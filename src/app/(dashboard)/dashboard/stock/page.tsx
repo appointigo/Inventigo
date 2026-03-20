@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { Typography, Tabs, message } from "antd";
+import { Typography, Tabs, App } from "antd";
 import StockTable from "@/modules/stock/components/StockTable";
 import StockAdjustmentModal from "@/modules/stock/components/StockAdjustmentModal";
 import MovementHistoryTable from "@/modules/stock/components/MovementHistoryTable";
@@ -9,6 +9,7 @@ import { useStockLevels, useStockMovements } from "@/modules/stock/hooks/useStoc
 import type { MockStockRow } from "@/modules/stock/services/mockStockService";
 
 export default function StockPage() {
+  const { message } = App.useApp();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
   const [adjustingRow, setAdjustingRow] = useState<MockStockRow | null>(null);

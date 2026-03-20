@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Typography, Card, message } from "antd";
+import { Typography, Card, App } from "antd";
 import CategoryForm from "@/modules/categories/components/CategoryForm";
 import type { CategoryFormValues } from "@/modules/categories/types";
 
 export default function NewCategoryPage() {
+  const { message } = App.useApp();
   const router = useRouter();
   const [saving, setSaving] = useState(false);
 

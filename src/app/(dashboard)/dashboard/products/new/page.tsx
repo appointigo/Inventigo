@@ -2,13 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Typography, Card, message } from "antd";
+import { Typography, Card, App } from "antd";
 import ProductForm from "@/modules/products/components/ProductForm";
 import { useCategories } from "@/modules/categories/hooks/useCategories";
 import { useBrands } from "@/modules/brands/hooks/useBrands";
 import type { ProductFormValues } from "@/modules/products/types";
 
 export default function NewProductPage() {
+  const { message } = App.useApp();
   const router = useRouter();
   const { categories } = useCategories();
   const { brands } = useBrands();

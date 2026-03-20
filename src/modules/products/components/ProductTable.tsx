@@ -1,6 +1,6 @@
 "use client";
 
-import { Table, Button, Space, Tag, Input, Select, Popconfirm, Tooltip, Badge } from "antd";
+import { Table, Button, Space, Tag, Input, Select, Popconfirm, Tooltip, Badge, Flex } from "antd";
 import {
   PlusOutlined,
   EditOutlined,
@@ -104,10 +104,10 @@ export default function ProductTable({
       align: "center",
       render: (_, record) => (
         <Space>
-          <Tooltip title="View">
+          <Tooltip title="View" destroyOnHidden>
             <Button type="text" icon={<EyeOutlined />} onClick={() => onView(record)} />
           </Tooltip>
-          <Tooltip title="Edit">
+          <Tooltip title="Edit" destroyOnHidden>
             <Button type="text" icon={<EditOutlined />} onClick={() => onEdit(record)} />
           </Tooltip>
           <Popconfirm
@@ -117,7 +117,7 @@ export default function ProductTable({
             okText="Delete"
             okButtonProps={{ danger: true }}
           >
-            <Tooltip title="Delete">
+            <Tooltip title="Delete" destroyOnHidden>
               <Button type="text" danger icon={<DeleteOutlined />} />
             </Tooltip>
           </Popconfirm>
@@ -128,15 +128,12 @@ export default function ProductTable({
 
   return (
     <div>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 16,
-          gap: 12,
-          flexWrap: "wrap",
-        }}
+      <Flex
+        justify="space-between"
+        align="center"
+        gap={12}
+        wrap
+        style={{ marginBottom: 16 }}
       >
         <Space wrap>
           <Input
@@ -167,7 +164,7 @@ export default function ProductTable({
         <Button type="primary" icon={<PlusOutlined />} onClick={onAdd}>
           Add Product
         </Button>
-      </div>
+      </Flex>
       <Table
         columns={columns}
         dataSource={products}

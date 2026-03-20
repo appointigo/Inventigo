@@ -98,7 +98,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           onClick={({ key }) => router.push(key)}
           style={{ borderRight: 0 }}
         />
-        <Tooltip title={collapsed ? "Expand" : "Collapse"} placement="right">
+        <Tooltip title={collapsed ? "Expand" : "Collapse"} placement="right" destroyOnHidden>
           <Flex
             align="center"
             justify="center"

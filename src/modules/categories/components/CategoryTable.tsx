@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Table, Button, Space, Tag, Input, Popconfirm, Tooltip } from "antd";
+import { Table, Button, Space, Tag, Input, Popconfirm, Tooltip, Flex } from "antd";
 import {
   PlusOutlined,
   EditOutlined,
@@ -91,7 +91,7 @@ export default function CategoryTable({
       align: "center",
       render: (_, record) => (
         <Space>
-          <Tooltip title="Edit">
+          <Tooltip title="Edit" destroyOnHidden>
             <Button
               type="text"
               icon={<EditOutlined />}
@@ -112,7 +112,7 @@ export default function CategoryTable({
               disabled: record.productCount > 0,
             }}
           >
-            <Tooltip title={record.productCount > 0 ? "Has products" : "Delete"}>
+            <Tooltip title={record.productCount > 0 ? "Has products" : "Delete"} destroyOnHidden>
               <Button
                 type="text"
                 danger
@@ -128,16 +128,13 @@ export default function CategoryTable({
 
   return (
     <div>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 16,
-          gap: 12,
-          flexWrap: "wrap",
-        }}
-      >
+      <Flex justify="space-between" align="center" gap={12} wrap style={{ marginBottom: 16 }}>
+        <Input
+          placeholder="Search categories..."
+          prefix={<SearchOutlined />}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
         <Input
           placeholder="Search categories..."
           prefix={<SearchOutlined />}
@@ -149,7 +146,7 @@ export default function CategoryTable({
         <Button type="primary" icon={<PlusOutlined />} onClick={onAdd}>
           Add Category
         </Button>
-      </div>
+      </Flex>
       <Table
         columns={columns}
         dataSource={filtered}

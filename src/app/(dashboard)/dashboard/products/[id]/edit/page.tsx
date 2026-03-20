@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { Typography, Card, Spin, message } from "antd";
+import { Typography, Card, Spin, App } from "antd";
 import ProductForm from "@/modules/products/components/ProductForm";
 import { useProduct } from "@/modules/products/hooks/useProducts";
 import { useCategories } from "@/modules/categories/hooks/useCategories";
@@ -10,6 +10,7 @@ import { useBrands } from "@/modules/brands/hooks/useBrands";
 import type { ProductFormValues } from "@/modules/products/types";
 
 export default function EditProductPage() {
+  const { message } = App.useApp();
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const { product, loading } = useProduct(params.id);

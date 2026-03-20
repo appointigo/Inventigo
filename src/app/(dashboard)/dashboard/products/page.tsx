@@ -2,13 +2,14 @@
 
 import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Typography, message } from "antd";
+import { Typography, App } from "antd";
 import ProductTable from "@/modules/products/components/ProductTable";
 import { useProducts } from "@/modules/products/hooks/useProducts";
 import { useCategories } from "@/modules/categories/hooks/useCategories";
 import { useBrands } from "@/modules/brands/hooks/useBrands";
 
 export default function ProductsPage() {
+  const { message } = App.useApp();
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string | undefined>();

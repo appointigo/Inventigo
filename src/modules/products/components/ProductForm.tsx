@@ -133,8 +133,7 @@ export default function ProductForm({
             >
               <Select
                 placeholder="Select category"
-                showSearch
-                optionFilterProp="label"
+                showSearch={{ optionFilterProp: "label" }}
                 options={categories.map((c) => ({ label: c.name, value: c.id }))}
               />
             </Form.Item>
@@ -147,8 +146,7 @@ export default function ProductForm({
             >
               <Select
                 placeholder="Select brand"
-                showSearch
-                optionFilterProp="label"
+                showSearch={{ optionFilterProp: "label" }}
                 options={brands.filter((b) => b.isActive).map((b) => ({ label: b.name, value: b.id }))}
               />
             </Form.Item>

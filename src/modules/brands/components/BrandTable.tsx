@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Table, Button, Space, Tag, Input, Popconfirm, Tooltip, Switch } from "antd";
+import { Table, Button, Space, Tag, Input, Popconfirm, Tooltip, Switch, Flex } from "antd";
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { Brand } from "../types";
@@ -63,7 +63,7 @@ export default function BrandTable({
       align: "center",
       render: (_, record) => (
         <Space>
-          <Tooltip title="Edit">
+          <Tooltip title="Edit" destroyOnHidden>
             <Button type="text" icon={<EditOutlined />} onClick={() => onEdit(record)} />
           </Tooltip>
           <Popconfirm
@@ -77,7 +77,7 @@ export default function BrandTable({
             okText="Delete"
             okButtonProps={{ danger: true, disabled: record.productCount > 0 }}
           >
-            <Tooltip title={record.productCount > 0 ? "Has products" : "Delete"}>
+            <Tooltip title={record.productCount > 0 ? "Has products" : "Delete"} destroyOnHidden>
               <Button type="text" danger icon={<DeleteOutlined />} disabled={record.productCount > 0} />
             </Tooltip>
           </Popconfirm>
@@ -88,7 +88,7 @@ export default function BrandTable({
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 12, flexWrap: "wrap" }}>
+      <Flex justify="space-between" align="center" gap={12} wrap style={{ marginBottom: 16 }}>
         <Input
           placeholder="Search brands..."
           prefix={<SearchOutlined />}
@@ -100,7 +100,7 @@ export default function BrandTable({
         <Button type="primary" icon={<PlusOutlined />} onClick={onAdd}>
           Add Brand
         </Button>
-      </div>
+      </Flex>
       <Table
         columns={columns}
         dataSource={filtered}

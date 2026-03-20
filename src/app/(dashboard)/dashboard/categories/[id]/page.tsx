@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { Typography, Card, Spin, message } from "antd";
+import { Typography, Card, Spin, App } from "antd";
 import CategoryForm from "@/modules/categories/components/CategoryForm";
 import { useCategory } from "@/modules/categories/hooks/useCategories";
 import type { CategoryFormValues } from "@/modules/categories/types";
 
 export default function EditCategoryPage() {
+  const { message } = App.useApp();
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const { category, loading } = useCategory(params.id);

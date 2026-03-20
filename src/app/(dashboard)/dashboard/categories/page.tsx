@@ -2,11 +2,12 @@
 
 import { useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Typography, message } from "antd";
+import { Typography, App } from "antd";
 import CategoryTable from "@/modules/categories/components/CategoryTable";
 import { useCategories } from "@/modules/categories/hooks/useCategories";
 
 export default function CategoriesPage() {
+  const { message } = App.useApp();
   const router = useRouter();
   const { categories, loading, refresh } = useCategories();
 

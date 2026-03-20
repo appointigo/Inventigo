@@ -1,6 +1,6 @@
 "use client";
 
-import { ConfigProvider, theme as antTheme } from "antd";
+import { ConfigProvider, App, theme as antTheme } from "antd";
 import type { ReactNode } from "react";
 
 // Inventigo brand design tokens
@@ -29,5 +29,9 @@ const inventigoTheme = {
 };
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  return <ConfigProvider theme={inventigoTheme}>{children}</ConfigProvider>;
+  return (
+    <ConfigProvider theme={inventigoTheme}>
+      <App>{children}</App>
+    </ConfigProvider>
+  );
 }

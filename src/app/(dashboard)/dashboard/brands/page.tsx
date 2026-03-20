@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { Typography, Modal, message } from "antd";
+import { Typography, Modal, App } from "antd";
 import BrandTable from "@/modules/brands/components/BrandTable";
 import BrandForm from "@/modules/brands/components/BrandForm";
 import { useBrands } from "@/modules/brands/hooks/useBrands";
 import type { Brand, BrandFormValues } from "@/modules/brands/types";
 
 export default function BrandsPage() {
+  const { message } = App.useApp();
   const { brands, loading, refresh } = useBrands();
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Brand | null>(null);
