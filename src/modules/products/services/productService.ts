@@ -246,6 +246,10 @@ export const productService = {
     return products.find((p) => p.id === id) ?? null;
   },
 
+  async getBySku(sku: string): Promise<Product | null> {
+    return products.find((p) => p.sku.toLowerCase() === sku.toLowerCase()) ?? null;
+  },
+
   async create(values: ProductFormValues): Promise<Product> {
     const now = new Date().toISOString();
     const id = `prod-${nextId++}`;

@@ -1,9 +1,11 @@
 "use client";
 
-import { Descriptions, Table, Tag, Badge, Card, Space, Button, Typography } from "antd";
+import { Descriptions, Table, Tag, Badge, Card, Space, Button, Typography, Flex } from "antd";
 import { EditOutlined, ArrowLeftOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { Product, ProductStockSize } from "../types";
+import BarcodeGenerator from "@/modules/barcode/components/BarcodeGenerator";
+import LabelPrinter from "@/modules/barcode/components/LabelPrinter";
 
 interface ProductDetailProps {
   product: Product;
@@ -45,14 +47,24 @@ export default function ProductDetail({ product, onEdit, onBack }: ProductDetail
 
   return (
     <Space orientation="vertical" size={24} style={{ width: "100%" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <Flex justify="space-between" align="center">
         <Button type="text" icon={<ArrowLeftOutlined />} onClick={onBack}>
           Back to Products
         </Button>
-        <Button icon={<EditOutlined />} onClick={onEdit}>
-          Edit
-        </Button>
-      </div>
+        <Space>
+          <LabelPrinter sku={product.sku} productName={product.name} price={product.basePrice} />
+          <Button icon={<EditOutlined />} onClick={onEdit}>
+            Edit
+          </Button>
+        </Space>
+      </Flex>
+
+      {/* Barcode Section */}
+      <Card size="small">
+        <div style={{ textAlign: "center" }}>
+          <BarcodeGenerator value={product.sku} height={50} />
+        </div>
+      </Card>
 
       <Card>
         <Descriptions
