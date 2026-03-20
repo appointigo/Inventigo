@@ -9,6 +9,7 @@ import {
   BarChartOutlined,
   SettingOutlined,
   ShopOutlined,
+  AlertOutlined,
 } from "@ant-design/icons";
 import { Role } from "@prisma/client";
 
@@ -65,6 +66,12 @@ export const MENU_ITEMS: MenuItem[] = [
     path: "/dashboard/purchase-orders",
     name: "Purchase Orders",
     icon: FileTextOutlined,
+    roles: ADMIN_MANAGER,
+  },
+  {
+    path: "/dashboard/alerts",
+    name: "Alerts",
+    icon: AlertOutlined,
     roles: ADMIN_MANAGER,
   },
   {

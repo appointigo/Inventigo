@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
+import { alertService } from "@/modules/alerts/services/alertService";
 
 /**
- * Cron job: Check stock levels and create alerts for low-stock items.
- * Runs daily via Vercel Cron. Full implementation in Phase 6.
+ * Cron job: Check stock levels against alert configs and send notifications.
+ * Runs daily at 8 AM via Vercel Cron (see vercel.json).
  */
 export async function GET(request: Request) {
   // Verify the request is from Vercel Cron
@@ -11,6 +12,13 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // TODO: Phase 6 — query AlertConfig, check stock levels, send notifications
-  return NextResponse.json({ message: "Reorder check stub — Phase 6" });
+  const lowStockItems = await alertService.checkStockLevels();
+  const result = await alertService.sendAlerts(lowStockItems);
+
+  return NextResponse.json({
+    message: "Reorder check completed",
+    lowStockCount: result.itemCount,
+    emailSent: result.emailSent,
+    smsSent: result.smsSent,
+  });
 }
