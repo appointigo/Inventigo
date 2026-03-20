@@ -1,0 +1,355 @@
+// Inventigo — Retail Inventory Management System
+// Full schema including Store (multi-store ready) and Sale/SaleItem (billing ready)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── ENUMS ──────────────────────────────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  MANAGER
+  STAFF
+}
+
+enum StockMovementType {
+  IN
+  OUT
+  ADJUSTMENT
+  SALE
+  RETURN
+}
+
+enum ReferenceType {
+  PO
+  SALE
+  MANUAL
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  ORDERED
+  RECEIVED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  UPI
+}
+
+enum SaleStatus {
+  COMPLETED
+  REFUNDED
+}
+
+// ─── STORE ──────────────────────────────────────────────────────────────────────
+
+model Store {
+  id        String   @id @default(uuid())
+  name      String
+  code      String   @unique
+  address   String?
+  phone     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users          User[]
+  stockEntries   StockEntry[]
+  stockMovements StockMovement[]
+  purchaseOrders PurchaseOrder[]
+  sales          Sale[]
+  alertConfigs   AlertConfig[]
+
+  @@map("stores")
+}
+
+// ─── USER ───────────────────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(STAFF)
+  storeId      String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  store          Store?          @relation(fields: [storeId], references: [id])
+  stockMovements StockMovement[]
+  purchaseOrders PurchaseOrder[]
+  sales          Sale[]
+
+  @@map("users")
+}
+
+// ─── CATEGORY ───────────────────────────────────────────────────────────────────
+
+model Category {
+  id              String   @id @default(uuid())
+  name            String   @unique
+  slug            String   @unique
+  description     String?
+  attributeSchema Json     @default("{}")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  products     Product[]
+  sizes        Size[]
+  alertConfigs AlertConfig[]
+
+  @@map("categories")
+}
+
+// ─── BRAND ──────────────────────────────────────────────────────────────────────
+
+model Brand {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  logoUrl   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products Product[]
+
+  @@map("brands")
+}
+
+// ─── PRODUCT ────────────────────────────────────────────────────────────────────
+
+model Product {
+  id         String   @id @default(uuid())
+  name       String
+  sku        String   @unique
+  categoryId String
+  brandId    String
+  basePrice  Decimal  @db.Decimal(10, 2)
+  costPrice  Decimal  @db.Decimal(10, 2)
+  attributes Json     @default("{}")
+  imageUrl   String?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  category           Category            @relation(fields: [categoryId], references: [id])
+  brand              Brand               @relation(fields: [brandId], references: [id])
+  stockEntries       StockEntry[]
+  stockMovements     StockMovement[]
+  purchaseOrderItems PurchaseOrderItem[]
+  saleItems          SaleItem[]
+
+  @@index([categoryId])
+  @@index([brandId])
+  @@index([sku])
+  @@map("products")
+}
+
+// ─── SIZE ───────────────────────────────────────────────────────────────────────
+
+model Size {
+  id         String   @id @default(uuid())
+  label      String
+  sortOrder  Int      @default(0)
+  categoryId String
+  createdAt  DateTime @default(now())
+
+  category           Category            @relation(fields: [categoryId], references: [id])
+  stockEntries       StockEntry[]
+  stockMovements     StockMovement[]
+  purchaseOrderItems PurchaseOrderItem[]
+  saleItems          SaleItem[]
+
+  @@unique([label, categoryId])
+  @@index([categoryId])
+  @@map("sizes")
+}
+
+// ─── STOCK ENTRY ────────────────────────────────────────────────────────────────
+
+model StockEntry {
+  id              String    @id @default(uuid())
+  productId       String
+  sizeId          String
+  storeId         String
+  quantity        Int       @default(0)
+  reorderLevel    Int       @default(5)
+  reorderQuantity Int       @default(10)
+  lastRestockedAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  product Product @relation(fields: [productId], references: [id])
+  size    Size    @relation(fields: [sizeId], references: [id])
+  store   Store   @relation(fields: [storeId], references: [id])
+
+  @@unique([productId, sizeId, storeId])
+  @@index([storeId])
+  @@index([productId])
+  @@map("stock_entries")
+}
+
+// ─── STOCK MOVEMENT (Audit Log) ─────────────────────────────────────────────────
+
+model StockMovement {
+  id            String            @id @default(uuid())
+  productId     String
+  sizeId        String
+  storeId       String
+  type          StockMovementType
+  quantity      Int
+  reason        String?
+  referenceType ReferenceType?
+  referenceId   String?
+  createdBy     String
+  createdAt     DateTime          @default(now())
+
+  product Product @relation(fields: [productId], references: [id])
+  size    Size    @relation(fields: [sizeId], references: [id])
+  store   Store   @relation(fields: [storeId], references: [id])
+  user    User    @relation(fields: [createdBy], references: [id])
+
+  @@index([productId])
+  @@index([storeId])
+  @@index([createdAt])
+  @@index([referenceType, referenceId])
+  @@map("stock_movements")
+}
+
+// ─── SUPPLIER ───────────────────────────────────────────────────────────────────
+
+model Supplier {
+  id            String   @id @default(uuid())
+  name          String
+  contactPerson String?
+  email         String?
+  phone         String?
+  address       String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  purchaseOrders PurchaseOrder[]
+
+  @@map("suppliers")
+}
+
+// ─── PURCHASE ORDER ─────────────────────────────────────────────────────────────
+
+model PurchaseOrder {
+  id          String              @id @default(uuid())
+  storeId     String
+  supplierId  String
+  status      PurchaseOrderStatus @default(DRAFT)
+  totalAmount Decimal             @default(0) @db.Decimal(10, 2)
+  notes       String?
+  orderedAt   DateTime?
+  receivedAt  DateTime?
+  createdBy   String
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  store    Store               @relation(fields: [storeId], references: [id])
+  supplier Supplier            @relation(fields: [supplierId], references: [id])
+  user     User                @relation(fields: [createdBy], references: [id])
+  items    PurchaseOrderItem[]
+
+  @@index([storeId])
+  @@index([supplierId])
+  @@index([status])
+  @@map("purchase_orders")
+}
+
+// ─── PURCHASE ORDER ITEM ────────────────────────────────────────────────────────
+
+model PurchaseOrderItem {
+  id              String  @id @default(uuid())
+  purchaseOrderId String
+  productId       String
+  sizeId          String
+  quantity        Int
+  unitCost        Decimal @db.Decimal(10, 2)
+  createdAt       DateTime @default(now())
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product       Product       @relation(fields: [productId], references: [id])
+  size          Size          @relation(fields: [sizeId], references: [id])
+
+  @@map("purchase_order_items")
+}
+
+// ─── SALE (Billing-ready — empty until Phase 8) ─────────────────────────────────
+
+model Sale {
+  id             String        @id @default(uuid())
+  storeId        String
+  invoiceNumber  String        @unique
+  customerName   String?
+  customerPhone  String?
+  subtotal       Decimal       @db.Decimal(10, 2)
+  discountAmount Decimal       @default(0) @db.Decimal(10, 2)
+  taxAmount      Decimal       @default(0) @db.Decimal(10, 2)
+  total          Decimal       @db.Decimal(10, 2)
+  paymentMethod  PaymentMethod @default(CASH)
+  status         SaleStatus    @default(COMPLETED)
+  createdBy      String
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  store Store      @relation(fields: [storeId], references: [id])
+  user  User       @relation(fields: [createdBy], references: [id])
+  items SaleItem[]
+
+  @@index([storeId])
+  @@index([createdAt])
+  @@index([status])
+  @@map("sales")
+}
+
+// ─── SALE ITEM (Billing-ready — empty until Phase 8) ────────────────────────────
+
+model SaleItem {
+  id        String  @id @default(uuid())
+  saleId    String
+  productId String
+  sizeId    String
+  quantity  Int
+  unitPrice Decimal @db.Decimal(10, 2)
+  total     Decimal @db.Decimal(10, 2)
+  createdAt DateTime @default(now())
+
+  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+  size    Size    @relation(fields: [sizeId], references: [id])
+
+  @@map("sale_items")
+}
+
+// ─── ALERT CONFIG ───────────────────────────────────────────────────────────────
+
+model AlertConfig {
+  id          String   @id @default(uuid())
+  storeId     String?
+  productId   String?
+  categoryId  String?
+  threshold   Int      @default(5)
+  notifyEmail Boolean  @default(true)
+  notifySMS   Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  store    Store?    @relation(fields: [storeId], references: [id])
+  category Category? @relation(fields: [categoryId], references: [id])
+
+  @@map("alert_configs")
+}
