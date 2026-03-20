@@ -620,7 +620,7 @@ inventigo/
 │   │   │   │   └── page.tsx         ← Reports with filters + export
 │   │   │   │
 │   │   │   ├── settings/
-│   │   │   │   └── page.tsx         ← Alert configs, user management
+│   │   │   │   └── page.tsx         ← Tabbed settings: profile, users, stores, billing config, appearance
 │   │   │   │
 │   │   │   └── billing/             ← Empty placeholder — Phase 8
 │   │   │       └── page.tsx
@@ -664,6 +664,21 @@ inventigo/
 │   │       │
 │   │       ├── billing/
 │   │       │   └── route.ts         ← Stub — returns 501 until Phase 8
+│   │       │
+│   │       ├── users/                 ← ★ Phase 9 — User management (ADMIN)
+│   │       │   ├── route.ts           ← GET (list), POST (create)
+│   │       │   └── [id]/
+│   │       │       ├── route.ts       ← GET, PUT, DELETE
+│   │       │       └── reset-password/
+│   │       │           └── route.ts   ← POST — admin resets user password
+│   │       │
+│   │       ├── stores/                ← ★ Phase 9 — Store management (ADMIN)
+│   │       │   ├── route.ts           ← GET (list), POST (create)
+│   │       │   └── [id]/
+│   │       │       └── route.ts       ← GET, PUT, DELETE
+│   │       │
+│   │       ├── settings/              ← ★ Phase 9 — App settings (billing config)
+│   │       │   └── route.ts           ← GET (all), PUT (ADMIN)
 │   │       │
 │   │       ├── barcode/
 │   │       │   └── lookup/
@@ -798,12 +813,31 @@ inventigo/
 │   │   │   │   └── useAlertConfigs.ts
 │   │   │   └── types.ts
 │   │   │
+│   │   ├── settings/                ← ★ Settings, user management, multi-store, billing config
+│   │   │   ├── components/
+│   │   │   │   ├── UserTable.tsx      ← User CRUD table (ADMIN only)
+│   │   │   │   ├── UserForm.tsx       ← Create/edit user modal
+│   │   │   │   ├── ResetPasswordModal.tsx ← Admin resets user password
+│   │   │   │   ├── StoreTable.tsx     ← Store CRUD table (ADMIN only)
+│   │   │   │   ├── StoreForm.tsx      ← Create/edit store modal
+│   │   │   │   ├── StoreProfileCard.tsx ← Quick-edit active store profile
+│   │   │   │   ├── BillingConfigForm.tsx ← Tax rate + invoice prefix
+│   │   │   │   ├── AppearanceSettings.tsx ← Light/dark theme toggle
+│   │   │   │   └── StoreSelector.tsx  ← Header dropdown for multi-store (ADMIN)
+│   │   │   ├── services/
+│   │   │   │   ├── userService.ts     ← User CRUD with password hashing
+│   │   │   │   ├── storeService.ts    ← Store CRUD
+│   │   │   │   └── settingsService.ts ← App settings (tax rate, invoice prefix)
+│   │   │   ├── hooks/
+│   │   │   │   ├── useUsers.ts
+│   │   │   │   ├── useStores.ts
+│   │   │   │   ├── useAppSettings.ts
+│   │   │   │   └── useTheme.ts        ← Light/dark mode toggle + localStorage
+│   │   │   └── types.ts
+│   │   │
 │   │   └── layout/
 │   │       ├── components/
-│   │       │   ├── AppLayout.tsx     ← ProLayout wrapper
-│   │       │   ├── Sidebar.tsx
-│   │       │   ├── Header.tsx
-│   │       │   └── StoreSelector.tsx ← Hidden initially, shown when multi-store
+│   │       │   └── AppLayout.tsx     ← ProLayout wrapper + StoreSelector in header
 │   │       ├── constants.ts         ← Menu items, route definitions
 │   │       └── types.ts
 │   │
@@ -1096,7 +1130,83 @@ inventigo/
 
 ---
 
-### Phase 9: Polish & Deployment
+### Phase 9: Settings & Multi-Store
+
+**Goal:** Full Settings page with user management, store management (multi-store UI), billing configuration, appearance (light/dark theme), and a store selector in the header.
+
+**Depends on:** Phase 2 (auth/roles), Phase 8 (billing module)
+
+#### 9A: Types & Services (foundation)
+
+| # | Task | Details |
+|---|---|---|
+| 9A.1 | Settings types | `modules/settings/types.ts` — `AppUser`, `CreateUserInput`, `UpdateUserInput`, `StoreRecord`, `CreateStoreInput`, `UpdateStoreInput`, `BillingConfig` (taxRate, invoicePrefix), `AppSettings` |
+| 9A.2 | userService | Mock in-memory CRUD — seeded with 3 users (admin/manager/staff). `getUsers()`, `getUserById()`, `createUser()` (bcrypt password), `updateUser()`, `resetPassword()`, `deleteUser()` (soft delete) |
+| 9A.3 | storeService | Mock in-memory CRUD — seeded with "Main Store". `getStores()`, `getStoreById()`, `createStore()`, `updateStore()`, `deleteStore()` (soft delete) |
+| 9A.4 | settingsService | Mock in-memory settings. `getSettings()` → `{ taxRate: 18, invoicePrefix: "INV" }`, `updateSettings(partial)` → merge & return |
+
+#### 9B: API Routes
+
+| # | Task | Details |
+|---|---|---|
+| 9B.1 | Users API | `app/api/users/route.ts` — GET list + POST create (ADMIN only via `requireRole`) |
+| 9B.2 | User detail API | `app/api/users/[id]/route.ts` — GET, PUT, DELETE (ADMIN only) |
+| 9B.3 | Password reset API | `app/api/users/[id]/reset-password/route.ts` — POST (ADMIN only, accepts `{ newPassword }`) |
+| 9B.4 | Stores API | `app/api/stores/route.ts` — GET list (all roles), POST create (ADMIN only) |
+| 9B.5 | Store detail API | `app/api/stores/[id]/route.ts` — GET, PUT (ADMIN), DELETE (ADMIN) |
+| 9B.6 | Settings API | `app/api/settings/route.ts` — GET (all roles), PUT (ADMIN only, updates billing config) |
+
+#### 9C: Hooks
+
+| # | Task | Details |
+|---|---|---|
+| 9C.1 | useUsers | `useUsers()` — fetch all + CRUD operations. `useUser(id)` — fetch single user |
+| 9C.2 | useStores | `useStores()` — fetch all stores + CRUD (named to avoid conflict with StoreProvider's `useStore`) |
+| 9C.3 | useAppSettings | `useAppSettings()` — fetch/update billing config (tax rate, invoice prefix) |
+| 9C.4 | useTheme | `useThemeMode()` — read/write `"light" \| "dark"` from localStorage, returns `{ mode, toggle }` |
+
+#### 9D: Components
+
+| # | Task | Details |
+|---|---|---|
+| 9D.1 | UserTable | antd Table — name, email, role (color Tag), store assignment, status, actions (edit, reset password, deactivate). Search + "Add User" button |
+| 9D.2 | UserForm | Modal form — name, email, password (create only), role Select, store Select, isActive Switch |
+| 9D.3 | ResetPasswordModal | Modal — new password + confirm password. Admin resets another user's password |
+| 9D.4 | StoreTable | antd Table — name, code, address, phone, status, actions (edit, deactivate). "Add Store" button |
+| 9D.5 | StoreForm | Modal form — name, code (auto slug), address, phone, isActive |
+| 9D.6 | StoreProfileCard | Editable card for active store — inline edit name/address/phone with Save/Cancel |
+| 9D.7 | BillingConfigForm | antd Form — Tax Rate (InputNumber, suffix "%"), Invoice Prefix (Input). Save button |
+| 9D.8 | AppearanceSettings | Theme toggle — antd Segmented control (Light / Dark). Reads/writes via `useThemeMode()` |
+
+#### 9E: Theme Integration
+
+| # | Task | Details |
+|---|---|---|
+| 9E.1 | Update ThemeProvider | Add `ThemeModeContext`, switch antd `algorithm` between `defaultAlgorithm` (light) and `darkAlgorithm` (dark), read initial mode from localStorage |
+| 9E.2 | Update globals.css | Dark mode body/scrollbar styles via CSS variables or body class |
+
+#### 9F: Settings Page & Multi-Store Header
+
+| # | Task | Details |
+|---|---|---|
+| 9F.1 | Settings page | Rewrite `settings/page.tsx` — antd Tabs: **My Profile** (all roles, read-only), **User Management** (ADMIN), **Store Management** (ADMIN, StoreProfileCard + StoreTable), **Billing Config** (ADMIN), **Appearance** (all roles). Default tab: "My Profile" for STAFF/MANAGER, "User Management" for ADMIN |
+| 9F.2 | StoreSelector | `modules/settings/components/StoreSelector.tsx` — antd Select dropdown fetching stores, on change calls `StoreProvider.setStore()`. ADMIN-only visibility |
+| 9F.3 | AppLayout update | Add StoreSelector to layout header (next to user avatar). Only render for ADMIN role |
+
+**Verification:**
+- Login as STAFF → Settings shows only "My Profile" + "Appearance" tabs
+- Login as ADMIN → all 5 tabs visible
+- Create user → appears in UserTable. Edit role → tag color updates. Deactivate → status changes
+- Admin resets user password → mock service updates
+- Create store → appears in StoreTable. Edit/deactivate works
+- ADMIN sees StoreSelector in header → switch store → StoreProvider context updates
+- Change tax rate / invoice prefix → save → values persist in session
+- Toggle dark mode → entire app switches theme → preference persists in localStorage on refresh
+- `npx next build` passes with zero errors
+
+---
+
+### Phase 10: Polish & Deployment
 
 **Goal:** Production-ready application.
 
@@ -1104,21 +1214,21 @@ inventigo/
 
 | # | Task | Details |
 |---|---|---|
-| 9.1 | Responsive design | Test on mobile/tablet viewports, fix Ant Design grid breakpoints |
-| 9.2 | Loading states | Skeleton loaders on tables and forms, Spin on async actions |
-| 9.3 | Empty states | Custom empty states per page (no products yet, no POs, etc.) |
-| 9.4 | Error handling | Global error boundary, API error toasts (notification), form error display |
-| 9.5 | Vercel setup | Connect GitHub repo, configure environment variables (DATABASE_URL, NEXTAUTH_SECRET, BLOB_READ_WRITE_TOKEN, RESEND_API_KEY, TWILIO_*) |
-| 9.6 | Neon production DB | Create production database, run `prisma migrate deploy`, seed initial data |
-| 9.7 | Vercel Cron | Verify cron job runs daily at 9 AM (reorder check) |
-| 9.8 | UAT | Test with real inventory data — all flows end-to-end |
+| 10.1 | Responsive design | Test on mobile/tablet viewports, fix Ant Design grid breakpoints |
+| 10.2 | Loading states | Skeleton loaders on tables and forms, Spin on async actions |
+| 10.3 | Empty states | Custom empty states per page (no products yet, no POs, etc.) |
+| 10.4 | Error handling | Global error boundary, API error toasts (notification), form error display |
+| 10.5 | Vercel setup | Connect GitHub repo, configure environment variables (DATABASE_URL, NEXTAUTH_SECRET, BLOB_READ_WRITE_TOKEN, RESEND_API_KEY, TWILIO_*) |
+| 10.6 | Neon production DB | Create production database, run `prisma migrate deploy`, seed initial data |
+| 10.7 | Vercel Cron | Verify cron job runs daily at 9 AM (reorder check) |
+| 10.8 | UAT | Test with real inventory data — all flows end-to-end |
 
 **Verification:**
 - App works on mobile Safari/Chrome (responsive)
 - All loading/empty/error states display correctly
 - Production deployment accessible via Vercel URL
 - Cron job fires on schedule
-- All Phase 1-8 verifications pass in production
+- All Phase 1-9 verifications pass in production
 
 ---
 
