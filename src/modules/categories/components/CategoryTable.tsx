@@ -134,12 +134,6 @@ export default function CategoryTable({
           prefix={<SearchOutlined />}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-        />
-        <Input
-          placeholder="Search categories..."
-          prefix={<SearchOutlined />}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
           allowClear
           style={{ maxWidth: 300 }}
         />
