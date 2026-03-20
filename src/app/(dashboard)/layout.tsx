@@ -2,6 +2,7 @@
 
 import { App } from "antd";
 import { StoreProvider } from "@/providers/StoreProvider";
+import AppLayout from "@/modules/layout/components/AppLayout";
 
 export default function DashboardLayout({
   children,
@@ -11,7 +12,7 @@ export default function DashboardLayout({
   return (
     <App>
       <StoreProvider defaultStoreId={null}>
-        {children}
+        <AppLayout>{children}</AppLayout>
       </StoreProvider>
     </App>
   );

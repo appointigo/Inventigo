@@ -5,6 +5,11 @@ import type { NextRequest } from "next/server";
 const publicRoutes = ["/login", "/api/auth"];
 
 export function proxy(request: NextRequest) {
+  // Skip auth checks in development for UI-first workflow
+  if (process.env.NODE_ENV === "development") {
+    return NextResponse.next();
+  }
+
   const { pathname } = request.nextUrl;
 
   // Allow public routes
