@@ -8,12 +8,7 @@ export type ProductFormValues = {
   attributes: Record<string, unknown>;
   imageUrl?: string;
   isActive: boolean;
-  stockEntries: {
-    sizeId: string;
-    quantity: number;
-    reorderLevel: number;
-    reorderQuantity: number;
-  }[];
+  sizes: string[]; // size IDs from the selected category
 };
 
 export type ProductListFilters = {
@@ -21,8 +16,30 @@ export type ProductListFilters = {
   brandId?: string;
   search?: string;
   isActive?: boolean;
-  page?: number;
-  pageSize?: number;
-  sortBy?: string;
-  sortOrder?: "asc" | "desc";
+};
+
+export type ProductStockSize = {
+  sizeId: string;
+  sizeLabel: string;
+  quantity: number;
+  reorderLevel: number;
+};
+
+export type Product = {
+  id: string;
+  name: string;
+  sku: string;
+  categoryId: string;
+  categoryName: string;
+  brandId: string;
+  brandName: string;
+  basePrice: number;
+  costPrice: number;
+  attributes: Record<string, unknown>;
+  imageUrl: string | null;
+  isActive: boolean;
+  stock: ProductStockSize[];
+  totalStock: number;
+  createdAt: string;
+  updatedAt: string;
 };

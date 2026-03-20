@@ -3,3 +3,13 @@ export type BrandFormValues = {
   logoUrl?: string;
   isActive: boolean;
 };
+
+export type Brand = {
+  id: string;
+  name: string;
+  logoUrl: string | null;
+  isActive: boolean;
+  productCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
