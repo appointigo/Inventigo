@@ -1,3 +1,10 @@
+export type AttributeField = {
+  name: string;
+  type: "text" | "select" | "number";
+  options?: string[];
+  required: boolean;
+};
+
 export type CategoryFormValues = {
   name: string;
   slug: string;
@@ -8,9 +15,14 @@ export type CategoryFormValues = {
   sizes: string[];
 };
 
-export type AttributeField = {
+export type Category = {
+  id: string;
   name: string;
-  type: "text" | "select" | "number";
-  options?: string[];
-  required: boolean;
+  slug: string;
+  description: string | null;
+  attributeSchema: { fields: AttributeField[] };
+  sizes: { id: string; label: string; sortOrder: number }[];
+  productCount: number;
+  createdAt: string;
+  updatedAt: string;
 };

@@ -44,16 +44,15 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   // (ProLayout reads window.innerWidth for responsive classes)
   if (!mounted || (isLoading && !isDev)) {
     return (
-      <div
+      <Flex
+        align="center"
+        justify="center"
         style={{
           height: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
         }}
       >
         <Spin size="large" />
-      </div>
+      </Flex>
     );
   }
 
@@ -65,13 +64,13 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   }));
 
   return (
-    <Layout style={{ minHeight: "100vh" }}>
+    <Layout style={{ height: "100vh", overflow: "hidden" }}>
       <Sider
         trigger={null}
         collapsible
         collapsed={collapsed}
         width={220}
-        style={{ background: "#001529", position: "relative" }}
+        style={{ background: "#001529", position: "relative", overflow: "hidden" }}
         breakpoint="lg"
         onBreakpoint={(broken) => setCollapsed(broken)}
       >
@@ -194,9 +193,10 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         <Content
           style={{
             margin: 0,
-            padding: 24,
+            padding: 0,
             background: token.colorBgLayout,
-            minHeight: "calc(100vh - 56px)",
+            overflow: "auto",
+            height: "calc(100vh - 56px)",
           }}
         >
           {children}
