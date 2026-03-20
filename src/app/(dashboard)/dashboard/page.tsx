@@ -7,6 +7,7 @@ import StockByCategoryChart from "@/modules/dashboard/components/StockByCategory
 import TopBrandsChart from "@/modules/dashboard/components/TopBrandsChart";
 import RecentMovementsWidget from "@/modules/dashboard/components/RecentMovementsWidget";
 import LowStockAlertsList from "@/modules/alerts/components/LowStockAlertsList";
+import SalesKPIWidget from "@/modules/billing/components/SalesKPIWidget";
 import { useDashboard } from "@/modules/dashboard/hooks/useDashboard";
 import { useLowStockAlerts } from "@/modules/alerts/hooks/useAlerts";
 import type { LowStockItem } from "@/modules/alerts/types";
@@ -50,7 +51,7 @@ export default function DashboardPage() {
       </Row>
 
       {/* Bottom Row: Low Stock + Recent Movements */}
-      <Row gutter={[16, 16]}>
+      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
         <Col xs={24} lg={12}>
           <LowStockAlertsList
             items={lowStockItems}
@@ -63,6 +64,13 @@ export default function DashboardPage() {
             movements={data?.recentMovements ?? []}
             loading={loading}
           />
+        </Col>
+      </Row>
+
+      {/* Sales Row */}
+      <Row gutter={[16, 16]}>
+        <Col xs={24} lg={12}>
+          <SalesKPIWidget />
         </Col>
       </Row>
     </div>

@@ -12,7 +12,11 @@ export function useSuppliers() {
     try {
       const res = await fetch("/api/suppliers");
       if (res.ok) setSuppliers(await res.json());
-    } finally {
+    } 
+    catch (error) {
+      console.error("Failed to fetch suppliers:", error);
+    } 
+    finally {
       setLoading(false);
     }
   }, []);
@@ -28,14 +32,25 @@ export function useSupplier(id: string | null) {
   const [supplier, setSupplier] = useState<Supplier | null>(null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
+  const fetchSupplier = useCallback(async () => {
     if (!id) return;
     setLoading(true);
-    fetch(`/api/suppliers/${encodeURIComponent(id)}`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => setSupplier(data))
-      .finally(() => setLoading(false));
+    try {
+      const res = await fetch(`/api/suppliers/${encodeURIComponent(id)}`);
+      const data = res.ok ? await res.json() : null;
+      setSupplier(data);
+    } 
+    catch (error) {
+      console.error("Failed to fetch supplier:", error);
+    } 
+    finally {
+      setLoading(false);
+    }
   }, [id]);
+
+  useEffect(() => {
+    fetchSupplier();
+  }, [fetchSupplier]);
 
   return { supplier, loading };
 }

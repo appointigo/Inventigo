@@ -18,7 +18,11 @@ export function useProducts(filters?: ProductListFilters) {
       const qs = params.toString();
       const res = await fetch(`/api/products${qs ? `?${qs}` : ""}`);
       if (res.ok) setProducts(await res.json());
-    } finally {
+    } 
+    catch (error) {
+      console.error("Failed to fetch products:", error);
+    } 
+    finally {
       setLoading(false);
     }
   }, [filters?.categoryId, filters?.brandId, filters?.search, filters?.isActive]);
@@ -34,14 +38,25 @@ export function useProduct(id: string | null) {
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
+  const fetchProduct = useCallback(async () => {
     if (!id) return;
     setLoading(true);
-    fetch(`/api/products/${encodeURIComponent(id)}`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => setProduct(data))
-      .finally(() => setLoading(false));
+    try {
+      const res = await fetch(`/api/products/${encodeURIComponent(id)}`);
+      const data = res.ok ? await res.json() : null;
+      setProduct(data);
+    } 
+    catch (error) {
+      console.error("Failed to fetch product:", error);
+    } 
+    finally {
+      setLoading(false);
+    }
   }, [id]);
+
+  useEffect(() => {
+    fetchProduct();
+  }, [fetchProduct]);
 
   return { product, loading };
 }

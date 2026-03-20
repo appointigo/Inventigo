@@ -1,22 +1,24 @@
-import { PaymentMethod } from "@prisma/client";
+export type PaymentMethodType = "CASH" | "CARD" | "UPI";
+export type SaleStatusType = "COMPLETED" | "REFUNDED";
 
 /**
  * Input for creating a new sale.
  */
 export type CreateSaleInput = {
-  storeId: string;
-  items: CreateSaleItemInput[];
-  paymentMethod: PaymentMethod;
-  discountAmount?: number;
-  taxAmount?: number;
+  items: CartItem[];
+  paymentMethod: PaymentMethodType;
+  discountAmount: number;
+  taxAmount: number;
   customerName?: string;
   customerPhone?: string;
-  userId: string;
 };
 
-export type CreateSaleItemInput = {
+export type CartItem = {
   productId: string;
+  productName: string;
+  sku: string;
   sizeId: string;
+  sizeLabel: string;
   quantity: number;
   unitPrice: number;
 };
@@ -25,25 +27,53 @@ export type CreateSaleItemInput = {
  * Filters for querying sales.
  */
 export type SaleFilters = {
-  storeId?: string;
-  startDate?: Date;
-  endDate?: Date;
-  status?: "COMPLETED" | "REFUNDED";
+  startDate?: string;
+  endDate?: string;
+  status?: SaleStatusType;
+  paymentMethod?: PaymentMethodType;
   search?: string;
-  page?: number;
-  pageSize?: number;
 };
 
 /**
- * Sale summary for display.
+ * Full sale detail with items.
+ */
+export type Sale = {
+  id: string;
+  invoiceNumber: string;
+  customerName: string | null;
+  customerPhone: string | null;
+  subtotal: number;
+  discountAmount: number;
+  taxAmount: number;
+  total: number;
+  paymentMethod: PaymentMethodType;
+  status: SaleStatusType;
+  items: SaleItem[];
+  createdAt: string;
+};
+
+export type SaleItem = {
+  id: string;
+  productId: string;
+  productName: string;
+  sku: string;
+  sizeId: string;
+  sizeLabel: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+};
+
+/**
+ * Sale summary for list display.
  */
 export type SaleSummary = {
   id: string;
   invoiceNumber: string;
   customerName: string | null;
   total: number;
-  paymentMethod: PaymentMethod;
-  status: string;
+  paymentMethod: PaymentMethodType;
+  status: SaleStatusType;
   itemCount: number;
-  createdAt: Date;
+  createdAt: string;
 };

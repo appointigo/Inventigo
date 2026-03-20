@@ -1,0 +1,274 @@
+"use client";
+
+import { useState, useCallback } from "react";
+import { Typography, Tabs, Input, Button, Table, Badge, Select, App, Flex } from "antd";
+import { ShoppingCartOutlined, SearchOutlined, ScanOutlined, HistoryOutlined, PlusOutlined } from "@ant-design/icons";
+import type { ColumnsType } from "antd/es/table";
+import type { Product } from "@/modules/products/types";
+import { useProducts } from "@/modules/products/hooks/useProducts";
+import { useSales, useCart } from "@/modules/billing/hooks/useBilling";
+import CartDrawer from "@/modules/billing/components/CartDrawer";
+import SalesHistory from "@/modules/billing/components/SalesHistory";
+import InvoicePreview from "@/modules/billing/components/InvoicePreview";
+import { formatCurrency } from "@/shared/utils/formatCurrency";
+import type { Sale } from "@/modules/billing/types";
+
+const { Title } = Typography;
+
+export default function BillingPage() {
+  const { message } = App.useApp();
+  const [activeTab, setActiveTab] = useState("new-sale");
+  const [search, setSearch] = useState("");
+  const [cartOpen, setCartOpen] = useState(false);
+  const [saleLoading, setSaleLoading] = useState(false);
+  const [completedSale, setCompletedSale] = useState<Sale | null>(null);
+  const [invoiceOpen, setInvoiceOpen] = useState(false);
+
+  // Product listing
+  const { products, loading: productsLoading } = useProducts(
+    search ? { search } : undefined
+  );
+
+  // Sales history
+  const {
+    sales,
+    loading: salesLoading,
+    filters: salesFilters,
+    setFilters: setSalesFilters,
+    createSale,
+    refundSale,
+    getSaleById,
+  } = useSales();
+
+  // Cart state
+  const cart = useCart();
+
+  // Size selection state per product
+  const [selectedSizes, setSelectedSizes] = useState<Record<string, string>>({});
+
+  const handleAddToCart = useCallback(
+    (product: Product) => {
+      const sizeId = selectedSizes[product.id];
+      const sizeInfo = product.stock.find((s) => s.sizeId === sizeId);
+
+      if (!sizeId || !sizeInfo) {
+        message.warning("Please select a size first");
+        return;
+      }
+
+      if (sizeInfo.quantity <= 0) {
+        message.error("This size is out of stock");
+        return;
+      }
+
+      cart.addItem({
+        productId: product.id,
+        productName: product.name,
+        sku: product.sku,
+        sizeId,
+        sizeLabel: sizeInfo.sizeLabel,
+        quantity: 1,
+        unitPrice: product.basePrice,
+      });
+
+      message.success(`${product.name} (${sizeInfo.sizeLabel}) added to cart`);
+    },
+    [selectedSizes, cart, message]
+  );
+
+  const handleConfirmSale = async () => {
+    if (cart.items.length === 0) {
+      message.warning("Cart is empty");
+      return;
+    }
+    setSaleLoading(true);
+    try {
+      const sale = await createSale(cart.toCreateInput());
+      setCompletedSale(sale);
+      setInvoiceOpen(true);
+      cart.clearCart();
+      setCartOpen(false);
+      message.success(`Sale created: ${sale.invoiceNumber}`);
+    } 
+    catch {
+      message.error("Failed to create sale");
+    } 
+    finally {
+      setSaleLoading(false);
+    }
+  };
+
+  const productColumns: ColumnsType<Product> = [
+    {
+      title: "Product",
+      key: "product",
+      render: (_, record) => (
+        <div>
+          <Typography.Text strong>{record.name}</Typography.Text>
+          <br />
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            {record.sku} · {record.brandName} · {record.categoryName}
+          </Typography.Text>
+        </div>
+      ),
+    },
+    {
+      title: "Price",
+      dataIndex: "basePrice",
+      width: 100,
+      align: "right",
+      render: (price: number) => formatCurrency(price),
+    },
+    {
+      title: "Stock",
+      dataIndex: "totalStock",
+      width: 80,
+      align: "center",
+      render: (qty: number) => (
+        <Badge
+          color={qty === 0 ? "red" : qty <= 10 ? "orange" : "green"}
+          text={qty}
+        />
+      ),
+    },
+    {
+      title: "Size",
+      key: "size",
+      width: 130,
+      render: (_, record) => (
+        <Select
+          placeholder="Size"
+          size="small"
+          value={selectedSizes[record.id]}
+          onChange={(val) =>
+            setSelectedSizes((prev) => ({ ...prev, [record.id]: val }))
+          }
+          style={{ width: 110 }}
+          options={record.stock.map((s) => ({
+            label: `${s.sizeLabel} (${s.quantity})`,
+            value: s.sizeId,
+            disabled: s.quantity === 0,
+          }))}
+        />
+      ),
+    },
+    {
+      title: "",
+      key: "action",
+      width: 60,
+      render: (_, record) => (
+        <Button
+          type="primary"
+          size="small"
+          icon={<PlusOutlined />}
+          onClick={() => handleAddToCart(record)}
+          disabled={!record.isActive || record.totalStock === 0}
+        />
+      ),
+    },
+  ];
+
+  return (
+    <div style={{ padding: 24 }}>
+      <Flex justify="space-between" align="center" style={{ marginBottom: 16 }}>
+        <Title level={3} style={{ margin: 0 }}>Billing</Title>
+        <Badge count={cart.items.length}>
+          <Button
+            type="primary"
+            icon={<ShoppingCartOutlined />}
+            onClick={() => setCartOpen(true)}
+            size="large"
+          >
+            Cart
+          </Button>
+        </Badge>
+      </Flex>
+
+      <Tabs
+        activeKey={activeTab}
+        onChange={setActiveTab}
+        items={[
+          {
+            key: "new-sale",
+            label: (
+              <span>
+                <ScanOutlined /> New Sale
+              </span>
+            ),
+            children: (
+              <div>
+                <Input
+                  placeholder="Search products by name or SKU..."
+                  prefix={<SearchOutlined />}
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  allowClear
+                  size="large"
+                  style={{ marginBottom: 16 }}
+                />
+                <Table
+                  columns={productColumns}
+                  dataSource={products}
+                  rowKey="id"
+                  loading={productsLoading}
+                  size="small"
+                  pagination={{ pageSize: 8 }}
+                  scroll={{ x: 600 }}
+                />
+              </div>
+            ),
+          },
+          {
+            key: "history",
+            label: (
+              <span>
+                <HistoryOutlined /> Sales History
+              </span>
+            ),
+            children: (
+              <SalesHistory
+                sales={sales}
+                loading={salesLoading}
+                filters={salesFilters}
+                onFiltersChange={setSalesFilters}
+                onRefund={refundSale}
+                onViewSale={getSaleById}
+              />
+            ),
+          },
+        ]}
+      />
+
+      {/* Cart Drawer */}
+      <CartDrawer
+        open={cartOpen}
+        items={cart.items}
+        discountAmount={cart.discountAmount}
+        taxAmount={cart.taxAmount}
+        paymentMethod={cart.paymentMethod}
+        customerName={cart.customerName}
+        customerPhone={cart.customerPhone}
+        onClose={() => setCartOpen(false)}
+        onUpdateQuantity={cart.updateQuantity}
+        onRemoveItem={cart.removeItem}
+        onDiscountChange={cart.setDiscountAmount}
+        onTaxChange={cart.setTaxAmount}
+        onPaymentMethodChange={cart.setPaymentMethod}
+        onCustomerNameChange={cart.setCustomerName}
+        onCustomerPhoneChange={cart.setCustomerPhone}
+        onConfirmSale={handleConfirmSale}
+        loading={saleLoading}
+      />
+
+      {/* Invoice Preview after sale */}
+      <InvoicePreview
+        sale={completedSale}
+        open={invoiceOpen}
+        onClose={() => {
+          setInvoiceOpen(false);
+          setCompletedSale(null);
+        }}
+      />
+    </div>
+  );
+}

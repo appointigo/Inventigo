@@ -15,7 +15,11 @@ export function useCategories() {
         const data = await res.json();
         setCategories(data);
       }
-    } finally {
+    } 
+    catch (error) {
+      console.error("Failed to fetch categories:", error);
+    } 
+    finally {
       setLoading(false);
     }
   }, []);
@@ -31,14 +35,25 @@ export function useCategory(id: string | null) {
   const [category, setCategory] = useState<Category | null>(null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
+  const fetchCategory = useCallback(async () => {
     if (!id) return;
     setLoading(true);
-    fetch(`/api/categories/${encodeURIComponent(id)}`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => setCategory(data))
-      .finally(() => setLoading(false));
+    try {
+      const res = await fetch(`/api/categories/${encodeURIComponent(id)}`);
+      const data = res.ok ? await res.json() : null;
+      setCategory(data);
+    } 
+    catch (error) {
+      console.error("Failed to fetch category:", error);
+    } 
+    finally {
+      setLoading(false);
+    }
   }, [id]);
+
+  useEffect(() => {
+    fetchCategory();
+  }, [fetchCategory]);
 
   return { category, loading };
 }
