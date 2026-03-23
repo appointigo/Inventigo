@@ -10,7 +10,8 @@ import {
 } from "@ant-design/icons";
 import { useAuth } from "@/modules/auth/hooks/useAuth";
 import { getMenuForRole } from "@/modules/layout/constants";
-import type { Role } from "@prisma/client";
+import { Role } from "@prisma/client";
+import StoreSelector from "@/modules/settings/components/StoreSelector";
 import { type ReactNode, useState, useEffect } from "react";
 
 const { Header, Sider, Content } = Layout;
@@ -133,7 +134,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       <Layout>
         <Header
           style={{
-            background: "#fff",
+            background: token.colorBgContainer,
             padding: "0 24px",
             display: "flex",
             alignItems: "center",
@@ -146,7 +147,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             zIndex: 10,
           }}
         >
-          <div />
+          {currentUser?.role === Role.ADMIN ? <StoreSelector /> : <div />}
 
           <Dropdown
             menu={{

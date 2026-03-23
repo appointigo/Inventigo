@@ -84,7 +84,7 @@ export const MENU_ITEMS: MenuItem[] = [
     path: "/dashboard/settings",
     name: "Settings",
     icon: SettingOutlined,
-    roles: ADMIN_ONLY,
+    roles: ALL_ROLES,
   },
 ];
 
