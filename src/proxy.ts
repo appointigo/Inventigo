@@ -5,11 +5,6 @@ import type { NextRequest } from "next/server";
 const publicRoutes = ["/login", "/api/auth"];
 
 export function proxy(request: NextRequest) {
-  // Skip auth checks in development for UI-first workflow
-  if (process.env.NODE_ENV === "development") {
-    return NextResponse.next();
-  }
-
   const { pathname } = request.nextUrl;
 
   // Allow public routes
@@ -26,10 +21,10 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check for session token (NextAuth sets this cookie)
+  // Check for session token (NextAuth v5 sets this cookie)
   const token =
-    request.cookies.get("__Secure-next-auth.session-token") ??
-    request.cookies.get("next-auth.session-token");
+    request.cookies.get("__Secure-authjs.session-token") ??
+    request.cookies.get("authjs.session-token");
 
   if (!token) {
     const loginUrl = new URL("/login", request.url);
