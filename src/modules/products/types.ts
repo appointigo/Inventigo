@@ -1,6 +1,7 @@
 export type ProductFormValues = {
   name: string;
   sku: string;
+  externalBarcode?: string;
   categoryId: string;
   brandId: string;
   basePrice: number;
@@ -21,6 +22,7 @@ export type ProductListFilters = {
 export type ProductStockSize = {
   sizeId: string;
   sizeLabel: string;
+  variantSku?: string | null;
   quantity: number;
   reorderLevel: number;
 };
@@ -29,6 +31,7 @@ export type Product = {
   id: string;
   name: string;
   sku: string;
+  externalBarcode: string | null;
   categoryId: string;
   categoryName: string;
   brandId: string;

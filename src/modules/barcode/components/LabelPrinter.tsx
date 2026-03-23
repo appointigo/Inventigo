@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { Modal, InputNumber, Button, Typography, Space } from "antd";
-import { PrinterOutlined } from "@ant-design/icons";
+import { useState, useCallback } from "react";
+import { Modal, InputNumber, Button, Typography, Space, App } from "antd";
+import { PrinterOutlined, DownloadOutlined } from "@ant-design/icons";
 import BarcodeGenerator from "./BarcodeGenerator";
 
 interface LabelPrinterProps {
@@ -12,8 +12,44 @@ interface LabelPrinterProps {
 }
 
 export default function LabelPrinter({ sku, productName, price }: LabelPrinterProps) {
+  const { message } = App.useApp();
   const [open, setOpen] = useState(false);
   const [copies, setCopies] = useState(1);
+
+  const handleDownloadPng = useCallback(() => {
+    // Find the SVG rendered by react-barcode inside the modal
+    const container = document.getElementById("label-printer-barcode-preview");
+    const svgEl = container?.querySelector("svg");
+    if (!svgEl) {
+      message.error("Barcode not rendered yet");
+      return;
+    }
+
+    const svgData = new XMLSerializer().serializeToString(svgEl);
+    const svgBlob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(svgBlob);
+
+    const img = new Image();
+    img.onload = () => {
+      const scale = 2; // 2x for high-res
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.scale(scale, scale);
+      ctx.drawImage(img, 0, 0);
+      URL.revokeObjectURL(url);
+
+      const pngUrl = canvas.toDataURL("image/png");
+      const a = document.createElement("a");
+      a.href = pngUrl;
+      a.download = `barcode-${sku}.png`;
+      a.click();
+      message.success("Barcode PNG downloaded");
+    };
+    img.src = url;
+  }, [sku, message]);
 
   const handlePrint = () => {
     const labels = Array.from({ length: copies }, (_, i) => i);
@@ -117,12 +153,20 @@ export default function LabelPrinter({ sku, productName, price }: LabelPrinterPr
         title="Print Barcode Labels"
         open={open}
         onCancel={() => setOpen(false)}
-        onOk={handlePrint}
-        okText="Print"
-        okButtonProps={{ icon: <PrinterOutlined /> }}
+        footer={[
+          <Button key="download" icon={<DownloadOutlined />} onClick={handleDownloadPng}>
+            Download PNG
+          </Button>,
+          <Button key="cancel" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>,
+          <Button key="print" type="primary" icon={<PrinterOutlined />} onClick={handlePrint}>
+            Print
+          </Button>,
+        ]}
       >
         <Space orientation="vertical" size={16} style={{ width: "100%" }}>
-          <div style={{ textAlign: "center", padding: 16, background: "#fafafa", borderRadius: 8 }}>
+          <div id="label-printer-barcode-preview" style={{ textAlign: "center", padding: 16, background: "#fafafa", borderRadius: 8 }}>
             <BarcodeGenerator value={sku} height={40} width={1.2} />
             <Typography.Text type="secondary" style={{ display: "block", marginTop: 8 }}>
               {productName}

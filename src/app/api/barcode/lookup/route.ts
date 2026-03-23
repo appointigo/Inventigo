@@ -9,17 +9,24 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "sku query parameter is required" }, { status: 400 });
   }
 
-  const product = await productService.getBySku(sku.trim());
+  const product = await productService.getByBarcode(sku.trim());
 
   if (!product) {
     return NextResponse.json({ error: "Product not found" }, { status: 404 });
   }
+
+  // Determine if a variant SKU was matched
+  const scanned = sku.trim().toLowerCase();
+  const matchedVariant = product.stock.find(
+    (s) => s.variantSku?.toLowerCase() === scanned
+  )?.sizeLabel ?? null;
 
   const result: BarcodeLookupResult = {
     product: {
       id: product.id,
       name: product.name,
       sku: product.sku,
+      externalBarcode: product.externalBarcode,
       categoryName: product.categoryName,
       brandName: product.brandName,
       basePrice: product.basePrice,
@@ -27,9 +34,11 @@ export async function GET(request: NextRequest) {
     },
     stockLevels: product.stock.map((s) => ({
       sizeLabel: s.sizeLabel,
+      variantSku: s.variantSku ?? null,
       quantity: s.quantity,
       status: s.quantity === 0 ? "OUT" : s.quantity <= s.reorderLevel ? "LOW" : "OK",
     })),
+    matchedVariant,
   };
 
   return NextResponse.json(result);

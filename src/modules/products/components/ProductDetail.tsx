@@ -17,6 +17,12 @@ export default function ProductDetail({ product, onEdit, onBack }: ProductDetail
   const stockColumns: ColumnsType<ProductStockSize> = [
     { title: "Size", dataIndex: "sizeLabel", width: 80 },
     {
+      title: "Variant SKU",
+      dataIndex: "variantSku",
+      width: 140,
+      render: (v: string | null) => v ? <Tag>{v}</Tag> : <Typography.Text type="secondary">—</Typography.Text>,
+    },
+    {
       title: "Quantity",
       dataIndex: "quantity",
       width: 100,
@@ -74,6 +80,9 @@ export default function ProductDetail({ product, onEdit, onBack }: ProductDetail
           size="small"
         >
           <Descriptions.Item label="SKU">{product.sku}</Descriptions.Item>
+          <Descriptions.Item label="External Barcode">
+            {product.externalBarcode ?? <Typography.Text type="secondary">—</Typography.Text>}
+          </Descriptions.Item>
           <Descriptions.Item label="Status">
             <Tag color={product.isActive ? "green" : "default"}>
               {product.isActive ? "Active" : "Inactive"}

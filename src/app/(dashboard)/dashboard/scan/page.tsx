@@ -1,29 +1,8 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import {
-  Typography,
-  Card,
-  Tabs,
-  Input,
-  Button,
-  Descriptions,
-  Tag,
-  Table,
-  Badge,
-  Space,
-  Result,
-  Spin,
-  App,
-} from "antd";
-import {
-  ScanOutlined,
-  SearchOutlined,
-  EyeOutlined,
-  EditOutlined,
-  ShoppingCartOutlined,
-  BarcodeOutlined,
-} from "@ant-design/icons";
+import { Typography, Card, Tabs, Input, InputNumber, Button, Descriptions, Tag, Table, Badge, Space, Result, Spin, Select, Divider, App } from "antd";
+import { ScanOutlined, SearchOutlined, EyeOutlined, EditOutlined, ShoppingCartOutlined, BarcodeOutlined, PlusCircleOutlined, DollarOutlined } from "@ant-design/icons";
 import { useRouter } from "next/navigation";
 import type { ColumnsType } from "antd/es/table";
 import type { BarcodeLookupResult } from "@/modules/barcode/types";
@@ -48,35 +27,47 @@ export default function ScanPage() {
   const [notFound, setNotFound] = useState(false);
   const [lastScanned, setLastScanned] = useState("");
 
+  // Inline stock receive state
+  const [receiveSize, setReceiveSize] = useState<string | undefined>(undefined);
+  const [receiveQty, setReceiveQty] = useState<number>(1);
+  const [receiving, setReceiving] = useState(false);
+
+  // Inline add-to-billing state
+  const [billingSize, setBillingSize] = useState<string | undefined>(undefined);
+  const [billingQty, setBillingQty] = useState<number>(1);
+  const [addingToBill, setAddingToBill] = useState(false);
+
   const lookupSku = useCallback(
     async (sku: string) => {
       if (!sku.trim()) return;
       setLoading(true);
       setNotFound(false);
       setResult(null);
+
       try {
         const data = await barcodeService.lookup(sku.trim());
         if (data) {
           setResult(data);
           setLastScanned(sku.trim());
-        } else {
+        } 
+        else {
           setNotFound(true);
           setLastScanned(sku.trim());
         }
-      } catch {
+      } 
+      catch {
         message.error("Failed to lookup barcode");
-      } finally {
+      } 
+      finally {
         setLoading(false);
       }
-    },
-    [message]
+    }, [message]
   );
 
   const handleScan = useCallback(
     (decodedText: string) => {
       lookupSku(decodedText);
-    },
-    [lookupSku]
+    }, [lookupSku]
   );
 
   const handleManualSearch = () => {
@@ -88,10 +79,106 @@ export default function ScanPage() {
     setNotFound(false);
     setLastScanned("");
     setManualSku("");
+    setReceiveSize(undefined);
+    setReceiveQty(1);
+    setBillingSize(undefined);
+    setBillingQty(1);
   };
+
+  const handleReceiveStock = useCallback(async () => {
+    if (!result || !receiveSize || receiveQty < 1) return;
+    const sizeInfo = result.stockLevels.find((s) => s.sizeLabel === receiveSize);
+
+    if (!sizeInfo) return;
+    setReceiving(true);
+
+    try {
+      const res = await fetch("/api/stock", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productId: result.product.id,
+          sizeId: receiveSize,
+          quantity: receiveQty,
+          type: "IN",
+          reason: "Stock received (scan)",
+        }),
+      });
+
+      if (!res.ok) throw new Error("Failed to receive stock");
+      message.success(`Received ${receiveQty} × ${result.product.name} (${receiveSize})`);
+
+      // Re-fetch to update stock levels
+      await lookupSku(result.product.sku);
+      setReceiveSize(undefined);
+      setReceiveQty(1);
+    } 
+    catch {
+      message.error("Failed to receive stock");
+    } 
+    finally {
+      setReceiving(false);
+    }
+  }, [result, receiveSize, receiveQty, lookupSku, message]);
+
+  const handleAddToBilling = useCallback(async () => {
+    if (!result || !billingSize || billingQty < 1) return;
+    const sizeInfo = result.stockLevels.find((s) => s.sizeLabel === billingSize);
+
+    if (!sizeInfo) return;
+
+    if (sizeInfo.quantity < billingQty) {
+      message.warning(`Only ${sizeInfo.quantity} in stock for size ${billingSize}`);
+      return;
+    }
+
+    setAddingToBill(true);
+
+    try {
+      // Create a single-item quick sale
+      const res = await fetch("/api/billing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: [{
+            productId: result.product.id,
+            productName: result.product.name,
+            sku: result.product.sku,
+            sizeId: billingSize,
+            sizeLabel: billingSize,
+            quantity: billingQty,
+            unitPrice: result.product.basePrice,
+          }],
+          paymentMethod: "CASH",
+          discountAmount: 0,
+          taxAmount: 0,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Failed to create sale");
+
+      const sale = await res.json();
+      message.success(`Quick sale created: ${sale.invoiceNumber}`);
+      await lookupSku(result.product.sku);
+      setBillingSize(undefined);
+      setBillingQty(1);
+    } 
+    catch {
+      message.error("Failed to create sale");
+    } 
+    finally {
+      setAddingToBill(false);
+    }
+  }, [result, billingSize, billingQty, lookupSku, message]);
 
   const stockColumns: ColumnsType<StockRow> = [
     { title: "Size", dataIndex: "sizeLabel", width: 80 },
+    {
+      title: "Variant SKU",
+      dataIndex: "variantSku",
+      width: 130,
+      render: (v: string | null) => v ? <Tag style={{ fontSize: 11 }}>{v}</Tag> : "—",
+    },
     {
       title: "Quantity",
       dataIndex: "quantity",
@@ -209,6 +296,11 @@ export default function ScanPage() {
             </div>
 
             {/* Product Info */}
+            {result.matchedVariant && (
+              <Tag color="blue" style={{ fontSize: 13 }}>
+                Scanned variant: Size {result.matchedVariant}
+              </Tag>
+            )}
             <Descriptions
               title={result.product.name}
               column={{ xs: 1, sm: 2 }}
@@ -241,6 +333,78 @@ export default function ScanPage() {
               title={() => <Typography.Text strong>Stock by Size</Typography.Text>}
             />
 
+            {/* Receive Stock Inline */}
+            <Card size="small" title={<><PlusCircleOutlined /> Receive Stock</>}>
+              <Space wrap style={{ width: "100%" }}>
+                <Select
+                  placeholder="Size"
+                  value={receiveSize}
+                  onChange={setReceiveSize}
+                  style={{ width: 110 }}
+                  options={result.stockLevels.map((s) => ({
+                    label: `${s.sizeLabel} (${s.quantity})`,
+                    value: s.sizeLabel,
+                  }))}
+                />
+                <InputNumber
+                  min={1}
+                  max={9999}
+                  value={receiveQty}
+                  onChange={(v) => setReceiveQty(v ?? 1)}
+                  style={{ width: 90 }}
+                  placeholder="Qty"
+                />
+                <Button
+                  type="primary"
+                  loading={receiving}
+                  disabled={!receiveSize || receiveQty < 1}
+                  onClick={handleReceiveStock}
+                  icon={<PlusCircleOutlined />}
+                >
+                  Receive
+                </Button>
+              </Space>
+            </Card>
+
+            {/* Quick Sale Inline */}
+            <Card size="small" title={<><DollarOutlined /> Quick Sale</>}>
+              <Space wrap style={{ width: "100%" }}>
+                <Select
+                  placeholder="Size"
+                  value={billingSize}
+                  onChange={setBillingSize}
+                  style={{ width: 110 }}
+                  options={result.stockLevels.map((s) => ({
+                    label: `${s.sizeLabel} (${s.quantity})`,
+                    value: s.sizeLabel,
+                    disabled: s.quantity === 0,
+                  }))}
+                />
+                <InputNumber
+                  min={1}
+                  max={9999}
+                  value={billingQty}
+                  onChange={(v) => setBillingQty(v ?? 1)}
+                  style={{ width: 90 }}
+                  placeholder="Qty"
+                />
+                <Button
+                  type="primary"
+                  loading={addingToBill}
+                  disabled={!billingSize || billingQty < 1}
+                  onClick={handleAddToBilling}
+                  icon={<DollarOutlined />}
+                >
+                  Sell
+                </Button>
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  ₹{result.product.basePrice.toLocaleString("en-IN")} each
+                </Typography.Text>
+              </Space>
+            </Card>
+
+            <Divider style={{ margin: "8px 0" }} />
+
             {/* Quick Actions */}
             <Card size="small" title="Quick Actions">
               <Space wrap>
@@ -251,16 +415,16 @@ export default function ScanPage() {
                   View Details
                 </Button>
                 <Button
+                  icon={<ShoppingCartOutlined />}
+                  onClick={() => router.push(`/dashboard/billing`)}
+                >
+                  Go to Billing
+                </Button>
+                <Button
                   icon={<EditOutlined />}
                   onClick={() => router.push(`/dashboard/stock`)}
                 >
-                  Adjust Stock
-                </Button>
-                <Button
-                  icon={<ShoppingCartOutlined />}
-                  onClick={() => router.push(`/dashboard/purchase-orders`)}
-                >
-                  Purchase Orders
+                  Stock Page
                 </Button>
                 <Button type="primary" icon={<ScanOutlined />} onClick={resetScan}>
                   Scan Another

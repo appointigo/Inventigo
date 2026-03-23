@@ -4,37 +4,37 @@ import type { Product, ProductFormValues, ProductListFilters } from "../types";
 
 let products: Product[] = [
   {
-    id: "prod-1", name: "Nike Dri-FIT Running Tee", sku: "NK-DFT-001",
+    id: "prod-1", name: "Nike Dri-FIT Running Tee", sku: "NK-DFT-001", externalBarcode: "8901030811649",
     categoryId: "cat-5", categoryName: "Dry-Fit T-Shirts", brandId: "br-1", brandName: "Nike",
     basePrice: 1499, costPrice: 900,
     attributes: { sleeve: "Half Sleeve", sport: "Running", color: "Black" },
     imageUrl: null, isActive: true,
     stock: [
-      { sizeId: "s-26", sizeLabel: "S", quantity: 15, reorderLevel: 5 },
-      { sizeId: "s-27", sizeLabel: "M", quantity: 25, reorderLevel: 5 },
-      { sizeId: "s-28", sizeLabel: "L", quantity: 20, reorderLevel: 5 },
-      { sizeId: "s-29", sizeLabel: "XL", quantity: 10, reorderLevel: 5 },
-      { sizeId: "s-30", sizeLabel: "XXL", quantity: 5, reorderLevel: 5 },
+      { sizeId: "s-26", sizeLabel: "S", variantSku: "NK-DFT-001-S", quantity: 15, reorderLevel: 5 },
+      { sizeId: "s-27", sizeLabel: "M", variantSku: "NK-DFT-001-M", quantity: 25, reorderLevel: 5 },
+      { sizeId: "s-28", sizeLabel: "L", variantSku: "NK-DFT-001-L", quantity: 20, reorderLevel: 5 },
+      { sizeId: "s-29", sizeLabel: "XL", variantSku: "NK-DFT-001-XL", quantity: 10, reorderLevel: 5 },
+      { sizeId: "s-30", sizeLabel: "XXL", variantSku: "NK-DFT-001-XXL", quantity: 5, reorderLevel: 5 },
     ],
     totalStock: 75, createdAt: "2025-01-01T00:00:00Z", updatedAt: "2025-01-01T00:00:00Z",
   },
   {
-    id: "prod-2", name: "Adidas Classic Round Neck Tee", sku: "AD-RN-001",
+    id: "prod-2", name: "Adidas Classic Round Neck Tee", sku: "AD-RN-001", externalBarcode: "4060477182940",
     categoryId: "cat-1", categoryName: "T-Shirts", brandId: "br-2", brandName: "Adidas",
     basePrice: 999, costPrice: 550,
     attributes: { sleeve: "Half Sleeve", neckType: "Round Neck", color: "White" },
     imageUrl: null, isActive: true,
     stock: [
-      { sizeId: "s-2", sizeLabel: "S", quantity: 20, reorderLevel: 5 },
-      { sizeId: "s-3", sizeLabel: "M", quantity: 30, reorderLevel: 5 },
-      { sizeId: "s-4", sizeLabel: "L", quantity: 25, reorderLevel: 5 },
-      { sizeId: "s-5", sizeLabel: "XL", quantity: 15, reorderLevel: 5 },
-      { sizeId: "s-6", sizeLabel: "XXL", quantity: 8, reorderLevel: 5 },
+      { sizeId: "s-2", sizeLabel: "S", variantSku: "AD-RN-001-S", quantity: 20, reorderLevel: 5 },
+      { sizeId: "s-3", sizeLabel: "M", variantSku: "AD-RN-001-M", quantity: 30, reorderLevel: 5 },
+      { sizeId: "s-4", sizeLabel: "L", variantSku: "AD-RN-001-L", quantity: 25, reorderLevel: 5 },
+      { sizeId: "s-5", sizeLabel: "XL", variantSku: "AD-RN-001-XL", quantity: 15, reorderLevel: 5 },
+      { sizeId: "s-6", sizeLabel: "XXL", variantSku: "AD-RN-001-XXL", quantity: 8, reorderLevel: 5 },
     ],
     totalStock: 98, createdAt: "2025-01-01T00:00:00Z", updatedAt: "2025-01-01T00:00:00Z",
   },
   {
-    id: "prod-3", name: "Puma Polo T-Shirt", sku: "PM-PT-001",
+    id: "prod-3", name: "Puma Polo T-Shirt", sku: "PM-PT-001", externalBarcode: null,
     categoryId: "cat-1", categoryName: "T-Shirts", brandId: "br-3", brandName: "Puma",
     basePrice: 1299, costPrice: 750,
     attributes: { sleeve: "Half Sleeve", neckType: "Polo", color: "Navy Blue" },
@@ -49,7 +49,7 @@ let products: Product[] = [
     totalStock: 65, createdAt: "2025-01-01T00:00:00Z", updatedAt: "2025-01-01T00:00:00Z",
   },
   {
-    id: "prod-4", name: "Levi's 511 Slim Fit Jeans", sku: "LV-511-001",
+    id: "prod-4", name: "Levi's 511 Slim Fit Jeans", sku: "LV-511-001", externalBarcode: null,
     categoryId: "cat-3", categoryName: "Jeans", brandId: "br-4", brandName: "Levi's",
     basePrice: 2999, costPrice: 1800,
     attributes: { fit: "Slim", rise: "Mid Rise", wash: "Dark", color: "Indigo" },
@@ -64,7 +64,7 @@ let products: Product[] = [
     totalStock: 61, createdAt: "2025-01-01T00:00:00Z", updatedAt: "2025-01-01T00:00:00Z",
   },
   {
-    id: "prod-5", name: "Levi's 501 Regular Fit Jeans", sku: "LV-501-001",
+    id: "prod-5", name: "Levi's 501 Regular Fit Jeans", sku: "LV-501-001", externalBarcode: null,
     categoryId: "cat-3", categoryName: "Jeans", brandId: "br-4", brandName: "Levi's",
     basePrice: 3499, costPrice: 2100,
     attributes: { fit: "Regular", rise: "Mid Rise", wash: "Medium", color: "Blue" },
@@ -79,7 +79,7 @@ let products: Product[] = [
     totalStock: 57, createdAt: "2025-01-01T00:00:00Z", updatedAt: "2025-01-01T00:00:00Z",
   },
   {
-    id: "prod-6", name: "Allen Solly Formal Shirt", sku: "AS-FS-001",
+    id: "prod-6", name: "Allen Solly Formal Shirt", sku: "AS-FS-001", externalBarcode: null,
     categoryId: "cat-2", categoryName: "Shirts", brandId: "br-5", brandName: "Allen Solly",
     basePrice: 1799, costPrice: 1000,
     attributes: { sleeve: "Full Sleeve", fit: "Slim Fit", pattern: "Solid", color: "Sky Blue" },
@@ -94,7 +94,7 @@ let products: Product[] = [
     totalStock: 57, createdAt: "2025-01-01T00:00:00Z", updatedAt: "2025-01-01T00:00:00Z",
   },
   {
-    id: "prod-7", name: "Allen Solly Checked Casual Shirt", sku: "AS-CS-001",
+    id: "prod-7", name: "Allen Solly Checked Casual Shirt", sku: "AS-CS-001", externalBarcode: null,
     categoryId: "cat-2", categoryName: "Shirts", brandId: "br-5", brandName: "Allen Solly",
     basePrice: 1599, costPrice: 900,
     attributes: { sleeve: "Half Sleeve", fit: "Regular Fit", pattern: "Checked", color: "Red/White" },
@@ -108,7 +108,7 @@ let products: Product[] = [
     totalStock: 54, createdAt: "2025-01-01T00:00:00Z", updatedAt: "2025-01-01T00:00:00Z",
   },
   {
-    id: "prod-8", name: "Nike Dri-FIT Joggers", sku: "NK-JG-001",
+    id: "prod-8", name: "Nike Dri-FIT Joggers", sku: "NK-JG-001", externalBarcode: null,
     categoryId: "cat-6", categoryName: "Lowers", brandId: "br-1", brandName: "Nike",
     basePrice: 1999, costPrice: 1200,
     attributes: { type: "Joggers", material: "Polyester", color: "Grey" },
@@ -122,7 +122,7 @@ let products: Product[] = [
     totalStock: 41, createdAt: "2025-01-01T00:00:00Z", updatedAt: "2025-01-01T00:00:00Z",
   },
   {
-    id: "prod-9", name: "Puma Cotton Track Pants", sku: "PM-TP-001",
+    id: "prod-9", name: "Puma Cotton Track Pants", sku: "PM-TP-001", externalBarcode: null,
     categoryId: "cat-6", categoryName: "Lowers", brandId: "br-3", brandName: "Puma",
     basePrice: 1499, costPrice: 850,
     attributes: { type: "Track Pants", material: "Cotton", color: "Black" },
@@ -137,7 +137,7 @@ let products: Product[] = [
     totalStock: 58, createdAt: "2025-01-01T00:00:00Z", updatedAt: "2025-01-01T00:00:00Z",
   },
   {
-    id: "prod-10", name: "Adidas Sport Shorts", sku: "AD-SS-001",
+    id: "prod-10", name: "Adidas Sport Shorts", sku: "AD-SS-001", externalBarcode: null,
     categoryId: "cat-7", categoryName: "Shorts", brandId: "br-2", brandName: "Adidas",
     basePrice: 899, costPrice: 500,
     attributes: { type: "Sports", length: "Above Knee", color: "Black" },
@@ -151,7 +151,7 @@ let products: Product[] = [
     totalStock: 70, createdAt: "2025-01-01T00:00:00Z", updatedAt: "2025-01-01T00:00:00Z",
   },
   {
-    id: "prod-11", name: "Nike Cargo Shorts", sku: "NK-CS-001",
+    id: "prod-11", name: "Nike Cargo Shorts", sku: "NK-CS-001", externalBarcode: null,
     categoryId: "cat-7", categoryName: "Shorts", brandId: "br-1", brandName: "Nike",
     basePrice: 1299, costPrice: 750,
     attributes: { type: "Cargo", length: "Knee Length", color: "Olive Green" },
@@ -165,7 +165,7 @@ let products: Product[] = [
     totalStock: 40, createdAt: "2025-01-01T00:00:00Z", updatedAt: "2025-01-01T00:00:00Z",
   },
   {
-    id: "prod-12", name: "Puma Slim Pants", sku: "PM-SP-001",
+    id: "prod-12", name: "Puma Slim Pants", sku: "PM-SP-001", externalBarcode: null,
     categoryId: "cat-4", categoryName: "Pants", brandId: "br-3", brandName: "Puma",
     basePrice: 1799, costPrice: 1050,
     attributes: { fit: "Slim Fit", material: "Cotton", color: "Khaki" },
@@ -180,7 +180,7 @@ let products: Product[] = [
     totalStock: 47, createdAt: "2025-01-01T00:00:00Z", updatedAt: "2025-01-01T00:00:00Z",
   },
   {
-    id: "prod-13", name: "Allen Solly Formal Trousers", sku: "AS-FT-001",
+    id: "prod-13", name: "Allen Solly Formal Trousers", sku: "AS-FT-001", externalBarcode: null,
     categoryId: "cat-4", categoryName: "Pants", brandId: "br-5", brandName: "Allen Solly",
     basePrice: 2199, costPrice: 1300,
     attributes: { fit: "Regular Fit", material: "Polyester", color: "Charcoal" },
@@ -195,7 +195,7 @@ let products: Product[] = [
     totalStock: 54, createdAt: "2025-01-01T00:00:00Z", updatedAt: "2025-01-01T00:00:00Z",
   },
   {
-    id: "prod-14", name: "Nike Pro Compression Tee", sku: "NK-PCT-001",
+    id: "prod-14", name: "Nike Pro Compression Tee", sku: "NK-PCT-001", externalBarcode: null,
     categoryId: "cat-5", categoryName: "Dry-Fit T-Shirts", brandId: "br-1", brandName: "Nike",
     basePrice: 1799, costPrice: 1050,
     attributes: { sleeve: "Half Sleeve", sport: "Gym", color: "Red" },
@@ -209,7 +209,7 @@ let products: Product[] = [
     totalStock: 51, createdAt: "2025-01-01T00:00:00Z", updatedAt: "2025-01-01T00:00:00Z",
   },
   {
-    id: "prod-15", name: "Adidas V-Neck Tee", sku: "AD-VN-001",
+    id: "prod-15", name: "Adidas V-Neck Tee", sku: "AD-VN-001", externalBarcode: null,
     categoryId: "cat-1", categoryName: "T-Shirts", brandId: "br-2", brandName: "Adidas",
     basePrice: 899, costPrice: 500,
     attributes: { sleeve: "Half Sleeve", neckType: "V-Neck", color: "Grey Melange" },
@@ -224,6 +224,15 @@ let products: Product[] = [
     totalStock: 86, createdAt: "2025-01-01T00:00:00Z", updatedAt: "2025-01-01T00:00:00Z",
   },
 ];
+
+// Ensure all stock entries have variantSku (default null for products without variant barcodes)
+for (const p of products) {
+  for (const s of p.stock) {
+    if (s.variantSku === undefined) {
+      (s as { variantSku: string | null }).variantSku = null;
+    }
+  }
+}
 
 let nextId = 16;
 
@@ -250,6 +259,17 @@ export const productService = {
     return products.find((p) => p.sku.toLowerCase() === sku.toLowerCase()) ?? null;
   },
 
+  async getByBarcode(barcode: string): Promise<Product | null> {
+    const lower = barcode.toLowerCase();
+    // Try SKU first, then externalBarcode, then variant SKUs
+    return (
+      products.find((p) => p.sku.toLowerCase() === lower) ??
+      products.find((p) => p.externalBarcode?.toLowerCase() === lower) ??
+      products.find((p) => p.stock.some((s) => s.variantSku?.toLowerCase() === lower)) ??
+      null
+    );
+  },
+
   async create(values: ProductFormValues): Promise<Product> {
     const now = new Date().toISOString();
     const id = `prod-${nextId++}`;
@@ -260,6 +280,7 @@ export const productService = {
       id,
       name: values.name,
       sku: values.sku,
+      externalBarcode: values.externalBarcode ?? null,
       categoryId: values.categoryId,
       categoryName: catRef?.categoryName ?? values.categoryId,
       brandId: values.brandId,
@@ -286,6 +307,7 @@ export const productService = {
       ...existing,
       name: values.name ?? existing.name,
       sku: values.sku ?? existing.sku,
+      externalBarcode: values.externalBarcode !== undefined ? (values.externalBarcode ?? null) : existing.externalBarcode,
       categoryId: values.categoryId ?? existing.categoryId,
       brandId: values.brandId ?? existing.brandId,
       basePrice: values.basePrice ?? existing.basePrice,

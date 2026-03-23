@@ -50,6 +50,7 @@ export default function ProductForm({
       form.setFieldsValue({
         name: initialValues.name,
         sku: initialValues.sku,
+        externalBarcode: initialValues.externalBarcode ?? undefined,
         categoryId: initialValues.categoryId,
         brandId: initialValues.brandId,
         basePrice: initialValues.basePrice,
@@ -122,6 +123,14 @@ export default function ProductForm({
             rules={[{ required: true, message: "SKU is required" }]}
           >
             <Input placeholder="e.g. NK-DFT-001" />
+          </Form.Item>
+
+          <Form.Item
+            name="externalBarcode"
+            label="External Barcode (EAN-13 / UPC-A)"
+            tooltip="Optional. Enter the manufacturer barcode so scanning the product packaging resolves to this product."
+          >
+            <Input placeholder="e.g. 8901030811649" />
           </Form.Item>
 
           <Space size={16} style={{ width: "100%", display: "flex" }}>
