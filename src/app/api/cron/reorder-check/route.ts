@@ -6,19 +6,22 @@ import { alertService } from "@/modules/alerts/services/alertService";
  * Runs daily at 8 AM via Vercel Cron (see vercel.json).
  */
 export async function GET(request: Request) {
-  // Verify the request is from Vercel Cron
+  const cronSecret = process.env.CRON_SECRET;
   const authHeader = request.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const lowStockItems = await alertService.checkStockLevels();
-  const result = await alertService.sendAlerts(lowStockItems);
-
-  return NextResponse.json({
-    message: "Reorder check completed",
-    lowStockCount: result.itemCount,
-    emailSent: result.emailSent,
-    smsSent: result.smsSent,
-  });
+  try {
+    const lowStockItems = await alertService.checkStockLevels();
+    const result = await alertService.sendAlerts(lowStockItems);
+    return NextResponse.json({
+      message: "Reorder check completed",
+      lowStockCount: result.itemCount,
+      emailSent: result.emailSent,
+      smsSent: result.smsSent,
+    });
+  } catch {
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
 }

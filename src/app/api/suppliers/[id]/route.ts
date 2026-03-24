@@ -2,18 +2,26 @@ import { NextResponse } from "next/server";
 import { supplierService } from "@/modules/suppliers/services/supplierService";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const supplier = await supplierService.getById(id);
-  if (!supplier) return NextResponse.json({ error: "Supplier not found" }, { status: 404 });
-  return NextResponse.json(supplier);
+  try {
+    const { id } = await params;
+    const supplier = await supplierService.getById(id);
+    if (!supplier) return NextResponse.json({ error: "Supplier not found" }, { status: 404 });
+    return NextResponse.json(supplier);
+  } catch {
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
 }
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const body = await request.json();
-  const supplier = await supplierService.update(id, body);
-  if (!supplier) return NextResponse.json({ error: "Supplier not found" }, { status: 404 });
-  return NextResponse.json(supplier);
+  try {
+    const { id } = await params;
+    const body = await request.json();
+    const supplier = await supplierService.update(id, body);
+    if (!supplier) return NextResponse.json({ error: "Supplier not found" }, { status: 404 });
+    return NextResponse.json(supplier);
+  } catch {
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
 }
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {

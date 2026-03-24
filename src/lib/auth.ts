@@ -41,8 +41,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
 
-        // --- TEST CREDENTIALS (dev only) — TODO: Remove before production ---
-        if (process.env.NODE_ENV === "development") {
+        // --- TEST CREDENTIALS (dev + demo mode) ---
+        if (process.env.NODE_ENV === "development" || process.env.DEMO_MODE === "true") {
           const testUser = TEST_USERS.find(
             (u) =>
               u.email === credentials.email &&
@@ -60,18 +60,24 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
         // --- END TEST CREDENTIALS ---
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email as string },
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            passwordHash: true,
-            role: true,
-            storeId: true,
-            isActive: true,
-          },
-        });
+        // Gracefully handle DB unavailability (demo mode without a database)
+        let user = null;
+        try {
+          user = await prisma.user.findUnique({
+            where: { email: credentials.email as string },
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              passwordHash: true,
+              role: true,
+              storeId: true,
+              isActive: true,
+            },
+          });
+        } catch {
+          return null;
+        }
 
         if (!user || !user.isActive) {
           return null;
