@@ -13,7 +13,9 @@ import {
   Divider,
   Card,
   Empty,
+  Tooltip,
 } from "antd";
+import { ReloadOutlined } from "@ant-design/icons";
 import type { Product, ProductFormValues } from "../types";
 import type { Category } from "@/modules/categories/types";
 import type { Brand } from "@/modules/brands/types";
@@ -27,6 +29,29 @@ interface ProductFormProps {
   loading?: boolean;
 }
 
+// --- SKU helpers ---
+function abbrevName(name: string): string {
+  const words = name.split(/[\s\-_]+/).filter(Boolean);
+  if (words.length >= 2) {
+    return words
+      .slice(0, 2)
+      .map((w) => w[0].toUpperCase())
+      .join("");
+  }
+  // Single word: strip vowels, take first 2 consonants
+  const upper = words[0].toUpperCase();
+  const consonants = upper.replace(/[AEIOU]/g, "");
+  if (consonants.length >= 2) return consonants.slice(0, 2);
+  if (consonants.length === 1) return consonants + (upper[1] ?? upper[0]);
+  return upper.slice(0, 2);
+}
+
+function generateSku(brandName: string, categoryName: string): string {
+  const seq = Math.floor(Math.random() * 900) + 100;
+  return `${abbrevName(brandName)}-${abbrevName(categoryName)}-${seq}`;
+}
+// --- end SKU helpers ---
+
 export default function ProductForm({
   initialValues,
   categories,
@@ -37,13 +62,26 @@ export default function ProductForm({
 }: ProductFormProps) {
   const [form] = Form.useForm();
   const [step, setStep] = useState(0);
+  const [skuTouched, setSkuTouched] = useState(false);
   const isEdit = !!initialValues;
 
   const selectedCategoryId = Form.useWatch("categoryId", form);
+  const selectedBrandId = Form.useWatch("brandId", form);
   const selectedCategory = useMemo(
     () => categories.find((c) => c.id === selectedCategoryId) ?? null,
     [categories, selectedCategoryId]
   );
+
+  // Auto-generate SKU when brand + category are both selected (new product only)
+  useEffect(() => {
+    if (isEdit || skuTouched) return;
+    if (!selectedBrandId || !selectedCategoryId) return;
+    const brand = brands.find((b) => b.id === selectedBrandId);
+    const category = categories.find((c) => c.id === selectedCategoryId);
+    if (brand && category) {
+      form.setFieldValue("sku", generateSku(brand.name, category.name));
+    }
+  }, [selectedBrandId, selectedCategoryId, isEdit, skuTouched, brands, categories, form]);
 
   useEffect(() => {
     if (initialValues) {
@@ -62,6 +100,7 @@ export default function ProductForm({
       });
     } else {
       form.resetFields();
+      setSkuTouched(false);
     }
   }, [initialValues, form]);
 
@@ -109,6 +148,7 @@ export default function ProductForm({
       >
         {/* Step 1: Basic Info */}
         <div style={{ display: step === 0 ? "block" : "none" }}>
+          {/* 1. Product Name */}
           <Form.Item
             name="name"
             label="Product Name"
@@ -117,36 +157,8 @@ export default function ProductForm({
             <Input placeholder="e.g. Nike Dri-FIT Running Tee" />
           </Form.Item>
 
-          <Form.Item
-            name="sku"
-            label="SKU"
-            rules={[{ required: true, message: "SKU is required" }]}
-          >
-            <Input placeholder="e.g. NK-DFT-001" />
-          </Form.Item>
-
-          <Form.Item
-            name="externalBarcode"
-            label="External Barcode (EAN-13 / UPC-A)"
-            tooltip="Optional. Enter the manufacturer barcode so scanning the product packaging resolves to this product."
-          >
-            <Input placeholder="e.g. 8901030811649" />
-          </Form.Item>
-
+          {/* 2. Brand + Category — drives SKU auto-generation */}
           <Space size={16} style={{ width: "100%", display: "flex" }}>
-            <Form.Item
-              name="categoryId"
-              label="Category"
-              rules={[{ required: true, message: "Select a category" }]}
-              style={{ flex: 1 }}
-            >
-              <Select
-                placeholder="Select category"
-                showSearch={{ optionFilterProp: "label" }}
-                options={categories.map((c) => ({ label: c.name, value: c.id }))}
-              />
-            </Form.Item>
-
             <Form.Item
               name="brandId"
               label="Brand"
@@ -159,8 +171,64 @@ export default function ProductForm({
                 options={brands.filter((b) => b.isActive).map((b) => ({ label: b.name, value: b.id }))}
               />
             </Form.Item>
+
+            <Form.Item
+              name="categoryId"
+              label="Category"
+              rules={[{ required: true, message: "Select a category" }]}
+              style={{ flex: 1 }}
+            >
+              <Select
+                placeholder="Select category"
+                showSearch={{ optionFilterProp: "label" }}
+                options={categories.map((c) => ({ label: c.name, value: c.id }))}
+              />
+            </Form.Item>
           </Space>
 
+          {/* 3. SKU — auto-populated once Brand + Category are selected */}
+          <Form.Item
+            name="sku"
+            label="SKU"
+            rules={[{ required: true, message: "SKU is required" }]}
+            tooltip={!isEdit ? "Auto-generated from Brand & Category. You can edit it or regenerate." : undefined}
+          >
+            <Input
+              placeholder="Select Brand & Category to auto-generate"
+              onChange={() => setSkuTouched(true)}
+              suffix={
+                !isEdit ? (
+                  <Tooltip title="Regenerate SKU">
+                    <ReloadOutlined
+                      style={{
+                        cursor: selectedBrandId && selectedCategoryId ? "pointer" : "default",
+                        color: selectedBrandId && selectedCategoryId ? "#1677ff" : "#d9d9d9",
+                      }}
+                      onClick={() => {
+                        const brand = brands.find((b) => b.id === selectedBrandId);
+                        const category = categories.find((c) => c.id === selectedCategoryId);
+                        if (brand && category) {
+                          form.setFieldValue("sku", generateSku(brand.name, category.name));
+                          setSkuTouched(false);
+                        }
+                      }}
+                    />
+                  </Tooltip>
+                ) : null
+              }
+            />
+          </Form.Item>
+
+          {/* 4. External Barcode — grouped with SKU as both are barcode-related */}
+          <Form.Item
+            name="externalBarcode"
+            label="External Barcode (EAN-13 / UPC-A)"
+            tooltip="Optional. Enter the manufacturer barcode so scanning the product packaging resolves to this product."
+          >
+            <Input placeholder="e.g. 8901030811649" />
+          </Form.Item>
+
+          {/* 5. Pricing */}
           <Space size={16} style={{ width: "100%", display: "flex" }}>
             <Form.Item
               name="basePrice"
@@ -181,6 +249,7 @@ export default function ProductForm({
             </Form.Item>
           </Space>
 
+          {/* 6. Image + Active */}
           <Form.Item name="imageUrl" label="Image URL">
             <Input placeholder="https://example.com/image.jpg (optional)" />
           </Form.Item>
