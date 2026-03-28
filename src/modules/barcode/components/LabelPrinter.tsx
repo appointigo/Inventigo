@@ -1,9 +1,16 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { Modal, InputNumber, Button, Typography, Space, App } from "antd";
+import { Modal, Button, Typography, App } from "antd";
 import { PrinterOutlined, DownloadOutlined } from "@ant-design/icons";
 import BarcodeGenerator from "./BarcodeGenerator";
+import {
+  FullWidthSpace,
+  BarcodePreview,
+  BarcodeSubtext,
+  CopiesInput,
+  CopiesHint,
+} from "./LabelPrinter.styled";
 
 interface LabelPrinterProps {
   sku: string;
@@ -165,27 +172,26 @@ export default function LabelPrinter({ sku, productName, price }: LabelPrinterPr
           </Button>,
         ]}
       >
-        <Space orientation="vertical" size={16} style={{ width: "100%" }}>
-          <div id="label-printer-barcode-preview" style={{ textAlign: "center", padding: 16, background: "#fafafa", borderRadius: 8 }}>
+        <FullWidthSpace orientation="vertical" size={16}>
+          <BarcodePreview id="label-printer-barcode-preview">
             <BarcodeGenerator value={sku} height={40} width={1.2} />
-            <Typography.Text type="secondary" style={{ display: "block", marginTop: 8 }}>
+            <BarcodeSubtext type="secondary">
               {productName}
-            </Typography.Text>
-          </div>
+            </BarcodeSubtext>
+          </BarcodePreview>
           <div>
             <Typography.Text strong>Number of labels:</Typography.Text>
-            <InputNumber
+            <CopiesInput
               min={1}
               max={100}
               value={copies}
-              onChange={(v) => setCopies(v ?? 1)}
-              style={{ width: 100, marginLeft: 12 }}
+              onChange={(v) => setCopies((v as number) ?? 1)}
             />
-            <Typography.Text type="secondary" style={{ marginLeft: 8 }}>
+            <CopiesHint type="secondary">
               (3 per row on A4)
-            </Typography.Text>
+            </CopiesHint>
           </div>
-        </Space>
+        </FullWidthSpace>
       </Modal>
     </>
   );
