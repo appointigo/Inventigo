@@ -3,6 +3,7 @@ import { AntdRegistry } from "@ant-design/nextjs-registry";
 import { AuthProvider } from "@/providers/AuthProvider";
 import { QueryProvider } from "@/providers/QueryProvider";
 import { ThemeProvider } from "@/providers/ThemeProvider";
+import { EmotionRegistry } from "@/providers/EmotionRegistry";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -18,13 +19,15 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <AuthProvider>
-          <QueryProvider>
-            <AntdRegistry>
-              <ThemeProvider>{children}</ThemeProvider>
-            </AntdRegistry>
-          </QueryProvider>
-        </AuthProvider>
+        <EmotionRegistry>
+          <AuthProvider>
+            <QueryProvider>
+              <AntdRegistry>
+                <ThemeProvider>{children}</ThemeProvider>
+              </AntdRegistry>
+            </QueryProvider>
+          </AuthProvider>
+        </EmotionRegistry>
       </body>
     </html>
   );
