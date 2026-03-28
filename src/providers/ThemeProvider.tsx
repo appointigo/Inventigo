@@ -15,7 +15,7 @@ export const ThemeModeContext = createContext<ThemeModeContextType>({
   toggleMode: () => {},
 });
 
-const STORAGE_KEY = "inventigo-theme";
+const STORAGE_KEY = "stockiva-theme";
 
 const baseTokens = {
   colorPrimary: "#1677ff",

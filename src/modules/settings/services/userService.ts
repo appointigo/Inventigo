@@ -7,7 +7,7 @@ let users: AppUser[] = [
   {
     id: "test-admin-001",
     name: "Test Admin",
-    email: "admin@inventigo.com",
+    email: "admin@stockiva.com",
     role: Role.ADMIN,
     storeId: null,
     storeName: null,
@@ -18,7 +18,7 @@ let users: AppUser[] = [
   {
     id: "test-manager-001",
     name: "Store Manager",
-    email: "manager@inventigo.com",
+    email: "manager@stockiva.com",
     role: Role.MANAGER,
     storeId: "test-store-001",
     storeName: "Main Store",
@@ -29,7 +29,7 @@ let users: AppUser[] = [
   {
     id: "test-staff-001",
     name: "Test Staff",
-    email: "staff@inventigo.com",
+    email: "staff@stockiva.com",
     role: Role.STAFF,
     storeId: "test-store-001",
     storeName: "Main Store",

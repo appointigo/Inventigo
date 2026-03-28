@@ -1,4 +1,4 @@
-# Inventigo — Retail Inventory Management System
+# Stockiva — Retail Inventory Management System
 
 > **Comprehensive development plan for a modular, scalable inventory management application for a clothing retail store.**
 
@@ -563,7 +563,7 @@ User ──── Store (nullable)
 ## 8. Folder Structure
 
 ```
-inventigo/
+stockiva/
 ├── prisma/
 │   ├── schema.prisma                ← Full schema (Store, Sale, SaleItem included from day 1)
 │   ├── migrations/
@@ -1288,7 +1288,7 @@ inventigo/
 
 ```env
 # Database
-DATABASE_URL="postgresql://user:pass@host/inventigo?sslmode=require"
+DATABASE_URL="postgresql://user:pass@host/stockiva?sslmode=require"
 
 # Auth
 NEXTAUTH_SECRET="<random-32-char-string>"
@@ -1306,7 +1306,7 @@ TWILIO_AUTH_TOKEN="<twilio-auth-token>"
 TWILIO_PHONE_NUMBER="+1234567890"
 
 # Alert recipient
-ALERT_EMAIL="owner@inventigo.com"
+ALERT_EMAIL="owner@stockiva.com"
 ALERT_PHONE="+91XXXXXXXXXX"
 ```
 

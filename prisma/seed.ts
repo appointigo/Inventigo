@@ -26,11 +26,11 @@ async function main() {
   const passwordHash = await bcrypt.hash("password123", 12);
 
   const admin = await prisma.user.upsert({
-    where: { email: "admin@inventigo.com" },
+    where: { email: "admin@stockiva.com" },
     update: {},
     create: {
       name: "Admin User",
-      email: "admin@inventigo.com",
+      email: "admin@stockiva.com",
       passwordHash,
       role: Role.ADMIN,
       storeId: null, // Admin has access to all stores
@@ -38,11 +38,11 @@ async function main() {
   });
 
   const manager = await prisma.user.upsert({
-    where: { email: "manager@inventigo.com" },
+    where: { email: "manager@stockiva.com" },
     update: {},
     create: {
       name: "Store Manager",
-      email: "manager@inventigo.com",
+      email: "manager@stockiva.com",
       passwordHash,
       role: Role.MANAGER,
       storeId: store.id,
@@ -50,11 +50,11 @@ async function main() {
   });
 
   const staff = await prisma.user.upsert({
-    where: { email: "staff@inventigo.com" },
+    where: { email: "staff@stockiva.com" },
     update: {},
     create: {
       name: "Staff Member",
-      email: "staff@inventigo.com",
+      email: "staff@stockiva.com",
       passwordHash,
       role: Role.STAFF,
       storeId: store.id,
@@ -439,9 +439,9 @@ async function main() {
 
   console.log("\n🎉 Seed completed successfully!");
   console.log("\n📋 Login credentials:");
-  console.log("   Admin:   admin@inventigo.com / password123");
-  console.log("   Manager: manager@inventigo.com / password123");
-  console.log("   Staff:   staff@inventigo.com / password123");
+  console.log("   Admin:   admin@stockiva.com / password123");
+  console.log("   Manager: manager@stockiva.com / password123");
+  console.log("   Staff:   staff@stockiva.com / password123");
 }
 
 main()

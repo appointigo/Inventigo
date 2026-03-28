@@ -60,7 +60,7 @@ export default function InvoicePreview({ sale, open, onClose }: InvoicePreviewPr
         </head>
         <body>
           <div class="header">
-            <h1>INVENTIGO</h1>
+            <h1>Stockiva</h1>
             <p>Tax Invoice</p>
           </div>
           <div class="info">

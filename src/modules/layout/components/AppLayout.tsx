@@ -20,7 +20,7 @@ const { Text } = Typography;
 const DEV_USER = {
   id: "dev",
   name: "Dev User",
-  email: "dev@inventigo.com",
+  email: "dev@stockiva.com",
   role: "ADMIN" as Role,
   storeId: null,
 };
@@ -88,7 +88,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             strong
             style={{ color: "#fff", fontSize: collapsed ? 14 : 18, whiteSpace: "nowrap" }}
           >
-            {collapsed ? "I" : "Inventigo"}
+            {collapsed ? "S" : "Stockiva"}
           </Text>
         </Flex>
         <Menu

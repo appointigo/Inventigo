@@ -1,4 +1,4 @@
-# Barcode Feature — Inventigo
+# Barcode Feature — Stockiva
 
 ---
 
@@ -10,7 +10,7 @@ It has two sides:
 - **Barcode Reader** — use the device camera (or manual entry) to scan a barcode and instantly pull up a product's details, pricing, and stock levels.
 - **Barcode Generator + Label Printer** — generate a scannable CODE-128 barcode for any product (using its SKU) and print it on a physical label to attach to the product.
 
-In Inventigo, **the SKU is the barcode**. Every product's SKU (e.g., `NK-DFT-001`) is encoded as a CODE-128 barcode. This keeps things simple: there is no separate barcode database — if a product exists in the system, it already has a barcode identity.
+In Stockiva, **the SKU is the barcode**. Every product's SKU (e.g., `NK-DFT-001`) is encoded as a CODE-128 barcode. This keeps things simple: there is no separate barcode database — if a product exists in the system, it already has a barcode identity.
 
 ---
 
@@ -35,7 +35,7 @@ Display: name, category, brand, price, stock by size
 **Supported barcode formats (camera scan):**
 | Format | Common Use |
 |--------|-----------|
-| CODE-128 | Internal SKU labels (what Inventigo generates) |
+| CODE-128 | Internal SKU labels (what Stockiva generates) |
 | EAN-13 | International retail products (manufacturer barcodes) |
 | UPC-A | US retail products |
 | CODE-39 | Legacy warehouse labels |
@@ -112,11 +112,11 @@ Finalize sale → stock is decremented
 
 ### Scenario A — Brand new product arriving at the store (never in system)
 
-A box of **Puma Joggers Size L** arrives. It has never been in Inventigo before.
+A box of **Puma Joggers Size L** arrives. It has never been in Stockiva before.
 
 **Steps:**
 
-1. **Create the product** in Inventigo:
+1. **Create the product** in Stockiva:
    - Go to Products → New Product
    - Fill in: Name, Category, Brand, Base Price
    - Assign a **SKU** — this becomes the barcode value.
@@ -155,7 +155,7 @@ No new barcode is needed — the SKU and its barcode already exist.
 
 ### Barcode Generation — Technical Detail
 
-Inventigo uses **react-barcode** (wraps **JsBarcode**) to render CODE-128 barcodes in the browser:
+Stockiva uses **react-barcode** (wraps **JsBarcode**) to render CODE-128 barcodes in the browser:
 
 ```tsx
 <BarcodeGenerator value="NK-TSH-M" height={50} displayValue />

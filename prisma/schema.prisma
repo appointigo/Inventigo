@@ -1,4 +1,4 @@
-// Inventigo — Retail Inventory Management System
+// Stockiva — Retail Inventory Management System
 // Full schema including Store (multi-store ready) and Sale/SaleItem (billing ready)
 
 generator client {

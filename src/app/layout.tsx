@@ -6,7 +6,7 @@ import { ThemeProvider } from "@/providers/ThemeProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Inventigo — Inventory Management",
+  title: "Stockiva — Inventory Management",
   description: "Clothing retail inventory management system",
 };
 
