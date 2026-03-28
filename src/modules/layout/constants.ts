@@ -21,12 +21,6 @@ export const MENU_ITEMS: MenuItem[] = [
     roles: ALL_ROLES,
   },
   {
-    path: "/dashboard/products",
-    name: "Products",
-    icon: ShoppingOutlined,
-    roles: ALL_ROLES,
-  },
-  {
     path: "/dashboard/categories",
     name: "Categories",
     icon: AppstoreOutlined,
@@ -37,6 +31,12 @@ export const MENU_ITEMS: MenuItem[] = [
     name: "Brands",
     icon: TagsOutlined,
     roles: ADMIN_MANAGER,
+  },
+  {
+    path: "/dashboard/products",
+    name: "Products",
+    icon: ShoppingOutlined,
+    roles: ALL_ROLES,
   },
   {
     path: "/dashboard/stock",
