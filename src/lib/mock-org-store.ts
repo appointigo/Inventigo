@@ -396,6 +396,184 @@ export const DEFAULT_STOCK_MOVEMENTS: MockStockMovement[] = [
   { id: "mv-8", productName: "Adidas Sport Shorts",            sku: "AD-SS-001",  sizeLabel: "M",  type: "IN",         quantity: 15, reason: "PO #002 received",            userName: "Admin User",   createdAt: "2025-01-08T12:00:00Z" },
 ];
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Org B: Scent & Soul — Luxury Fragrance & Perfume (test-org-002)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export const ORG_B_DEFAULT_BRANDS: Omit<Brand, never>[] = [
+  { id: "b-br-1", name: "Chanel",            logoUrl: null, isActive: true, productCount: 2, createdAt: "2025-01-01T00:00:00Z", updatedAt: "2025-01-01T00:00:00Z" },
+  { id: "b-br-2", name: "Dior",              logoUrl: null, isActive: true, productCount: 1, createdAt: "2025-01-01T00:00:00Z", updatedAt: "2025-01-01T00:00:00Z" },
+  { id: "b-br-3", name: "Versace",           logoUrl: null, isActive: true, productCount: 1, createdAt: "2025-01-01T00:00:00Z", updatedAt: "2025-01-01T00:00:00Z" },
+  { id: "b-br-4", name: "Davidoff",          logoUrl: null, isActive: true, productCount: 1, createdAt: "2025-01-01T00:00:00Z", updatedAt: "2025-01-01T00:00:00Z" },
+  { id: "b-br-5", name: "Forest Essentials", logoUrl: null, isActive: true, productCount: 1, createdAt: "2025-01-01T00:00:00Z", updatedAt: "2025-01-01T00:00:00Z" },
+];
+
+export const ORG_B_DEFAULT_CATEGORIES: Category[] = [
+  {
+    id: "b-cat-1", name: "Eau de Parfum", slug: "eau-de-parfum",
+    description: "High concentration perfume — 15–20% fragrance oil",
+    attributeSchema: { fields: [
+      { name: "scentFamily", type: "select", options: ["Floral","Woody","Oriental","Fresh","Citrus"], required: true },
+      { name: "intensity",   type: "select", options: ["Light","Medium","Strong","Intense"],          required: true },
+      { name: "gender",      type: "select", options: ["Men","Women","Unisex"],                      required: true },
+    ]},
+    sizes: [
+      { id: "b-s-1", label: "30ml",  sortOrder: 0 },
+      { id: "b-s-2", label: "50ml",  sortOrder: 1 },
+      { id: "b-s-3", label: "100ml", sortOrder: 2 },
+    ],
+    productCount: 2, createdAt: "2025-01-01T00:00:00Z", updatedAt: "2025-01-01T00:00:00Z",
+  },
+  {
+    id: "b-cat-2", name: "Eau de Toilette", slug: "eau-de-toilette",
+    description: "Lighter concentration — 5–15% fragrance oil",
+    attributeSchema: { fields: [
+      { name: "scentFamily", type: "select", options: ["Floral","Woody","Oriental","Fresh","Citrus"], required: true },
+      { name: "gender",      type: "select", options: ["Men","Women","Unisex"],                      required: true },
+    ]},
+    sizes: [
+      { id: "b-s-4", label: "50ml",  sortOrder: 0 },
+      { id: "b-s-5", label: "100ml", sortOrder: 1 },
+      { id: "b-s-6", label: "200ml", sortOrder: 2 },
+    ],
+    productCount: 2, createdAt: "2025-01-01T00:00:00Z", updatedAt: "2025-01-01T00:00:00Z",
+  },
+  {
+    id: "b-cat-3", name: "Perfume Gift Sets", slug: "gift-sets",
+    description: "Curated gift sets — perfume + accessories",
+    attributeSchema: { fields: [
+      { name: "setContents", type: "text",   required: true },
+      { name: "occasion",    type: "select", options: ["Birthday","Anniversary","Festival","Corporate"], required: false },
+    ]},
+    sizes: [
+      { id: "b-s-7", label: "Standard Set", sortOrder: 0 },
+      { id: "b-s-8", label: "Premium Set",  sortOrder: 1 },
+    ],
+    productCount: 1, createdAt: "2025-01-01T00:00:00Z", updatedAt: "2025-01-01T00:00:00Z",
+  },
+  {
+    id: "b-cat-4", name: "Attar & Oud", slug: "attar-oud",
+    description: "Traditional concentrated oil-based fragrances",
+    attributeSchema: { fields: [
+      { name: "base",   type: "select", options: ["Oud","Rose","Sandalwood","Musk","Amber"], required: true  },
+      { name: "origin", type: "select", options: ["Indian","Arabic","Persian"],              required: false },
+      { name: "purity", type: "select", options: ["Pure","Blended"],                        required: true  },
+    ]},
+    sizes: [
+      { id: "b-s-9",  label: "3ml",  sortOrder: 0 },
+      { id: "b-s-10", label: "6ml",  sortOrder: 1 },
+      { id: "b-s-11", label: "12ml", sortOrder: 2 },
+    ],
+    productCount: 1, createdAt: "2025-01-01T00:00:00Z", updatedAt: "2025-01-01T00:00:00Z",
+  },
+];
+
+export const ORG_B_DEFAULT_PRODUCTS: Product[] = [
+  {
+    id: "b-prod-1", name: "Chanel No. 5 Eau de Parfum", sku: "CN-N5-EDP", externalBarcode: "3145891164258",
+    categoryId: "b-cat-1", categoryName: "Eau de Parfum", brandId: "b-br-1", brandName: "Chanel",
+    basePrice: 12500, costPrice: 8000,
+    attributes: { scentFamily: "Floral", intensity: "Intense", gender: "Women" },
+    imageUrl: null, isActive: true,
+    stock: [
+      { sizeId: "b-s-1", sizeLabel: "30ml",  variantSku: "CN-N5-EDP-30",  quantity: 12, reorderLevel: 3 },
+      { sizeId: "b-s-2", sizeLabel: "50ml",  variantSku: "CN-N5-EDP-50",  quantity: 20, reorderLevel: 5 },
+      { sizeId: "b-s-3", sizeLabel: "100ml", variantSku: "CN-N5-EDP-100", quantity:  8, reorderLevel: 3 },
+    ],
+    totalStock: 40, createdAt: "2025-01-01T00:00:00Z", updatedAt: "2025-01-01T00:00:00Z",
+  },
+  {
+    id: "b-prod-2", name: "Dior Sauvage Eau de Toilette", sku: "DR-SV-EDT", externalBarcode: "3348901250121",
+    categoryId: "b-cat-2", categoryName: "Eau de Toilette", brandId: "b-br-2", brandName: "Dior",
+    basePrice: 9800, costPrice: 6200,
+    attributes: { scentFamily: "Fresh", gender: "Men" },
+    imageUrl: null, isActive: true,
+    stock: [
+      { sizeId: "b-s-4", sizeLabel: "50ml",  variantSku: "DR-SV-EDT-50",  quantity: 15, reorderLevel: 5 },
+      { sizeId: "b-s-5", sizeLabel: "100ml", variantSku: "DR-SV-EDT-100", quantity: 18, reorderLevel: 5 },
+      { sizeId: "b-s-6", sizeLabel: "200ml", variantSku: "DR-SV-EDT-200", quantity:  6, reorderLevel: 2 },
+    ],
+    totalStock: 39, createdAt: "2025-01-01T00:00:00Z", updatedAt: "2025-01-01T00:00:00Z",
+  },
+  {
+    id: "b-prod-3", name: "Versace Eros Eau de Parfum", sku: "VS-ER-EDP", externalBarcode: "8011003865499",
+    categoryId: "b-cat-1", categoryName: "Eau de Parfum", brandId: "b-br-3", brandName: "Versace",
+    basePrice: 7200, costPrice: 4500,
+    attributes: { scentFamily: "Oriental", intensity: "Strong", gender: "Men" },
+    imageUrl: null, isActive: true,
+    stock: [
+      { sizeId: "b-s-1", sizeLabel: "30ml",  variantSku: "VS-ER-EDP-30",  quantity:  8, reorderLevel: 3 },
+      { sizeId: "b-s-2", sizeLabel: "50ml",  variantSku: "VS-ER-EDP-50",  quantity: 14, reorderLevel: 4 },
+      { sizeId: "b-s-3", sizeLabel: "100ml", variantSku: "VS-ER-EDP-100", quantity: 10, reorderLevel: 3 },
+    ],
+    totalStock: 32, createdAt: "2025-01-01T00:00:00Z", updatedAt: "2025-01-01T00:00:00Z",
+  },
+  {
+    id: "b-prod-4", name: "Davidoff Cool Water EDT", sku: "DF-CW-EDT", externalBarcode: "3607342117228",
+    categoryId: "b-cat-2", categoryName: "Eau de Toilette", brandId: "b-br-4", brandName: "Davidoff",
+    basePrice: 2800, costPrice: 1600,
+    attributes: { scentFamily: "Fresh", gender: "Men" },
+    imageUrl: null, isActive: true,
+    stock: [
+      { sizeId: "b-s-4", sizeLabel: "50ml",  variantSku: "DF-CW-EDT-50",  quantity: 25, reorderLevel: 8 },
+      { sizeId: "b-s-5", sizeLabel: "100ml", variantSku: "DF-CW-EDT-100", quantity: 20, reorderLevel: 6 },
+    ],
+    totalStock: 45, createdAt: "2025-01-01T00:00:00Z", updatedAt: "2025-01-01T00:00:00Z",
+  },
+  {
+    id: "b-prod-5", name: "Royal Oud Pure Attar", sku: "RO-OUD-3ML", externalBarcode: null,
+    categoryId: "b-cat-4", categoryName: "Attar & Oud", brandId: "b-br-5", brandName: "Forest Essentials",
+    basePrice: 3500, costPrice: 1800,
+    attributes: { base: "Oud", origin: "Arabic", purity: "Pure" },
+    imageUrl: null, isActive: true,
+    stock: [
+      { sizeId: "b-s-9",  sizeLabel: "3ml",  variantSku: "RO-OUD-3ML",  quantity: 30, reorderLevel: 10 },
+      { sizeId: "b-s-10", sizeLabel: "6ml",  variantSku: "RO-OUD-6ML",  quantity: 20, reorderLevel: 6  },
+      { sizeId: "b-s-11", sizeLabel: "12ml", variantSku: "RO-OUD-12ML", quantity: 10, reorderLevel: 3  },
+    ],
+    totalStock: 60, createdAt: "2025-01-01T00:00:00Z", updatedAt: "2025-01-01T00:00:00Z",
+  },
+  {
+    id: "b-prod-6", name: "Chanel Chance Gift Set", sku: "CN-CG-SET", externalBarcode: null,
+    categoryId: "b-cat-3", categoryName: "Perfume Gift Sets", brandId: "b-br-1", brandName: "Chanel",
+    basePrice: 18000, costPrice: 12000,
+    attributes: { setContents: "50ml EDP + body lotion + pouch", occasion: "Birthday" },
+    imageUrl: null, isActive: true,
+    stock: [
+      { sizeId: "b-s-7", sizeLabel: "Standard Set", variantSku: "CN-CG-SET-STD", quantity: 6, reorderLevel: 2 },
+      { sizeId: "b-s-8", sizeLabel: "Premium Set",  variantSku: "CN-CG-SET-PRE", quantity: 4, reorderLevel: 2 },
+    ],
+    totalStock: 10, createdAt: "2025-01-01T00:00:00Z", updatedAt: "2025-01-01T00:00:00Z",
+  },
+];
+
+export const ORG_B_DEFAULT_STOCK_ROWS: MockStockRow[] = [
+  { id: "b-se-1",  productId: "b-prod-1", productName: "Chanel No. 5 Eau de Parfum",   sku: "CN-N5-EDP",  categoryName: "Eau de Parfum",     brandName: "Chanel",            sizeId: "b-s-1", sizeLabel: "30ml",        quantity: 12, reorderLevel: 3, status: "OK" },
+  { id: "b-se-2",  productId: "b-prod-1", productName: "Chanel No. 5 Eau de Parfum",   sku: "CN-N5-EDP",  categoryName: "Eau de Parfum",     brandName: "Chanel",            sizeId: "b-s-2", sizeLabel: "50ml",        quantity: 20, reorderLevel: 5, status: "OK" },
+  { id: "b-se-3",  productId: "b-prod-1", productName: "Chanel No. 5 Eau de Parfum",   sku: "CN-N5-EDP",  categoryName: "Eau de Parfum",     brandName: "Chanel",            sizeId: "b-s-3", sizeLabel: "100ml",       quantity:  8, reorderLevel: 3, status: "OK" },
+  { id: "b-se-4",  productId: "b-prod-2", productName: "Dior Sauvage Eau de Toilette", sku: "DR-SV-EDT",  categoryName: "Eau de Toilette",   brandName: "Dior",              sizeId: "b-s-4", sizeLabel: "50ml",        quantity: 15, reorderLevel: 5, status: "OK" },
+  { id: "b-se-5",  productId: "b-prod-2", productName: "Dior Sauvage Eau de Toilette", sku: "DR-SV-EDT",  categoryName: "Eau de Toilette",   brandName: "Dior",              sizeId: "b-s-5", sizeLabel: "100ml",       quantity: 18, reorderLevel: 5, status: "OK" },
+  { id: "b-se-6",  productId: "b-prod-2", productName: "Dior Sauvage Eau de Toilette", sku: "DR-SV-EDT",  categoryName: "Eau de Toilette",   brandName: "Dior",              sizeId: "b-s-6", sizeLabel: "200ml",       quantity:  6, reorderLevel: 2, status: "OK" },
+  { id: "b-se-7",  productId: "b-prod-3", productName: "Versace Eros Eau de Parfum",   sku: "VS-ER-EDP",  categoryName: "Eau de Parfum",     brandName: "Versace",           sizeId: "b-s-1", sizeLabel: "30ml",        quantity:  8, reorderLevel: 3, status: "OK" },
+  { id: "b-se-8",  productId: "b-prod-3", productName: "Versace Eros Eau de Parfum",   sku: "VS-ER-EDP",  categoryName: "Eau de Parfum",     brandName: "Versace",           sizeId: "b-s-2", sizeLabel: "50ml",        quantity: 14, reorderLevel: 4, status: "OK" },
+  { id: "b-se-9",  productId: "b-prod-3", productName: "Versace Eros Eau de Parfum",   sku: "VS-ER-EDP",  categoryName: "Eau de Parfum",     brandName: "Versace",           sizeId: "b-s-3", sizeLabel: "100ml",       quantity: 10, reorderLevel: 3, status: "OK" },
+  { id: "b-se-10", productId: "b-prod-4", productName: "Davidoff Cool Water EDT",       sku: "DF-CW-EDT",  categoryName: "Eau de Toilette",   brandName: "Davidoff",          sizeId: "b-s-4", sizeLabel: "50ml",        quantity: 25, reorderLevel: 8, status: "OK" },
+  { id: "b-se-11", productId: "b-prod-4", productName: "Davidoff Cool Water EDT",       sku: "DF-CW-EDT",  categoryName: "Eau de Toilette",   brandName: "Davidoff",          sizeId: "b-s-5", sizeLabel: "100ml",       quantity: 20, reorderLevel: 6, status: "OK" },
+  { id: "b-se-12", productId: "b-prod-5", productName: "Royal Oud Pure Attar",          sku: "RO-OUD-3ML", categoryName: "Attar & Oud",       brandName: "Forest Essentials", sizeId: "b-s-9",  sizeLabel: "3ml",        quantity: 30, reorderLevel: 10, status: "OK" },
+  { id: "b-se-13", productId: "b-prod-5", productName: "Royal Oud Pure Attar",          sku: "RO-OUD-3ML", categoryName: "Attar & Oud",       brandName: "Forest Essentials", sizeId: "b-s-10", sizeLabel: "6ml",        quantity: 20, reorderLevel: 6,  status: "OK" },
+  { id: "b-se-14", productId: "b-prod-5", productName: "Royal Oud Pure Attar",          sku: "RO-OUD-3ML", categoryName: "Attar & Oud",       brandName: "Forest Essentials", sizeId: "b-s-11", sizeLabel: "12ml",       quantity: 10, reorderLevel: 3,  status: "OK" },
+  { id: "b-se-15", productId: "b-prod-6", productName: "Chanel Chance Gift Set",        sku: "CN-CG-SET",  categoryName: "Perfume Gift Sets", brandName: "Chanel",            sizeId: "b-s-7", sizeLabel: "Standard Set", quantity: 6, reorderLevel: 2, status: "OK" },
+  { id: "b-se-16", productId: "b-prod-6", productName: "Chanel Chance Gift Set",        sku: "CN-CG-SET",  categoryName: "Perfume Gift Sets", brandName: "Chanel",            sizeId: "b-s-8", sizeLabel: "Premium Set",  quantity: 4, reorderLevel: 2, status: "OK" },
+];
+
+export const ORG_B_DEFAULT_STOCK_MOVEMENTS: MockStockMovement[] = [
+  { id: "b-mv-1", productName: "Chanel No. 5 Eau de Parfum",   sku: "CN-N5-EDP",  sizeLabel: "50ml",  type: "IN",         quantity: 20, reason: "Initial stock received",          userName: "Kavya Reddy",  createdAt: "2025-01-15T10:30:00Z" },
+  { id: "b-mv-2", productName: "Dior Sauvage Eau de Toilette", sku: "DR-SV-EDT",  sizeLabel: "100ml", type: "SALE",       quantity:  3, reason: null,                              userName: "Rohit Sharma", createdAt: "2025-01-14T14:20:00Z" },
+  { id: "b-mv-3", productName: "Versace Eros Eau de Parfum",   sku: "VS-ER-EDP",  sizeLabel: "50ml",  type: "IN",         quantity: 14, reason: "Restocked from distributor",      userName: "Vikram Patel", createdAt: "2025-01-13T09:15:00Z" },
+  { id: "b-mv-4", productName: "Davidoff Cool Water EDT",       sku: "DF-CW-EDT",  sizeLabel: "50ml",  type: "ADJUSTMENT", quantity: -2, reason: "Bottle damaged in transit",       userName: "Vikram Patel", createdAt: "2025-01-12T11:00:00Z" },
+  { id: "b-mv-5", productName: "Royal Oud Pure Attar",          sku: "RO-OUD-3ML", sizeLabel: "3ml",   type: "SALE",       quantity:  5, reason: null,                              userName: "Rohit Sharma", createdAt: "2025-01-11T16:30:00Z" },
+];
+
 // ─── Org-keyed in-memory store ────────────────────────────────────────────────
 
 export interface OrgMockData {
@@ -414,17 +592,38 @@ function deepClone<T>(obj: T): T {
   return JSON.parse(JSON.stringify(obj));
 }
 
-function makeOrgData(): OrgMockData {
+type OrgSeed = {
+  brands: Omit<Brand, never>[];
+  categories: Category[];
+  products: Product[];
+  stockRows: MockStockRow[];
+  stockMovements: MockStockMovement[];
+};
+
+const ORG_B_SEED: OrgSeed = {
+  brands: ORG_B_DEFAULT_BRANDS,
+  categories: ORG_B_DEFAULT_CATEGORIES,
+  products: ORG_B_DEFAULT_PRODUCTS,
+  stockRows: ORG_B_DEFAULT_STOCK_ROWS,
+  stockMovements: ORG_B_DEFAULT_STOCK_MOVEMENTS,
+};
+
+function makeOrgData(seed?: OrgSeed): OrgMockData {
+  const b  = seed?.brands         ?? DEFAULT_BRANDS;
+  const c  = seed?.categories     ?? DEFAULT_CATEGORIES;
+  const p  = seed?.products       ?? DEFAULT_PRODUCTS;
+  const sr = seed?.stockRows      ?? DEFAULT_STOCK_ROWS;
+  const sm = seed?.stockMovements ?? DEFAULT_STOCK_MOVEMENTS;
   return {
-    brands: deepClone(DEFAULT_BRANDS),
-    brandNextId: DEFAULT_BRANDS.length + 1,
-    categories: deepClone(DEFAULT_CATEGORIES),
-    categoryNextId: DEFAULT_CATEGORIES.length + 1,
-    products: deepClone(DEFAULT_PRODUCTS),
-    productNextId: DEFAULT_PRODUCTS.length + 1,
-    stockRows: deepClone(DEFAULT_STOCK_ROWS),
-    stockMovements: deepClone(DEFAULT_STOCK_MOVEMENTS),
-    stockMvNextId: DEFAULT_STOCK_MOVEMENTS.length + 1,
+    brands:         deepClone(b),
+    brandNextId:    b.length + 1,
+    categories:     deepClone(c),
+    categoryNextId: c.length + 1,
+    products:       deepClone(p),
+    productNextId:  p.length + 1,
+    stockRows:      deepClone(sr),
+    stockMovements: deepClone(sm),
+    stockMvNextId:  sm.length + 1,
   };
 }
 
@@ -433,11 +632,13 @@ const orgStore = new Map<string, OrgMockData>();
 
 /**
  * Get (or lazily seed) the mock data for a given org.
- * Each org gets an isolated copy of the default data the first time it's accessed.
+ * - test-org-001 (Rare Thread)  → clothing/apparel seed data
+ * - test-org-002 (Scent & Soul) → fragrance/perfume seed data
+ * - any other orgId             → isolated copy of default clothing data
  */
 export function getOrgData(orgId: string): OrgMockData {
   if (!orgStore.has(orgId)) {
-    orgStore.set(orgId, makeOrgData());
+    orgStore.set(orgId, makeOrgData(orgId === "test-org-002" ? ORG_B_SEED : undefined));
   }
   return orgStore.get(orgId)!;
 }

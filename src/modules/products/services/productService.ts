@@ -1,5 +1,6 @@
 import type { Product, ProductFormValues, ProductListFilters } from "../types";
 import { getOrgData } from "@/lib/mock-org-store";
+import { imageService } from "@/shared/services/imageService";
 
 // TODO: Replace with Prisma queries when DB is connected
 
@@ -74,6 +75,17 @@ export const productService = {
     const idx = data.products.findIndex((p) => p.id === id);
     if (idx === -1) return null;
     const existing = data.products[idx];
+
+    // Delete the old blob image when imageUrl is being replaced or removed
+    const incomingImageUrl = values.imageUrl !== undefined ? (values.imageUrl ?? null) : existing.imageUrl;
+    if (
+      existing.imageUrl &&
+      incomingImageUrl !== existing.imageUrl &&
+      existing.imageUrl.includes("vercel-storage.com")
+    ) {
+      await imageService.delete(existing.imageUrl);
+    }
+
     const updated: Product = {
       ...existing,
       name: values.name ?? existing.name,
@@ -84,7 +96,7 @@ export const productService = {
       basePrice: values.basePrice ?? existing.basePrice,
       costPrice: values.costPrice ?? existing.costPrice,
       attributes: values.attributes ?? existing.attributes,
-      imageUrl: values.imageUrl !== undefined ? (values.imageUrl ?? null) : existing.imageUrl,
+      imageUrl: incomingImageUrl,
       isActive: values.isActive ?? existing.isActive,
       updatedAt: new Date().toISOString(),
     };

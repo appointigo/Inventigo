@@ -1,21 +1,10 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import {
-  Form,
-  Input,
-  InputNumber,
-  Select,
-  Switch,
-  Button,
-  Steps,
-  Space,
-  Divider,
-  Card,
-  Empty,
-  Tooltip,
-} from "antd";
-import { ReloadOutlined } from "@ant-design/icons";
+import { Form, Input, InputNumber, Select, Switch, Button, Steps, Space, Divider, Card, Empty, Tooltip, Upload, Image, message, Flex } from "antd";
+import { ReloadOutlined, UploadOutlined } from "@ant-design/icons";
+import { upload } from "@vercel/blob/client";
+import type { UploadRequestOption } from "@rc-component/upload/lib/interface";
 import type { Product, ProductFormValues } from "../types";
 import type { Category } from "@/modules/categories/types";
 import type { Brand } from "@/modules/brands/types";
@@ -30,7 +19,7 @@ interface ProductFormProps {
 }
 
 // --- SKU helpers ---
-function abbrevName(name: string): string {
+const abbrevName = (name: string): string =>{
   const words = name.split(/[\s\-_]+/).filter(Boolean);
   if (words.length >= 2) {
     return words
@@ -46,24 +35,48 @@ function abbrevName(name: string): string {
   return upper.slice(0, 2);
 }
 
-function generateSku(brandName: string, categoryName: string): string {
+const generateSku = (brandName: string, categoryName: string): string => {
   const seq = Math.floor(Math.random() * 900) + 100;
   return `${abbrevName(brandName)}-${abbrevName(categoryName)}-${seq}`;
-}
+};
 // --- end SKU helpers ---
 
-export default function ProductForm({
+const ProductForm = ({
   initialValues,
   categories,
   brands,
   onSubmit,
   onCancel,
   loading,
-}: ProductFormProps) {
+}: ProductFormProps) => {
   const [form] = Form.useForm();
   const [step, setStep] = useState(0);
   const [skuTouched, setSkuTouched] = useState(false);
+  const [imageUploading, setImageUploading] = useState(false);
   const isEdit = !!initialValues;
+
+  const imageUrl = Form.useWatch("imageUrl", form);
+
+  const handleImageUpload = async (options: UploadRequestOption) => {
+    const file = options.file as File;
+    setImageUploading(true);
+    try {
+      const blob = await upload(file.name, file, {
+        access: "public",
+        handleUploadUrl: "/api/upload",
+      });
+      form.setFieldValue("imageUrl", blob.url);
+      options.onSuccess?.(blob);
+    } 
+    catch (err) {
+      console.error(err);
+      options.onError?.(err as Error);
+      message.error("Image upload failed. Please try again.");
+    } 
+    finally {
+      setImageUploading(false);
+    }
+  };
 
   const selectedCategoryId = Form.useWatch("categoryId", form);
   const selectedBrandId = Form.useWatch("brandId", form);
@@ -76,8 +89,10 @@ export default function ProductForm({
   useEffect(() => {
     if (isEdit || skuTouched) return;
     if (!selectedBrandId || !selectedCategoryId) return;
+
     const brand = brands.find((b) => b.id === selectedBrandId);
     const category = categories.find((c) => c.id === selectedCategoryId);
+
     if (brand && category) {
       form.setFieldValue("sku", generateSku(brand.name, category.name));
     }
@@ -98,7 +113,8 @@ export default function ProductForm({
         attributes: initialValues.attributes,
         sizes: initialValues.stock.map((s) => s.sizeId),
       });
-    } else {
+    } 
+    else {
       form.resetFields();
       setSkuTouched(false);
     }
@@ -117,7 +133,8 @@ export default function ProductForm({
         ]);
       }
       setStep(step + 1);
-    } catch {
+    } 
+    catch {
       // validation errors shown in form
     }
   };
@@ -126,7 +143,9 @@ export default function ProductForm({
     try {
       const values = await form.validateFields();
       await onSubmit(values);
-    } catch {
+    } 
+    catch (err) {
+      console.error(err);
       // validation errors shown
     }
   };
@@ -198,7 +217,7 @@ export default function ProductForm({
               onChange={() => setSkuTouched(true)}
               suffix={
                 !isEdit ? (
-                  <Tooltip title="Regenerate SKU">
+                  <Tooltip title="Regenerate SKU" destroyOnHidden>
                     <ReloadOutlined
                       style={{
                         cursor: selectedBrandId && selectedCategoryId ? "pointer" : "default",
@@ -250,8 +269,38 @@ export default function ProductForm({
           </Space>
 
           {/* 6. Image + Active */}
-          <Form.Item name="imageUrl" label="Image URL">
-            <Input placeholder="https://example.com/image.jpg (optional)" />
+          <Form.Item name="imageUrl" label="Product Image">
+            <Input type="hidden" />
+          </Form.Item>
+          <Form.Item label="Upload Image" style={{ marginTop: -16 }}>
+            <Space orientation="vertical" style={{ width: "100%" }}>
+              <Upload
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                showUploadList={false}
+                customRequest={handleImageUpload}
+                disabled={imageUploading}
+                maxCount={1}
+              >
+                <Button icon={<UploadOutlined />} loading={imageUploading}>
+                  {imageUrl ? "Replace Image" : "Upload Image"}
+                </Button>
+              </Upload>
+              {imageUrl && (
+                <Image
+                  src={imageUrl}
+                  alt="Product image preview"
+                  width={120}
+                  height={120}
+                  style={{ objectFit: "cover", borderRadius: 8, border: "1px solid #f0f0f0" }}
+                  preview={{ src: imageUrl }}
+                />
+              )}
+              {!imageUrl && (
+                <span style={{ color: "#999", fontSize: 12 }}>
+                  Max 5 MB · JPEG, PNG, WebP, GIF
+                </span>
+              )}
+            </Space>
           </Form.Item>
 
           <Form.Item name="isActive" label="Active" valuePropName="checked">
@@ -261,88 +310,107 @@ export default function ProductForm({
 
         {/* Step 2: Dynamic Attributes from Category Schema */}
         <div style={{ display: step === 1 ? "block" : "none" }}>
-          {!selectedCategory ? (
-            <Empty description="Select a category first to see attribute fields" />
-          ) : selectedCategory.attributeSchema.fields.length === 0 ? (
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description="This category has no attribute fields"
-            />
-          ) : (
-            <Card size="small" title={`${selectedCategory.name} Attributes`}>
-              {selectedCategory.attributeSchema.fields.map((field) => (
-                <Form.Item
-                  key={field.name}
-                  name={["attributes", field.name]}
-                  label={field.name.charAt(0).toUpperCase() + field.name.slice(1)}
-                  rules={
-                    field.required
-                      ? [{ required: true, message: `${field.name} is required` }]
-                      : undefined
-                  }
-                >
-                  {field.type === "select" ? (
-                    <Select
-                      placeholder={`Select ${field.name}`}
-                      options={(field.options ?? []).map((o) => ({ label: o, value: o }))}
-                      allowClear={!field.required}
-                    />
-                  ) : field.type === "number" ? (
-                    <InputNumber style={{ width: "100%" }} placeholder={`Enter ${field.name}`} />
-                  ) : (
-                    <Input placeholder={`Enter ${field.name}`} />
-                  )}
-                </Form.Item>
-              ))}
-            </Card>
-          )}
+          {
+            !selectedCategory ? (
+              <Empty description="Select a category first to see attribute fields" />
+            ) 
+            : selectedCategory.attributeSchema.fields.length === 0 ? (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="This category has no attribute fields"
+              />
+            ) 
+            : (
+              <Card size="small" title={`${selectedCategory.name} Attributes`}>
+                {
+                  selectedCategory.attributeSchema.fields.map((field) => (
+                    <Form.Item
+                      key={field.name}
+                      name={["attributes", field.name]}
+                      label={field.name.charAt(0).toUpperCase() + field.name.slice(1)}
+                      rules={
+                        field.required
+                          ? [{ required: true, message: `${field.name} is required` }]
+                          : undefined
+                      }
+                    >
+                      {field.type === "select" ? (
+                        <Select
+                          placeholder={`Select ${field.name}`}
+                          options={(field.options ?? []).map((o) => ({ label: o, value: o }))}
+                          allowClear={!field.required}
+                        />
+                      ) 
+                      : field.type === "number" ? (
+                        <InputNumber style={{ width: "100%" }} placeholder={`Enter ${field.name}`} />
+                      ) 
+                      : (
+                        <Input placeholder={`Enter ${field.name}`} />
+                      )}
+                    </Form.Item>
+                  ))
+                }
+              </Card>
+            )
+          }
         </div>
 
         {/* Step 3: Select Sizes */}
         <div style={{ display: step === 2 ? "block" : "none" }}>
-          {!selectedCategory ? (
-            <Empty description="Select a category first to see available sizes" />
-          ) : selectedCategory.sizes.length === 0 ? (
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description="This category has no sizes defined"
-            />
-          ) : (
-            <Form.Item
-              name="sizes"
-              label={`Available Sizes (${selectedCategory.name})`}
-              rules={[{ required: true, message: "Select at least one size" }]}
-            >
-              <Select
-                mode="multiple"
-                placeholder="Select sizes for this product"
-                options={selectedCategory.sizes.map((s) => ({
-                  label: s.label,
-                  value: s.id,
-                }))}
+          {
+            !selectedCategory ? (
+              <Empty description="Select a category first to see available sizes" />
+            ) 
+            : selectedCategory.sizes.length === 0 ? (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="This category has no sizes defined"
               />
-            </Form.Item>
-          )}
+            ) 
+            : (
+              <Form.Item
+                name="sizes"
+                label={`Available Sizes (${selectedCategory.name})`}
+                rules={[{ required: true, message: "Select at least one size" }]}
+              >
+                <Select
+                  mode="multiple"
+                  placeholder="Select sizes for this product"
+                  options={selectedCategory.sizes.map((s) => ({
+                    label: s.label,
+                    value: s.id,
+                  }))}
+                />
+              </Form.Item>
+            )
+          }
         </div>
       </Form>
 
       <Divider />
 
-      <div style={{ display: "flex", justifyContent: "space-between" }}>
+      <Flex justify="space-between">
         <Button onClick={onCancel}>Cancel</Button>
         <Space>
-          {step > 0 && <Button onClick={() => setStep(step - 1)}>Back</Button>}
-          {step < steps.length - 1 ? (
-            <Button type="primary" onClick={handleNext}>
-              Next
-            </Button>
-          ) : (
-            <Button type="primary" onClick={handleFinish} loading={loading}>
-              {isEdit ? "Update Product" : "Create Product"}
-            </Button>
-          )}
+          {
+            step > 0 && <Button onClick={() => setStep(step - 1)}>Back</Button>
+          }
+          {
+            step < steps.length - 1 ? (
+              <Button type="primary" onClick={handleNext}>
+                Next
+              </Button>
+            ) 
+            : (
+              <Button type="primary" onClick={handleFinish} loading={loading}>
+                {isEdit ? "Update Product" : "Create Product"}
+              </Button>
+            )
+          }
         </Space>
-      </div>
+      </Flex>
     </div>
   );
 }
+
+export default ProductForm;

@@ -6,47 +6,107 @@ import { prisma } from "./db";
 
 // ========================== TEST CREDENTIALS ==========================
 // TODO: Remove before production deployment
-// Hardcoded test users for development without a database connection.
-// Super Admin: superadmin@stockiva.com / superadmin123
-// Owner:       owner@stockiva.com / owner123
-// Admin:       admin@stockiva.com / admin123
-// Staff:       staff@stockiva.com / staff123
+//
+// Platform Admin
+//   superadmin@stockiva.com / superadmin123   (SUPER_ADMIN → /admin)
+//
+// Org A — Rare Thread (clothing/apparel)  orgId: test-org-001
+//   owner@rarethread.com   / password   (OWNER)
+//   admin@rarethread.com   / password   (ADMIN)
+//   manager@rarethread.com / password   (MANAGER)
+//   staff@rarethread.com   / password   (STAFF)
+//
+// Org B — Scent & Soul (fragrance/perfume)  orgId: test-org-002
+//   owner@scentandsoul.com   / password   (OWNER)
+//   admin@scentandsoul.com   / password   (ADMIN)
+//   manager@scentandsoul.com / password   (MANAGER)
+//   staff@scentandsoul.com   / password   (STAFF)
 const TEST_USERS = [
+  // ── Platform Admin ──────────────────────────────────────────────────────
   {
     id: "test-superadmin-001",
-    name: "Test Super Admin",
+    name: "Stockiva Admin",
     email: "superadmin@stockiva.com",
     password: "superadmin123",
     role: "SUPER_ADMIN" as const,
     storeId: null,
     orgId: null,
   },
+
+  // ── Org A: Rare Thread (clothing/apparel) ────────────────────────────────
   {
-    id: "test-owner-001",
-    name: "Test Owner",
-    email: "owner@stockiva.com",
-    password: "owner123",
+    id: "test-a-owner-001",
+    name: "Minhaj Ahmad Khan",
+    email: "owner@rarethread.com",
+    password: "password",
     role: "OWNER" as const,
-    storeId: null,
+    storeId: "test-store-001",
     orgId: "test-org-001",
   },
   {
-    id: "test-admin-001",
-    name: "Test Admin",
-    email: "admin@stockiva.com",
-    password: "admin123",
+    id: "test-a-admin-001",
+    name: "Urooj Ahmad",
+    email: "admin@rarethread.com",
+    password: "password",
     role: "ADMIN" as const,
     storeId: "test-store-001",
     orgId: "test-org-001",
   },
   {
-    id: "test-staff-001",
-    name: "Test Staff",
-    email: "staff@stockiva.com",
-    password: "staff123",
+    id: "test-a-manager-001",
+    name: "Osama",
+    email: "manager@rarethread.com",
+    password: "password",
+    role: "MANAGER" as const,
+    storeId: "test-store-001",
+    orgId: "test-org-001",
+  },
+  {
+    id: "test-a-staff-001",
+    name: "Irfan Khan",
+    email: "staff@rarethread.com",
+    password: "password",
     role: "STAFF" as const,
     storeId: "test-store-001",
     orgId: "test-org-001",
+  },
+
+  // ── Org B: Scent & Soul (fragrance/perfume) ──────────────────────────────
+  {
+    id: "test-b-owner-001",
+    name: "Urooj Ahmad",
+    email: "owner@scentandsoul.com",
+    password: "password",
+    role: "OWNER" as const,
+    storeId: "test-store-002",
+    orgId: "test-org-002",
+  },
+  {
+    id: "test-b-admin-001",
+    name: "Shad Mirza",
+    email: "admin@scentandsoul.com",
+    password: "password",
+    role: "ADMIN" as const,
+    storeId: "test-store-002",
+    orgId: "test-org-002",
+  },
+  {
+    id: "test-b-manager-001",
+    name: "Meera Joshi",
+    email: "manager@scentandsoul.com",
+    password: "password",
+    role: "MANAGER" as const,
+    storeId: "test-store-002",
+    orgId: "test-org-002",
+  },
+  {
+    id: "test-b-staff-001",
+    name: "Rohit Sharma",
+    email: "staff@scentandsoul.com",
+    password: "password",
+    role: "STAFF" as const,
+    storeId: "test-store-002",
+    orgId: "test-org-002",
   },
 ];
 // ======================== END TEST CREDENTIALS ========================
