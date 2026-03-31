@@ -25,24 +25,24 @@
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                      Single Next.js App                         │
-│                                                                  │
+│                                                                 │
 │   ┌─────────────┐    ┌─────────────┐    ┌─────────────────────┐ │
 │   │  Org A      │    │  Org B      │    │  SUPER_ADMIN        │ │
 │   │ "Rare Thread│    │"Scent &Soul"│    │  /admin panel       │ │
 │   │  /dashboard"│    │  /dashboard"│    │  (platform-wide)    │ │
 │   └──────┬──────┘    └──────┬──────┘    └──────────┬──────────┘ │
-│          │                  │                       │            │
-│          └──────────────────┴───────────────────────┘           │
-│                             │                                    │
+│          │                  │                      │            │
+│          └──────────────────┴──────────────────────┘            │
+│                             │                                   │
 │              ┌──────────────▼──────────────┐                    │
-│              │     Auth Middleware          │                    │
-│              │  (orgId injected per request)│                    │
+│              │     Auth Middleware         │                    │
+│              │ (orgId injected per request)│                    │
 │              └──────────────┬──────────────┘                    │
-│                             │                                    │
+│                             │                                   │
 │              ┌──────────────▼──────────────┐                    │
-│              │      Shared Database         │                    │
-│              │  (orgId column on every table│                    │
-│              │   — data siloed by orgId)    │                    │
+│              │      Shared Database        │                    │
+│              │ (orgId column on every table│                    │
+│              │   — data siloed by orgId)   │                    │
 │              └─────────────────────────────┘                    │
 └─────────────────────────────────────────────────────────────────┘
 ```
