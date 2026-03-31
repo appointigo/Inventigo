@@ -1,5 +1,5 @@
-import type { AlertConfig, AlertConfigFormValues, LowStockItem } from "../types";
 import { mockStockService } from "@/modules/stock/services/mockStockService";
+import type { AlertConfig, AlertConfigFormValues, LowStockItem } from "../types";
 
 // TODO: Replace with Prisma queries when DB is connected
 
@@ -123,11 +123,11 @@ export const alertService = {
    * The logic: for each active config, find stock rows that match (product or category or global)
    * and where quantity <= threshold.
    */
-  async checkStockLevels(): Promise<LowStockItem[]> {
+  async checkStockLevels(orgId: string): Promise<LowStockItem[]> {
     const activeConfigs = alertConfigs.filter((c) => c.isActive);
     if (activeConfigs.length === 0) return [];
 
-    const allStock = await mockStockService.getStockLevels();
+    const allStock = await mockStockService.getStockLevels(orgId);
     const lowStockMap = new Map<string, LowStockItem>();
 
     for (const config of activeConfigs) {

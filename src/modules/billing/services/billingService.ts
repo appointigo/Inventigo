@@ -1,3 +1,4 @@
+import { mockStockService } from "@/modules/stock/services/mockStockService";
 import type {
   CreateSaleInput,
   Sale,
@@ -5,7 +6,6 @@ import type {
   SaleFilters,
   SaleSummary,
 } from "../types";
-import { mockStockService } from "@/modules/stock/services/mockStockService";
 
 // Mock sales data
 const sales: Sale[] = [
@@ -97,15 +97,15 @@ let nextSaleId = 6;
 let nextItemId = 8;
 let invoiceSeq = 2;
 
-function generateInvoiceNumber(): string {
+const generateInvoiceNumber = (): string => {
   const now = new Date();
   const dateStr = now.toISOString().slice(0, 10).replace(/-/g, "");
   const seq = String(invoiceSeq++).padStart(4, "0");
   return `INV-${dateStr}-${seq}`;
-}
+};
 
 export const billingService = {
-  async createSale(input: CreateSaleInput): Promise<Sale> {
+  async createSale(orgId: string, input: CreateSaleInput): Promise<Sale> {
     const subtotal = input.items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
     const total = subtotal - input.discountAmount + input.taxAmount;
 
@@ -138,7 +138,7 @@ export const billingService = {
 
     // Decrement stock for each item (mock)
     for (const item of input.items) {
-      await mockStockService.adjustStock({
+      await mockStockService.adjustStock(orgId, {
         productId: item.productId,
         sizeId: item.sizeId,
         quantity: item.quantity,
@@ -193,7 +193,7 @@ export const billingService = {
     }));
   },
 
-  async refundSale(saleId: string): Promise<Sale | null> {
+  async refundSale(orgId: string, saleId: string): Promise<Sale | null> {
     const sale = sales.find((s) => s.id === saleId);
     if (!sale || sale.status === "REFUNDED") return null;
 
@@ -201,7 +201,7 @@ export const billingService = {
 
     // Restore stock for each item
     for (const item of sale.items) {
-      await mockStockService.adjustStock({
+      await mockStockService.adjustStock(orgId, {
         productId: item.productId,
         sizeId: item.sizeId,
         quantity: item.quantity,

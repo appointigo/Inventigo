@@ -1,7 +1,16 @@
 import { NextResponse } from "next/server";
+import { requireOrgAuth } from "@/lib/auth.middleware";
 import { mockStockService } from "@/modules/stock/services/mockStockService";
 
-export async function GET(request: Request) {
+export const GET = async (request: Request) => {
+  let user;
+  try { 
+    user = await requireOrgAuth(); 
+  }
+  catch { 
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 }); 
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const filters = {
@@ -9,14 +18,23 @@ export async function GET(request: Request) {
       lowStockOnly: searchParams.get("lowStockOnly") === "true" || undefined,
       outOfStockOnly: searchParams.get("outOfStockOnly") === "true" || undefined,
     };
-    const levels = await mockStockService.getStockLevels(filters);
+    const levels = await mockStockService.getStockLevels(user.orgId, filters);
     return NextResponse.json(levels);
-  } catch {
+  } 
+  catch {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
-export async function POST(request: Request) {
+export const POST = async (request: Request) => {
+  let user;
+  try { 
+    user = await requireOrgAuth(); 
+  }
+  catch { 
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 }); 
+  }
+
   try {
     const body = await request.json();
     if (!body.productId || !body.sizeId || body.quantity === undefined || !body.type) {
@@ -25,12 +43,13 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    const result = await mockStockService.adjustStock(body);
+    const result = await mockStockService.adjustStock(user.orgId, body, user.name);
     if (!result) {
       return NextResponse.json({ error: "Stock entry not found" }, { status: 404 });
     }
     return NextResponse.json(result);
-  } catch {
+  } 
+  catch {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

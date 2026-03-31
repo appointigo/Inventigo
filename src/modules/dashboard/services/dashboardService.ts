@@ -1,16 +1,16 @@
 import type { DashboardData, StockByCategory, TopBrand, RecentMovement } from "../types";
-import { mockStockService } from "@/modules/stock/services/mockStockService";
 import { productService } from "@/modules/products/services/productService";
 import { poService } from "@/modules/purchase-orders/services/poService";
+import { mockStockService } from "@/modules/stock/services/mockStockService";
 
 // TODO: Replace with Prisma aggregation queries when DB is connected
 
 export const dashboardService = {
-  async getData(): Promise<DashboardData> {
+  async getData(orgId: string): Promise<DashboardData> {
     const [allStock, allMovements, allProducts, allPOs] = await Promise.all([
-      mockStockService.getStockLevels(),
-      mockStockService.getMovements(),
-      productService.list(),
+      mockStockService.getStockLevels(orgId),
+      mockStockService.getMovements(orgId),
+      productService.list(orgId),
       poService.list(),
     ]);
 

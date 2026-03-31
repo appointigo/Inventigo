@@ -1,7 +1,16 @@
 import { NextResponse } from "next/server";
 import { reportsService } from "@/modules/dashboard/services/reportsService";
+import { requireOrgAuth } from "@/lib/auth.middleware";
 
-export async function GET(request: Request) {
+export const GET = async (request: Request) => {
+  let user;
+  try { 
+    user = await requireOrgAuth(); 
+  }
+  catch { 
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 }); 
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const reportType = searchParams.get("type") ?? "stock";
@@ -12,7 +21,7 @@ export async function GET(request: Request) {
         brandName: searchParams.get("brandName") || undefined,
         status: (searchParams.get("status") as "OK" | "LOW" | "OUT") || undefined,
       };
-      const data = await reportsService.getStockReport(filters);
+      const data = await reportsService.getStockReport(user.orgId, filters);
       return NextResponse.json(data);
     }
 
@@ -22,12 +31,13 @@ export async function GET(request: Request) {
         startDate: searchParams.get("startDate") || undefined,
         endDate: searchParams.get("endDate") || undefined,
       };
-      const data = await reportsService.getMovementReport(filters);
+      const data = await reportsService.getMovementReport(user.orgId, filters);
       return NextResponse.json(data);
     }
 
     return NextResponse.json({ error: "Invalid report type" }, { status: 400 });
-  } catch {
+  } 
+  catch {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

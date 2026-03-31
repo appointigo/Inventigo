@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { billingService } from "@/modules/billing/services/billingService";
+import { requireOrgAuth } from "@/lib/auth.middleware";
 
-export async function GET(request: NextRequest) {
+export const GET = async (request: NextRequest) => {
+  let user;
+  try { 
+    user = await requireOrgAuth(); 
+  }
+  catch { 
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 }); 
+  }
+
   try {
     const sp = request.nextUrl.searchParams;
     const filters = {
@@ -13,17 +22,27 @@ export async function GET(request: NextRequest) {
     };
     const sales = await billingService.getSales(filters);
     return NextResponse.json(sales);
-  } catch {
+  } 
+  catch {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
-export async function POST(request: NextRequest) {
+export const POST = async (request: NextRequest) => {
+  let user;
+  try { 
+    user = await requireOrgAuth(); 
+  }
+  catch { 
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 }); 
+  }
+
   try {
     const body = await request.json();
-    const sale = await billingService.createSale(body);
+    const sale = await billingService.createSale(user.orgId, body);
     return NextResponse.json(sale, { status: 201 });
-  } catch {
+  } 
+  catch {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

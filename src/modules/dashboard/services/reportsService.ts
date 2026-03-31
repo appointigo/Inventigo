@@ -1,5 +1,4 @@
-import type { MockStockRow, MockStockMovement } from "@/modules/stock/services/mockStockService";
-import { mockStockService } from "@/modules/stock/services/mockStockService";
+import { MockStockMovement, MockStockRow, mockStockService } from "@/modules/stock/services/mockStockService";
 
 export type StockReportFilters = {
   categoryName?: string;
@@ -19,8 +18,8 @@ export type StockReportRow = MockStockRow & {
 };
 
 export const reportsService = {
-  async getStockReport(filters?: StockReportFilters): Promise<StockReportRow[]> {
-    const allStock = await mockStockService.getStockLevels();
+  async getStockReport(orgId: string, filters?: StockReportFilters): Promise<StockReportRow[]> {
+    const allStock = await mockStockService.getStockLevels(orgId);
 
     // Inline cost price map (matches productService data)
     const costPrices: Record<string, number> = {
@@ -50,8 +49,8 @@ export const reportsService = {
     return result;
   },
 
-  async getMovementReport(filters?: MovementReportFilters): Promise<MockStockMovement[]> {
-    const allMovements = await mockStockService.getMovements();
+  async getMovementReport(orgId: string, filters?: MovementReportFilters): Promise<MockStockMovement[]> {
+    const allMovements = await mockStockService.getMovements(orgId);
     let result = [...allMovements];
 
     if (filters?.type) {

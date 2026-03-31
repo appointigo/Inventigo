@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { productService } from "@/modules/products/services/productService";
+import { requireOrgAuth } from "@/lib/auth.middleware";
 import type { BarcodeLookupResult } from "@/modules/barcode/types";
 
-export async function GET(request: NextRequest) {
+export const GET = async (request: NextRequest) => {
+  let user;
+  try { 
+    user = await requireOrgAuth(); 
+  }
+  catch { 
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 }); 
+  }
+
   try {
     const sku = request.nextUrl.searchParams.get("sku");
 
@@ -10,7 +19,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "sku query parameter is required" }, { status: 400 });
     }
 
-    const product = await productService.getByBarcode(sku.trim());
+    const product = await productService.getByBarcode(user.orgId, sku.trim());
 
     if (!product) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
@@ -42,7 +51,8 @@ export async function GET(request: NextRequest) {
     };
 
     return NextResponse.json(result);
-  } catch {
+  } 
+  catch {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
