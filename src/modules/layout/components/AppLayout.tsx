@@ -1,12 +1,13 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { Layout, Menu, Dropdown, Avatar, Space, Spin, Typography, theme, Flex, Tooltip } from "antd";
+import { Layout, Menu, Dropdown, Avatar, Space, Spin, Typography, theme, Flex, Tooltip, Tag } from "antd";
 import {
   LogoutOutlined,
   UserOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  AppstoreOutlined,
 } from "@ant-design/icons";
 import { useAuth } from "@/modules/auth/hooks/useAuth";
 import { getMenuForRole } from "@/modules/layout/constants";
@@ -23,6 +24,7 @@ const DEV_USER = {
   email: "dev@stockiva.com",
   role: "ADMIN" as Role,
   storeId: null,
+  orgId: "test-org-001",
 };
 
 export default function AppLayout({ children }: { children: ReactNode }) {
@@ -41,8 +43,14 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const isDev = process.env.NODE_ENV === "development";
   const currentUser = user ?? (isDev ? DEV_USER : null);
 
-  // Wait for client mount to avoid ProLayout hydration mismatch
-  // (ProLayout reads window.innerWidth for responsive classes)
+  // SUPER_ADMIN should never land in the regular dashboard
+  useEffect(() => {
+    if (mounted && currentUser?.role === Role.SUPER_ADMIN) {
+      router.replace("/admin");
+    }
+  }, [mounted, currentUser, router]);
+
+  // Wait for client mount to avoid hydration mismatch
   if (!mounted || (isLoading && !isDev)) {
     return (
       <Flex
@@ -57,7 +65,17 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     );
   }
 
+  // While redirecting SUPER_ADMIN, show spinner
+  if (currentUser?.role === Role.SUPER_ADMIN) {
+    return (
+      <Flex align="center" justify="center" style={{ height: "100vh" }}>
+        <Spin size="large" />
+      </Flex>
+    );
+  }
+
   const role = currentUser?.role ?? ("ADMIN" as Role);
+  const canSwitchStores = role === Role.OWNER || role === Role.ADMIN;
   const menuItems = getMenuForRole(role).map((item) => ({
     key: item.path,
     icon: <item.icon />,
@@ -91,6 +109,31 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             {collapsed ? "S" : "Stockiva"}
           </Text>
         </Flex>
+
+        {/* Org name badge */}
+        {!collapsed && currentUser?.orgId && (
+          <Flex
+            align="center"
+            style={{
+              padding: "6px 16px",
+              borderBottom: "1px solid rgba(255,255,255,0.06)",
+            }}
+          >
+            <AppstoreOutlined style={{ color: "rgba(255,255,255,0.45)", marginRight: 6, fontSize: 11 }} />
+            <Text
+              style={{
+                color: "rgba(255,255,255,0.55)",
+                fontSize: 11,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {currentUser.orgId}
+            </Text>
+          </Flex>
+        )}
+
         <Menu
           theme="dark"
           mode="inline"
@@ -147,7 +190,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             zIndex: 10,
           }}
         >
-          {currentUser?.role === Role.ADMIN ? <StoreSelector /> : <div />}
+          {canSwitchStores ? <StoreSelector /> : <div />}
 
           <Dropdown
             menu={{
@@ -163,12 +206,12 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                         {currentUser?.email}
                       </Text>
                       <br />
-                      <Text
-                        type="secondary"
-                        style={{ fontSize: 11, textTransform: "uppercase" }}
+                      <Tag
+                        color={role === Role.OWNER ? "purple" : role === Role.ADMIN ? "red" : "blue"}
+                        style={{ marginTop: 4, fontSize: 10 }}
                       >
-                        {currentUser?.role}
-                      </Text>
+                        {role}
+                      </Tag>
                     </div>
                   ),
                   disabled: true,

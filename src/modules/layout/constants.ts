@@ -1,4 +1,4 @@
-import { DashboardOutlined, ShoppingOutlined, AppstoreOutlined, TagsOutlined, InboxOutlined, FileTextOutlined, ScanOutlined, BarChartOutlined, SettingOutlined, ShopOutlined, AlertOutlined, DollarOutlined } from "@ant-design/icons";
+import { DashboardOutlined, ShoppingOutlined, AppstoreOutlined, TagsOutlined, InboxOutlined, FileTextOutlined, ScanOutlined, BarChartOutlined, SettingOutlined, ShopOutlined, AlertOutlined, DollarOutlined, TeamOutlined } from "@ant-design/icons";
 import { Role } from "@prisma/client";
 
 export type MenuItem = {
@@ -9,9 +9,9 @@ export type MenuItem = {
   children?: MenuItem[];
 };
 
-const ALL_ROLES: Role[] = [Role.ADMIN, Role.MANAGER, Role.STAFF];
-const ADMIN_MANAGER: Role[] = [Role.ADMIN, Role.MANAGER];
-const ADMIN_ONLY: Role[] = [Role.ADMIN];
+const ALL_ROLES: Role[] = [Role.OWNER, Role.ADMIN, Role.MANAGER, Role.STAFF];
+const ADMIN_MANAGER: Role[] = [Role.OWNER, Role.ADMIN, Role.MANAGER];
+const ADMIN_ONLY: Role[] = [Role.OWNER, Role.ADMIN];
 
 export const MENU_ITEMS: MenuItem[] = [
   {
@@ -86,11 +86,16 @@ export const MENU_ITEMS: MenuItem[] = [
     icon: SettingOutlined,
     roles: ALL_ROLES,
   },
+  {
+    path: "/dashboard/settings/team",
+    name: "Team",
+    icon: TeamOutlined,
+    roles: ADMIN_ONLY,
+  },
 ];
 
-/**
- * Filter menu items based on user role.
- */
 export function getMenuForRole(role: Role): MenuItem[] {
+  // SUPER_ADMIN is handled separately — they go to /admin
+  if (role === Role.SUPER_ADMIN) return [];
   return MENU_ITEMS.filter((item) => item.roles.includes(role));
 }
