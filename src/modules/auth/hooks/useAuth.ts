@@ -9,13 +9,14 @@ export type CurrentUser = {
   email: string;
   role: Role;
   storeId: string | null;
+  orgId: string | null;
 };
 
 /**
  * Hook to get the current authenticated user.
  * Returns user data, loading state, and authentication status.
  */
-export function useCurrentUser() {
+export const useCurrentUser = () => {
   const { data: session, status } = useSession();
 
   const user: CurrentUser | null = session?.user
@@ -25,6 +26,7 @@ export function useCurrentUser() {
         email: session.user.email ?? "",
         role: session.user.role,
         storeId: session.user.storeId,
+        orgId: session.user.orgId,
       }
     : null;
 
@@ -38,7 +40,7 @@ export function useCurrentUser() {
 /**
  * Hook for auth actions.
  */
-export function useAuth() {
+export const useAuth = () => {
   const { user, isLoading, isAuthenticated } = useCurrentUser();
 
   const logout = async () => {

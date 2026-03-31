@@ -7,9 +7,29 @@ import { prisma } from "./db";
 // ========================== TEST CREDENTIALS ==========================
 // TODO: Remove before production deployment
 // Hardcoded test users for development without a database connection.
-// Admin:  admin@stockiva.com / admin123
-// Staff:  staff@stockiva.com / staff123
+// Super Admin: superadmin@stockiva.com / superadmin123
+// Owner:       owner@stockiva.com / owner123
+// Admin:       admin@stockiva.com / admin123
+// Staff:       staff@stockiva.com / staff123
 const TEST_USERS = [
+  {
+    id: "test-superadmin-001",
+    name: "Test Super Admin",
+    email: "superadmin@stockiva.com",
+    password: "superadmin123",
+    role: "SUPER_ADMIN" as const,
+    storeId: null,
+    orgId: null,
+  },
+  {
+    id: "test-owner-001",
+    name: "Test Owner",
+    email: "owner@stockiva.com",
+    password: "owner123",
+    role: "OWNER" as const,
+    storeId: null,
+    orgId: "test-org-001",
+  },
   {
     id: "test-admin-001",
     name: "Test Admin",
@@ -17,6 +37,7 @@ const TEST_USERS = [
     password: "admin123",
     role: "ADMIN" as const,
     storeId: "test-store-001",
+    orgId: "test-org-001",
   },
   {
     id: "test-staff-001",
@@ -25,6 +46,7 @@ const TEST_USERS = [
     password: "staff123",
     role: "STAFF" as const,
     storeId: "test-store-001",
+    orgId: "test-org-001",
   },
 ];
 // ======================== END TEST CREDENTIALS ========================
@@ -68,6 +90,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               email: testUser.email,
               role: testUser.role,
               storeId: testUser.storeId,
+              orgId: testUser.orgId,
             };
           }
 
@@ -91,6 +114,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                   email: demoUser.email,
                   role: demoUser.role,
                   storeId: demoUser.storeId,
+                  orgId: demoUser.orgId,
                 };
               }
             }
@@ -112,6 +136,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               passwordHash: true,
               role: true,
               storeId: true,
+              orgId: true,
               isActive: true,
             },
           });
@@ -138,6 +163,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email: user.email,
           role: user.role,
           storeId: user.storeId,
+          orgId: user.orgId,
         };
       },
     }),
@@ -150,12 +176,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user) {
         token.id = user.id!;
         token.role = user.role ?? "ADMIN";
-        token.storeId = user.storeId ?? "test-store-001";
+        token.storeId = user.storeId ?? null;
+        token.orgId = user.orgId ?? null;
       }
-      // Google OAuth: populate defaults if not set
+      // Google OAuth: needs onboarding flow to create/join an org
       if (account?.provider === "google" && !token.role) {
-        token.role = "ADMIN";
-        token.storeId = "test-store-001";
+        token.role = "OWNER";
+        token.storeId = null;
+        token.orgId = null;
       }
       return token;
     },
@@ -164,6 +192,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.id = token.id;
         session.user.role = token.role;
         session.user.storeId = token.storeId;
+        session.user.orgId = token.orgId;
       }
       return session;
     },

@@ -7,13 +7,14 @@ export type AuthUser = {
   email: string;
   role: Role;
   storeId: string | null;
+  orgId: string | null;
 };
 
 /**
  * Get the authenticated user from the session.
  * Use in API routes and Server Components.
  */
-export async function getAuthUser(): Promise<AuthUser | null> {
+export const getAuthUser = async (): Promise<AuthUser | null> => {
   const session = await auth();
   if (!session?.user) return null;
 
@@ -23,6 +24,7 @@ export async function getAuthUser(): Promise<AuthUser | null> {
     email: session.user.email ?? "",
     role: session.user.role,
     storeId: session.user.storeId,
+    orgId: session.user.orgId,
   };
 }
 
@@ -30,7 +32,7 @@ export async function getAuthUser(): Promise<AuthUser | null> {
  * Require the user to be authenticated. Throws if not.
  * Use in API routes.
  */
-export async function requireAuth(): Promise<AuthUser> {
+export const requireAuth = async (): Promise<AuthUser> => {
   const user = await getAuthUser();
   if (!user) {
     throw new Error("Unauthorized");
@@ -39,10 +41,34 @@ export async function requireAuth(): Promise<AuthUser> {
 }
 
 /**
- * Require the user to have a specific role (or higher).
- * Role hierarchy: ADMIN > MANAGER > STAFF
+ * Require the user to be authenticated and belong to an organization.
+ * SUPER_ADMIN has orgId=null — use requireSuperAdmin() for platform routes.
+ * All other roles must have an orgId to access org-scoped resources.
  */
-export async function requireRole(...allowedRoles: Role[]): Promise<AuthUser> {
+export const requireOrgAuth = async (): Promise<AuthUser & { orgId: string }> => {
+  const user = await requireAuth();
+  if (!user.orgId) {
+    throw new Error("Forbidden");
+  }
+  return user as AuthUser & { orgId: string };
+}
+
+/**
+ * Require the user to be a SUPER_ADMIN (platform admin only).
+ */
+export const requireSuperAdmin = async (): Promise<AuthUser> => {
+  const user = await requireAuth();
+  if (user.role !== "SUPER_ADMIN") {
+    throw new Error("Forbidden");
+  }
+  return user;
+}
+
+/**
+ * Require the user to have a specific role (or higher).
+ * Role hierarchy: SUPER_ADMIN > OWNER > ADMIN > MANAGER > STAFF
+ */
+export const requireRole = async (...allowedRoles: Role[]): Promise<AuthUser> => {
   const user = await requireAuth();
   if (!allowedRoles.includes(user.role)) {
     throw new Error("Forbidden");

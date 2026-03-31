@@ -2,34 +2,22 @@ import { prisma } from "./db";
 
 const DEFAULT_STORE_CODE = "MAIN";
 
-let cachedStoreId: string | null = null;
-
 /**
- * Get the default store ID.
- * In multi-store mode (future), this will be replaced by StoreProvider context.
- * For now, it returns the "MAIN" store ID from the database.
+ * Get the default store ID for an organization.
+ * Finds the "MAIN" store scoped to the given orgId.
+ * Use in API routes after extracting orgId from the session.
  */
-export async function getDefaultStoreId(): Promise<string> {
-  if (cachedStoreId) return cachedStoreId;
-
-  const store = await prisma.store.findUnique({
-    where: { code: DEFAULT_STORE_CODE },
+export const getDefaultStoreId = async (orgId: string): Promise<string> => {
+  const store = await prisma.store.findFirst({
+    where: { code: DEFAULT_STORE_CODE, orgId },
     select: { id: true },
   });
 
   if (!store) {
     throw new Error(
-      `Default store "${DEFAULT_STORE_CODE}" not found. Run 'npx prisma db seed' first.`
+      `Default store "${DEFAULT_STORE_CODE}" not found for this organization. Run 'npx prisma db seed' first.`
     );
   }
 
-  cachedStoreId = store.id;
   return store.id;
-}
-
-/**
- * Reset cached store ID (useful for testing).
- */
-export function resetStoreCache() {
-  cachedStoreId = null;
 }
