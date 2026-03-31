@@ -1,5 +1,6 @@
 // Stockiva — Retail Inventory Management System
-// Full schema including Store (multi-store ready) and Sale/SaleItem (billing ready)
+// Multi-tenant schema: Organization is the tenant boundary.
+// Every org has its own stores, categories, brands, products, suppliers.
 
 generator client {
   provider = "prisma-client-js"
@@ -12,9 +13,23 @@ datasource db {
 // ─── ENUMS ──────────────────────────────────────────────────────────────────────
 
 enum Role {
-  ADMIN
-  MANAGER
-  STAFF
+  SUPER_ADMIN // Platform admin — no org, sees everything
+  OWNER       // Org owner — creates org, manages billing, one per org
+  ADMIN       // Org admin — manages stores, invites users (not OWNER)
+  MANAGER     // Manages products/suppliers/POs within one store
+  STAFF       // Stock adjustments, view-only on most things
+}
+
+enum OrgPlan {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
 }
 
 enum StockMovementType {
@@ -49,18 +64,43 @@ enum SaleStatus {
   REFUNDED
 }
 
+// ─── ORGANIZATION ────────────────────────────────────────────────────────────────
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  logoUrl   String?
+  plan      OrgPlan  @default(FREE)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users       User[]
+  stores      Store[]
+  categories  Category[]
+  brands      Brand[]
+  products    Product[]
+  suppliers   Supplier[]
+  invitations Invitation[]
+
+  @@map("organizations")
+}
+
 // ─── STORE ──────────────────────────────────────────────────────────────────────
 
 model Store {
   id        String   @id @default(uuid())
+  orgId     String
   name      String
-  code      String   @unique
+  code      String
   address   String?
   phone     String?
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  org            Organization    @relation(fields: [orgId], references: [id])
   users          User[]
   stockEntries   StockEntry[]
   stockMovements StockMovement[]
@@ -68,6 +108,8 @@ model Store {
   sales          Sale[]
   alertConfigs   AlertConfig[]
 
+  @@unique([code, orgId])
+  @@index([orgId])
   @@map("stores")
 }
 
@@ -75,6 +117,7 @@ model Store {
 
 model User {
   id           String   @id @default(uuid())
+  orgId        String?
   name         String
   email        String   @unique
   passwordHash String
@@ -84,29 +127,58 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  store          Store?          @relation(fields: [storeId], references: [id])
-  stockMovements StockMovement[]
-  purchaseOrders PurchaseOrder[]
-  sales          Sale[]
+  org             Organization?  @relation(fields: [orgId], references: [id])
+  store           Store?         @relation(fields: [storeId], references: [id])
+  stockMovements  StockMovement[]
+  purchaseOrders  PurchaseOrder[]
+  sales           Sale[]
+  sentInvitations Invitation[]   @relation("SentInvitations")
 
+  @@index([orgId])
   @@map("users")
+}
+
+// ─── INVITATION ──────────────────────────────────────────────────────────────────
+
+model Invitation {
+  id        String           @id @default(uuid())
+  orgId     String
+  email     String
+  role      Role
+  invitedBy String
+  status    InvitationStatus @default(PENDING)
+  token     String           @unique
+  expiresAt DateTime
+  createdAt DateTime         @default(now())
+
+  org     Organization @relation(fields: [orgId], references: [id])
+  inviter User         @relation("SentInvitations", fields: [invitedBy], references: [id])
+
+  @@index([orgId])
+  @@index([email])
+  @@map("invitations")
 }
 
 // ─── CATEGORY ───────────────────────────────────────────────────────────────────
 
 model Category {
   id              String   @id @default(uuid())
-  name            String   @unique
-  slug            String   @unique
+  orgId           String
+  name            String
+  slug            String
   description     String?
   attributeSchema Json     @default("{}")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  org          Organization  @relation(fields: [orgId], references: [id])
   products     Product[]
   sizes        Size[]
   alertConfigs AlertConfig[]
 
+  @@unique([name, orgId])
+  @@unique([slug, orgId])
+  @@index([orgId])
   @@map("categories")
 }
 
@@ -114,14 +186,18 @@ model Category {
 
 model Brand {
   id        String   @id @default(uuid())
-  name      String   @unique
+  orgId     String
+  name      String
   logoUrl   String?
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  org      Organization @relation(fields: [orgId], references: [id])
   products Product[]
 
+  @@unique([name, orgId])
+  @@index([orgId])
   @@map("brands")
 }
 
@@ -129,8 +205,9 @@ model Brand {
 
 model Product {
   id         String   @id @default(uuid())
+  orgId      String
   name       String
-  sku        String   @unique
+  sku        String
   categoryId String
   brandId    String
   basePrice  Decimal  @db.Decimal(10, 2)
@@ -141,6 +218,7 @@ model Product {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
+  org                Organization        @relation(fields: [orgId], references: [id])
   category           Category            @relation(fields: [categoryId], references: [id])
   brand              Brand               @relation(fields: [brandId], references: [id])
   stockEntries       StockEntry[]
@@ -148,6 +226,8 @@ model Product {
   purchaseOrderItems PurchaseOrderItem[]
   saleItems          SaleItem[]
 
+  @@unique([sku, orgId])
+  @@index([orgId])
   @@index([categoryId])
   @@index([brandId])
   @@index([sku])
@@ -229,6 +309,7 @@ model StockMovement {
 
 model Supplier {
   id            String   @id @default(uuid())
+  orgId         String
   name          String
   contactPerson String?
   email         String?
@@ -238,8 +319,10 @@ model Supplier {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  org            Organization    @relation(fields: [orgId], references: [id])
   purchaseOrders PurchaseOrder[]
 
+  @@index([orgId])
   @@map("suppliers")
 }
 

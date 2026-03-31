@@ -6,14 +6,26 @@ import "dotenv/config";
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
 const prisma = new PrismaClient({ adapter });
 
-async function main() {
+const main = async () => {
   console.log("🌱 Seeding database...");
 
-  // ─── Store ──────────────────────────────────────────────────────────────────
-  const store = await prisma.store.upsert({
-    where: { code: "MAIN" },
+  // ─── Organization ─────────────────────────────────────────────────────────────
+  const org = await prisma.organization.upsert({
+    where: { slug: "stockiva-demo" },
     update: {},
     create: {
+      name: "Stockiva Demo",
+      slug: "stockiva-demo",
+    },
+  });
+  console.log(`✅ Organization: ${org.name}`);
+
+  // ─── Store ────────────────────────────────────────────────────────────────────
+  const store = await prisma.store.upsert({
+    where: { code_orgId: { code: "MAIN", orgId: org.id } },
+    update: {},
+    create: {
+      orgId: org.id,
       name: "Main Store",
       code: "MAIN",
       address: "123 Main Street, City Center",
@@ -22,8 +34,34 @@ async function main() {
   });
   console.log(`✅ Store: ${store.name}`);
 
-  // ─── Users ──────────────────────────────────────────────────────────────────
+  // ─── Users ────────────────────────────────────────────────────────────────────
   const passwordHash = await bcrypt.hash("password123", 12);
+
+  const _superAdmin = await prisma.user.upsert({
+    where: { email: "superadmin@stockiva.com" },
+    update: {},
+    create: {
+      name: "Super Admin",
+      email: "superadmin@stockiva.com",
+      passwordHash,
+      role: Role.SUPER_ADMIN,
+      orgId: null,
+      storeId: null,
+    },
+  });
+
+  const _owner = await prisma.user.upsert({
+    where: { email: "owner@stockiva.com" },
+    update: {},
+    create: {
+      name: "Demo Owner",
+      email: "owner@stockiva.com",
+      passwordHash,
+      role: Role.OWNER,
+      orgId: org.id,
+      storeId: null,
+    },
+  });
 
   const admin = await prisma.user.upsert({
     where: { email: "admin@stockiva.com" },
@@ -33,7 +71,8 @@ async function main() {
       email: "admin@stockiva.com",
       passwordHash,
       role: Role.ADMIN,
-      storeId: null, // Admin has access to all stores
+      orgId: org.id,
+      storeId: null, // Admin has access to all stores within org
     },
   });
 
@@ -45,6 +84,7 @@ async function main() {
       email: "manager@stockiva.com",
       passwordHash,
       role: Role.MANAGER,
+      orgId: org.id,
       storeId: store.id,
     },
   });
@@ -57,10 +97,11 @@ async function main() {
       email: "staff@stockiva.com",
       passwordHash,
       role: Role.STAFF,
+      orgId: org.id,
       storeId: store.id,
     },
   });
-  console.log(`✅ Users: admin, manager, staff (password: password123)`);
+  console.log(`✅ Users: superadmin, owner, admin, manager, staff (password: password123)`);
 
   // ─── Categories with Attribute Schemas ──────────────────────────────────────
   const categoriesData = [
@@ -163,9 +204,10 @@ async function main() {
 
   for (const cat of categoriesData) {
     const category = await prisma.category.upsert({
-      where: { slug: cat.slug },
+      where: { slug_orgId: { slug: cat.slug, orgId: org.id } },
       update: {},
       create: {
+        orgId: org.id,
         name: cat.name,
         slug: cat.slug,
         description: cat.description,
@@ -197,9 +239,9 @@ async function main() {
 
   for (const brandName of brandsData) {
     const brand = await prisma.brand.upsert({
-      where: { name: brandName },
+      where: { name_orgId: { name: brandName, orgId: org.id } },
       update: {},
-      create: { name: brandName },
+      create: { orgId: org.id, name: brandName },
     });
     brands[brandName] = brand.id;
   }
@@ -364,9 +406,10 @@ async function main() {
     if (!cat) continue;
 
     const product = await prisma.product.upsert({
-      where: { sku: prod.sku },
+      where: { sku_orgId: { sku: prod.sku, orgId: org.id } },
       update: {},
       create: {
+        orgId: org.id,
         name: prod.name,
         sku: prod.sku,
         categoryId: cat.id,
@@ -430,18 +473,20 @@ async function main() {
   ];
 
   for (const sup of suppliersData) {
-    const existing = await prisma.supplier.findFirst({ where: { name: sup.name } });
+    const existing = await prisma.supplier.findFirst({ where: { name: sup.name, orgId: org.id } });
     if (!existing) {
-      await prisma.supplier.create({ data: sup });
+      await prisma.supplier.create({ data: { ...sup, orgId: org.id } });
     }
   }
   console.log(`✅ Suppliers: ${suppliersData.length}`);
 
   console.log("\n🎉 Seed completed successfully!");
   console.log("\n📋 Login credentials:");
-  console.log("   Admin:   admin@stockiva.com / password123");
-  console.log("   Manager: manager@stockiva.com / password123");
-  console.log("   Staff:   staff@stockiva.com / password123");
+  console.log("   Super Admin: superadmin@stockiva.com / password123");
+  console.log("   Owner:       owner@stockiva.com / password123");
+  console.log("   Admin:       admin@stockiva.com / password123");
+  console.log("   Manager:     manager@stockiva.com / password123");
+  console.log("   Staff:       staff@stockiva.com / password123");
 }
 
 main()

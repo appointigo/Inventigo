@@ -1232,6 +1232,31 @@ stockiva/
 
 ---
 
+### TODO: Product Image Upload (After Multi-Tenant Architecture)
+
+> **Status: NOT STARTED** — Implement after multi-tenancy migration is complete.
+
+**Goal:** Replace the plain URL text input on `ProductForm` with a real file upload widget backed by Vercel Blob. The `imageService.ts` abstraction and `@vercel/blob` package are already in place.
+
+**Depends on:** Multi-Tenant Architecture implementation (orgId, auth, service layer)
+
+| # | Task | Details |
+|---|---|---|
+| T.1 | Upload API route | Create `app/api/upload/route.ts` — Vercel Blob token endpoint for client-side direct upload. Returns a short-lived client token via `handleUpload()` from `@vercel/blob/client`. Requires `BLOB_READ_WRITE_TOKEN` env var. |
+| T.2 | ProductForm upload widget | Replace `<Form.Item name="imageUrl"><Input placeholder="https://..." /></Form.Item>` with antd `<Upload>` component. Use `upload()` from `@vercel/blob/client` with `handleUploadUrl: "/api/upload"`. On success, store returned URL in form field. Show image preview below the uploader. |
+| T.3 | Delete old image on update | In `productService.ts`, when `imageUrl` changes on update, call `imageService.delete(oldImageUrl)` before saving the new URL to avoid orphaned blobs. |
+| T.4 | Brand logo upload | Apply the same upload pattern to `BrandForm.tsx` for the brand `logoUrl` field. Wire `brandService.ts` to delete the old logo on update. |
+| T.5 | Environment variable | Add `BLOB_READ_WRITE_TOKEN` to `.env.local` (get from Vercel project dashboard → Storage → Blob) and to Vercel project environment variables for production. |
+
+**Verification:**
+- Upload a product image → file uploads directly to Vercel Blob CDN → `imageUrl` saved to DB
+- Image preview renders in `ProductForm` and `ProductDetail`
+- Edit product, replace image → old blob deleted, new URL saved
+- Upload brand logo → same flow works for `BrandForm`
+- `BLOB_READ_WRITE_TOKEN` not exposed to the client (server-side token endpoint only)
+
+---
+
 ## 10. Verification & Testing Plan
 
 ### Manual Verification Checklist
