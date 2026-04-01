@@ -21,7 +21,7 @@ export const GET = async (request: Request) => {
         brandName: searchParams.get("brandName") || undefined,
         status: (searchParams.get("status") as "OK" | "LOW" | "OUT") || undefined,
       };
-      const data = await reportsService.getStockReport(user.orgId, filters);
+            const data = await reportsService.getStockReport(user.orgId, user.storeId ?? null, filters);
       return NextResponse.json(data);
     }
 
@@ -31,7 +31,7 @@ export const GET = async (request: Request) => {
         startDate: searchParams.get("startDate") || undefined,
         endDate: searchParams.get("endDate") || undefined,
       };
-      const data = await reportsService.getMovementReport(user.orgId, filters);
+      const data = await reportsService.getMovementReport(user.orgId, user.storeId ?? null, filters);
       return NextResponse.json(data);
     }
 

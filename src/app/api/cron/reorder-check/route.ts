@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { alertService } from "@/modules/alerts/services/alertService";
+import { prisma } from "@/lib/db";
 
 /**
  * Cron job: Check stock levels against alert configs and send notifications.
@@ -13,16 +14,21 @@ export const GET = async (request: Request) => {
   }
 
   try {
-    const lowStockItems = await alertService.checkStockLevels("test-org-001");
-    const result = await alertService.sendAlerts(lowStockItems);
+    const orgs = await prisma.organization.findMany({ select: { id: true } });
+    let totalLowStock = 0;
+
+    for (const org of orgs) {
+      const lowStockItems = await alertService.checkStockLevels(org.id);
+      const result = await alertService.sendAlerts(org.id, lowStockItems);
+      totalLowStock += result.itemCount;
+    }
+
     return NextResponse.json({
       message: "Reorder check completed",
-      lowStockCount: result.itemCount,
-      emailSent: result.emailSent,
-      smsSent: result.smsSent,
+      orgsChecked: orgs.length,
+      totalLowStockCount: totalLowStock,
     });
-  } 
-  catch {
+  } catch {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

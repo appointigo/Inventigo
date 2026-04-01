@@ -80,7 +80,7 @@ export default function StockTable({
       dataIndex: "status",
       width: 120,
       align: "center",
-      render: (status: MockStockRow["status"]) => (
+      render: (status: StockLevelRow["status"]) => (
         <Tag color={statusColors[status]}>{statusLabels[status]}</Tag>
       ),
     },

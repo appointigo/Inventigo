@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import type { Product, ProductFormValues, ProductListFilters } from "../types";
 import { imageService } from "@/shared/services/imageService";
@@ -94,7 +95,7 @@ export const productService = {
         brandId: values.brandId,
         basePrice: values.basePrice,
         costPrice: values.costPrice,
-        attributes: values.attributes ?? {},
+        attributes: (values.attributes ?? {}) as Prisma.InputJsonValue,
         imageUrl: values.imageUrl ?? null,
         isActive: values.isActive,
       },
@@ -126,10 +127,10 @@ export const productService = {
         ...(values.brandId !== undefined && { brandId: values.brandId }),
         ...(values.basePrice !== undefined && { basePrice: values.basePrice }),
         ...(values.costPrice !== undefined && { costPrice: values.costPrice }),
-        ...(values.attributes !== undefined && { attributes: values.attributes }),
+        ...(values.attributes !== undefined && { attributes: values.attributes as Prisma.InputJsonValue }),
         ...(values.isActive !== undefined && { isActive: values.isActive }),
         imageUrl: incomingImageUrl,
-      },
+      } as Prisma.ProductUpdateInput,
       include,
     });
     return toDto(p);
