@@ -1,10 +1,16 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import type { MockStockRow, MockStockMovement, StockListFilters } from "../services/mockStockService";
+import type { StockLevelRow, StockMovementRow } from "../types";
+
+export type StockListFilters = {
+  search?: string;
+  lowStockOnly?: boolean;
+  outOfStockOnly?: boolean;
+};
 
 export function useStockLevels(filters?: StockListFilters) {
-  const [stockLevels, setStockLevels] = useState<MockStockRow[]>([]);
+  const [stockLevels, setStockLevels] = useState<StockLevelRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchLevels = useCallback(async () => {
@@ -30,7 +36,7 @@ export function useStockLevels(filters?: StockListFilters) {
 }
 
 export function useStockMovements() {
-  const [movements, setMovements] = useState<MockStockMovement[]>([]);
+  const [movements, setMovements] = useState<StockMovementRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchMovements = useCallback(async () => {

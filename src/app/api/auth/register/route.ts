@@ -1,22 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// In-memory store for demo/development mode registrations.
-// Exported so auth.ts can look up demo users during sign-in.
-// ─────────────────────────────────────────────────────────────────────────────
-export interface DemoRegisteredUser {
-  id: string;
-  name: string;
-  email: string;
-  passwordHash: string;
-  role: "OWNER";
-  storeId: string | null;
-  orgId: string;
-}
-
-// In-memory store for demo mode registrations (resets on server restart)
-export const demoRegisteredUsers: DemoRegisteredUser[] = [];
+import { prisma } from "@/lib/db";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -37,8 +21,7 @@ export const POST = async (req: NextRequest) => {
   let body: { orgName?: string; ownerName?: string; email?: string; password?: string };
   try {
     body = await req.json();
-  } 
-  catch (error){
+  } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
@@ -60,42 +43,11 @@ export const POST = async (req: NextRequest) => {
   const baseSlug = slugify(orgName);
   const passwordHash = await bcrypt.hash(password, 12);
 
-  // ── Demo / development mode ─────────────────────────────────────────────────
-  if (process.env.NODE_ENV === "development" || process.env.DEMO_MODE === "true") {
-    const existingUser = demoRegisteredUsers.find((u) => u.email === emailLower);
-    if (existingUser) {
-      return NextResponse.json({ error: "Email already registered" }, { status: 409 });
-    }
-
-    const orgId = `demo-org-${Date.now()}`;
-    const userId = `demo-user-${Date.now()}`;
-
-    demoRegisteredUsers.push({
-      id: userId,
-      name: ownerName,
-      email: emailLower,
-      passwordHash,
-      role: "OWNER",
-      storeId: null,
-      orgId,
-    });
-
-    return NextResponse.json(
-      { message: "Organization registered successfully", orgId, userId },
-      { status: 201 }
-    );
-  }
-
-  // ── Production mode — DB transaction ────────────────────────────────────────
   try {
-    const { prisma } = await import("@/lib/db");
-
     const result = await prisma.$transaction(async (tx) => {
-      console.log("Checking if email exists:", result);
       // Check email uniqueness
       const existingUser = await tx.user.findUnique({ where: { email: emailLower } });
       if (existingUser) {
-        console.log("Email already exists:", emailLower);
         throw new Error("EMAIL_EXISTS");
       }
 
@@ -139,12 +91,11 @@ export const POST = async (req: NextRequest) => {
       { message: "Organization registered successfully", ...result },
       { status: 201 }
     );
-  } 
-  catch (error) {
+  } catch (error) {
     if (error instanceof Error && error.message === "EMAIL_EXISTS") {
       return NextResponse.json({ error: "Email already registered" }, { status: 409 });
     }
     console.error("Registration error:", error);
     return NextResponse.json({ error: "Registration failed" }, { status: 500 });
   }
-}
+};

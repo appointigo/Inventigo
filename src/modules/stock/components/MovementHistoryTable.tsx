@@ -2,10 +2,10 @@
 
 import { Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import type { MockStockMovement } from "../services/mockStockService";
+import type { StockMovementRow } from "../types";
 
 interface MovementHistoryTableProps {
-  movements: MockStockMovement[];
+  movements: StockMovementRow[];
   loading: boolean;
 }
 
@@ -18,7 +18,7 @@ const typeColors: Record<string, string> = {
 };
 
 export default function MovementHistoryTable({ movements, loading }: MovementHistoryTableProps) {
-  const columns: ColumnsType<MockStockMovement> = [
+  const columns: ColumnsType<StockMovementRow> = [
     {
       title: "Product",
       dataIndex: "productName",

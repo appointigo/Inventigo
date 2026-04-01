@@ -98,7 +98,7 @@ const LoginPage = () => {
   };
 
   // ─── Sign Up ──────────────────────────────────────────────────────────────
-  const onSignUp = async (values: { name: string; email: string; password: string; confirmPassword: string }) => {
+  const onSignUp = async (values: { orgName: string; name: string; email: string; password: string; confirmPassword: string }) => {
     if (values.password !== values.confirmPassword) {
       message.error("Passwords do not match");
       return;
@@ -109,7 +109,7 @@ const LoginPage = () => {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: values.name, email: values.email, password: values.password }),
+        body: JSON.stringify({ orgName: values.orgName, ownerName: values.name, email: values.email, password: values.password }),
       });
 
       const data = await res.json();
@@ -295,6 +295,13 @@ const LoginPage = () => {
                 <AuthDivider>or with email</AuthDivider>
 
                 <Form form={signupForm} layout="vertical" onFinish={onSignUp} autoComplete="off">
+                  <Form.Item
+                    name="orgName"
+                    rules={[{ required: true, message: "Please enter your organization name" }]}
+                  >
+                    <Input prefix={<UserOutlined />} placeholder="Organization / Store name" size="large" />
+                  </Form.Item>
+
                   <Form.Item
                     name="name"
                     rules={[{ required: true, message: "Please enter your name" }]}

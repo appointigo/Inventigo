@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import { Modal, Form, InputNumber, Select, Input, Typography, Space, Tag } from "antd";
-import type { MockStockRow } from "../services/mockStockService";
+import type { StockLevelRow } from "../types";
 
 interface StockAdjustmentModalProps {
-  stockRow: MockStockRow | null;
+  stockRow: StockLevelRow | null;
   open: boolean;
   onCancel: () => void;
   onSubmit: (values: {

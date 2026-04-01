@@ -3,16 +3,16 @@
 import { Table, Tag, Input, Select, Badge, Flex } from "antd";
 import { SearchOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
-import type { MockStockRow } from "../services/mockStockService";
+import type { StockLevelRow } from "../types";
 
 interface StockTableProps {
-  stockLevels: MockStockRow[];
+  stockLevels: StockLevelRow[];
   loading: boolean;
   search: string;
   onSearchChange: (value: string) => void;
   statusFilter: string | undefined;
   onStatusChange: (value: string | undefined) => void;
-  onAdjust: (row: MockStockRow) => void;
+  onAdjust: (row: StockLevelRow) => void;
 }
 
 const statusColors = { OK: "green", LOW: "orange", OUT: "red" } as const;
@@ -27,7 +27,7 @@ export default function StockTable({
   onStatusChange,
   onAdjust,
 }: StockTableProps) {
-  const columns: ColumnsType<MockStockRow> = [
+  const columns: ColumnsType<StockLevelRow> = [
     {
       title: "Product",
       dataIndex: "productName",

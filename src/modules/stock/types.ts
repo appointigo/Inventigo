@@ -31,12 +31,25 @@ export type StockLevelRow = {
   sku: string;
   categoryName: string;
   brandName: string;
+  sizeId: string;
   sizeLabel: string;
   quantity: number;
   reorderLevel: number;
   reorderQuantity: number;
   status: "OK" | "LOW" | "OUT";
   lastRestockedAt: Date | null;
+};
+
+export type StockMovementRow = {
+  id: string;
+  productName: string;
+  sku: string;
+  sizeLabel: string;
+  type: string;
+  quantity: number;
+  reason: string | null;
+  userName: string;
+  createdAt: string;
 };
 
 export type MovementHistoryFilters = {
