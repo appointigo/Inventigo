@@ -138,21 +138,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         // --- TEST CREDENTIALS (dev + demo mode) ---
         if (process.env.NODE_ENV === "development" || process.env.DEMO_MODE === "true") {
-          const testUser = TEST_USERS.find(
-            (u) =>
-              u.email === credentials.email &&
-              u.password === credentials.password
-          );
-          if (testUser) {
-            return {
-              id: testUser.id,
-              name: testUser.name,
-              email: testUser.email,
-              role: testUser.role,
-              storeId: testUser.storeId,
-              orgId: testUser.orgId,
-            };
-          }
+          // const testUser = TEST_USERS.find(
+          //   (u) =>
+          //     u.email === credentials.email &&
+          //     u.password === credentials.password
+          // );
+          // if (testUser) {
+          //   return {
+          //     id: testUser.id,
+          //     name: testUser.name,
+          //     email: testUser.email,
+          //     role: testUser.role,
+          //     storeId: testUser.storeId,
+          //     orgId: testUser.orgId,
+          //   };
+          // }
 
           // Check in-memory registered users (created via /api/auth/register in demo mode)
           try {

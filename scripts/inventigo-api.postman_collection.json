@@ -1,0 +1,1235 @@
+{
+  "info": {
+    "name": "Inventigo API",
+    "description": "Full API collection for Inventigo — multi-tenant retail inventory management.\n\n## Setup\n1. Import this collection into Postman.\n2. Set the `baseUrl` variable to `http://localhost:3000`.\n3. Run **Auth → Sign In** first — the response sets `sessionCookie` automatically via the test script.\n4. All subsequent requests use `{{sessionCookie}}` in the Cookie header.\n\n## Test Credentials\n| Role | Email | Password |\n|------|-------|----------|\n| OWNER | owner@stockiva.com | password123 |\n| ADMIN | admin@stockiva.com | password123 |\n| MANAGER | manager@stockiva.com | password123 |\n| STAFF | staff@stockiva.com | password123 |\n| SUPER_ADMIN | superadmin@stockiva.com | password123 |",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl",       "value": "http://localhost:3000",  "type": "string" },
+    { "key": "sessionCookie", "value": "",                        "type": "string" },
+    { "key": "orgId",         "value": "",  "type": "string" },
+    { "key": "productId",     "value": "",  "type": "string" },
+    { "key": "categoryId",    "value": "",  "type": "string" },
+    { "key": "brandId",       "value": "",  "type": "string" },
+    { "key": "supplierId",    "value": "",  "type": "string" },
+    { "key": "storeId",       "value": "",  "type": "string" },
+    { "key": "poId",          "value": "",  "type": "string" },
+    { "key": "saleId",        "value": "",  "type": "string" },
+    { "key": "userId",        "value": "",  "type": "string" },
+    { "key": "alertId",       "value": "",  "type": "string" },
+    { "key": "inviteToken",   "value": "",  "type": "string" },
+    { "key": "sizeId",        "value": "",  "type": "string" },
+    { "key": "adminOrgId",    "value": "",  "type": "string" }
+  ],
+  "item": [
+
+    {
+      "name": "🔐 Auth",
+      "item": [
+        {
+          "name": "Get CSRF Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "pm.collectionVariables.set('csrfToken', json.csrfToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url":    "{{baseUrl}}/api/auth/csrf",
+            "description": "Fetch a CSRF token — required before Sign In."
+          }
+        },
+        {
+          "name": "Sign In",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Extract the session cookie from Set-Cookie header",
+                  "var cookies = pm.response.headers.get('Set-Cookie') || '';",
+                  "var match = cookies.match(/((?:authjs|next-auth|__Secure-authjs|__Secure-next-auth)\\.session-token=[^;]+)/);",
+                  "if (match) {",
+                  "  pm.collectionVariables.set('sessionCookie', match[1]);",
+                  "  console.log('Session cookie saved: ' + match[1].substring(0, 40) + '...');",
+                  "} else {",
+                  "  console.warn('No session cookie found. Check credentials.');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url":    "{{baseUrl}}/api/auth/callback/credentials",
+            "header": [{ "key": "Content-Type", "value": "application/x-www-form-urlencoded" }],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "email",       "value": "owner@stockiva.com" },
+                { "key": "password",    "value": "password123" },
+                { "key": "csrfToken",   "value": "{{csrfToken}}" },
+                { "key": "callbackUrl", "value": "{{baseUrl}}" },
+                { "key": "redirect",    "value": "false" }
+              ]
+            },
+            "description": "Authenticates with credentials. Run 'Get CSRF Token' first.\nAuto-saves the session cookie to {{sessionCookie}}."
+          }
+        },
+        {
+          "name": "Get Session",
+          "request": {
+            "method": "GET",
+            "url":    "{{baseUrl}}/api/auth/session",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }],
+            "description": "Returns the currently authenticated user from the JWT session."
+          }
+        },
+        {
+          "name": "Register New Organization",
+          "request": {
+            "method": "POST",
+            "url":    "{{baseUrl}}/api/auth/register",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orgName\": \"My Retail Store\",\n  \"ownerName\": \"John Doe\",\n  \"email\": \"john.doe@myretail.com\",\n  \"password\": \"SecurePass123\"\n}"
+            },
+            "description": "Creates a new Organization + OWNER user + default Store in one transaction.\nRequired fields: orgName, ownerName, email, password (min 8 chars)"
+          }
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST",
+            "url":    "{{baseUrl}}/api/auth/forgot-password",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"owner@stockiva.com\"\n}"
+            },
+            "description": "Initiates password reset. In demo mode always returns 200."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🏢 Organization",
+      "item": [
+        {
+          "name": "Get Current Org",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.id) pm.collectionVariables.set('orgId', json.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url":    "{{baseUrl}}/api/org",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }],
+            "description": "Returns the organization the current user belongs to."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🏪 Stores",
+      "item": [
+        {
+          "name": "List Stores",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (Array.isArray(json) && json[0]) pm.collectionVariables.set('storeId', json[0].id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url":    "{{baseUrl}}/api/stores",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }]
+          }
+        },
+        {
+          "name": "Create Store",
+          "request": {
+            "method": "POST",
+            "url":    "{{baseUrl}}/api/stores",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Cookie",       "value": "{{sessionCookie}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"East Wing Store\",\n  \"code\": \"EW01\",\n  \"address\": \"123 Main Street, City Center\",\n  \"phone\": \"+91-9876543210\"\n}"
+            },
+            "description": "Requires ADMIN role or above."
+          }
+        },
+        {
+          "name": "Get Store by ID",
+          "request": {
+            "method": "GET",
+            "url":    "{{baseUrl}}/api/stores/{{storeId}}",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }]
+          }
+        },
+        {
+          "name": "Update Store",
+          "request": {
+            "method": "PUT",
+            "url":    "{{baseUrl}}/api/stores/{{storeId}}",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Cookie",       "value": "{{sessionCookie}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"East Wing Store — Updated\",\n  \"address\": \"456 Commerce Ave\",\n  \"phone\": \"+91-9999999999\",\n  \"isActive\": true\n}"
+            },
+            "description": "Requires ADMIN role or above."
+          }
+        },
+        {
+          "name": "Delete Store",
+          "request": {
+            "method": "DELETE",
+            "url":    "{{baseUrl}}/api/stores/{{storeId}}",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }],
+            "description": "Requires ADMIN role or above."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🗂️ Categories",
+      "item": [
+        {
+          "name": "List Categories",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (Array.isArray(json) && json[0]) pm.collectionVariables.set('categoryId', json[0].id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url":    "{{baseUrl}}/api/categories",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }]
+          }
+        },
+        {
+          "name": "Create Category",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.id) pm.collectionVariables.set('categoryId', json.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url":    "{{baseUrl}}/api/categories",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Cookie",       "value": "{{sessionCookie}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Footwear\",\n  \"description\": \"Shoes, sandals, and boots\",\n  \"sizes\": [\"UK 6\", \"UK 7\", \"UK 8\", \"UK 9\", \"UK 10\"],\n  \"attributeSchema\": {\n    \"fields\": [\n      { \"name\": \"style\",    \"type\": \"select\", \"options\": [\"Sports\", \"Formal\", \"Casual\"], \"required\": true },\n      { \"name\": \"material\", \"type\": \"select\", \"options\": [\"Leather\", \"Canvas\", \"Synthetic\"], \"required\": false }\n    ]\n  }\n}"
+            },
+            "description": "Required: name, sizes (array). Optional: description, attributeSchema."
+          }
+        },
+        {
+          "name": "Get Category by ID",
+          "request": {
+            "method": "GET",
+            "url":    "{{baseUrl}}/api/categories/{{categoryId}}",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }]
+          }
+        },
+        {
+          "name": "Update Category",
+          "request": {
+            "method": "PUT",
+            "url":    "{{baseUrl}}/api/categories/{{categoryId}}",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Cookie",       "value": "{{sessionCookie}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Footwear (Updated)\",\n  \"description\": \"All types of footwear — updated\",\n  \"sizes\": [\"UK 5\", \"UK 6\", \"UK 7\", \"UK 8\", \"UK 9\", \"UK 10\"]\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Category",
+          "request": {
+            "method": "DELETE",
+            "url":    "{{baseUrl}}/api/categories/{{categoryId}}",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }]
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🏷️ Brands",
+      "item": [
+        {
+          "name": "List Brands",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (Array.isArray(json) && json[0]) pm.collectionVariables.set('brandId', json[0].id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url":    "{{baseUrl}}/api/brands",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }]
+          }
+        },
+        {
+          "name": "Create Brand",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.id) pm.collectionVariables.set('brandId', json.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url":    "{{baseUrl}}/api/brands",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Cookie",       "value": "{{sessionCookie}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Nike\",\n  \"logoUrl\": \"https://example.com/nike-logo.png\"\n}"
+            },
+            "description": "Required: name. Optional: logoUrl."
+          }
+        },
+        {
+          "name": "Get Brand by ID",
+          "request": {
+            "method": "GET",
+            "url":    "{{baseUrl}}/api/brands/{{brandId}}",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }]
+          }
+        },
+        {
+          "name": "Update Brand",
+          "request": {
+            "method": "PUT",
+            "url":    "{{baseUrl}}/api/brands/{{brandId}}",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Cookie",       "value": "{{sessionCookie}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Nike (Updated)\",\n  \"logoUrl\": \"https://example.com/nike-logo-v2.png\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Brand",
+          "request": {
+            "method": "DELETE",
+            "url":    "{{baseUrl}}/api/brands/{{brandId}}",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }]
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "📦 Products",
+      "item": [
+        {
+          "name": "List Products",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (Array.isArray(json) && json[0]) {",
+                  "  pm.collectionVariables.set('productId', json[0].id);",
+                  "  // Capture first available sizeId from product variants",
+                  "  var sizes = json[0].sizes || json[0].variants || json[0].stockItems || [];",
+                  "  if (sizes[0] && sizes[0].sizeId) pm.collectionVariables.set('sizeId', sizes[0].sizeId);",
+                  "  if (sizes[0] && sizes[0].id && !sizes[0].sizeId) pm.collectionVariables.set('sizeId', sizes[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw":   "{{baseUrl}}/api/products",
+              "host":  ["{{baseUrl}}"],
+              "path":  ["api", "products"],
+              "query": [
+                { "key": "search",     "value": "",     "disabled": true },
+                { "key": "categoryId", "value": "",     "disabled": true },
+                { "key": "brandId",    "value": "",     "disabled": true },
+                { "key": "isActive",   "value": "true", "disabled": true }
+              ]
+            },
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }],
+            "description": "Query params: search, categoryId, brandId, isActive"
+          }
+        },
+        {
+          "name": "Create Product",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.id) pm.collectionVariables.set('productId', json.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url":    "{{baseUrl}}/api/products",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Cookie",       "value": "{{sessionCookie}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Classic White T-Shirt\",\n  \"sku\": \"TSH-WHT-001\",\n  \"description\": \"100% cotton classic white tee\",\n  \"costPrice\": 250,\n  \"sellPrice\": 599,\n  \"categoryId\": \"{{categoryId}}\",\n  \"brandId\": \"{{brandId}}\",\n  \"externalBarcode\": \"8901234567890\",\n  \"imageUrl\": null\n}"
+            },
+            "description": "Required: name, sku, categoryId, brandId. Optional: description, costPrice, sellPrice, externalBarcode, imageUrl."
+          }
+        },
+        {
+          "name": "Get Product by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "// Capture sizeId from product detail — try multiple response shapes",
+                  "var sizes = json.sizes || json.variants || json.stockItems || json.productSizes || [];",
+                  "if (sizes[0]) {",
+                  "  var sid = sizes[0].sizeId || sizes[0].id;",
+                  "  if (sid) { pm.collectionVariables.set('sizeId', sid); console.log('sizeId set: ' + sid); }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url":    "{{baseUrl}}/api/products/{{productId}}",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }]
+          }
+        },
+        {
+          "name": "Update Product",
+          "request": {
+            "method": "PUT",
+            "url":    "{{baseUrl}}/api/products/{{productId}}",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Cookie",       "value": "{{sessionCookie}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Classic White T-Shirt (Updated)\",\n  \"sellPrice\": 649,\n  \"description\": \"Premium 100% cotton — now with updated fabric\",\n  \"isActive\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Product",
+          "request": {
+            "method": "DELETE",
+            "url":    "{{baseUrl}}/api/products/{{productId}}",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }]
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🚚 Suppliers",
+      "item": [
+        {
+          "name": "List Suppliers",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (Array.isArray(json) && json[0]) pm.collectionVariables.set('supplierId', json[0].id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url":    "{{baseUrl}}/api/suppliers",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }]
+          }
+        },
+        {
+          "name": "Create Supplier",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.id) pm.collectionVariables.set('supplierId', json.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url":    "{{baseUrl}}/api/suppliers",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Cookie",       "value": "{{sessionCookie}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Reliance Textiles Pvt. Ltd.\",\n  \"contactPerson\": \"Ravi Kumar\",\n  \"contactEmail\": \"ravi@reliancetextiles.com\",\n  \"phone\": \"+91-9876543210\",\n  \"address\": \"Plot 45, MIDC Industrial Area, Pune\",\n  \"notes\": \"Primary fabric supplier — 30-day credit\"\n}"
+            },
+            "description": "Required: name. Optional: contactPerson, contactEmail, phone, address, notes."
+          }
+        },
+        {
+          "name": "Get Supplier by ID",
+          "request": {
+            "method": "GET",
+            "url":    "{{baseUrl}}/api/suppliers/{{supplierId}}",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }]
+          }
+        },
+        {
+          "name": "Update Supplier",
+          "request": {
+            "method": "PUT",
+            "url":    "{{baseUrl}}/api/suppliers/{{supplierId}}",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Cookie",       "value": "{{sessionCookie}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contactPerson\": \"Amit Sharma\",\n  \"phone\": \"+91-9123456789\",\n  \"notes\": \"Updated: now 45-day credit terms\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Supplier",
+          "request": {
+            "method": "DELETE",
+            "url":    "{{baseUrl}}/api/suppliers/{{supplierId}}",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }]
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "📊 Stock",
+      "item": [
+        {
+          "name": "Get Stock Levels",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw":   "{{baseUrl}}/api/stock",
+              "host":  ["{{baseUrl}}"],
+              "path":  ["api", "stock"],
+              "query": [
+                { "key": "search",          "value": "",      "disabled": true },
+                { "key": "lowStockOnly",    "value": "true",  "disabled": true },
+                { "key": "outOfStockOnly",  "value": "false", "disabled": true }
+              ]
+            },
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }],
+            "description": "Returns stock levels per product/variant.\nQuery params: search, lowStockOnly, outOfStockOnly"
+          }
+        },
+        {
+          "name": "Adjust Stock",
+          "request": {
+            "method": "POST",
+            "url":    "{{baseUrl}}/api/stock",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Cookie",       "value": "{{sessionCookie}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"sizeId\": \"{{sizeId}}\",\n  \"quantity\": 10,\n  \"type\": \"IN\",\n  \"notes\": \"Manual stock adjustment — received from warehouse\"\n}"
+            },
+            "description": "Required: productId, sizeId, quantity, type.\ntype enum: IN | OUT | ADJUSTMENT | SALE | RETURN"
+          }
+        },
+        {
+          "name": "Get Stock Movements",
+          "request": {
+            "method": "GET",
+            "url":    "{{baseUrl}}/api/stock/movements",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }],
+            "description": "Returns recent stock movement history."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🛒 Purchase Orders",
+      "item": [
+        {
+          "name": "List Purchase Orders",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (Array.isArray(json) && json[0]) pm.collectionVariables.set('poId', json[0].id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url":    "{{baseUrl}}/api/purchase-orders",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }]
+          }
+        },
+        {
+          "name": "Create Purchase Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.id) pm.collectionVariables.set('poId', json.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url":    "{{baseUrl}}/api/purchase-orders",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Cookie",       "value": "{{sessionCookie}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"supplierId\": \"{{supplierId}}\",\n  \"notes\": \"Quarterly restock — summer collection\",\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 50,\n      \"unitCost\": 280\n    }\n  ]\n}"
+            },
+            "description": "Creates a PO in DRAFT status.\nRequired: supplierId, items[] with productId, quantity, unitCost."
+          }
+        },
+        {
+          "name": "Get Purchase Order by ID",
+          "request": {
+            "method": "GET",
+            "url":    "{{baseUrl}}/api/purchase-orders/{{poId}}",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }]
+          }
+        },
+        {
+          "name": "Submit Purchase Order",
+          "request": {
+            "method": "POST",
+            "url":    "{{baseUrl}}/api/purchase-orders/{{poId}}/submit",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Cookie",       "value": "{{sessionCookie}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{}" },
+            "description": "Moves PO from DRAFT → ORDERED status."
+          }
+        },
+        {
+          "name": "Receive Purchase Order",
+          "request": {
+            "method": "POST",
+            "url":    "{{baseUrl}}/api/purchase-orders/{{poId}}/receive",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Cookie",       "value": "{{sessionCookie}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantityReceived\": 50,\n      \"notes\": \"All items received in good condition\"\n    }\n  ]\n}"
+            },
+            "description": "Marks PO as RECEIVED and creates stock movements.\nRequired: items[] with productId and quantityReceived."
+          }
+        },
+        {
+          "name": "Delete Purchase Order",
+          "request": {
+            "method": "DELETE",
+            "url":    "{{baseUrl}}/api/purchase-orders/{{poId}}",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }],
+            "description": "Only DRAFT orders can be deleted."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🔔 Alerts",
+      "item": [
+        {
+          "name": "List Alert Configs",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (Array.isArray(json) && json[0]) pm.collectionVariables.set('alertId', json[0].id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url":    "{{baseUrl}}/api/alerts",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }],
+            "description": "List all alert configurations (low-stock thresholds)."
+          }
+        },
+        {
+          "name": "Create Alert Config",
+          "request": {
+            "method": "POST",
+            "url":    "{{baseUrl}}/api/alerts",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Cookie",       "value": "{{sessionCookie}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"threshold\": 10,\n  \"notifyEmail\": true,\n  \"notifySMS\": false,\n  \"isActive\": true\n}"
+            },
+            "description": "Required: threshold (number >= 0).\nOptional: productId, categoryId (one of them to scope), notifyEmail, notifySMS, isActive."
+          }
+        },
+        {
+          "name": "Get Low-Stock Items",
+          "request": {
+            "method": "GET",
+            "url":    "{{baseUrl}}/api/alerts/low-stock",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }],
+            "description": "Returns products whose current stock is below their configured threshold."
+          }
+        },
+        {
+          "name": "Update Alert Config",
+          "request": {
+            "method": "PUT",
+            "url":    "{{baseUrl}}/api/alerts/{{alertId}}",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Cookie",       "value": "{{sessionCookie}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"threshold\": 15,\n  \"notifyEmail\": true,\n  \"notifySMS\": true,\n  \"isActive\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Alert Config",
+          "request": {
+            "method": "DELETE",
+            "url":    "{{baseUrl}}/api/alerts/{{alertId}}",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }]
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "📈 Dashboard & Reports",
+      "item": [
+        {
+          "name": "Get Dashboard KPIs",
+          "request": {
+            "method": "GET",
+            "url":    "{{baseUrl}}/api/dashboard",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }],
+            "description": "Returns KPIs, stock by category, top brands, and recent movements."
+          }
+        },
+        {
+          "name": "Get Reports",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw":   "{{baseUrl}}/api/reports",
+              "host":  ["{{baseUrl}}"],
+              "path":  ["api", "reports"],
+              "query": [
+                { "key": "startDate", "value": "2026-01-01", "disabled": true },
+                { "key": "endDate",   "value": "2026-03-31", "disabled": true },
+                { "key": "type",      "value": "sales",      "disabled": true }
+              ]
+            },
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }],
+            "description": "Returns paginated report data. Optional query: startDate, endDate, type."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "💳 Billing & Sales",
+      "item": [
+        {
+          "name": "List Sales",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (Array.isArray(json) && json[0]) pm.collectionVariables.set('saleId', json[0].id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw":   "{{baseUrl}}/api/billing",
+              "host":  ["{{baseUrl}}"],
+              "path":  ["api", "billing"],
+              "query": [
+                { "key": "startDate",      "value": "2026-01-01",  "disabled": true },
+                { "key": "endDate",        "value": "2026-12-31",  "disabled": true },
+                { "key": "status",         "value": "COMPLETED",   "disabled": true },
+                { "key": "paymentMethod",  "value": "UPI",         "disabled": true },
+                { "key": "search",         "value": "",            "disabled": true }
+              ]
+            },
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }],
+            "description": "Query params (all optional): startDate, endDate, status (COMPLETED|REFUNDED), paymentMethod (CASH|CARD|UPI), search"
+          }
+        },
+        {
+          "name": "Create Sale",
+          "request": {
+            "method": "POST",
+            "url":    "{{baseUrl}}/api/billing",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Cookie",       "value": "{{sessionCookie}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"storeId\": \"{{storeId}}\",\n  \"paymentMethod\": \"UPI\",\n  \"customerName\": \"Priya Sharma\",\n  \"customerPhone\": \"+91-9876543210\",\n  \"discount\": 50,\n  \"notes\": \"Walk-in customer\",\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"sizeId\": \"{{sizeId}}\",\n      \"quantity\": 2,\n      \"unitPrice\": 599\n    }\n  ]\n}"
+            },
+            "description": "Required: storeId, paymentMethod, items[].\npaymentMethod: CASH | CARD | UPI"
+          }
+        },
+        {
+          "name": "Get Sale by ID",
+          "request": {
+            "method": "GET",
+            "url":    "{{baseUrl}}/api/billing/{{saleId}}",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }]
+          }
+        },
+        {
+          "name": "Refund Sale",
+          "request": {
+            "method": "POST",
+            "url":    "{{baseUrl}}/api/billing/{{saleId}}/refund",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Cookie",       "value": "{{sessionCookie}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{}" },
+            "description": "Marks a COMPLETED sale as REFUNDED. Reverses stock."
+          }
+        },
+        {
+          "name": "Get Billing KPIs",
+          "request": {
+            "method": "GET",
+            "url":    "{{baseUrl}}/api/billing/kpis",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }],
+            "description": "Returns todaySales, todayRevenue, totalSales, totalRevenue."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "⚙️ Settings",
+      "item": [
+        {
+          "name": "Get Settings",
+          "request": {
+            "method": "GET",
+            "url":    "{{baseUrl}}/api/settings",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }]
+          }
+        },
+        {
+          "name": "Update Settings (Billing Config)",
+          "request": {
+            "method": "PUT",
+            "url":    "{{baseUrl}}/api/settings",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Cookie",       "value": "{{sessionCookie}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"billingConfig\": {\n    \"taxRate\": 18,\n    \"currency\": \"INR\",\n    \"invoicePrefix\": \"INV\",\n    \"enableSMS\": false,\n    \"enableEmail\": true\n  }\n}"
+            },
+            "description": "Requires ADMIN role."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "👥 Team & Users",
+      "item": [
+        {
+          "name": "Get Team Members",
+          "request": {
+            "method": "GET",
+            "url":    "{{baseUrl}}/api/team",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }],
+            "description": "Returns all users in the current org."
+          }
+        },
+        {
+          "name": "List Users",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (Array.isArray(json) && json[0]) pm.collectionVariables.set('userId', json[0].id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url":    "{{baseUrl}}/api/users",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }],
+            "description": "Requires ADMIN role."
+          }
+        },
+        {
+          "name": "Create User",
+          "request": {
+            "method": "POST",
+            "url":    "{{baseUrl}}/api/users",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Cookie",       "value": "{{sessionCookie}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Rahul Verma\",\n  \"email\": \"rahul.verma@stockiva.com\",\n  \"password\": \"StaffPass@123\",\n  \"role\": \"STAFF\",\n  \"storeId\": \"{{storeId}}\"\n}"
+            },
+            "description": "Requires ADMIN role.\nrole enum: OWNER | ADMIN | MANAGER | STAFF"
+          }
+        },
+        {
+          "name": "Get User by ID",
+          "request": {
+            "method": "GET",
+            "url":    "{{baseUrl}}/api/users/{{userId}}",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }]
+          }
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "url":    "{{baseUrl}}/api/users/{{userId}}",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Cookie",       "value": "{{sessionCookie}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Rahul Verma (Updated)\",\n  \"role\": \"MANAGER\",\n  \"storeId\": \"{{storeId}}\",\n  \"isActive\": true\n}"
+            },
+            "description": "Requires ADMIN role."
+          }
+        },
+        {
+          "name": "Reset User Password",
+          "request": {
+            "method": "POST",
+            "url":    "{{baseUrl}}/api/users/{{userId}}/reset-password",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Cookie",       "value": "{{sessionCookie}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newPassword\": \"NewPass@456\"\n}"
+            },
+            "description": "Requires ADMIN role. newPassword must be >= 6 characters."
+          }
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "url":    "{{baseUrl}}/api/users/{{userId}}",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }],
+            "description": "Requires ADMIN role."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "✉️ Invitations",
+      "item": [
+        {
+          "name": "List Invitations",
+          "request": {
+            "method": "GET",
+            "url":    "{{baseUrl}}/api/invitations",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }],
+            "description": "Requires OWNER or ADMIN role."
+          }
+        },
+        {
+          "name": "Send Invitation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.inviteLink) {",
+                  "  var match = json.inviteLink.match(/\\/invitations\\/([^?]+)/);",
+                  "  if (match) pm.collectionVariables.set('inviteToken', match[1]);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url":    "{{baseUrl}}/api/invitations",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Cookie",       "value": "{{sessionCookie}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newstaff@example.com\",\n  \"role\": \"STAFF\"\n}"
+            },
+            "description": "Requires OWNER or ADMIN role.\nrole enum: ADMIN | MANAGER | STAFF (cannot invite OWNER)"
+          }
+        },
+        {
+          "name": "Get Invitation by Token",
+          "request": {
+            "method": "GET",
+            "url":    "{{baseUrl}}/api/invitations/{{inviteToken}}",
+            "description": "Public endpoint. Returns invitation details for the signup form."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "📷 Barcode",
+      "item": [
+        {
+          "name": "Lookup by SKU",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw":   "{{baseUrl}}/api/barcode/lookup?sku=TSH-WHT-001",
+              "host":  ["{{baseUrl}}"],
+              "path":  ["api", "barcode", "lookup"],
+              "query": [{ "key": "sku", "value": "TSH-WHT-001" }]
+            },
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }],
+            "description": "Looks up a product by its SKU or external barcode.\nRequired query param: sku"
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🔑 Admin (Super Admin only)",
+      "item": [
+        {
+          "name": "List All Organizations",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (Array.isArray(json) && json[0]) {",
+                  "  pm.collectionVariables.set('adminOrgId', json[0].id);",
+                  "  console.log('adminOrgId set: ' + json[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url":    "{{baseUrl}}/api/admin/organizations",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }],
+            "description": "Requires SUPER_ADMIN role.\nSign in as superadmin@stockiva.com first."
+          }
+        },
+        {
+          "name": "Get Organization Detail",
+          "request": {
+            "method": "GET",
+            "url":    "{{baseUrl}}/api/admin/organizations/{{adminOrgId}}",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }],
+            "description": "Requires SUPER_ADMIN role. adminOrgId is auto-set by running 'List All Organizations' first."
+          }
+        },
+        {
+          "name": "Get Platform Stats",
+          "request": {
+            "method": "GET",
+            "url":    "{{baseUrl}}/api/admin/stats",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }],
+            "description": "Requires SUPER_ADMIN role.\nReturns totalOrgs, activeOrgs, totalUsers, totalStores, planDistribution."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "⏰ Cron",
+      "item": [
+        {
+          "name": "Trigger Reorder Check",
+          "request": {
+            "method": "GET",
+            "url":    "{{baseUrl}}/api/cron/reorder-check",
+            "header": [
+              { "key": "Authorization", "value": "Bearer dev-cron-secret" }
+            ],
+            "description": "Protected by Authorization: Bearer <CRON_SECRET>.\nNot a session-cookie route — use the Authorization header directly.\nIn production CRON_SECRET is a secret env var."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "📤 Upload",
+      "item": [
+        {
+          "name": "Request Upload Token (Vercel Blob)",
+          "request": {
+            "method": "POST",
+            "url":    "{{baseUrl}}/api/upload",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Cookie",       "value": "{{sessionCookie}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"blob.generate-client-token\",\n  \"payload\": {\n    \"pathname\": \"products/image.jpg\",\n    \"callbackUrl\": \"{{baseUrl}}/api/upload\",\n    \"clientPayload\": null,\n    \"multipart\": false\n  }\n}"
+            },
+            "description": "Used by the @vercel/blob client library to get a signed upload token.\nStep 1 of the Vercel Blob client-side upload flow.\nAllowed types: image/jpeg, image/png, image/webp, image/gif (max 5 MB)."
+          }
+        }
+      ]
+    }
+
+  ]
+}

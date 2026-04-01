@@ -91,9 +91,11 @@ export const POST = async (req: NextRequest) => {
     const { prisma } = await import("@/lib/db");
 
     const result = await prisma.$transaction(async (tx) => {
+      console.log("Checking if email exists:", result);
       // Check email uniqueness
       const existingUser = await tx.user.findUnique({ where: { email: emailLower } });
       if (existingUser) {
+        console.log("Email already exists:", emailLower);
         throw new Error("EMAIL_EXISTS");
       }
 
