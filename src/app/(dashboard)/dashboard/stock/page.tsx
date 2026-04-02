@@ -6,13 +6,13 @@ import StockTable from "@/modules/stock/components/StockTable";
 import StockAdjustmentModal from "@/modules/stock/components/StockAdjustmentModal";
 import MovementHistoryTable from "@/modules/stock/components/MovementHistoryTable";
 import { useStockLevels, useStockMovements } from "@/modules/stock/hooks/useStock";
-import type { MockStockRow } from "@/modules/stock/services/mockStockService";
+import type { StockLevelRow } from "@/modules/stock/types";
 
 export default function StockPage() {
   const { message } = App.useApp();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
-  const [adjustingRow, setAdjustingRow] = useState<MockStockRow | null>(null);
+  const [adjustingRow, setAdjustingRow] = useState<StockLevelRow | null>(null);
 
   const { stockLevels, loading, refresh } = useStockLevels({
     search: search || undefined,

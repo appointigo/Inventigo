@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { demoInvitations } from "@/app/api/invitations/route";
-
 // POST /api/invitations/[token]/accept
 // Authenticated route: existing signed-in user accepts an invitation to join an org.
 export const POST = async (
@@ -30,48 +28,6 @@ export const POST = async (
     );
   }
 
-  // ─── Demo mode ───────────────────────────────────────────────────────────
-  if (process.env.NODE_ENV === "development" || process.env.DEMO_MODE === "true") {
-    const inv = demoInvitations.find((i) => i.token === token);
-
-    if (!inv) {
-      return NextResponse.json({ error: "Invitation not found" }, { status: 404 });
-    }
-    if (inv.status !== "PENDING") {
-      return NextResponse.json(
-        { error: "Invitation has already been used or expired" },
-        { status: 410 }
-      );
-    }
-    if (new Date(inv.expiresAt) < new Date()) {
-      inv.status = "EXPIRED";
-      return NextResponse.json({ error: "Invitation has expired" }, { status: 410 });
-    }
-    if (inv.email.toLowerCase() !== sessionEmail?.toLowerCase()) {
-      return NextResponse.json(
-        { error: `This invitation was sent to ${inv.email}.` },
-        { status: 403 }
-      );
-    }
-
-    // Update in-memory user
-    const { demoRegisteredUsers } = await import("@/app/api/auth/register/route");
-    const user = demoRegisteredUsers.find((u) => u.id === userId);
-    if (user) {
-      user.orgId = inv.orgId;
-      user.role = inv.role as "OWNER";
-    }
-
-    inv.status = "ACCEPTED";
-
-    return NextResponse.json({
-      message: `You have joined ${inv.orgName} as ${inv.role}`,
-      orgId: inv.orgId,
-      role: inv.role,
-    });
-  }
-
-  // ─── Production: Prisma ──────────────────────────────────────────────────
   try {
     const { prisma } = await import("@/lib/db");
 

@@ -1,4 +1,3 @@
-import { mockStockService } from "@/modules/stock/services/mockStockService";
 import type {
   CreateSaleInput,
   Sale,
@@ -136,17 +135,6 @@ export const billingService = {
       createdAt: new Date().toISOString(),
     };
 
-    // Decrement stock for each item (mock)
-    for (const item of input.items) {
-      await mockStockService.adjustStock(orgId, {
-        productId: item.productId,
-        sizeId: item.sizeId,
-        quantity: item.quantity,
-        type: "OUT",
-        reason: `Sale ${sale.invoiceNumber}`,
-      });
-    }
-
     sales.unshift(sale);
     return sale;
   },
@@ -198,18 +186,7 @@ export const billingService = {
     if (!sale || sale.status === "REFUNDED") return null;
 
     sale.status = "REFUNDED";
-
-    // Restore stock for each item
-    for (const item of sale.items) {
-      await mockStockService.adjustStock(orgId, {
-        productId: item.productId,
-        sizeId: item.sizeId,
-        quantity: item.quantity,
-        type: "IN",
-        reason: `Refund ${sale.invoiceNumber}`,
-      });
-    }
-
+    // TODO: Restore stock via stockService when billing is wired to real DB (Phase 8)
     return sale;
   },
 

@@ -1,4 +1,6 @@
-import { MockStockMovement, MockStockRow, mockStockService } from "@/modules/stock/services/mockStockService";
+import { prisma } from "@/lib/db";
+import { stockService } from "@/modules/stock/services/stockService";
+import type { StockLevelRow, StockMovementRow } from "@/modules/stock/types";
 
 export type StockReportFilters = {
   categoryName?: string;
@@ -12,27 +14,38 @@ export type MovementReportFilters = {
   endDate?: string;
 };
 
-export type StockReportRow = MockStockRow & {
+export type StockReportRow = StockLevelRow & {
   costPrice: number;
   stockValue: number;
 };
 
 export const reportsService = {
-  async getStockReport(orgId: string, filters?: StockReportFilters): Promise<StockReportRow[]> {
-    const allStock = await mockStockService.getStockLevels(orgId);
+  async getStockReport(
+    orgId: string,
+    storeId: string | null,
+    filters?: StockReportFilters
+  ): Promise<StockReportRow[]> {
+    let resolvedStoreId = storeId;
+    if (!resolvedStoreId) {
+      const firstStore = await prisma.store.findFirst({ where: { orgId }, select: { id: true } });
+      resolvedStoreId = firstStore?.id ?? null;
+    }
+    if (!resolvedStoreId) return [];
 
-    // Inline cost price map (matches productService data)
-    const costPrices: Record<string, number> = {
-      "prod-1": 900,
-      "prod-2": 550,
-      "prod-4": 1800,
-      "prod-6": 1200,
-      "prod-10": 600,
-      "prod-12": 1000,
-    };
+    const { items: allStock } = await stockService.getStockLevels({
+      storeId: resolvedStoreId,
+      page: 1,
+      pageSize: 10000,
+    });
 
-    let result = allStock.map((row) => {
-      const costPrice = costPrices[row.productId] ?? 0;
+    const products = await prisma.product.findMany({
+      where: { orgId },
+      select: { id: true, costPrice: true },
+    });
+    const costPriceMap = new Map(products.map((p) => [p.id, Number(p.costPrice)]));
+
+    let result: StockReportRow[] = allStock.map((row) => {
+      const costPrice = costPriceMap.get(row.productId) ?? 0;
       return { ...row, costPrice, stockValue: row.quantity * costPrice };
     });
 
@@ -49,23 +62,29 @@ export const reportsService = {
     return result;
   },
 
-  async getMovementReport(orgId: string, filters?: MovementReportFilters): Promise<MockStockMovement[]> {
-    const allMovements = await mockStockService.getMovements(orgId);
-    let result = [...allMovements];
+  async getMovementReport(
+    orgId: string,
+    storeId: string | null,
+    filters?: MovementReportFilters
+  ): Promise<StockMovementRow[]> {
+    let resolvedStoreId = storeId;
+    if (!resolvedStoreId) {
+      const firstStore = await prisma.store.findFirst({ where: { orgId }, select: { id: true } });
+      resolvedStoreId = firstStore?.id ?? null;
+    }
+    if (!resolvedStoreId) return [];
+
+    const { items } = await stockService.getMovementHistory({
+      storeId: resolvedStoreId,
+      startDate: filters?.startDate ? new Date(filters.startDate) : undefined,
+      endDate: filters?.endDate ? new Date(filters.endDate) : undefined,
+      page: 1,
+      pageSize: 10000,
+    });
 
     if (filters?.type) {
-      result = result.filter((m) => m.type === filters.type);
+      return items.filter((m) => m.type === filters.type);
     }
-    if (filters?.startDate) {
-      const start = new Date(filters.startDate);
-      result = result.filter((m) => new Date(m.createdAt) >= start);
-    }
-    if (filters?.endDate) {
-      const end = new Date(filters.endDate);
-      end.setHours(23, 59, 59, 999);
-      result = result.filter((m) => new Date(m.createdAt) <= end);
-    }
-
-    return result;
+    return items;
   },
 };

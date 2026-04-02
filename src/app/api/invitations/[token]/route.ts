@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { demoInvitations } from "@/app/api/invitations/route";
+import { prisma } from "@/lib/db";
 
 // GET /api/invitations/[token] — validate and fetch invite info (public, no auth)
 export const GET = async (
@@ -9,29 +9,7 @@ export const GET = async (
 ) => {
   const { token } = await params;
 
-  if (process.env.NODE_ENV === "development" || process.env.DEMO_MODE === "true") {
-    const inv = demoInvitations.find((i) => i.token === token);
-    if (!inv) {
-      return NextResponse.json({ error: "Invitation not found" }, { status: 404 });
-    }
-    if (inv.status !== "PENDING") {
-      return NextResponse.json({ error: "Invitation has already been used or expired" }, { status: 410 });
-    }
-    if (new Date(inv.expiresAt) < new Date()) {
-      inv.status = "EXPIRED";
-      return NextResponse.json({ error: "Invitation has expired" }, { status: 410 });
-    }
-    return NextResponse.json({
-      email: inv.email,
-      orgName: inv.orgName,
-      role: inv.role,
-      inviterName: inv.inviterName,
-    });
-  }
-
   try {
-    const { prisma } = await import("@/lib/db");
-
     const inv = await prisma.invitation.findUnique({
       where: { token },
       include: {
@@ -89,41 +67,7 @@ export const POST = async (
 
   const passwordHash = await bcrypt.hash(password, 12);
 
-  if (process.env.NODE_ENV === "development" || process.env.DEMO_MODE === "true") {
-    const inv = demoInvitations.find((i) => i.token === token);
-    if (!inv || inv.status !== "PENDING") {
-      return NextResponse.json({ error: "Invalid or expired invitation" }, { status: 410 });
-    }
-    if (new Date(inv.expiresAt) < new Date()) {
-      inv.status = "EXPIRED";
-      return NextResponse.json({ error: "Invitation has expired" }, { status: 410 });
-    }
-
-    // Mark accepted in demo store
-    inv.status = "ACCEPTED";
-
-    // Register via the demo users store
-    const { demoRegisteredUsers } = await import("@/app/api/auth/register/route");
-    const existing = demoRegisteredUsers.find((u) => u.email === inv.email);
-    if (!existing) {
-      demoRegisteredUsers.push({
-        id: `demo-user-${Date.now()}`,
-        name,
-        email: inv.email,
-        passwordHash,
-        role: "OWNER", // will be corrected — demo override
-        storeId: null,
-        orgId: inv.orgId,
-        emailVerified: true, // invited users are considered verified
-      });
-    }
-
-    return NextResponse.json({ message: "Invitation accepted" });
-  }
-
   try {
-    const { prisma } = await import("@/lib/db");
-
     const result = await prisma.$transaction(async (tx) => {
       const inv = await tx.invitation.findUnique({
         where: { token },
@@ -136,19 +80,11 @@ export const POST = async (
         throw new Error("EXPIRED_INVITATION");
       }
 
-      // Check email not already in use
       const existingUser = await tx.user.findUnique({ where: { email: inv.email } });
       if (existingUser) throw new Error("EMAIL_EXISTS");
 
       const user = await tx.user.create({
-        data: {
-          name,
-          email: inv.email,
-          passwordHash,
-          role: inv.role,
-          orgId: inv.orgId,
-          storeId: null,
-        },
+        data: { name, email: inv.email, passwordHash, role: inv.role, orgId: inv.orgId, storeId: null },
       });
 
       await tx.invitation.update({ where: { token }, data: { status: "ACCEPTED" } });
@@ -175,26 +111,14 @@ export const POST = async (
   }
 };
 
-// DELETE /api/invitations/[token] — revoke invitation by ID (token param used as invitation ID)
+// DELETE /api/invitations/[token] — revoke invitation by ID
 export const DELETE = async (
   _req: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) => {
   const { token: invitationId } = await params;
 
-  // This route uses the segment as an invitation ID for revocation
-  if (process.env.NODE_ENV === "development" || process.env.DEMO_MODE === "true") {
-    const idx = demoInvitations.findIndex((i) => i.id === invitationId);
-    if (idx === -1) {
-      return NextResponse.json({ error: "Invitation not found" }, { status: 404 });
-    }
-    demoInvitations.splice(idx, 1);
-    return NextResponse.json({ message: "Invitation revoked" });
-  }
-
   try {
-    const { prisma } = await import("@/lib/db");
-
     const inv = await prisma.invitation.findUnique({ where: { id: invitationId } });
     if (!inv) {
       return NextResponse.json({ error: "Invitation not found" }, { status: 404 });

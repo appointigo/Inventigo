@@ -1,22 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// In-memory store for demo/development mode registrations.
-// Exported so auth.ts can look up demo users during sign-in.
-// ─────────────────────────────────────────────────────────────────────────────
-export interface DemoRegisteredUser {
-  id: string;
-  name: string;
-  email: string;
-  passwordHash: string;
-  role: "OWNER";
-  storeId: string | null;
-  orgId: string | null;
-  emailVerified: boolean;
-}
-
-export const demoRegisteredUsers: DemoRegisteredUser[] = [];
+import { prisma } from "@/lib/db";
 
 // In-memory OTP store for demo mode (resets on server restart)
 export const demoOtpStore: Map<string, { code: string; expiresAt: number; attempts: number }> =
@@ -25,11 +9,11 @@ export const demoOtpStore: Map<string, { code: string; expiresAt: number; attemp
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
-function generateOtp(): string {
+const generateOtp = (): string => {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
-async function sendVerificationEmail(email: string, code: string): Promise<void> {
+const sendVerificationEmail = async (email: string, code: string): Promise<void> => {
   // Production: use Resend (set RESEND_API_KEY in env)
   if (process.env.RESEND_API_KEY) {
     await fetch("https://api.resend.com/emails", {
@@ -65,7 +49,7 @@ async function sendVerificationEmail(email: string, code: string): Promise<void>
 // Body: { name, email, password }
 // Creates user account (no org yet), sends 6-digit OTP for email verification.
 // ─────────────────────────────────────────────────────────────────────────────
-export async function POST(request: NextRequest) {
+export const POST = async (request: NextRequest) => {
   let body: unknown;
   try {
     body = await request.json();
@@ -96,49 +80,14 @@ export async function POST(request: NextRequest) {
   const otp = generateOtp();
   const expiresAt = Date.now() + 15 * 60 * 1000; // 15 minutes
 
-  // ── Demo / development mode ─────────────────────────────────────────────────
-  if (process.env.NODE_ENV === "development" || process.env.DEMO_MODE === "true") {
-    const existingUser = demoRegisteredUsers.find((u) => u.email === emailLower);
-    if (existingUser) {
-      return NextResponse.json({ error: "Email already registered" }, { status: 409 });
-    }
-
-    const userId = `demo-user-${Date.now()}`;
-
-    demoRegisteredUsers.push({
-      id: userId,
-      name: name.trim(),
-      email: emailLower,
-      passwordHash,
-      role: "OWNER",
-      storeId: null,
-      orgId: null,
-      emailVerified: false,
-    });
-
-    demoOtpStore.set(emailLower, { code: otp, expiresAt, attempts: 0 });
-    await sendVerificationEmail(emailLower, otp);
-
-    return NextResponse.json(
-      {
-        message: `Verification code sent to ${emailLower}`,
-        userId,
-        // Expose OTP in dev for easier testing
-        ...(process.env.NODE_ENV === "development" ? { _devOtp: otp } : {}),
-      },
-      { status: 201 }
-    );
-  }
-
-  // ── Production mode — database ──────────────────────────────────────────────
   try {
-    const { prisma } = await import("@/lib/db");
-
+    // Check email uniqueness
     const existingUser = await prisma.user.findUnique({ where: { email: emailLower } });
     if (existingUser) {
       return NextResponse.json({ error: "Email already registered" }, { status: 409 });
     }
 
+    // Create user (no org yet — assigned during onboarding)
     const user = await prisma.user.create({
       data: {
         name: name.trim(),
@@ -163,11 +112,14 @@ export async function POST(request: NextRequest) {
 
     await sendVerificationEmail(emailLower, otp);
 
+    const devPayload = process.env.NODE_ENV === "development" ? { _devOtp: otp } : {};
+
     return NextResponse.json(
-      { message: `Verification code sent to ${emailLower}`, userId: user.id },
+      { message: `Verification code sent to ${emailLower}`, userId: user.id, ...devPayload },
       { status: 201 }
     );
-  } catch (error) {
+  } 
+  catch (error) {
     console.error("Registration error:", error);
     return NextResponse.json({ error: "Registration failed" }, { status: 500 });
   }

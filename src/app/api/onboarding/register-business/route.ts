@@ -65,35 +65,6 @@ export const POST = async (request: NextRequest) => {
 
   const userId = session.user.id;
 
-  // ── Demo / development mode ─────────────────────────────────────────────────
-  if (process.env.NODE_ENV === "development" || process.env.DEMO_MODE === "true") {
-    try {
-      const { demoRegisteredUsers } = await import("@/app/api/auth/register/route");
-
-      const orgId = `demo-org-${Date.now()}`;
-      const storeId = `demo-store-${Date.now()}`;
-
-      const user = demoRegisteredUsers.find((u) => u.id === userId);
-      if (user) {
-        user.orgId = orgId;
-        user.storeId = storeId;
-      }
-
-      return NextResponse.json(
-        {
-          message: "Business registered successfully",
-          orgId,
-          storeId,
-        },
-        { status: 201 }
-      );
-    } 
-    catch {
-      return NextResponse.json({ error: "Failed to register business" }, { status: 500 });
-    }
-  }
-
-  // ── Production mode — database ──────────────────────────────────────────────
   try {
     const { prisma } = await import("@/lib/db");
 

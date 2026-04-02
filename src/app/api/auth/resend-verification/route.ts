@@ -60,36 +60,6 @@ export const POST = async (request: NextRequest) => {
   const expiresAt = Date.now() + 15 * 60 * 1000;
   const RESEND_COOLDOWN_MS = 60_000; // 60 seconds
 
-  // ── Demo / development mode ─────────────────────────────────────────────────
-  if (process.env.NODE_ENV === "development" || process.env.DEMO_MODE === "true") {
-    const { demoOtpStore, demoRegisteredUsers } = await import(
-      "@/app/api/auth/register/route"
-    );
-
-    const userExists = demoRegisteredUsers.find((u) => u.email === emailLower);
-    if (!userExists) {
-      // Don't reveal whether the email is registered
-      return NextResponse.json({ message: "If that email is registered, a new code has been sent." });
-    }
-
-    const existing = demoOtpStore.get(emailLower);
-    if (existing && Date.now() - (existing.expiresAt - 15 * 60 * 1000) < RESEND_COOLDOWN_MS) {
-      return NextResponse.json(
-        { error: "Please wait 60 seconds before requesting a new code" },
-        { status: 429 }
-      );
-    }
-
-    demoOtpStore.set(emailLower, { code: otp, expiresAt, attempts: 0 });
-    await sendVerificationEmail(emailLower, otp);
-
-    return NextResponse.json({
-      message: "New verification code sent",
-      ...(process.env.NODE_ENV === "development" ? { _devOtp: otp } : {}),
-    });
-  }
-
-  // ── Production mode — database ──────────────────────────────────────────────
   try {
     const { prisma } = await import("@/lib/db");
 

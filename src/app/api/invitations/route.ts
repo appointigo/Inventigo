@@ -1,23 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireOrgAuth } from "@/lib/auth.middleware";
+import { prisma } from "@/lib/db";
 import type { Role } from "@prisma/client";
-
-// In-memory store for demo mode invitations
-interface DemoInvitation {
-  id: string;
-  orgId: string;
-  email: string;
-  role: Role;
-  invitedById: string;
-  inviterName: string;
-  orgName: string;
-  status: "PENDING" | "ACCEPTED" | "EXPIRED";
-  token: string;
-  expiresAt: string;
-  createdAt: string;
-}
-
-export const demoInvitations: DemoInvitation[] = [];
 
 const generateToken = (): string => {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -26,15 +10,14 @@ const generateToken = (): string => {
     token += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return token;
-}
+};
 
 // GET /api/invitations — list invitations for current org (ADMIN/OWNER only)
 export const GET = async () => {
   let user;
   try {
     user = await requireOrgAuth();
-  } 
-  catch {
+  } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -42,24 +25,7 @@ export const GET = async () => {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  if (process.env.NODE_ENV === "development" || process.env.DEMO_MODE === "true") {
-    const orgInvitations = demoInvitations.filter((i) => i.orgId === user.orgId);
-    return NextResponse.json(
-      orgInvitations.map((i) => ({
-        id: i.id,
-        email: i.email,
-        role: i.role,
-        status: i.status,
-        inviterName: i.inviterName,
-        expiresAt: i.expiresAt,
-        createdAt: i.createdAt,
-      }))
-    );
-  }
-
   try {
-    const { prisma } = await import("@/lib/db");
-
     const invitations = await prisma.invitation.findMany({
       where: { orgId: user.orgId },
       include: { inviter: { select: { name: true } } },
@@ -77,8 +43,7 @@ export const GET = async () => {
         createdAt: i.createdAt.toISOString(),
       }))
     );
-  } 
-  catch (err) {
+  } catch (err) {
     console.error("GET /api/invitations error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
@@ -89,8 +54,7 @@ export const POST = async (req: NextRequest) => {
   let user;
   try {
     user = await requireOrgAuth();
-  } 
-  catch {
+  } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -98,12 +62,10 @@ export const POST = async (req: NextRequest) => {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  // ADMIN cannot invite OWNER
   let body: { email?: string; role?: string };
   try {
     body = await req.json();
-  } 
-  catch {
+  } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
@@ -115,7 +77,6 @@ export const POST = async (req: NextRequest) => {
   const emailLower = email.toLowerCase().trim();
   const validRoles: Role[] = ["ADMIN", "MANAGER", "STAFF"];
 
-  // ADMIN can only invite MANAGER/STAFF
   if (user.role === "ADMIN" && !["MANAGER", "STAFF"].includes(role)) {
     return NextResponse.json({ error: "Admins can only invite MANAGER or STAFF" }, { status: 403 });
   }
@@ -125,81 +86,32 @@ export const POST = async (req: NextRequest) => {
   }
 
   const inviteToken = generateToken();
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
-
-  if (process.env.NODE_ENV === "development" || process.env.DEMO_MODE === "true") {
-    const existing = demoInvitations.find(
-      (i) => i.email === emailLower && i.orgId === user.orgId && i.status === "PENDING"
-    );
-    if (existing) {
-      return NextResponse.json({ error: "An invitation for this email is already pending" }, { status: 409 });
-    }
-
-    const invitation: DemoInvitation = {
-      id: `inv-${Date.now()}`,
-      orgId: user.orgId,
-      email: emailLower,
-      role: role as Role,
-      invitedById: user.id,
-      inviterName: user.name,
-      orgName: "Test Organization",
-      status: "PENDING",
-      token: inviteToken,
-      expiresAt: expiresAt.toISOString(),
-      createdAt: new Date().toISOString(),
-    };
-
-    demoInvitations.push(invitation);
-
-    // In a real app, email would be sent here via Resend/SendGrid
-    console.log(`[DEV] Invitation link: /invite/${inviteToken}`);
-
-    return NextResponse.json(
-      { message: "Invitation created", inviteLink: `/invite/${inviteToken}` },
-      { status: 201 }
-    );
-  }
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
   try {
-    const { prisma } = await import("@/lib/db");
-
-    // Check email not already a member
-    const existingUser = await prisma.user.findUnique({
-      where: { email: emailLower },
-    });
+    const existingUser = await prisma.user.findUnique({ where: { email: emailLower } });
     if (existingUser?.orgId === user.orgId) {
       return NextResponse.json({ error: "This user is already a member of your organization" }, { status: 409 });
     }
 
-    // Check no pending invitation
     const existingInvite = await prisma.invitation.findFirst({
       where: { email: emailLower, orgId: user.orgId, status: "PENDING" },
     });
-
     if (existingInvite) {
       return NextResponse.json({ error: "An invitation for this email is already pending" }, { status: 409 });
     }
 
     const invitation = await prisma.invitation.create({
-      data: {
-        orgId: user.orgId,
-        email: emailLower,
-        role: role as Role,
-        invitedBy: user.id,
-        token: inviteToken,
-        expiresAt,
-      },
+      data: { orgId: user.orgId, email: emailLower, role: role as Role, invitedBy: user.id, token: inviteToken, expiresAt },
     });
 
-    // TODO: Send invitation email via Resend
     console.log(`[INFO] Invitation created for ${emailLower}: /invite/${inviteToken}`);
 
     return NextResponse.json(
       { message: "Invitation sent", inviteLink: `/invite/${invitation.token}` },
       { status: 201 }
     );
-  } 
-  catch (err) {
+  } catch (err) {
     console.error("POST /api/invitations error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }

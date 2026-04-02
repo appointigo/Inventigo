@@ -83,6 +83,7 @@ model Organization {
   products    Product[]
   suppliers   Supplier[]
   invitations Invitation[]
+  alertConfigs AlertConfig[]
 
   @@map("organizations")
 }
@@ -205,17 +206,18 @@ model Brand {
 // ─── PRODUCT ────────────────────────────────────────────────────────────────────
 
 model Product {
-  id         String   @id @default(uuid())
-  orgId      String
-  name       String
-  sku        String
-  categoryId String
-  brandId    String
-  basePrice  Decimal  @db.Decimal(10, 2)
-  costPrice  Decimal  @db.Decimal(10, 2)
-  attributes Json     @default("{}")
-  imageUrl   String?
-  isActive   Boolean  @default(true)
+  id               String   @id @default(uuid())
+  orgId            String
+  name             String
+  sku              String
+  externalBarcode  String?
+  categoryId       String
+  brandId          String
+  basePrice        Decimal  @db.Decimal(10, 2)
+  costPrice        Decimal  @db.Decimal(10, 2)
+  attributes       Json     @default("{}")
+  imageUrl         String?
+  isActive         Boolean  @default(true)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -422,6 +424,7 @@ model SaleItem {
 
 model AlertConfig {
   id          String   @id @default(uuid())
+  orgId       String
   storeId     String?
   productId   String?
   categoryId  String?
@@ -432,9 +435,11 @@ model AlertConfig {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  store    Store?    @relation(fields: [storeId], references: [id])
-  category Category? @relation(fields: [categoryId], references: [id])
+  org      Organization @relation(fields: [orgId], references: [id])
+  store    Store?       @relation(fields: [storeId], references: [id])
+  category Category?    @relation(fields: [categoryId], references: [id])
 
+  @@index([orgId])
   @@map("alert_configs")
 }
 
