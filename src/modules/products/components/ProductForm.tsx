@@ -81,15 +81,19 @@ const ProductForm = ({
   const selectedCategoryId = Form.useWatch("categoryId", form);
   const selectedBrandId = Form.useWatch("brandId", form);
   const watchedSizes = Form.useWatch("sizes", form) as { sizeId: string; quantity: number }[] | undefined;
-  const watchedAttributes = Form.useWatch("attributes", form) as Record<string, unknown> | undefined;
-  const allocatedQty = (watchedSizes ?? []).reduce((sum, s) => sum + (s?.quantity ?? 0), 0);
-  const totalBudget = typeof watchedAttributes?.quantity === "number" ? (watchedAttributes.quantity as number) : null;
-  const remainingQty = totalBudget !== null ? totalBudget - allocatedQty : null;
-  const isOverAllocated = remainingQty !== null && remainingQty < 0;
+  const watchedAttrQty = Form.useWatch(["attributes", "quantity"], form) as number | null | undefined;
+  const allocatedQty = (watchedSizes ?? []).reduce((sum, s) => sum + (Number(s?.quantity) || 0), 0);
   const selectedCategory = useMemo(
     () => categories.find((c) => c.id === selectedCategoryId) ?? null,
     [categories, selectedCategoryId]
   );
+  // Only show budget banner if the selected category has a numeric "quantity" attribute
+  const categoryHasQtyAttr = selectedCategory?.attributeSchema.fields.some(
+    (f) => f.name === "quantity" && f.type === "number"
+  ) ?? false;
+  const totalBudget = categoryHasQtyAttr && typeof watchedAttrQty === "number" ? watchedAttrQty : null;
+  const remainingQty = totalBudget !== null ? totalBudget - allocatedQty : null;
+  const isOverAllocated = remainingQty !== null && remainingQty < 0;
 
   // Auto-generate SKU when brand + category are both selected (new product only)
   useEffect(() => {
@@ -125,6 +129,20 @@ const ProductForm = ({
       setSkuTouched(false);
     }
   }, [initialValues, form]);
+
+  // Populate sizes list whenever the selected category changes (new product flow)
+  useEffect(() => {
+    if (!selectedCategory || isEdit) return;
+    const categoryIds = new Set(selectedCategory.sizes.map((s) => s.id));
+    const current: { sizeId: string; quantity: number }[] = form.getFieldValue("sizes") ?? [];
+    // Remove entries that don't belong to this category, then add missing ones
+    const kept = current.filter((s) => categoryIds.has(s.sizeId));
+    const presentIds = new Set(kept.map((s) => s.sizeId));
+    const newEntries = selectedCategory.sizes
+      .filter((sz) => !presentIds.has(sz.id))
+      .map((sz) => ({ sizeId: sz.id, quantity: 0 }));
+    form.setFieldValue("sizes", [...kept, ...newEntries]);
+  }, [selectedCategory, isEdit, form]);
 
   const handleNext = async () => {
     try {
@@ -385,23 +403,32 @@ const ProductForm = ({
             )
             : (
               <>
+                {/* Budget summary banner */}
+                {totalBudget !== null && (
+                  <div style={{
+                    background: "#f6ffed",
+                    border: "1px solid #b7eb8f",
+                    borderRadius: 8,
+                    padding: "10px 16px",
+                    marginBottom: 16,
+                    display: "flex",
+                    gap: 24,
+                    flexWrap: "wrap",
+                    fontSize: 13,
+                  }}>
+                    <span>Total qty: <strong>{totalBudget}</strong></span>
+                    <span>Allocated: <strong style={{ color: isOverAllocated ? "#ff4d4f" : "#52c41a" }}>{allocatedQty}</strong></span>
+                    <span style={{ color: isOverAllocated ? "#ff4d4f" : undefined }}>
+                      Available: <strong style={{ color: isOverAllocated ? "#ff4d4f" : "#1677ff" }}>{remainingQty}</strong>
+                      {isOverAllocated && <span style={{ marginLeft: 6 }}>⚠ over by {Math.abs(remainingQty!)}</span>}
+                    </span>
+                  </div>
+                )}
                 <p style={{ marginBottom: 16, color: "rgba(0,0,0,0.45)", fontSize: 13 }}>
                   Enter the available quantity for each size. Leave 0 for sizes you don&apos;t stock.
                 </p>
                 <Form.List name="sizes">
-                  {(fields, { add, remove }) => {
-                    // Ensure every category size has an entry in the list
-                    const currentSizes: { sizeId: string; quantity: number }[] =
-                      form.getFieldValue("sizes") ?? [];
-                    const presentIds = new Set(currentSizes.map((s: { sizeId: string }) => s.sizeId));
-
-                    // Add missing sizes on first render of this step
-                    selectedCategory.sizes.forEach((sz) => {
-                      if (!presentIds.has(sz.id)) {
-                        add({ sizeId: sz.id, quantity: 0 });
-                      }
-                    });
-
+                  {(fields, { remove }) => {
                     return (
                       <>
                         {/* Header row */}
@@ -463,18 +490,8 @@ const ProductForm = ({
                         })}
                         {/* Total */}
                         <Divider style={{ margin: "12px 0" }} />
-                        {totalBudget !== null && (
-                          <Row gutter={16} style={{ marginBottom: 8 }}>
-                            <Col span={24}>
-                              <span style={{ color: "rgba(0,0,0,0.45)", fontSize: 13 }}>
-                                Total budget (from attributes):{" "}
-                                <strong>{totalBudget} units</strong>
-                              </span>
-                            </Col>
-                          </Row>
-                        )}
                         <Row gutter={16}>
-                          <Col span={8}><strong>Allocated</strong></Col>
+                          <Col span={8}><strong>Total Allocated</strong></Col>
                           <Col span={8}>
                             <strong style={{ color: isOverAllocated ? "#ff4d4f" : undefined }}>
                               {allocatedQty} units

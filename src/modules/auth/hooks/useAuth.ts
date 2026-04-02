@@ -10,6 +10,7 @@ export type CurrentUser = {
   role: Role;
   storeId: string | null;
   orgId: string | null;
+  orgName: string | null;
 };
 
 /**
@@ -27,6 +28,7 @@ export const useCurrentUser = () => {
         role: session.user.role,
         storeId: session.user.storeId,
         orgId: session.user.orgId,
+        orgName: session.user.orgName ?? null,
       }
     : null;
 

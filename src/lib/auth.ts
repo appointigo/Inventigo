@@ -44,6 +44,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               orgId: true,
               isActive: true,
               emailVerified: true,
+              org: { select: { name: true } },
             },
           });
         } catch {
@@ -70,6 +71,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           role: user.role,
           storeId: user.storeId,
           orgId: user.orgId,
+          orgName: user.org?.name ?? null,
           emailVerified: user.emailVerified,
         };
       },
@@ -85,6 +87,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.role = user.role ?? "OWNER";
         token.storeId = user.storeId ?? null;
         token.orgId = user.orgId ?? null;
+        token.orgName = (user as { orgName?: string | null }).orgName ?? null;
         token.emailVerified = (user as { emailVerified?: boolean }).emailVerified ?? false;
       }
       // Google OAuth: email already verified by Google, needs onboarding to create org
@@ -101,13 +104,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         try {
           const fresh = await prisma.user.findUnique({
             where: { id: token.id as string },
-            select: { orgId: true, storeId: true, role: true, emailVerified: true },
+            select: {
+              orgId: true,
+              storeId: true,
+              role: true,
+              emailVerified: true,
+              org: { select: { name: true } },
+            },
           });
           if (fresh) {
             token.orgId = fresh.orgId;
             token.storeId = fresh.storeId;
             token.role = fresh.role;
             token.emailVerified = fresh.emailVerified;
+            token.orgName = fresh.org?.name ?? null;
           }
         } catch {
           // DB unavailable — keep existing token values
@@ -121,6 +131,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.role = token.role;
         session.user.storeId = token.storeId;
         session.user.orgId = token.orgId;
+        session.user.orgName = token.orgName ?? null;
         // Cast to our augmented type — emailVerified is boolean in our schema, not Date
         (session.user as { emailVerified: boolean }).emailVerified =
           (token.emailVerified as boolean) ?? false;

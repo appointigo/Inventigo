@@ -13,7 +13,7 @@ import { useAuth } from "@/modules/auth/hooks/useAuth";
 import { getMenuForRole } from "@/modules/layout/constants";
 import { Role } from "@prisma/client";
 import StoreSelector from "@/modules/settings/components/StoreSelector";
-import { type ReactNode, useState, useEffect } from "react";
+import { type ReactNode, useState, useEffect, useRef } from "react";
 
 const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
@@ -25,6 +25,7 @@ const DEV_USER = {
   role: "ADMIN" as Role,
   storeId: null,
   orgId: "test-org-001",
+  orgName: null,
 };
 
 export default function AppLayout({ children }: { children: ReactNode }) {
@@ -33,11 +34,24 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const { user, isLoading, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [fetchedOrgName, setFetchedOrgName] = useState<string | null>(null);
+  const orgFetched = useRef(false);
   const { token } = theme.useToken();
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Fetch org name once when session has orgId but no orgName (existing sessions)
+  useEffect(() => {
+    if (orgFetched.current || !user?.orgId) return;
+    if (user.orgName) { setFetchedOrgName(user.orgName); return; }
+    orgFetched.current = true;
+    fetch("/api/org/name")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data?.name) setFetchedOrgName(data.name); })
+      .catch(() => {});
+  }, [user?.orgId, user?.orgName]);
 
   // In dev mode without DB, use a mock admin user so the layout renders
   const isDev = process.env.NODE_ENV === "development";
@@ -110,30 +124,32 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           </Text>
         </Flex>
 
-        {/* Org name badge */}
-        {!collapsed && currentUser?.orgId && (
+        {/* Org name — shown directly below "Stockiva" */}
+        {!collapsed && (currentUser?.orgName || fetchedOrgName) && (
           <Flex
             align="center"
+            gap={6}
             style={{
-              padding: "6px 16px",
+              padding: "6px 16px 8px",
               borderBottom: "1px solid rgba(255,255,255,0.06)",
             }}
           >
-            <AppstoreOutlined style={{ color: "rgba(255,255,255,0.45)", marginRight: 6, fontSize: 11 }} />
+            <AppstoreOutlined style={{ color: "rgba(255,255,255,0.4)", fontSize: 11 }} />
             <Text
               style={{
-                color: "rgba(255,255,255,0.55)",
-                fontSize: 11,
+                color: "rgba(255,255,255,0.65)",
+                fontSize: 12,
                 whiteSpace: "nowrap",
                 overflow: "hidden",
                 textOverflow: "ellipsis",
               }}
             >
-              {currentUser.orgId}
+              {currentUser?.orgName ?? fetchedOrgName}
             </Text>
           </Flex>
         )}
 
+        
         <Menu
           theme="dark"
           mode="inline"

@@ -1,77 +1,76 @@
+import { prisma } from "@/lib/db";
 import type { StoreRecord, CreateStoreInput, UpdateStoreInput } from "../types";
 
-// TODO: Replace with Prisma queries when DB is connected
-let stores: StoreRecord[] = [
-  {
-    id: "test-store-001",
-    name: "Main Store",
-    code: "MAIN",
-    address: "123 Main Street, City Center",
-    phone: "+91-9876543210",
-    isActive: true,
-    userCount: 2,
-    createdAt: "2025-01-01T00:00:00Z",
-  },
-  {
-    id: "test-store-002",
-    name: "Rare Threads Outlet",
-    code: "RARE-THREADS-OUTLET",
-    address: "Rare Threads Outlet, 456 Fashion Ave, City Center",
-    phone: "+91-9876543210",
-    isActive: true,
-    userCount: 2,
-    createdAt: "2025-01-01T00:00:00Z",
-  },
-];
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const toRecord = (s: any): StoreRecord => ({
+  id: s.id,
+  name: s.name,
+  code: s.code,
+  address: s.address ?? null,
+  phone: s.phone ?? null,
+  isActive: s.isActive,
+  userCount: s._count?.users ?? 0,
+  createdAt: s.createdAt instanceof Date ? s.createdAt.toISOString() : s.createdAt,
+});
 
-let nextId = 2;
+const storeInclude = { _count: { select: { users: true } } } as const;
 
 export const storeService = {
-  async list(): Promise<StoreRecord[]> {
-    return [...stores].sort((a, b) => a.name.localeCompare(b.name));
+  async list(orgId: string): Promise<StoreRecord[]> {
+    const stores = await prisma.store.findMany({
+      where: { orgId },
+      include: storeInclude,
+      orderBy: { name: "asc" },
+    });
+    return stores.map(toRecord);
   },
 
-  async getById(id: string): Promise<StoreRecord | null> {
-    return stores.find((s) => s.id === id) ?? null;
+  async getById(orgId: string, id: string): Promise<StoreRecord | null> {
+    const store = await prisma.store.findFirst({
+      where: { id, orgId },
+      include: storeInclude,
+    });
+    return store ? toRecord(store) : null;
   },
 
-  async create(input: CreateStoreInput): Promise<StoreRecord> {
-    if (stores.some((s) => s.code.toLowerCase() === input.code.toLowerCase())) {
-      throw new Error("Store code already in use");
-    }
-    const store: StoreRecord = {
-      id: `store-${nextId++}`,
-      name: input.name,
-      code: input.code.toUpperCase(),
-      address: input.address ?? null,
-      phone: input.phone ?? null,
-      isActive: true,
-      userCount: 0,
-      createdAt: new Date().toISOString(),
-    };
-    stores.push(store);
-    return store;
+  async create(orgId: string, input: CreateStoreInput): Promise<StoreRecord> {
+    const existing = await prisma.store.findFirst({
+      where: { code: input.code.toUpperCase(), orgId },
+    });
+    if (existing) throw new Error("Store code already in use");
+    const store = await prisma.store.create({
+      data: {
+        orgId,
+        name: input.name,
+        code: input.code.toUpperCase(),
+        address: input.address ?? null,
+        phone: input.phone ?? null,
+      },
+      include: storeInclude,
+    });
+    return toRecord(store);
   },
 
-  async update(id: string, input: UpdateStoreInput): Promise<StoreRecord | null> {
-    const idx = stores.findIndex((s) => s.id === id);
-    if (idx === -1) return null;
-    const existing = stores[idx];
-    const updated: StoreRecord = {
-      ...existing,
-      name: input.name ?? existing.name,
-      address: input.address !== undefined ? (input.address || null) : existing.address,
-      phone: input.phone !== undefined ? (input.phone || null) : existing.phone,
-      isActive: input.isActive !== undefined ? input.isActive : existing.isActive,
-    };
-    stores[idx] = updated;
-    return updated;
+  async update(orgId: string, id: string, input: UpdateStoreInput): Promise<StoreRecord | null> {
+    const existing = await prisma.store.findFirst({ where: { id, orgId } });
+    if (!existing) return null;
+    const store = await prisma.store.update({
+      where: { id },
+      data: {
+        name: input.name,
+        address: input.address !== undefined ? (input.address || null) : undefined,
+        phone: input.phone !== undefined ? (input.phone || null) : undefined,
+        isActive: input.isActive,
+      },
+      include: storeInclude,
+    });
+    return toRecord(store);
   },
 
-  async delete(id: string): Promise<boolean> {
-    const idx = stores.findIndex((s) => s.id === id);
-    if (idx === -1) return false;
-    stores[idx] = { ...stores[idx], isActive: false };
+  async delete(orgId: string, id: string): Promise<boolean> {
+    const existing = await prisma.store.findFirst({ where: { id, orgId } });
+    if (!existing) return false;
+    await prisma.store.update({ where: { id }, data: { isActive: false } });
     return true;
   },
 };

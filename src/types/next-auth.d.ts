@@ -7,6 +7,7 @@ declare module "next-auth" {
     role: Role;
     storeId: string | null;
     orgId: string | null;
+    orgName?: string | null;
     emailVerified?: boolean;
   }
 
@@ -18,6 +19,7 @@ declare module "next-auth" {
       role: Role;
       storeId: string | null;
       orgId: string | null;
+      orgName: string | null;
       emailVerified: boolean;
     };
   }
@@ -29,6 +31,7 @@ declare module "next-auth/jwt" {
     role: Role;
     storeId: string | null;
     orgId: string | null;
+    orgName?: string | null;
     emailVerified?: boolean;
   }
 }

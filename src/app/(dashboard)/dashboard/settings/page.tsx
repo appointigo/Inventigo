@@ -41,7 +41,7 @@ function ProfileTab() {
 
 export default function SettingsPage() {
   const { user } = useCurrentUser();
-  const isAdmin = user?.role === Role.ADMIN;
+  const isAdmin = user?.role === Role.ADMIN || user?.role === Role.OWNER;
 
   const tabs = [
     {
