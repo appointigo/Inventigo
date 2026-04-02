@@ -175,6 +175,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                   role: demoUser.role,
                   storeId: demoUser.storeId,
                   orgId: demoUser.orgId,
+                  emailVerified: demoUser.emailVerified,
                 };
               }
             }
@@ -198,6 +199,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               storeId: true,
               orgId: true,
               isActive: true,
+              emailVerified: true,
             },
           });
         } catch {
@@ -224,6 +226,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           role: user.role,
           storeId: user.storeId,
           orgId: user.orgId,
+          emailVerified: user.emailVerified,
         };
       },
     }),
@@ -232,18 +235,39 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     strategy: "jwt",
   },
   callbacks: {
-    async jwt({ token, user, account }) {
+    async jwt({ token, user, account, trigger }) {
       if (user) {
         token.id = user.id!;
-        token.role = user.role ?? "ADMIN";
+        token.role = user.role ?? "OWNER";
         token.storeId = user.storeId ?? null;
         token.orgId = user.orgId ?? null;
+        token.emailVerified = (user as { emailVerified?: boolean }).emailVerified ?? false;
       }
-      // Google OAuth: needs onboarding flow to create/join an org
-      if (account?.provider === "google" && !token.role) {
-        token.role = "OWNER";
-        token.storeId = null;
-        token.orgId = null;
+      // Google OAuth: email already verified by Google, needs onboarding to create org
+      if (account?.provider === "google") {
+        token.emailVerified = true;
+        if (!token.role) {
+          token.role = "OWNER";
+          token.storeId = null;
+          token.orgId = null;
+        }
+      }
+      // Refresh from DB after onboarding completes (client calls session.update())
+      if (trigger === "update" && token.id) {
+        try {
+          const fresh = await prisma.user.findUnique({
+            where: { id: token.id as string },
+            select: { orgId: true, storeId: true, role: true, emailVerified: true },
+          });
+          if (fresh) {
+            token.orgId = fresh.orgId;
+            token.storeId = fresh.storeId;
+            token.role = fresh.role;
+            token.emailVerified = fresh.emailVerified;
+          }
+        } catch {
+          // DB unavailable — keep existing token values
+        }
       }
       return token;
     },
@@ -253,6 +277,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.role = token.role;
         session.user.storeId = token.storeId;
         session.user.orgId = token.orgId;
+        // Cast to our augmented type — emailVerified is boolean in our schema, not Date
+        (session.user as { emailVerified: boolean }).emailVerified =
+          (token.emailVerified as boolean) ?? false;
       }
       return session;
     },

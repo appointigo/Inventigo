@@ -12,43 +12,78 @@ export interface DemoRegisteredUser {
   passwordHash: string;
   role: "OWNER";
   storeId: string | null;
-  orgId: string;
+  orgId: string | null;
+  emailVerified: boolean;
 }
 
-// In-memory store for demo mode registrations (resets on server restart)
 export const demoRegisteredUsers: DemoRegisteredUser[] = [];
+
+// In-memory OTP store for demo mode (resets on server restart)
+export const demoOtpStore: Map<string, { code: string; expiresAt: number; attempts: number }> =
+  new Map();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
-function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+function generateOtp(): string {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+async function sendVerificationEmail(email: string, code: string): Promise<void> {
+  // Production: use Resend (set RESEND_API_KEY in env)
+  if (process.env.RESEND_API_KEY) {
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: "Stockiva <noreply@stockiva.in>",
+        to: email,
+        subject: "Verify your Stockiva account",
+        html: `
+          <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+            <h2 style="color:#1677ff">Verify your email</h2>
+            <p>Your Stockiva verification code is:</p>
+            <div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#1677ff;margin:24px 0">
+              ${code}
+            </div>
+            <p style="color:#666">This code expires in 15 minutes.</p>
+          </div>
+        `,
+      }),
+    });
+  } else {
+    // Dev/demo fallback — log to console
+    console.log(`\n[Stockiva OTP] Email: ${email} | Code: ${code}\n`);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/auth/register
-// Body: { orgName, ownerName, email, password }
-// Creates: Organization + OWNER User + default Store (in one transaction)
+// Body: { name, email, password }
+// Creates user account (no org yet), sends 6-digit OTP for email verification.
 // ─────────────────────────────────────────────────────────────────────────────
-export const POST = async (req: NextRequest) => {
-  let body: { orgName?: string; ownerName?: string; email?: string; password?: string };
+export async function POST(request: NextRequest) {
+  let body: unknown;
   try {
-    body = await req.json();
-  } 
-  catch (error){
-    console.error(error);
+    body = await request.json();
+  } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { orgName, ownerName, email, password } = body;
+  const { name, email, password } = body as Record<string, string>;
 
-  if (!orgName || !ownerName || !email || !password) {
-    return NextResponse.json({ error: "All fields are required" }, { status: 400 });
+  if (!name?.trim()) {
+    return NextResponse.json({ error: "Name is required" }, { status: 400 });
   }
-
+  if (!email?.trim()) {
+    return NextResponse.json({ error: "Email is required" }, { status: 400 });
+  }
+  if (!password) {
+    return NextResponse.json({ error: "Password is required" }, { status: 400 });
+  }
   if (password.length < 8) {
     return NextResponse.json(
       { error: "Password must be at least 8 characters" },
@@ -57,8 +92,9 @@ export const POST = async (req: NextRequest) => {
   }
 
   const emailLower = email.toLowerCase().trim();
-  const baseSlug = slugify(orgName);
   const passwordHash = await bcrypt.hash(password, 12);
+  const otp = generateOtp();
+  const expiresAt = Date.now() + 15 * 60 * 1000; // 15 minutes
 
   // ── Demo / development mode ─────────────────────────────────────────────────
   if (process.env.NODE_ENV === "development" || process.env.DEMO_MODE === "true") {
@@ -67,83 +103,71 @@ export const POST = async (req: NextRequest) => {
       return NextResponse.json({ error: "Email already registered" }, { status: 409 });
     }
 
-    const orgId = `demo-org-${Date.now()}`;
     const userId = `demo-user-${Date.now()}`;
 
     demoRegisteredUsers.push({
       id: userId,
-      name: ownerName,
+      name: name.trim(),
       email: emailLower,
       passwordHash,
       role: "OWNER",
       storeId: null,
-      orgId,
+      orgId: null,
+      emailVerified: false,
     });
 
+    demoOtpStore.set(emailLower, { code: otp, expiresAt, attempts: 0 });
+    await sendVerificationEmail(emailLower, otp);
+
     return NextResponse.json(
-      { message: "Organization registered successfully", orgId, userId },
+      {
+        message: `Verification code sent to ${emailLower}`,
+        userId,
+        // Expose OTP in dev for easier testing
+        ...(process.env.NODE_ENV === "development" ? { _devOtp: otp } : {}),
+      },
       { status: 201 }
     );
   }
 
-  // ── Production mode — DB transaction ────────────────────────────────────────
+  // ── Production mode — database ──────────────────────────────────────────────
   try {
     const { prisma } = await import("@/lib/db");
 
-    const result = await prisma.$transaction(async (tx) => {
-      console.log("Checking if email exists:", result);
-      // Check email uniqueness
-      const existingUser = await tx.user.findUnique({ where: { email: emailLower } });
-      if (existingUser) {
-        console.log("Email already exists:", emailLower);
-        throw new Error("EMAIL_EXISTS");
-      }
-
-      // Ensure slug is unique — append timestamp suffix if taken
-      let finalSlug = baseSlug;
-      const existingOrg = await tx.organization.findUnique({ where: { slug: baseSlug } });
-      if (existingOrg) {
-        finalSlug = `${baseSlug}-${Date.now()}`;
-      }
-
-      // Create organization
-      const org = await tx.organization.create({
-        data: { name: orgName, slug: finalSlug },
-      });
-
-      // Create OWNER user
-      const user = await tx.user.create({
-        data: {
-          name: ownerName,
-          email: emailLower,
-          passwordHash,
-          role: "OWNER",
-          orgId: org.id,
-          storeId: null,
-        },
-      });
-
-      // Create default store
-      await tx.store.create({
-        data: {
-          orgId: org.id,
-          name: "Main Store",
-          code: "MAIN",
-        },
-      });
-
-      return { orgId: org.id, userId: user.id };
-    });
-
-    return NextResponse.json(
-      { message: "Organization registered successfully", ...result },
-      { status: 201 }
-    );
-  } 
-  catch (error) {
-    if (error instanceof Error && error.message === "EMAIL_EXISTS") {
+    const existingUser = await prisma.user.findUnique({ where: { email: emailLower } });
+    if (existingUser) {
       return NextResponse.json({ error: "Email already registered" }, { status: 409 });
     }
+
+    const user = await prisma.user.create({
+      data: {
+        name: name.trim(),
+        email: emailLower,
+        passwordHash,
+        role: "OWNER",
+        orgId: null,
+        storeId: null,
+        emailVerified: false,
+      },
+    });
+
+    // Delete any existing OTP records for this email, then create a fresh one
+    await prisma.emailVerification.deleteMany({ where: { email: emailLower } });
+    await prisma.emailVerification.create({
+      data: {
+        email: emailLower,
+        code: otp,
+        expiresAt: new Date(expiresAt),
+      },
+    });
+
+    await sendVerificationEmail(emailLower, otp);
+
+    return NextResponse.json(
+      { message: `Verification code sent to ${emailLower}`, userId: user.id },
+      { status: 201 }
+    );
+  } catch (error) {
     console.error("Registration error:", error);
     return NextResponse.json({ error: "Registration failed" }, { status: 500 });
   }

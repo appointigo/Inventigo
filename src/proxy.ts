@@ -2,12 +2,17 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 // Routes that don't require authentication
-const publicRoutes = ["/login", "/api/auth", "/api/cron"];
+const publicRoutes = ["/login", "/api/auth", "/api/cron", "/verify-email", "/onboarding", "/invite"];
 
-export function proxy(request: NextRequest) {
+export const proxy = (request: NextRequest) => {
   const { pathname } = request.nextUrl;
 
-  // Allow public routes
+  // Root landing page is public
+  if (pathname === "/") {
+    return NextResponse.next();
+  }
+
+  // Allow public routes (prefix match)
   if (publicRoutes.some((route) => pathname.startsWith(route))) {
     return NextResponse.next();
   }

@@ -123,9 +123,10 @@ model User {
   passwordHash String
   role         Role     @default(STAFF)
   storeId      String?
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  isActive      Boolean  @default(true)
+  emailVerified Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   org             Organization?  @relation(fields: [orgId], references: [id])
   store           Store?         @relation(fields: [storeId], references: [id])
@@ -435,4 +436,18 @@ model AlertConfig {
   category Category? @relation(fields: [categoryId], references: [id])
 
   @@map("alert_configs")
+}
+
+// ─── EMAIL VERIFICATION ──────────────────────────────────────────────────────────
+
+model EmailVerification {
+  id        String   @id @default(uuid())
+  email     String
+  code      String
+  expiresAt DateTime
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([email])
+  @@map("email_verifications")
 }

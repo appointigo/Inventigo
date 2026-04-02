@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "Inventigo API",
-    "description": "Full API collection for Inventigo — multi-tenant retail inventory management.\n\n## Setup\n1. Import this collection into Postman.\n2. Set the `baseUrl` variable to `http://localhost:3000`.\n3. Run **Auth → Sign In** first — the response sets `sessionCookie` automatically via the test script.\n4. All subsequent requests use `{{sessionCookie}}` in the Cookie header.\n\n## Test Credentials\n| Role | Email | Password |\n|------|-------|----------|\n| OWNER | owner@stockiva.com | password123 |\n| ADMIN | admin@stockiva.com | password123 |\n| MANAGER | manager@stockiva.com | password123 |\n| STAFF | staff@stockiva.com | password123 |\n| SUPER_ADMIN | superadmin@stockiva.com | password123 |",
+    "name": "Stockiva API",
+    "description": "Full API collection for Stockiva — multi-tenant retail inventory management.\n\n## Setup\n1. Import this collection into Postman.\n2. Set the `baseUrl` variable to `http://localhost:3000`.\n3. Run **Auth → Sign In** first — the response sets `sessionCookie` automatically via the test script.\n4. All subsequent requests use `{{sessionCookie}}` in the Cookie header.\n\n## Test Credentials\n| Role | Email | Password |\n|------|-------|----------|\n| OWNER | owner@stockiva.com | password123 |\n| ADMIN | admin@stockiva.com | password123 |\n| MANAGER | manager@stockiva.com | password123 |\n| STAFF | staff@stockiva.com | password123 |\n| SUPER_ADMIN | superadmin@stockiva.com | password123 |",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [

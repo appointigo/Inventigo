@@ -57,7 +57,8 @@ export const GET = async (
       role: inv.role,
       inviterName: inv.inviter.name,
     });
-  } catch (err) {
+  } 
+  catch (err) {
     console.error("GET /api/invitations/[token] error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
@@ -73,7 +74,8 @@ export const POST = async (
   let body: { name?: string; password?: string };
   try {
     body = await req.json();
-  } catch {
+  } 
+  catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
@@ -112,6 +114,7 @@ export const POST = async (
         role: "OWNER", // will be corrected — demo override
         storeId: null,
         orgId: inv.orgId,
+        emailVerified: true, // invited users are considered verified
       });
     }
 
@@ -154,7 +157,8 @@ export const POST = async (
     });
 
     return NextResponse.json({ message: "Invitation accepted", userId: result.id });
-  } catch (err) {
+  } 
+  catch (err) {
     if (err instanceof Error) {
       if (err.message === "INVALID_INVITATION") {
         return NextResponse.json({ error: "Invalid or expired invitation" }, { status: 410 });
@@ -198,7 +202,8 @@ export const DELETE = async (
 
     await prisma.invitation.delete({ where: { id: invitationId } });
     return NextResponse.json({ message: "Invitation revoked" });
-  } catch (err) {
+  } 
+  catch (err) {
     console.error("DELETE /api/invitations/[token] error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }

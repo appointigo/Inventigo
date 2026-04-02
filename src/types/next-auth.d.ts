@@ -7,6 +7,7 @@ declare module "next-auth" {
     role: Role;
     storeId: string | null;
     orgId: string | null;
+    emailVerified?: boolean;
   }
 
   interface Session {
@@ -17,6 +18,7 @@ declare module "next-auth" {
       role: Role;
       storeId: string | null;
       orgId: string | null;
+      emailVerified: boolean;
     };
   }
 }
@@ -27,5 +29,6 @@ declare module "next-auth/jwt" {
     role: Role;
     storeId: string | null;
     orgId: string | null;
+    emailVerified?: boolean;
   }
 }
