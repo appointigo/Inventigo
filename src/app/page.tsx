@@ -1,26 +1,19 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import LandingPage from "./LandingPage";
 
-// Phase B2: Landing page placeholder.
-// Authenticated users with a complete setup go straight to dashboard.
-// Full landing page UI is built in Phase C.
 const Home = async () => {
   const session = await auth();
 
   if (session?.user) {
-    if (session.user.emailVerified && session.user.orgId) {
-      redirect("/dashboard");
-    }
-    if (!session.user.emailVerified) {
-      redirect("/verify-email");
-    }
-    if (!session.user.orgId) {
-      redirect("/onboarding");
-    }
+    if (session.user.role === "SUPER_ADMIN") redirect("/admin");
+    if (!session.user.emailVerified) redirect("/verify-email");
+    if (!session.user.orgId) redirect("/onboarding");
+    redirect("/dashboard");
   }
 
-  // Unauthenticated — redirect to login (landing page built in Phase C)
-  redirect("/login");
-}
+  // Unauthenticated — show marketing landing page
+  return <LandingPage />;
+};
 
 export default Home;
