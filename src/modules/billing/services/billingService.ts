@@ -1,3 +1,4 @@
+import { prisma } from "@/lib/db";
 import type {
   CreateSaleInput,
   Sale,
@@ -6,201 +7,211 @@ import type {
   SaleSummary,
 } from "../types";
 
-// Mock sales data
-const sales: Sale[] = [
-  {
-    id: "sale-1",
-    invoiceNumber: "INV-20250115-0001",
-    customerName: "Rahul Sharma",
-    customerPhone: "9876543210",
-    subtotal: 4498,
-    discountAmount: 200,
-    taxAmount: 0,
-    total: 4298,
-    paymentMethod: "UPI",
-    status: "COMPLETED",
-    items: [
-      { id: "si-1", productId: "prod-1", productName: "Nike Dri-FIT Running Tee", sku: "NK-DFT-001", sizeId: "s-27", sizeLabel: "M", quantity: 2, unitPrice: 1499, total: 2998 },
-      { id: "si-2", productId: "prod-3", productName: "Puma Polo T-Shirt", sku: "PM-PT-001", sizeId: "s-3", sizeLabel: "M", quantity: 1, unitPrice: 1299, total: 1299 },
-    ],
-    createdAt: "2025-01-15T14:30:00Z",
-  },
-  {
-    id: "sale-2",
-    invoiceNumber: "INV-20250114-0001",
-    customerName: null,
-    customerPhone: null,
-    subtotal: 2999,
-    discountAmount: 0,
-    taxAmount: 0,
-    total: 2999,
-    paymentMethod: "CASH",
-    status: "COMPLETED",
-    items: [
-      { id: "si-3", productId: "prod-4", productName: "Levi's 511 Slim Fit Jeans", sku: "LV-511-001", sizeId: "s-14", sizeLabel: "32", quantity: 1, unitPrice: 2999, total: 2999 },
-    ],
-    createdAt: "2025-01-14T11:00:00Z",
-  },
-  {
-    id: "sale-3",
-    invoiceNumber: "INV-20250113-0001",
-    customerName: "Priya Patel",
-    customerPhone: "9876543211",
-    subtotal: 3598,
-    discountAmount: 300,
-    taxAmount: 0,
-    total: 3298,
-    paymentMethod: "CARD",
-    status: "REFUNDED",
-    items: [
-      { id: "si-4", productId: "prod-6", productName: "Allen Solly Formal Shirt", sku: "AS-FS-001", sizeId: "s-8", sizeLabel: "M", quantity: 1, unitPrice: 1799, total: 1799 },
-      { id: "si-5", productId: "prod-7", productName: "Allen Solly Checked Casual Shirt", sku: "AS-CS-001", sizeId: "s-7", sizeLabel: "S", quantity: 1, unitPrice: 1599, total: 1599 },
-    ],
-    createdAt: "2025-01-13T16:45:00Z",
-  },
-  {
-    id: "sale-4",
-    invoiceNumber: "INV-20250112-0001",
-    customerName: "Amit Kumar",
-    customerPhone: null,
-    subtotal: 1999,
-    discountAmount: 0,
-    taxAmount: 0,
-    total: 1999,
-    paymentMethod: "UPI",
-    status: "COMPLETED",
-    items: [
-      { id: "si-6", productId: "prod-8", productName: "Nike Dri-FIT Joggers", sku: "NK-JG-001", sizeId: "s-32", sizeLabel: "M", quantity: 1, unitPrice: 1999, total: 1999 },
-    ],
-    createdAt: "2025-01-12T10:15:00Z",
-  },
-  {
-    id: "sale-5",
-    invoiceNumber: "INV-20250111-0001",
-    customerName: null,
-    customerPhone: null,
-    subtotal: 1798,
-    discountAmount: 100,
-    taxAmount: 0,
-    total: 1698,
-    paymentMethod: "CASH",
-    status: "COMPLETED",
-    items: [
-      { id: "si-7", productId: "prod-10", productName: "Adidas Sport Shorts", sku: "AD-SS-001", sizeId: "s-37", sizeLabel: "M", quantity: 2, unitPrice: 899, total: 1798 },
-    ],
-    createdAt: "2025-01-11T15:30:00Z",
-  },
-];
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
 
-let nextSaleId = 6;
-let nextItemId = 8;
-let invoiceSeq = 2;
-
-const generateInvoiceNumber = (): string => {
-  const now = new Date();
-  const dateStr = now.toISOString().slice(0, 10).replace(/-/g, "");
-  const seq = String(invoiceSeq++).padStart(4, "0");
-  return `INV-${dateStr}-${seq}`;
+const generateInvoiceNumber = async (storeId: string): Promise<string> => {
+  const today = new Date();
+  const dateStr = today.toISOString().slice(0, 10).replace(/-/g, "");
+  const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const endOfDay = new Date(startOfDay.getTime() + 86400000);
+  const count = await prisma.sale.count({
+    where: { storeId, createdAt: { gte: startOfDay, lt: endOfDay } },
+  });
+  return `INV-${dateStr}-${String(count + 1).padStart(4, "0")}`;
 };
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const toSaleDto = (s: any): Sale => ({
+  id: s.id,
+  invoiceNumber: s.invoiceNumber,
+  customerName: s.customerName ?? null,
+  customerPhone: s.customerPhone ?? null,
+  subtotal: Number(s.subtotal),
+  discountAmount: Number(s.discountAmount),
+  taxAmount: Number(s.taxAmount),
+  total: Number(s.total),
+  paymentMethod: s.paymentMethod as Sale["paymentMethod"],
+  status: s.status as Sale["status"],
+  items: (s.items ?? []).map((i: any): SaleItem => ({
+    id: i.id,
+    productId: i.productId,
+    productName: i.product?.name ?? "",
+    sku: i.product?.sku ?? "",
+    sizeId: i.sizeId,
+    sizeLabel: i.size?.label ?? "",
+    quantity: i.quantity,
+    unitPrice: Number(i.unitPrice),
+    total: Number(i.total),
+  })),
+  createdAt: s.createdAt instanceof Date ? s.createdAt.toISOString() : s.createdAt,
+});
+
+const saleInclude = {
+  items: {
+    include: {
+      product: { select: { name: true, sku: true } },
+      size: { select: { label: true } },
+    },
+  },
+} as const;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Service
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const billingService = {
-  async createSale(orgId: string, input: CreateSaleInput): Promise<Sale> {
-    const subtotal = input.items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+  async createSale(
+    orgId: string,
+    storeId: string,
+    userId: string,
+    input: CreateSaleInput
+  ): Promise<Sale> {
+    const subtotal = input.items.reduce((sum, it) => sum + it.unitPrice * it.quantity, 0);
     const total = subtotal - input.discountAmount + input.taxAmount;
+    const invoiceNumber = await generateInvoiceNumber(storeId);
 
-    const saleItems: SaleItem[] = input.items.map((item) => ({
-      id: `si-${nextItemId++}`,
-      productId: item.productId,
-      productName: item.productName,
-      sku: item.sku,
-      sizeId: item.sizeId,
-      sizeLabel: item.sizeLabel,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      total: item.unitPrice * item.quantity,
-    }));
+    const sale = await prisma.$transaction(async (tx) => {
+      const created = await tx.sale.create({
+        data: {
+          storeId,
+          invoiceNumber,
+          customerName: input.customerName ?? null,
+          customerPhone: input.customerPhone ?? null,
+          subtotal,
+          discountAmount: input.discountAmount,
+          taxAmount: input.taxAmount,
+          total,
+          paymentMethod: input.paymentMethod,
+          status: "COMPLETED",
+          createdBy: userId,
+          items: {
+            create: input.items.map((it) => ({
+              productId: it.productId,
+              sizeId: it.sizeId,
+              quantity: it.quantity,
+              unitPrice: it.unitPrice,
+              total: it.unitPrice * it.quantity,
+            })),
+          },
+        },
+        include: saleInclude,
+      });
 
-    const sale: Sale = {
-      id: `sale-${nextSaleId++}`,
-      invoiceNumber: generateInvoiceNumber(),
-      customerName: input.customerName ?? null,
-      customerPhone: input.customerPhone ?? null,
-      subtotal,
-      discountAmount: input.discountAmount,
-      taxAmount: input.taxAmount,
-      total,
-      paymentMethod: input.paymentMethod,
-      status: "COMPLETED",
-      items: saleItems,
-      createdAt: new Date().toISOString(),
-    };
+      // Decrement stock for each sold item
+      for (const it of input.items) {
+        await tx.stockEntry.updateMany({
+          where: { productId: it.productId, sizeId: it.sizeId, storeId },
+          data: { quantity: { decrement: it.quantity } },
+        });
+      }
 
-    sales.unshift(sale);
-    return sale;
+      return created;
+    });
+
+    return toSaleDto(sale);
   },
 
-  async getSaleById(id: string): Promise<Sale | null> {
-    return sales.find((s) => s.id === id) ?? null;
+  async getSaleById(orgId: string, id: string): Promise<Sale | null> {
+    const sale = await prisma.sale.findFirst({
+      where: { id, store: { orgId } },
+      include: saleInclude,
+    });
+    return sale ? toSaleDto(sale) : null;
   },
 
-  async getSales(filters?: SaleFilters): Promise<SaleSummary[]> {
-    let result = [...sales];
-
-    if (filters?.status) {
-      result = result.filter((s) => s.status === filters.status);
-    }
-    if (filters?.paymentMethod) {
-      result = result.filter((s) => s.paymentMethod === filters.paymentMethod);
-    }
-    if (filters?.startDate) {
-      result = result.filter((s) => s.createdAt >= filters.startDate!);
-    }
+  async getSales(orgId: string, filters?: SaleFilters): Promise<SaleSummary[]> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const where: any = { store: { orgId } };
+    if (filters?.status) where.status = filters.status;
+    if (filters?.paymentMethod) where.paymentMethod = filters.paymentMethod;
+    if (filters?.startDate) where.createdAt = { ...(where.createdAt ?? {}), gte: new Date(filters.startDate) };
     if (filters?.endDate) {
       const end = new Date(filters.endDate);
       end.setDate(end.getDate() + 1);
-      result = result.filter((s) => s.createdAt < end.toISOString());
+      where.createdAt = { ...(where.createdAt ?? {}), lt: end };
     }
     if (filters?.search) {
-      const q = filters.search.toLowerCase();
-      result = result.filter(
-        (s) =>
-          s.invoiceNumber.toLowerCase().includes(q) ||
-          (s.customerName?.toLowerCase().includes(q) ?? false)
-      );
+      where.OR = [
+        { invoiceNumber: { contains: filters.search, mode: "insensitive" } },
+        { customerName: { contains: filters.search, mode: "insensitive" } },
+      ];
     }
 
-    return result.map((s) => ({
+    const sales = await prisma.sale.findMany({
+      where,
+      include: { _count: { select: { items: true } } },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return sales.map((s) => ({
       id: s.id,
       invoiceNumber: s.invoiceNumber,
-      customerName: s.customerName,
-      total: s.total,
-      paymentMethod: s.paymentMethod,
-      status: s.status,
-      itemCount: s.items.length,
-      createdAt: s.createdAt,
+      customerName: s.customerName ?? null,
+      total: Number(s.total),
+      paymentMethod: s.paymentMethod as Sale["paymentMethod"],
+      status: s.status as Sale["status"],
+      itemCount: s._count.items,
+      createdAt: s.createdAt.toISOString(),
     }));
   },
 
   async refundSale(orgId: string, saleId: string): Promise<Sale | null> {
-    const sale = sales.find((s) => s.id === saleId);
-    if (!sale || sale.status === "REFUNDED") return null;
+    const existing = await prisma.sale.findFirst({
+      where: { id: saleId, store: { orgId } },
+      include: saleInclude,
+    });
+    if (!existing || existing.status === "REFUNDED") return null;
 
-    sale.status = "REFUNDED";
-    // TODO: Restore stock via stockService when billing is wired to real DB (Phase 8)
-    return sale;
+    const updated = await prisma.$transaction(async (tx) => {
+      const sale = await tx.sale.update({
+        where: { id: saleId },
+        data: { status: "REFUNDED" },
+        include: saleInclude,
+      });
+
+      // Restore stock for each item
+      for (const it of existing.items) {
+        await tx.stockEntry.updateMany({
+          where: { productId: it.productId, sizeId: it.sizeId, storeId: existing.storeId },
+          data: { quantity: { increment: it.quantity } },
+        });
+      }
+
+      return sale;
+    });
+
+    return toSaleDto(updated);
   },
 
-  /** Sales KPIs for dashboard */
-  async getSalesKPIs(): Promise<{ todaySales: number; todayRevenue: number; totalSales: number; totalRevenue: number }> {
-    const today = new Date().toISOString().slice(0, 10);
-    const completedSales = sales.filter((s) => s.status === "COMPLETED");
-    const todayCompleted = completedSales.filter((s) => s.createdAt.slice(0, 10) === today);
+  async getSalesKPIs(orgId: string): Promise<{
+    todaySales: number;
+    todayRevenue: number;
+    totalSales: number;
+    totalRevenue: number;
+  }> {
+    const today = new Date();
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const endOfDay = new Date(startOfDay.getTime() + 86400000);
+
+    const [todayRows, allRows] = await Promise.all([
+      prisma.sale.findMany({
+        where: { store: { orgId }, status: "COMPLETED", createdAt: { gte: startOfDay, lt: endOfDay } },
+        select: { total: true },
+      }),
+      prisma.sale.findMany({
+        where: { store: { orgId }, status: "COMPLETED" },
+        select: { total: true },
+      }),
+    ]);
 
     return {
-      todaySales: todayCompleted.length,
-      todayRevenue: todayCompleted.reduce((sum, s) => sum + s.total, 0),
-      totalSales: completedSales.length,
-      totalRevenue: completedSales.reduce((sum, s) => sum + s.total, 0),
+      todaySales: todayRows.length,
+      todayRevenue: todayRows.reduce((s, r) => s + Number(r.total), 0),
+      totalSales: allRows.length,
+      totalRevenue: allRows.reduce((s, r) => s + Number(r.total), 0),
     };
   },
 };
+

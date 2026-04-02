@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Form, Input, InputNumber, Select, Switch, Button, Steps, Space, Divider, Card, Empty, Tooltip, Upload, Image, message, Flex } from "antd";
+import { Form, Input, InputNumber, Select, Switch, Button, Steps, Space, Divider, Card, Empty, Tooltip, Upload, Image, message, Flex, Row, Col } from "antd";
 import { ReloadOutlined, UploadOutlined } from "@ant-design/icons";
 import { upload } from "@vercel/blob/client";
 import type { UploadRequestOption } from "@rc-component/upload/lib/interface";
@@ -80,6 +80,12 @@ const ProductForm = ({
 
   const selectedCategoryId = Form.useWatch("categoryId", form);
   const selectedBrandId = Form.useWatch("brandId", form);
+  const watchedSizes = Form.useWatch("sizes", form) as { sizeId: string; quantity: number }[] | undefined;
+  const watchedAttributes = Form.useWatch("attributes", form) as Record<string, unknown> | undefined;
+  const allocatedQty = (watchedSizes ?? []).reduce((sum, s) => sum + (s?.quantity ?? 0), 0);
+  const totalBudget = typeof watchedAttributes?.quantity === "number" ? (watchedAttributes.quantity as number) : null;
+  const remainingQty = totalBudget !== null ? totalBudget - allocatedQty : null;
+  const isOverAllocated = remainingQty !== null && remainingQty < 0;
   const selectedCategory = useMemo(
     () => categories.find((c) => c.id === selectedCategoryId) ?? null,
     [categories, selectedCategoryId]
@@ -111,7 +117,7 @@ const ProductForm = ({
         isActive: initialValues.isActive,
         imageUrl: initialValues.imageUrl ?? undefined,
         attributes: initialValues.attributes,
-        sizes: initialValues.stock.map((s) => s.sizeId),
+        sizes: initialValues.stock.map((s) => ({ sizeId: s.sizeId, quantity: s.quantity })),
       });
     } 
     else {
@@ -142,11 +148,21 @@ const ProductForm = ({
   const handleFinish = async () => {
     try {
       const values = await form.validateFields();
-      await onSubmit(values);
+      // Guard: at least one size must have quantity > 0
+      const sizes = (values.sizes ?? []) as { sizeId: string; quantity: number }[];
+      if (sizes.length === 0) {
+        message.error("Please add at least one size with a quantity.");
+        return;
+      }
+      const hasQty = sizes.some((s) => (s.quantity ?? 0) > 0);
+      if (!hasQty) {
+        message.error("At least one size must have a quantity greater than 0.");
+        return;
+      }
+      await onSubmit({ ...values, sizes });
     } 
     catch (err) {
       console.error(err);
-      // validation errors shown
     }
   };
 
@@ -355,33 +371,133 @@ const ProductForm = ({
           }
         </div>
 
-        {/* Step 3: Select Sizes */}
+        {/* Step 3: Per-size Quantities */}
         <div style={{ display: step === 2 ? "block" : "none" }}>
           {
             !selectedCategory ? (
               <Empty description="Select a category first to see available sizes" />
-            ) 
+            )
             : selectedCategory.sizes.length === 0 ? (
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
                 description="This category has no sizes defined"
               />
-            ) 
+            )
             : (
-              <Form.Item
-                name="sizes"
-                label={`Available Sizes (${selectedCategory.name})`}
-                rules={[{ required: true, message: "Select at least one size" }]}
-              >
-                <Select
-                  mode="multiple"
-                  placeholder="Select sizes for this product"
-                  options={selectedCategory.sizes.map((s) => ({
-                    label: s.label,
-                    value: s.id,
-                  }))}
-                />
-              </Form.Item>
+              <>
+                <p style={{ marginBottom: 16, color: "rgba(0,0,0,0.45)", fontSize: 13 }}>
+                  Enter the available quantity for each size. Leave 0 for sizes you don&apos;t stock.
+                </p>
+                <Form.List name="sizes">
+                  {(fields, { add, remove }) => {
+                    // Ensure every category size has an entry in the list
+                    const currentSizes: { sizeId: string; quantity: number }[] =
+                      form.getFieldValue("sizes") ?? [];
+                    const presentIds = new Set(currentSizes.map((s: { sizeId: string }) => s.sizeId));
+
+                    // Add missing sizes on first render of this step
+                    selectedCategory.sizes.forEach((sz) => {
+                      if (!presentIds.has(sz.id)) {
+                        add({ sizeId: sz.id, quantity: 0 });
+                      }
+                    });
+
+                    return (
+                      <>
+                        {/* Header row */}
+                        <Row gutter={16} style={{ marginBottom: 8 }}>
+                          <Col span={8}><span style={{ fontWeight: 500 }}>Size</span></Col>
+                          <Col span={8}><span style={{ fontWeight: 500 }}>Quantity</span></Col>
+                        </Row>
+                        {fields.map((field) => {
+                          const sizeId = form.getFieldValue(["sizes", field.name, "sizeId"]) as string;
+                          const sizeLabel = selectedCategory.sizes.find((s) => s.id === sizeId)?.label ?? sizeId;
+                          return (
+                            <Row key={field.key} gutter={16} align="middle" style={{ marginBottom: 12 }}>
+                              <Col span={8}>
+                                <span style={{ fontSize: 15 }}>{sizeLabel}</span>
+                                {/* hidden field to carry sizeId */}
+                                <Form.Item name={[field.name, "sizeId"]} noStyle>
+                                  <Input type="hidden" />
+                                </Form.Item>
+                              </Col>
+                              <Col span={8}>
+                                <Form.Item
+                                  name={[field.name, "quantity"]}
+                                  noStyle
+                                  rules={[{ required: true, message: "" }]}
+                                >
+                                  <Space.Compact style={{ width: "100%" }}>
+                                    <InputNumber
+                                      min={0}
+                                      style={{ width: "100%" }}
+                                      placeholder="0"
+                                    />
+                                    <span style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      padding: "0 11px",
+                                      background: "#fafafa",
+                                      border: "1px solid #d9d9d9",
+                                      borderLeft: 0,
+                                      borderRadius: "0 6px 6px 0",
+                                      color: "rgba(0,0,0,0.45)",
+                                      fontSize: 14,
+                                      whiteSpace: "nowrap",
+                                    }}>units</span>
+                                  </Space.Compact>
+                                </Form.Item>
+                              </Col>
+                              <Col span={4}>
+                                <Button
+                                  type="text"
+                                  danger
+                                  size="small"
+                                  onClick={() => remove(field.name)}
+                                >
+                                  Remove
+                                </Button>
+                              </Col>
+                            </Row>
+                          );
+                        })}
+                        {/* Total */}
+                        <Divider style={{ margin: "12px 0" }} />
+                        {totalBudget !== null && (
+                          <Row gutter={16} style={{ marginBottom: 8 }}>
+                            <Col span={24}>
+                              <span style={{ color: "rgba(0,0,0,0.45)", fontSize: 13 }}>
+                                Total budget (from attributes):{" "}
+                                <strong>{totalBudget} units</strong>
+                              </span>
+                            </Col>
+                          </Row>
+                        )}
+                        <Row gutter={16}>
+                          <Col span={8}><strong>Allocated</strong></Col>
+                          <Col span={8}>
+                            <strong style={{ color: isOverAllocated ? "#ff4d4f" : undefined }}>
+                              {allocatedQty} units
+                            </strong>
+                            {isOverAllocated && (
+                              <span style={{ color: "#ff4d4f", fontSize: 12, marginLeft: 8 }}>
+                                ⚠ Over by {Math.abs(remainingQty!)}
+                              </span>
+                            )}
+                          </Col>
+                          {remainingQty !== null && (
+                            <Col span={8}>
+                              <span style={{ color: isOverAllocated ? "#ff4d4f" : "rgba(0,0,0,0.45)", fontSize: 13 }}>
+                                Remaining: {remainingQty} units
+                              </span>
+                            </Col>
+                          )}
+                        </Row>
+                      </>
+                    );
+                  }}
+                </Form.List>
+              </>
             )
           }
         </div>

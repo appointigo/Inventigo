@@ -121,10 +121,12 @@ const OnboardingInner = () => {
       }
 
       sessionStorage.removeItem("selectedPlan");
-      // Refresh JWT so orgId/storeId is picked up
+      // Refresh JWT so orgId/storeId is picked up, then hard-navigate
+      // to force the browser to load the fresh session cookie (avoids
+      // the race condition where dashboard layout reads stale orgId:null)
       await updateSession();
       message.success("Setup complete! Welcome to Stockiva 🎉");
-      router.push("/dashboard");
+      window.location.href = "/dashboard";
     } 
     catch (error) {
       console.error(error);

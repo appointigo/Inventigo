@@ -85,22 +85,50 @@ export const productService = {
   },
 
   async create(orgId: string, values: ProductFormValues): Promise<Product> {
-    const p = await prisma.product.create({
-      data: {
-        orgId,
-        name: values.name,
-        sku: values.sku,
-        externalBarcode: values.externalBarcode ?? null,
-        categoryId: values.categoryId,
-        brandId: values.brandId,
-        basePrice: values.basePrice,
-        costPrice: values.costPrice,
-        attributes: (values.attributes ?? {}) as Prisma.InputJsonValue,
-        imageUrl: values.imageUrl ?? null,
-        isActive: values.isActive,
-      },
-      include,
+    // Resolve the storeId from the org's first store (used for StockEntry)
+    const org = await prisma.organization.findUnique({
+      where: { id: orgId },
+      include: { stores: { orderBy: { createdAt: "asc" }, take: 1 } },
     });
+    const storeId = org?.stores[0]?.id ?? null;
+
+    const p = await prisma.$transaction(async (tx) => {
+      const product = await tx.product.create({
+        data: {
+          orgId,
+          name: values.name,
+          sku: values.sku,
+          externalBarcode: values.externalBarcode ?? null,
+          categoryId: values.categoryId,
+          brandId: values.brandId,
+          basePrice: values.basePrice,
+          costPrice: values.costPrice,
+          attributes: (values.attributes ?? {}) as Prisma.InputJsonValue,
+          imageUrl: values.imageUrl ?? null,
+          isActive: values.isActive,
+        },
+        include,
+      });
+
+      // Create a StockEntry for each size that has quantity > 0
+      if (storeId && values.sizes?.length) {
+        const stockData = values.sizes
+          .filter((s) => s.quantity > 0)
+          .map((s) => ({
+            productId: product.id,
+            sizeId: s.sizeId,
+            storeId,
+            quantity: s.quantity,
+          }));
+        if (stockData.length) {
+          await tx.stockEntry.createMany({ data: stockData });
+        }
+      }
+
+      // Re-fetch with stock entries included
+      return tx.product.findUniqueOrThrow({ where: { id: product.id }, include });
+    });
+
     return toDto(p);
   },
 
@@ -117,22 +145,58 @@ export const productService = {
       await imageService.delete(existing.imageUrl);
     }
 
-    const p = await prisma.product.update({
-      where: { id },
-      data: {
-        ...(values.name !== undefined && { name: values.name }),
-        ...(values.sku !== undefined && { sku: values.sku }),
-        ...(values.externalBarcode !== undefined && { externalBarcode: values.externalBarcode ?? null }),
-        ...(values.categoryId !== undefined && { categoryId: values.categoryId }),
-        ...(values.brandId !== undefined && { brandId: values.brandId }),
-        ...(values.basePrice !== undefined && { basePrice: values.basePrice }),
-        ...(values.costPrice !== undefined && { costPrice: values.costPrice }),
-        ...(values.attributes !== undefined && { attributes: values.attributes as Prisma.InputJsonValue }),
-        ...(values.isActive !== undefined && { isActive: values.isActive }),
-        imageUrl: incomingImageUrl,
-      } as Prisma.ProductUpdateInput,
-      include,
+    const p = await prisma.$transaction(async (tx) => {
+      const product = await tx.product.update({
+        where: { id },
+        data: {
+          ...(values.name !== undefined && { name: values.name }),
+          ...(values.sku !== undefined && { sku: values.sku }),
+          ...(values.externalBarcode !== undefined && { externalBarcode: values.externalBarcode ?? null }),
+          ...(values.categoryId !== undefined && { categoryId: values.categoryId }),
+          ...(values.brandId !== undefined && { brandId: values.brandId }),
+          ...(values.basePrice !== undefined && { basePrice: values.basePrice }),
+          ...(values.costPrice !== undefined && { costPrice: values.costPrice }),
+          ...(values.attributes !== undefined && { attributes: values.attributes as Prisma.InputJsonValue }),
+          ...(values.isActive !== undefined && { isActive: values.isActive }),
+          imageUrl: incomingImageUrl,
+        } as Prisma.ProductUpdateInput,
+        include,
+      });
+
+      // Sync stock entries when sizes are provided in the update
+      if (values.sizes !== undefined) {
+        // Get the store from existing stock entries (or org's first store)
+        const firstEntry = await tx.stockEntry.findFirst({ where: { productId: id } });
+        let storeId = firstEntry?.storeId ?? null;
+        if (!storeId) {
+          const org = await prisma.organization.findUnique({
+            where: { id: orgId },
+            include: { stores: { orderBy: { createdAt: "asc" }, take: 1 } },
+          });
+          storeId = org?.stores[0]?.id ?? null;
+        }
+
+        if (storeId) {
+          // Upsert each size entry; remove entries for sizes no longer in the list
+          const incomingSizeIds = new Set(values.sizes.map((s) => s.sizeId));
+          // Delete removed sizes
+          await tx.stockEntry.deleteMany({
+            where: { productId: id, storeId, sizeId: { notIn: [...incomingSizeIds] } },
+          });
+          // Upsert each incoming size
+          for (const sz of values.sizes) {
+            await tx.stockEntry.upsert({
+              where: { productId_sizeId_storeId: { productId: id, sizeId: sz.sizeId, storeId } },
+              update: { quantity: sz.quantity },
+              create: { productId: id, sizeId: sz.sizeId, storeId, quantity: sz.quantity },
+            });
+          }
+        }
+      }
+
+      return tx.product.findUniqueOrThrow({ where: { id: product.id }, include });
     });
+
     return toDto(p);
   },
 

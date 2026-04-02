@@ -1,3 +1,8 @@
+export type SizeQuantity = {
+  sizeId: string;
+  quantity: number;
+};
+
 export type ProductFormValues = {
   name: string;
   sku: string;
@@ -9,7 +14,7 @@ export type ProductFormValues = {
   attributes: Record<string, unknown>;
   imageUrl?: string;
   isActive: boolean;
-  sizes: string[]; // size IDs from the selected category
+  sizes: SizeQuantity[]; // per-size quantities
 };
 
 export type ProductListFilters = {
