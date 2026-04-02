@@ -3,8 +3,8 @@
 import { Form, Input, App } from "antd";
 import { LockOutlined, MailOutlined, UserOutlined, ArrowLeftOutlined } from "@ant-design/icons";
 import { signIn, useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
 import {
   SceneWrapper,
   Overlay,
@@ -54,10 +54,25 @@ const GoogleIcon = () => (
   </svg>
 );
 
-const LoginPage = () => {
+// ─── Smart redirect based on session state ────────────────────────────────────
+function getRedirectPath(user: { role: string; emailVerified: boolean; orgId: string | null }): string {
+  if (user.role === "SUPER_ADMIN") return "/admin";
+  if (!user.emailVerified) return "/verify-email";
+  if (!user.orgId) return "/onboarding";
+  return "/dashboard";
+}
+
+// ─── Inner component (uses useSearchParams, must be wrapped in Suspense) ─────
+function LoginInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { message } = App.useApp();
-  const [mode, setMode] = useState<Mode>("signin");
+
+  // Read ?tab= and ?plan= from URL
+  const tabParam = searchParams.get("tab");
+  const planParam = searchParams.get("plan");
+
+  const [mode, setMode] = useState<Mode>(tabParam === "signup" ? "signup" : "signin");
   const [signinLoading, setSigninLoading] = useState(false);
   const [signupLoading, setSignupLoading] = useState(false);
   const [forgotLoading, setForgotLoading] = useState(false);
@@ -65,11 +80,21 @@ const LoginPage = () => {
   const [signinForm] = Form.useForm();
   const [signupForm] = Form.useForm();
   const [forgotForm] = Form.useForm();
-  const { status } = useSession();
+  const { data: session, status } = useSession();
 
+  // Smart redirect for already-authenticated users
   useEffect(() => {
-    if (status === "authenticated") router.replace("/dashboard");
-  }, [status, router]);
+    if (status === "authenticated" && session?.user) {
+      router.replace(getRedirectPath(session.user as { role: string; emailVerified: boolean; orgId: string | null }));
+    }
+  }, [status, session, router]);
+
+  // Store plan param in sessionStorage for onboarding page to pick up
+  useEffect(() => {
+    if (planParam) {
+      sessionStorage.setItem("selectedPlan", planParam);
+    }
+  }, [planParam]);
 
   // ─── Sign In ──────────────────────────────────────────────────────────────
   const onSignIn = async (values: { email: string; password: string }) => {
@@ -83,16 +108,14 @@ const LoginPage = () => {
 
       if (result?.error) {
         message.error("Invalid email or password");
-      } 
-      else {
-        router.push("/dashboard");
+      } else {
+        // Let the useEffect handle smart routing via session update
+        router.refresh();
       }
-    } 
-    catch (error) {
+    } catch (error) {
       console.error(error);
       message.error("Something went wrong. Please try again.");
-    } 
-    finally {
+    } finally {
       setSigninLoading(false);
     }
   };
@@ -115,23 +138,16 @@ const LoginPage = () => {
       const data = await res.json();
       if (!res.ok) {
         message.error(data.error ?? "Registration failed");
-      } 
-      else {
-        message.success("Account created! Signing you in…");
-        const result = await signIn("credentials", {
-          email: values.email,
-          password: values.password,
-          redirect: false,
-        });
-        if (result?.error) setMode("signin");
-        else router.push("/dashboard");
+      } else {
+        // Store credentials temporarily for auto-sign-in after email verification
+        sessionStorage.setItem("pendingAuth", JSON.stringify({ email: values.email, password: values.password }));
+        message.success("Account created! Check your email for a verification code.");
+        router.push(`/verify-email?email=${encodeURIComponent(values.email)}`);
       }
-    } 
-    catch (error) {
+    } catch (error) {
       console.error(error);
       message.error("Something went wrong. Please try again.");
-    } 
-    finally {
+    } finally {
       setSignupLoading(false);
     }
   };
@@ -148,12 +164,10 @@ const LoginPage = () => {
       message.success("If that email exists, a reset link has been sent.");
       forgotForm.resetFields();
       setMode("signin");
-    } 
-    catch (error) {
+    } catch (error) {
       console.error(error);
       message.error("Something went wrong. Please try again.");
-    } 
-    finally {
+    } finally {
       setForgotLoading(false);
     }
   };
@@ -162,13 +176,11 @@ const LoginPage = () => {
   const onGoogleSignIn = async () => {
     setGoogleLoading(true);
     try {
-      await signIn("google", { callbackUrl: "/dashboard" });
-    } 
-    catch (error) {
+      await signIn("google", { callbackUrl: "/onboarding" });
+    } catch (error) {
       console.error(error);
       message.error("Google sign-in is not configured.");
-    } 
-    finally {
+    } finally {
       setGoogleLoading(false);
     }
   };
@@ -355,6 +367,15 @@ const LoginPage = () => {
       </GlassCard>
     </SceneWrapper>
   );
-};
+}
+
+// Wrap in Suspense because useSearchParams requires it in Next.js
+const LoginPage = () => (
+  <Suspense>
+    <LoginInner />
+  </Suspense>
+);
 
 export default LoginPage;
+
+

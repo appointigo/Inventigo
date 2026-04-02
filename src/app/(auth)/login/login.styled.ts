@@ -311,7 +311,9 @@ export const CardTitle = styled(Typography.Title)`
   }
 `;
 
-export const CardSubtext = styled(Typography.Text)<{ $mb?: number }>`
+export const CardSubtext = styled(Typography.Text, {
+  shouldForwardProp: (prop) => prop !== "$mb",
+})<{ $mb?: number }>`
   && {
     display: block;
     margin-bottom: ${({ $mb }) => $mb ?? 24}px;
