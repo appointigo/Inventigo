@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import type { AdjustStockInput, StockLevelFilters, StockLevelRow, MovementHistoryFilters } from "../types";
+import type { AdjustStockInput, StockLevelFilters, StockLevelRow, MovementHistoryFilters, StockMovementRow } from "../types";
 
 /**
  * Central Stock Service — THE single source of truth for all inventory mutations.
@@ -128,6 +128,7 @@ export const stockService = {
       sku: entry.product.sku,
       categoryName: entry.product.category.name,
       brandName: entry.product.brand.name,
+      sizeId: entry.sizeId,
       sizeLabel: entry.size.label,
       quantity: entry.quantity,
       reorderLevel: entry.reorderLevel,
@@ -147,7 +148,7 @@ export const stockService = {
   /**
    * Get stock movement history (audit log).
    */
-  async getMovementHistory(filters: MovementHistoryFilters) {
+  async getMovementHistory(filters: MovementHistoryFilters): Promise<{ items: StockMovementRow[]; total: number }> {
     const { storeId, productId, type, startDate, endDate, page = 1, pageSize = 20 } = filters;
 
     const where: Record<string, unknown> = { storeId };
@@ -174,6 +175,19 @@ export const stockService = {
       prisma.stockMovement.count({ where }),
     ]);
 
-    return { items: movements, total };
+    return {
+      items: movements.map((m) => ({
+        id: m.id,
+        productName: m.product.name,
+        sku: m.product.sku,
+        sizeLabel: m.size.label,
+        type: m.type,
+        quantity: m.quantity,
+        reason: m.reason ?? null,
+        userName: m.user.name,
+        createdAt: m.createdAt.toISOString(),
+      })),
+      total,
+    };
   },
 };

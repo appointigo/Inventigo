@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import { Modal, Form, InputNumber, Select, Input, Typography, Space, Tag } from "antd";
-import type { MockStockRow } from "../services/mockStockService";
+import type { StockLevelRow } from "../types";
 
 interface StockAdjustmentModalProps {
-  stockRow: MockStockRow | null;
+  stockRow: StockLevelRow | null;
   open: boolean;
   onCancel: () => void;
   onSubmit: (values: {
@@ -17,12 +17,7 @@ interface StockAdjustmentModalProps {
   }) => Promise<void>;
 }
 
-export default function StockAdjustmentModal({
-  stockRow,
-  open,
-  onCancel,
-  onSubmit,
-}: StockAdjustmentModalProps) {
+const StockAdjustmentModal = ({ stockRow, open, onCancel, onSubmit }: StockAdjustmentModalProps) => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
 
@@ -38,7 +33,11 @@ export default function StockAdjustmentModal({
         reason: values.reason,
       });
       form.resetFields();
-    } finally {
+    } 
+    catch (error) {
+      console.error("Failed to submit stock adjustment:", error);
+    }
+    finally {
       setLoading(false);
     }
   };
@@ -107,3 +106,5 @@ export default function StockAdjustmentModal({
     </Modal>
   );
 }
+
+export default StockAdjustmentModal;

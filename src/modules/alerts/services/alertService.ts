@@ -1,158 +1,145 @@
-import { mockStockService } from "@/modules/stock/services/mockStockService";
+import { prisma } from "@/lib/db";
+import { stockService } from "@/modules/stock/services/stockService";
 import type { AlertConfig, AlertConfigFormValues, LowStockItem } from "../types";
 
-// TODO: Replace with Prisma queries when DB is connected
+function mapConfig(
+  raw: {
+    id: string;
+    orgId: string;
+    storeId: string | null;
+    productId: string | null;
+    categoryId: string | null;
+    threshold: number;
+    notifyEmail: boolean;
+    notifySMS: boolean;
+    isActive: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+    category: { name: string } | null;
+  } & { product?: { name: string } | null }
+): AlertConfig {
+  return {
+    id: raw.id,
+    storeId: raw.storeId,
+    productId: raw.productId,
+    productName: raw.product?.name ?? null,
+    categoryId: raw.categoryId,
+    categoryName: raw.category?.name ?? null,
+    threshold: raw.threshold,
+    notifyEmail: raw.notifyEmail,
+    notifySMS: raw.notifySMS,
+    isActive: raw.isActive,
+    createdAt: raw.createdAt.toISOString(),
+    updatedAt: raw.updatedAt.toISOString(),
+  };
+}
 
-let alertConfigs: AlertConfig[] = [
-  {
-    id: "ac-1",
-    storeId: null,
-    productId: null,
-    productName: null,
-    categoryId: null,
-    categoryName: null,
-    threshold: 5,
-    notifyEmail: true,
-    notifySMS: false,
-    isActive: true,
-    createdAt: "2025-01-01T00:00:00Z",
-    updatedAt: "2025-01-01T00:00:00Z",
-  },
-  {
-    id: "ac-2",
-    storeId: null,
-    productId: "prod-4",
-    productName: "Levi's 511 Slim Fit Jeans",
-    categoryId: null,
-    categoryName: null,
-    threshold: 8,
-    notifyEmail: true,
-    notifySMS: true,
-    isActive: true,
-    createdAt: "2025-01-02T00:00:00Z",
-    updatedAt: "2025-01-02T00:00:00Z",
-  },
-  {
-    id: "ac-3",
-    storeId: null,
-    productId: null,
-    productName: null,
-    categoryId: "cat-3",
-    categoryName: "Jeans",
-    threshold: 10,
-    notifyEmail: true,
-    notifySMS: false,
-    isActive: false,
-    createdAt: "2025-01-03T00:00:00Z",
-    updatedAt: "2025-01-03T00:00:00Z",
-  },
-];
-
-let nextId = 4;
+const include = {
+  category: { select: { name: true } },
+  product: { select: { name: true } },
+} as const;
 
 export const alertService = {
-  async list(): Promise<AlertConfig[]> {
-    return [...alertConfigs].sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+  async list(orgId: string): Promise<AlertConfig[]> {
+    const configs = await prisma.alertConfig.findMany({
+      where: { orgId },
+      include,
+      orderBy: { createdAt: "desc" },
+    });
+    return configs.map(mapConfig);
   },
 
-  async getById(id: string): Promise<AlertConfig | null> {
-    return alertConfigs.find((c) => c.id === id) ?? null;
+  async getById(id: string, orgId: string): Promise<AlertConfig | null> {
+    const config = await prisma.alertConfig.findFirst({
+      where: { id, orgId },
+      include,
+    });
+    return config ? mapConfig(config) : null;
   },
 
-  async create(values: AlertConfigFormValues): Promise<AlertConfig> {
-    const now = new Date().toISOString();
-    const config: AlertConfig = {
-      id: `ac-${nextId++}`,
-      storeId: null,
-      productId: values.productId ?? null,
-      productName: values.productId ? `Product ${values.productId}` : null,
-      categoryId: values.categoryId ?? null,
-      categoryName: values.categoryId ? `Category ${values.categoryId}` : null,
-      threshold: values.threshold,
-      notifyEmail: values.notifyEmail,
-      notifySMS: values.notifySMS,
-      isActive: values.isActive,
-      createdAt: now,
-      updatedAt: now,
-    };
-    alertConfigs.push(config);
-    return config;
+  async create(orgId: string, values: AlertConfigFormValues): Promise<AlertConfig> {
+    const config = await prisma.alertConfig.create({
+      data: {
+        orgId,
+        productId: values.productId ?? null,
+        categoryId: values.categoryId ?? null,
+        threshold: values.threshold,
+        notifyEmail: values.notifyEmail,
+        notifySMS: values.notifySMS,
+        isActive: values.isActive,
+      },
+      include,
+    });
+    return mapConfig(config);
   },
 
-  async update(id: string, values: Partial<AlertConfigFormValues>): Promise<AlertConfig | null> {
-    const idx = alertConfigs.findIndex((c) => c.id === id);
-    if (idx === -1) return null;
-    const existing = alertConfigs[idx];
-    const updated: AlertConfig = {
-      ...existing,
-      threshold: values.threshold ?? existing.threshold,
-      notifyEmail: values.notifyEmail ?? existing.notifyEmail,
-      notifySMS: values.notifySMS ?? existing.notifySMS,
-      isActive: values.isActive ?? existing.isActive,
-      productId: values.productId !== undefined ? (values.productId ?? null) : existing.productId,
-      productName:
-        values.productId !== undefined
-          ? values.productId
-            ? `Product ${values.productId}`
-            : null
-          : existing.productName,
-      categoryId: values.categoryId !== undefined ? (values.categoryId ?? null) : existing.categoryId,
-      categoryName:
-        values.categoryId !== undefined
-          ? values.categoryId
-            ? `Category ${values.categoryId}`
-            : null
-          : existing.categoryName,
-      updatedAt: new Date().toISOString(),
-    };
-    alertConfigs[idx] = updated;
-    return updated;
+  async update(id: string, orgId: string, values: Partial<AlertConfigFormValues>): Promise<AlertConfig | null> {
+    const existing = await prisma.alertConfig.findFirst({ where: { id, orgId } });
+    if (!existing) return null;
+
+    const config = await prisma.alertConfig.update({
+      where: { id },
+      data: {
+        ...(values.threshold !== undefined && { threshold: values.threshold }),
+        ...(values.notifyEmail !== undefined && { notifyEmail: values.notifyEmail }),
+        ...(values.notifySMS !== undefined && { notifySMS: values.notifySMS }),
+        ...(values.isActive !== undefined && { isActive: values.isActive }),
+        ...(values.productId !== undefined && { productId: values.productId ?? null }),
+        ...(values.categoryId !== undefined && { categoryId: values.categoryId ?? null }),
+      },
+      include,
+    });
+    return mapConfig(config);
   },
 
-  async delete(id: string): Promise<boolean> {
-    const idx = alertConfigs.findIndex((c) => c.id === id);
-    if (idx === -1) return false;
-    alertConfigs.splice(idx, 1);
+  async delete(id: string, orgId: string): Promise<boolean> {
+    const existing = await prisma.alertConfig.findFirst({ where: { id, orgId } });
+    if (!existing) return false;
+    await prisma.alertConfig.delete({ where: { id } });
     return true;
   },
 
-  /**
-   * Check current stock levels against alert configs and return items below threshold.
-   * The logic: for each active config, find stock rows that match (product or category or global)
-   * and where quantity <= threshold.
-   */
   async checkStockLevels(orgId: string): Promise<LowStockItem[]> {
-    const activeConfigs = alertConfigs.filter((c) => c.isActive);
+    const activeConfigs = await prisma.alertConfig.findMany({
+      where: { orgId, isActive: true },
+      include: { category: { select: { name: true } } },
+    });
     if (activeConfigs.length === 0) return [];
 
-    const allStock = await mockStockService.getStockLevels(orgId);
+    // Aggregate stock across all stores in the org
+    const stores = await prisma.store.findMany({ where: { orgId }, select: { id: true } });
     const lowStockMap = new Map<string, LowStockItem>();
 
-    for (const config of activeConfigs) {
-      for (const row of allStock) {
-        // Check if config applies to this stock row
-        const matchesProduct = config.productId ? config.productId === row.productId : true;
-        const matchesCategory = config.categoryId
-          ? config.categoryName?.toLowerCase() === row.categoryName.toLowerCase()
-          : true;
+    for (const store of stores) {
+      const { items: allStock } = await stockService.getStockLevels({
+        storeId: store.id,
+        page: 1,
+        pageSize: 10000,
+      });
 
-        if (matchesProduct && matchesCategory && row.quantity <= config.threshold) {
-          // Use sizeId as unique key to avoid duplicates
-          if (!lowStockMap.has(row.id)) {
-            lowStockMap.set(row.id, {
-              id: row.id,
-              productId: row.productId,
-              productName: row.productName,
-              sku: row.sku,
-              categoryName: row.categoryName,
-              brandName: row.brandName,
-              sizeLabel: row.sizeLabel,
-              quantity: row.quantity,
-              reorderLevel: row.reorderLevel,
-              deficit: config.threshold - row.quantity,
-            });
+      for (const config of activeConfigs) {
+        for (const row of allStock) {
+          const matchesProduct = config.productId ? config.productId === row.productId : true;
+          const categoryMatch = config.categoryId
+            ? config.category?.name?.toLowerCase() === row.categoryName.toLowerCase()
+            : true;
+
+          if (matchesProduct && categoryMatch && row.quantity <= config.threshold) {
+            const key = `${row.id}-${store.id}`;
+            if (!lowStockMap.has(key)) {
+              lowStockMap.set(key, {
+                id: row.id,
+                productId: row.productId,
+                productName: row.productName,
+                sku: row.sku,
+                categoryName: row.categoryName,
+                brandName: row.brandName,
+                sizeLabel: row.sizeLabel,
+                quantity: row.quantity,
+                reorderLevel: row.reorderLevel,
+                deficit: config.threshold - row.quantity,
+              });
+            }
           }
         }
       }
@@ -161,37 +148,29 @@ export const alertService = {
     return Array.from(lowStockMap.values()).sort((a, b) => a.quantity - b.quantity);
   },
 
-  /**
-   * Simulate sending alert notifications.
-   * In production: Resend email + Twilio SMS.
-   */
-  async sendAlerts(items: LowStockItem[]): Promise<{ emailSent: boolean; smsSent: boolean; itemCount: number }> {
-    if (items.length === 0) {
-      return { emailSent: false, smsSent: false, itemCount: 0 };
-    }
+  async sendAlerts(
+    orgId: string,
+    items: LowStockItem[]
+  ): Promise<{ emailSent: boolean; smsSent: boolean; itemCount: number }> {
+    if (items.length === 0) return { emailSent: false, smsSent: false, itemCount: 0 };
 
-    const hasEmailConfig = alertConfigs.some((c) => c.isActive && c.notifyEmail);
-    const hasSmsConfig = alertConfigs.some((c) => c.isActive && c.notifySMS);
+    const activeConfigs = await prisma.alertConfig.findMany({
+      where: { orgId, isActive: true },
+      select: { notifyEmail: true, notifySMS: true },
+    });
+    const hasEmailConfig = activeConfigs.some((c) => c.notifyEmail);
+    const hasSmsConfig = activeConfigs.some((c) => c.notifySMS);
 
     // TODO: Replace with actual Resend email + Twilio SMS when integrations are added
     console.log(`[AlertService] ${items.length} low-stock items detected:`);
     items.forEach((item) => {
       console.log(
-        `  - ${item.productName} (${item.sizeLabel}): ${item.quantity} in stock, threshold deficit: ${item.deficit}`
+        `  - ${item.productName} (${item.sizeLabel}): ${item.quantity} in stock, deficit: ${item.deficit}`
       );
     });
+    if (hasEmailConfig) console.log("[AlertService] Email notification sent (simulated)");
+    if (hasSmsConfig) console.log("[AlertService] SMS notification sent (simulated)");
 
-    if (hasEmailConfig) {
-      console.log("[AlertService] Email notification sent (simulated)");
-    }
-    if (hasSmsConfig) {
-      console.log("[AlertService] SMS notification sent (simulated)");
-    }
-
-    return {
-      emailSent: hasEmailConfig,
-      smsSent: hasSmsConfig,
-      itemCount: items.length,
-    };
+    return { emailSent: hasEmailConfig, smsSent: hasSmsConfig, itemCount: items.length };
   },
 };

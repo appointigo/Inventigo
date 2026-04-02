@@ -8,7 +8,7 @@ export const GET = async () => {
   catch { return NextResponse.json({ error: "Unauthorized" }, { status: 401 }); }
 
   try {
-    const data = await dashboardService.getData(user.orgId);
+    const data = await dashboardService.getData(user.orgId, user.storeId ?? null);
     return NextResponse.json(data);
   } 
   catch {

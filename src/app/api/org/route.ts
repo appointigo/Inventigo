@@ -1,38 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireOrgAuth } from "@/lib/auth.middleware";
+import { prisma } from "@/lib/db";
 
 // GET /api/org — return current org info
 export const GET = async () => {
   let user;
   try {
     user = await requireOrgAuth();
-  } 
-  catch {
+  } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (process.env.NODE_ENV === "development" || process.env.DEMO_MODE === "true") {
-    return NextResponse.json({
-      id: user.orgId,
-      name: "Test Organization",
-      slug: "test-org",
-      plan: "FREE",
-      isActive: true,
-      userCount: 4,
-      storeCount: 1,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
-  }
-
   try {
-    const { prisma } = await import("@/lib/db");
-
     const org = await prisma.organization.findUnique({
       where: { id: user.orgId },
-      include: {
-        _count: { select: { users: true, stores: true } },
-      },
+      include: { _count: { select: { users: true, stores: true } } },
     });
 
     if (!org) {
@@ -50,8 +32,7 @@ export const GET = async () => {
       createdAt: org.createdAt.toISOString(),
       updatedAt: org.updatedAt.toISOString(),
     });
-  } 
-  catch (err) {
+  } catch (err) {
     console.error("GET /api/org error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
@@ -62,8 +43,7 @@ export const PATCH = async (req: NextRequest) => {
   let user;
   try {
     user = await requireOrgAuth();
-  } 
-  catch {
+  } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -74,8 +54,7 @@ export const PATCH = async (req: NextRequest) => {
   let body: { name?: string };
   try {
     body = await req.json();
-  } 
-  catch {
+  } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
@@ -84,21 +63,13 @@ export const PATCH = async (req: NextRequest) => {
     return NextResponse.json({ error: "Name is required" }, { status: 400 });
   }
 
-  if (process.env.NODE_ENV === "development" || process.env.DEMO_MODE === "true") {
-    return NextResponse.json({ message: "Updated (demo mode)" });
-  }
-
   try {
-    const { prisma } = await import("@/lib/db");
-
     await prisma.organization.update({
       where: { id: user.orgId },
       data: { name: name.trim() },
     });
-
     return NextResponse.json({ message: "Organization updated" });
-  } 
-  catch (err) {
+  } catch (err) {
     console.error("PATCH /api/org error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }

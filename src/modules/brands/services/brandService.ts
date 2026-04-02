@@ -1,59 +1,75 @@
+import { prisma } from "@/lib/db";
 import type { Brand, BrandFormValues } from "../types";
-import { getOrgData } from "@/lib/mock-org-store";
 
-// TODO: Replace with Prisma queries when DB is connected
+type BrandWithCount = {
+  id: string;
+  name: string;
+  logoUrl: string | null;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  _count: { products: number };
+};
+
+const toDto = (b: BrandWithCount): Brand => ({
+  id: b.id,
+  name: b.name,
+  logoUrl: b.logoUrl,
+  isActive: b.isActive,
+  productCount: b._count.products,
+  createdAt: b.createdAt.toISOString(),
+  updatedAt: b.updatedAt.toISOString(),
+});
 
 export const brandService = {
   async list(orgId: string): Promise<Brand[]> {
-    const { brands } = getOrgData(orgId);
-    return [...brands].sort((a, b) => a.name.localeCompare(b.name));
+    const brands = await prisma.brand.findMany({
+      where: { orgId },
+      include: { _count: { select: { products: true } } },
+      orderBy: { name: "asc" },
+    });
+    return brands.map(toDto);
   },
 
   async getById(orgId: string, id: string): Promise<Brand | null> {
-    const { brands } = getOrgData(orgId);
-    return brands.find((b) => b.id === id) ?? null;
+    const b = await prisma.brand.findFirst({
+      where: { id, orgId },
+      include: { _count: { select: { products: true } } },
+    });
+    return b ? toDto(b) : null;
   },
 
   async create(orgId: string, values: BrandFormValues): Promise<Brand> {
-    const data = getOrgData(orgId);
-    const now = new Date().toISOString();
-    const brand: Brand = {
-      id: `br-${data.brandNextId++}`,
-      name: values.name,
-      logoUrl: values.logoUrl ?? null,
-      isActive: values.isActive,
-      productCount: 0,
-      createdAt: now,
-      updatedAt: now,
-    };
-    data.brands.push(brand);
-    return brand;
+    const b = await prisma.brand.create({
+      data: { orgId, name: values.name, logoUrl: values.logoUrl ?? null, isActive: values.isActive },
+      include: { _count: { select: { products: true } } },
+    });
+    return toDto(b);
   },
 
   async update(orgId: string, id: string, values: Partial<BrandFormValues>): Promise<Brand | null> {
-    const data = getOrgData(orgId);
-    const idx = data.brands.findIndex((b) => b.id === id);
-    if (idx === -1) return null;
-    const existing = data.brands[idx];
-    const updated: Brand = {
-      ...existing,
-      name: values.name ?? existing.name,
-      logoUrl: values.logoUrl !== undefined ? (values.logoUrl ?? null) : existing.logoUrl,
-      isActive: values.isActive ?? existing.isActive,
-      updatedAt: new Date().toISOString(),
-    };
-    data.brands[idx] = updated;
-    return updated;
+    const existing = await prisma.brand.findFirst({ where: { id, orgId } });
+    if (!existing) return null;
+    const b = await prisma.brand.update({
+      where: { id },
+      data: {
+        ...(values.name !== undefined && { name: values.name }),
+        ...(values.logoUrl !== undefined && { logoUrl: values.logoUrl ?? null }),
+        ...(values.isActive !== undefined && { isActive: values.isActive }),
+      },
+      include: { _count: { select: { products: true } } },
+    });
+    return toDto(b);
   },
 
   async delete(orgId: string, id: string): Promise<boolean> {
-    const data = getOrgData(orgId);
-    const idx = data.brands.findIndex((b) => b.id === id);
-    if (idx === -1) return false;
-    if (data.brands[idx].productCount > 0) {
-      throw new Error("Cannot delete brand with existing products");
-    }
-    data.brands.splice(idx, 1);
+    const b = await prisma.brand.findFirst({
+      where: { id, orgId },
+      include: { _count: { select: { products: true } } },
+    });
+    if (!b) return false;
+    if (b._count.products > 0) throw new Error("Cannot delete brand with existing products");
+    await prisma.brand.delete({ where: { id } });
     return true;
   },
 };
