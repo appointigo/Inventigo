@@ -14,7 +14,7 @@ interface RegisterBusinessBody {
   industry?: string;
   storeName?: string;
   storeCity?: string;
-  plan?: "FREE" | "PRO";
+  plan?: "FREE" | "PRO" | "ENTERPRISE";
 }
 
 const slugify = (name: string): string => {
@@ -59,8 +59,8 @@ export const POST = async (request: NextRequest) => {
     return NextResponse.json({ error: "Business name is required" }, { status: 400 });
   }
 
-  if (!["FREE", "PRO"].includes(plan)) {
-    return NextResponse.json({ error: "Invalid plan. Must be FREE or PRO" }, { status: 400 });
+  if (!["FREE", "PRO", "ENTERPRISE"].includes(plan)) {
+    return NextResponse.json({ error: "Invalid plan. Must be FREE, PRO, or ENTERPRISE" }, { status: 400 });
   }
 
   const userId = session.user.id;
@@ -127,7 +127,7 @@ export const POST = async (request: NextRequest) => {
         data: {
           name: businessName.trim(),
           slug: finalSlug,
-          plan: plan as "FREE" | "PRO",
+          plan: plan as "FREE" | "PRO" | "ENTERPRISE",
         },
       });
 

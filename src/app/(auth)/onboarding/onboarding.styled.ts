@@ -8,7 +8,8 @@ const { Text } = Typography;
 // ─── Extends GlassCard with wider max-width for the wizard ───────────────────
 
 export const OnboardingCard = styled(GlassCard)`
-  max-width: 520px;
+  max-width: 840px;
+  padding: 36px 32px 28px;
 `;
 
 // ─── Plan selection grid ─────────────────────────────────────────────────────
@@ -16,10 +17,10 @@ export const OnboardingCard = styled(GlassCard)`
 export const PlanGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+  gap: 16px;
   margin-bottom: 28px;
 
-  @media (max-width: 500px) {
+  @media (max-width: 640px) {
     grid-template-columns: 1fr;
   }
 `;
@@ -28,7 +29,7 @@ export const PlanCard = styled.div<{ $selected?: boolean }>`
   border: 1.5px solid
     ${({ $selected }) => ($selected ? "#5ecfea" : "rgba(255,255,255,0.14)")};
   border-radius: 14px;
-  padding: 18px 14px;
+  padding: 20px 16px;
   background: ${({ $selected }) =>
     $selected ? "rgba(94,207,234,0.1)" : "rgba(255,255,255,0.04)"};
   cursor: pointer;
@@ -84,12 +85,53 @@ export const PlanPrice = styled(Text)`
   }
 `;
 
+export const PlanPeriod = styled(Text)`
+  && {
+    display: block;
+    color: rgba(255, 255, 255, 0.38);
+    font-size: 11px;
+    margin-bottom: 6px;
+  }
+`;
+
 export const PlanDesc = styled(Text)`
   && {
     display: block;
-    color: rgba(255, 255, 255, 0.45);
-    font-size: 11px;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 11.5px;
+    line-height: 1.5;
+    margin-bottom: 0;
   }
+`;
+
+export const PlanDivider = styled.hr`
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin: 12px 0;
+`;
+
+export const PlanFeatsList = styled.ul`
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+`;
+
+export const PlanFeatsItem = styled.li`
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  padding: 4px 0;
+  line-height: 1.4;
+`;
+
+export const PlanCheckMark = styled.span`
+  color: #5ecfea;
+  font-size: 13px;
+  flex-shrink: 0;
+  margin-top: 1px;
 `;
 
 // ─── Step 2 back / complete row ──────────────────────────────────────────────

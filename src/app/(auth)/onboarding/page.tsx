@@ -6,7 +6,7 @@ import { ShopOutlined, RocketOutlined, CrownOutlined, StarFilled } from "@ant-de
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { SceneWrapper, Overlay, OrbitRing, Particle, LogoRow, LogoIcon, LogoText, SubmitBtn, CardTitle, CardSubtext, FooterText } from "@/app/(auth)/login/login.styled";
-import { OnboardingCard, PlanGrid, PlanCard, PopularBadge, PlanSelectedIcon, PlanName, PlanPrice, PlanDesc, StepNavRow, BackBtn, ProBanner, EnterpriseBanner } from "./onboarding.styled";
+import { OnboardingCard, PlanGrid, PlanCard, PopularBadge, PlanSelectedIcon, PlanName, PlanPrice, PlanPeriod, PlanDesc, PlanDivider, PlanFeatsList, PlanFeatsItem, PlanCheckMark, StepNavRow, BackBtn, ProBanner, EnterpriseBanner } from "./onboarding.styled";
 
 const { Text } = Typography;
 
@@ -34,30 +34,36 @@ const INDUSTRIES = [
 
 const PLANS = [
   {
-    id: "free",
+    id: "free" as const,
     name: "Starter",
     price: "Free",
-    desc: "Up to 100 products",
-    icon: <ShopOutlined style={{ fontSize: 22, color: "#5ecfea", marginBottom: 8 }} />,
+    period: "Forever free",
+    desc: "Perfect for solo entrepreneurs and small shops getting started.",
+    icon: <ShopOutlined style={{ fontSize: 24, color: "#5ecfea", marginBottom: 8 }} />,
+    features: ["1 store", "100 products", "2 team members", "Basic stock tracking", "Email support"],
     popular: false,
   },
   {
-    id: "pro",
+    id: "pro" as const,
     name: "Growth",
-    price: "₹2,499/mo",
-    desc: "1 month free trial",
-    icon: <RocketOutlined style={{ fontSize: 22, color: "#f0d060", marginBottom: 8 }} />,
+    price: "₹2,499",
+    period: "per month · 1 month free trial",
+    desc: "Everything you need to run a multi-store retail business.",
+    icon: <RocketOutlined style={{ fontSize: 24, color: "#f0d060", marginBottom: 8 }} />,
+    features: ["Unlimited stores", "Unlimited products", "10 team members", "Advanced analytics", "Barcode scanning", "Reorder automation"],
     popular: true,
   },
   {
-    id: "enterprise",
+    id: "enterprise" as const,
     name: "Enterprise",
     price: "Custom",
-    desc: "Contact sales",
-    icon: <CrownOutlined style={{ fontSize: 22, color: "#c87eff", marginBottom: 8 }} />,
+    period: "Tailored for you",
+    desc: "For large teams, custom integrations, and compliance needs.",
+    icon: <CrownOutlined style={{ fontSize: 24, color: "#c87eff", marginBottom: 8 }} />,
+    features: ["Everything in Growth", "Unlimited members", "Custom integrations", "Dedicated manager", "99.9% SLA"],
     popular: false,
   },
-] as const;
+];
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
@@ -104,7 +110,7 @@ const OnboardingInner = () => {
           industry: values.industry ?? null,
           storeName: values.storeName || "Main Store",
           storeCity: values.storeCity ?? null,
-          plan,
+          plan: plan.toUpperCase(),
         }),
       });
 
@@ -158,7 +164,7 @@ const OnboardingInner = () => {
         </div>
 
         {/* ─── Step 1: Business Info ─ */}
-        {stepIndex === 0 && (
+        <div style={{ display: stepIndex === 0 ? undefined : "none" }}>
           <>
             <Space orientation="vertical" size={2} style={{ marginBottom: 24 }}>
               <CardTitle level={3}>Hi {firstName}! 👋</CardTitle>
@@ -210,10 +216,10 @@ const OnboardingInner = () => {
               </SubmitBtn>
             </Form>
           </>
-        )}
+        </div>
 
         {/* ─── Step 2: Plan ─ */}
-        {stepIndex === 1 && (
+        <div style={{ display: stepIndex === 1 ? undefined : "none" }}>
           <>
             <Space orientation="vertical" size={2} style={{ marginBottom: 24 }}>
               <CardTitle level={3}>Choose your plan</CardTitle>
@@ -227,12 +233,19 @@ const OnboardingInner = () => {
                   $selected={plan === p.id}
                   onClick={() => setPlan(p.id as typeof plan)}
                 >
-                  {p.popular && <PopularBadge>Popular</PopularBadge>}
+                {p.popular && <PopularBadge>Popular</PopularBadge>}
                   {plan === p.id && <PlanSelectedIcon />}
                   <div>{p.icon}</div>
                   <PlanName>{p.name}</PlanName>
                   <PlanPrice>{p.price}</PlanPrice>
+                  <PlanPeriod>{p.period}</PlanPeriod>
                   <PlanDesc>{p.desc}</PlanDesc>
+                  <PlanDivider />
+                  <PlanFeatsList>
+                    {p.features.map((f) => (
+                      <PlanFeatsItem key={f}><PlanCheckMark>✓</PlanCheckMark>{f}</PlanFeatsItem>
+                    ))}
+                  </PlanFeatsList>
                 </PlanCard>
               ))}
             </PlanGrid>
@@ -264,7 +277,7 @@ const OnboardingInner = () => {
               </SubmitBtn>
             </StepNavRow>
           </>
-        )}
+        </div>
 
         <FooterText>© 2026 Stockiva. All rights reserved.</FooterText>
       </OnboardingCard>
