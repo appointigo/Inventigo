@@ -1,13 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Table, Button, Space, Tag, Input, Popconfirm, Tooltip, Flex } from "antd";
-import {
-  PlusOutlined,
-  EditOutlined,
-  DeleteOutlined,
-  SearchOutlined,
-} from "@ant-design/icons";
+import { Table, Button, Space, Tag, Input, Popconfirm, Tooltip, Flex, Empty } from "antd";
+import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { Category } from "../types";
 
@@ -19,13 +14,7 @@ interface CategoryTableProps {
   onDelete: (id: string) => Promise<void>;
 }
 
-export default function CategoryTable({
-  categories,
-  loading,
-  onAdd,
-  onEdit,
-  onDelete,
-}: CategoryTableProps) {
+const CategoryTable = ({ categories, loading, onAdd, onEdit, onDelete }: CategoryTableProps) => {
   const [search, setSearch] = useState("");
 
   const filtered = categories.filter(
@@ -127,7 +116,7 @@ export default function CategoryTable({
   ];
 
   return (
-    <div>
+    <>
       <Flex justify="space-between" align="center" gap={12} wrap style={{ marginBottom: 16 }}>
         <Input
           placeholder="Search categories..."
@@ -147,8 +136,25 @@ export default function CategoryTable({
         rowKey="id"
         loading={loading}
         pagination={{ pageSize: 10, showSizeChanger: true, showTotal: (t) => `${t} categories` }}
-        locale={{ emptyText: search ? "No categories match your search" : "No categories yet" }}
+        locale={{
+          emptyText: !loading && categories.length === 0 ? (
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description={
+                <span style={{ color: "#888" }}>
+                  No categories yet. Categories group your products and define their attributes.
+                </span>
+              }
+            >
+              <Button type="primary" icon={<PlusOutlined />} onClick={onAdd}>
+                Add your first category
+              </Button>
+            </Empty>
+          ) : search ? "No categories match your search" : undefined,
+        }}
       />
-    </div>
+    </>
   );
 }
+
+export default CategoryTable;

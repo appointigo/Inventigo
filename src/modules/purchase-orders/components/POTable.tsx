@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Table, Button, Space, Tag, Input, Select, Flex } from "antd";
+import { Table, Button, Space, Tag, Input, Select, Flex, Empty } from "antd";
 import { PlusOutlined, SearchOutlined, EyeOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { PurchaseOrderStatus } from "@prisma/client";
@@ -23,17 +23,7 @@ interface POTableProps {
   onView: (po: PurchaseOrder) => void;
 }
 
-export default function POTable({
-  purchaseOrders,
-  suppliers,
-  loading,
-  statusFilter,
-  onStatusChange,
-  supplierFilter,
-  onSupplierChange,
-  onAdd,
-  onView,
-}: POTableProps) {
+const POTable = ({ purchaseOrders, suppliers, loading, statusFilter, onStatusChange, supplierFilter, onSupplierChange, onAdd, onView }: POTableProps) => {
   const [search, setSearch] = useState("");
 
   const filtered = purchaseOrders.filter(
@@ -111,7 +101,7 @@ export default function POTable({
   ];
 
   return (
-    <div>
+    <>
       <Flex justify="space-between" align="center" gap={12} wrap style={{ marginBottom: 16 }}>
         <Space wrap>
           <Input
@@ -150,7 +140,25 @@ export default function POTable({
         loading={loading}
         pagination={{ pageSize: 10, showSizeChanger: true, showTotal: (t) => `${t} purchase orders` }}
         scroll={{ x: 1000 }}
+        locale={{
+          emptyText: !loading && purchaseOrders.length === 0 && !search && !statusFilter && !supplierFilter ? (
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description={
+                <span style={{ color: "#888" }}>
+                  No purchase orders yet. Create a PO to restock from a supplier.
+                </span>
+              }
+            >
+              <Button type="primary" icon={<PlusOutlined />} onClick={onAdd}>
+                Create purchase order
+              </Button>
+            </Empty>
+          ) : undefined,
+        }}
       />
-    </div>
+    </>
   );
 }
+
+export default POTable;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Table, Button, Space, Tag, Input, Popconfirm, Tooltip, Switch, Flex } from "antd";
+import { Table, Button, Space, Input, Popconfirm, Tooltip, Switch, Flex, Empty } from "antd";
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { Brand } from "../types";
@@ -15,14 +15,7 @@ interface BrandTableProps {
   onToggleActive: (brand: Brand) => Promise<void>;
 }
 
-export default function BrandTable({
-  brands,
-  loading,
-  onAdd,
-  onEdit,
-  onDelete,
-  onToggleActive,
-}: BrandTableProps) {
+const BrandTable = ({ brands, loading, onAdd, onEdit, onDelete, onToggleActive }: BrandTableProps) => {
   const [search, setSearch] = useState("");
 
   const filtered = brands.filter((b) =>
@@ -87,7 +80,7 @@ export default function BrandTable({
   ];
 
   return (
-    <div>
+    <>
       <Flex justify="space-between" align="center" gap={12} wrap style={{ marginBottom: 16 }}>
         <Input
           placeholder="Search brands..."
@@ -107,7 +100,25 @@ export default function BrandTable({
         rowKey="id"
         loading={loading}
         pagination={{ pageSize: 10, showSizeChanger: true, showTotal: (t) => `${t} brands` }}
+        locale={{
+          emptyText: !loading && brands.length === 0 ? (
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description={
+                <span style={{ color: "#888" }}>
+                  No brands yet. Brands help you organise products by manufacturer.
+                </span>
+              }
+            >
+              <Button type="primary" icon={<PlusOutlined />} onClick={onAdd}>
+                Add your first brand
+              </Button>
+            </Empty>
+          ) : undefined,
+        }}
       />
-    </div>
+    </>
   );
 }
+
+export default BrandTable;

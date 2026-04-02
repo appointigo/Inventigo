@@ -1,6 +1,6 @@
 "use client";
 
-import { Table, Tag, Input, Select, Badge, Flex } from "antd";
+import { Table, Tag, Input, Select, Badge, Flex, Empty } from "antd";
 import { SearchOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { MockStockRow } from "../services/mockStockService";
@@ -18,15 +18,7 @@ interface StockTableProps {
 const statusColors = { OK: "green", LOW: "orange", OUT: "red" } as const;
 const statusLabels = { OK: "In Stock", LOW: "Low Stock", OUT: "Out of Stock" } as const;
 
-export default function StockTable({
-  stockLevels,
-  loading,
-  search,
-  onSearchChange,
-  statusFilter,
-  onStatusChange,
-  onAdjust,
-}: StockTableProps) {
+const StockTable = ({ stockLevels, loading, search, onSearchChange, statusFilter, onStatusChange, onAdjust }: StockTableProps) => {
   const columns: ColumnsType<MockStockRow> = [
     {
       title: "Product",
@@ -96,7 +88,7 @@ export default function StockTable({
   ];
 
   return (
-    <div>
+    <>
       <Flex gap={12} wrap style={{ marginBottom: 16 }}>
         <Input
           placeholder="Search by product or SKU..."
@@ -126,7 +118,21 @@ export default function StockTable({
         loading={loading}
         pagination={{ pageSize: 15, showSizeChanger: true, showTotal: (t) => `${t} entries` }}
         size="middle"
+        locale={{
+          emptyText: !loading && stockLevels.length === 0 ? (
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description={
+                <span style={{ color: "#888" }}>
+                  No stock entries yet. Add products to start tracking inventory levels.
+                </span>
+              }
+            />
+          ) : undefined,
+        }}
       />
-    </div>
+    </>
   );
 }
+
+export default StockTable;

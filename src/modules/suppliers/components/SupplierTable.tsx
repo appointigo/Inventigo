@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Table, Button, Space, Tag, Input, Popconfirm, Tooltip, Switch, Flex } from "antd";
+import { Table, Button, Space, Input, Popconfirm, Tooltip, Switch, Flex, Empty } from "antd";
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, EyeOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { Supplier } from "../types";
@@ -16,15 +16,7 @@ interface SupplierTableProps {
   onToggleActive: (supplier: Supplier) => Promise<void>;
 }
 
-export default function SupplierTable({
-  suppliers,
-  loading,
-  onAdd,
-  onView,
-  onEdit,
-  onDelete,
-  onToggleActive,
-}: SupplierTableProps) {
+const SupplierTable = ({ suppliers, loading, onAdd, onView, onEdit, onDelete, onToggleActive }: SupplierTableProps) => {
   const [search, setSearch] = useState("");
 
   const filtered = suppliers.filter(
@@ -110,7 +102,7 @@ export default function SupplierTable({
   ];
 
   return (
-    <div>
+    <>
       <Flex justify="space-between" align="center" gap={12} wrap style={{ marginBottom: 16 }}>
         <Input
           placeholder="Search suppliers..."
@@ -130,7 +122,25 @@ export default function SupplierTable({
         rowKey="id"
         loading={loading}
         pagination={{ pageSize: 10, showSizeChanger: true, showTotal: (t) => `${t} suppliers` }}
+        locale={{
+          emptyText: !loading && suppliers.length === 0 ? (
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description={
+                <span style={{ color: "#888" }}>
+                  No suppliers yet. Add suppliers to track where your products come from.
+                </span>
+              }
+            >
+              <Button type="primary" icon={<PlusOutlined />} onClick={onAdd}>
+                Add your first supplier
+              </Button>
+            </Empty>
+          ) : undefined,
+        }}
       />
-    </div>
+    </>
   );
 }
+
+export default SupplierTable;

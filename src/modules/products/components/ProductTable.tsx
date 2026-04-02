@@ -1,13 +1,7 @@
 "use client";
 
-import { Table, Button, Space, Tag, Input, Select, Popconfirm, Tooltip, Badge, Flex } from "antd";
-import {
-  PlusOutlined,
-  EditOutlined,
-  DeleteOutlined,
-  SearchOutlined,
-  EyeOutlined,
-} from "@ant-design/icons";
+import { Table, Button, Space, Tag, Input, Select, Popconfirm, Tooltip, Badge, Flex, Empty } from "antd";
+import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, EyeOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { Product } from "../types";
 import type { Category } from "@/modules/categories/types";
@@ -30,7 +24,7 @@ interface ProductTableProps {
   onDelete: (id: string) => Promise<void>;
 }
 
-export default function ProductTable({
+const ProductTable = ({
   products,
   categories,
   brands,
@@ -45,7 +39,7 @@ export default function ProductTable({
   onView,
   onEdit,
   onDelete,
-}: ProductTableProps) {
+}: ProductTableProps) => {
   const columns: ColumnsType<Product> = [
     {
       title: "Product",
@@ -127,7 +121,7 @@ export default function ProductTable({
   ];
 
   return (
-    <div>
+    <>
       <Flex
         justify="space-between"
         align="center"
@@ -171,7 +165,28 @@ export default function ProductTable({
         rowKey="id"
         loading={loading}
         pagination={{ pageSize: 10, showSizeChanger: true, showTotal: (t) => `${t} products` }}
+        locale={{
+          emptyText: !loading && products.length === 0 && !search && !categoryFilter && !brandFilter ? (
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description={
+                <span style={{ color: "#888" }}>
+                  {categories.length === 0
+                    ? "Add a category first, then come back to add products."
+                    : "No products yet. Start building your inventory."
+                  }
+                </span>
+              }
+            >
+              <Button type="primary" icon={<PlusOutlined />} onClick={onAdd} disabled={categories.length === 0}>
+                {categories.length === 0 ? "Add a category first" : "Add your first product"}
+              </Button>
+            </Empty>
+          ) : undefined,
+        }}
       />
-    </div>
+    </>
   );
 }
+
+export default ProductTable;
