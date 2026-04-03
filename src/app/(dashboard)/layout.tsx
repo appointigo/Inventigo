@@ -63,7 +63,7 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <App>
-      <StoreProvider defaultStoreId={null}>
+      <StoreProvider defaultStoreId={session?.user?.storeId ?? null}>
         <AppLayout>{children}</AppLayout>
       </StoreProvider>
     </App>

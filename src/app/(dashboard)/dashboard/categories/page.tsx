@@ -5,11 +5,13 @@ import { useRouter } from "next/navigation";
 import { Typography, App } from "antd";
 import CategoryTable from "@/modules/categories/components/CategoryTable";
 import { useCategories } from "@/modules/categories/hooks/useCategories";
+import { useStore } from "@/providers/StoreProvider";
 
 export default function CategoriesPage() {
   const { message } = App.useApp();
   const router = useRouter();
-  const { categories, loading, refresh } = useCategories();
+  const { storeId } = useStore();
+  const { categories, loading, refresh } = useCategories(storeId ?? undefined);
 
   const handleDelete = useCallback(
     async (id: string) => {

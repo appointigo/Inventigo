@@ -2,6 +2,7 @@ export type BrandFormValues = {
   name: string;
   logoUrl?: string;
   isActive: boolean;
+  storeId?: string;
 };
 
 export type Brand = {

@@ -7,11 +7,13 @@ import { ArrowLeftOutlined } from "@ant-design/icons";
 import POForm from "@/modules/purchase-orders/components/POForm";
 import { useSuppliers } from "@/modules/suppliers/hooks/useSuppliers";
 import { useProducts } from "@/modules/products/hooks/useProducts";
+import { useStore } from "@/providers/StoreProvider";
 import type { POItemFormValues } from "@/modules/purchase-orders/types";
 
 export default function NewPurchaseOrderPage() {
   const router = useRouter();
   const { message } = App.useApp();
+  const { storeId } = useStore();
   const { suppliers } = useSuppliers();
   const { products } = useProducts();
   const [saving, setSaving] = useState(false);
@@ -21,6 +23,10 @@ export default function NewPurchaseOrderPage() {
     notes?: string;
     items: POItemFormValues[];
   }) => {
+    if (!storeId) {
+      message.error("Please select a store first");
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch("/api/purchase-orders", {
@@ -28,7 +34,7 @@ export default function NewPurchaseOrderPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...values,
-          storeId: "store-1", // Default store
+          storeId,
         }),
       });
       if (!res.ok) {

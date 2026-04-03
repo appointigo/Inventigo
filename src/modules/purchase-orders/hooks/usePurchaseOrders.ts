@@ -11,6 +11,7 @@ export function usePurchaseOrders(filters?: Partial<POListFilters>) {
     setLoading(true);
     try {
       const params = new URLSearchParams();
+      if (filters?.storeId) params.set("storeId", filters.storeId);
       if (filters?.supplierId) params.set("supplierId", filters.supplierId);
       if (filters?.status) params.set("status", filters.status);
       const qs = params.toString();
@@ -19,7 +20,7 @@ export function usePurchaseOrders(filters?: Partial<POListFilters>) {
     } finally {
       setLoading(false);
     }
-  }, [filters?.supplierId, filters?.status]);
+  }, [filters?.storeId, filters?.supplierId, filters?.status]);
 
   useEffect(() => {
     fetchOrders();

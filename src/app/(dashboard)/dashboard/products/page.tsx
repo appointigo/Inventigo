@@ -7,15 +7,18 @@ import ProductTable from "@/modules/products/components/ProductTable";
 import { useProducts } from "@/modules/products/hooks/useProducts";
 import { useCategories } from "@/modules/categories/hooks/useCategories";
 import { useBrands } from "@/modules/brands/hooks/useBrands";
+import { useStore } from "@/providers/StoreProvider";
 
 export default function ProductsPage() {
   const { message } = App.useApp();
   const router = useRouter();
+  const { storeId } = useStore();
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string | undefined>();
   const [brandFilter, setBrandFilter] = useState<string | undefined>();
 
   const { products, loading, refresh } = useProducts({
+    storeId: storeId ?? undefined,
     search: search || undefined,
     categoryId: categoryFilter,
     brandId: brandFilter,

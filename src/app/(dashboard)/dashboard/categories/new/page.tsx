@@ -4,11 +4,13 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Typography, Card, App } from "antd";
 import CategoryForm from "@/modules/categories/components/CategoryForm";
+import { useStore } from "@/providers/StoreProvider";
 import type { CategoryFormValues } from "@/modules/categories/types";
 
 export default function NewCategoryPage() {
   const { message } = App.useApp();
   const router = useRouter();
+  const { storeId } = useStore();
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async (values: CategoryFormValues) => {
@@ -17,7 +19,7 @@ export default function NewCategoryPage() {
       const res = await fetch("/api/categories", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
+        body: JSON.stringify({ ...values, storeId: storeId ?? undefined }),
       });
       if (!res.ok) {
         const data = await res.json();

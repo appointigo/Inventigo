@@ -3,13 +3,14 @@ import { prisma } from "@/lib/db";
 import type { Product, ProductFormValues, ProductListFilters } from "../types";
 import { imageService } from "@/shared/services/imageService";
 
-const include = {
+const buildInclude = (storeId?: string) => ({
   category: { select: { name: true } },
   brand: { select: { name: true } },
   stockEntries: {
+    where: storeId ? { storeId } : undefined,
     include: { size: { select: { label: true } } },
   },
-};
+});
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const toDto = (p: any): Product => {
@@ -53,11 +54,17 @@ export const productService = {
         { sku: { contains: filters.search, mode: "insensitive" } },
       ];
     }
+    // When a storeId is given, only return products that have stock in that store
+    if (filters?.storeId) {
+      where.stockEntries = { some: { storeId: filters.storeId } };
+    }
+    const include = buildInclude(filters?.storeId);
     const products = await prisma.product.findMany({ where, include, orderBy: { name: "asc" } });
     return products.map(toDto);
   },
 
-  async getById(orgId: string, id: string): Promise<Product | null> {
+  async getById(orgId: string, id: string, storeId?: string): Promise<Product | null> {
+    const include = buildInclude(storeId);
     const p = await prisma.product.findFirst({ where: { id, orgId }, include });
     return p ? toDto(p) : null;
   },
@@ -65,7 +72,7 @@ export const productService = {
   async getBySku(orgId: string, sku: string): Promise<Product | null> {
     const p = await prisma.product.findFirst({
       where: { orgId, sku: { equals: sku, mode: "insensitive" } },
-      include,
+      include: buildInclude(),
     });
     return p ? toDto(p) : null;
   },
@@ -79,18 +86,21 @@ export const productService = {
           { externalBarcode: { equals: barcode, mode: "insensitive" } },
         ],
       },
-      include,
+      include: buildInclude(),
     });
     return p ? toDto(p) : null;
   },
 
   async create(orgId: string, values: ProductFormValues): Promise<Product> {
-    // Resolve the storeId from the org's first store (used for StockEntry)
-    const org = await prisma.organization.findUnique({
-      where: { id: orgId },
-      include: { stores: { orderBy: { createdAt: "asc" }, take: 1 } },
-    });
-    const storeId = org?.stores[0]?.id ?? null;
+    // Use the storeId sent by the client (selected store) or fall back to the org's first store
+    let storeId = values.storeId ?? null;
+    if (!storeId) {
+      const org = await prisma.organization.findUnique({
+        where: { id: orgId },
+        include: { stores: { orderBy: { createdAt: "asc" }, take: 1 } },
+      });
+      storeId = org?.stores[0]?.id ?? null;
+    }
 
     const p = await prisma.$transaction(async (tx) => {
       const product = await tx.product.create({
@@ -107,7 +117,7 @@ export const productService = {
           imageUrl: values.imageUrl ?? null,
           isActive: values.isActive,
         },
-        include,
+        include: buildInclude(storeId ?? undefined),
       });
 
       // Create a StockEntry for each size that has quantity > 0
@@ -126,7 +136,7 @@ export const productService = {
       }
 
       // Re-fetch with stock entries included
-      return tx.product.findUniqueOrThrow({ where: { id: product.id }, include });
+      return tx.product.findUniqueOrThrow({ where: { id: product.id }, include: buildInclude(storeId ?? undefined) });
     });
 
     return toDto(p);
@@ -160,14 +170,14 @@ export const productService = {
           ...(values.isActive !== undefined && { isActive: values.isActive }),
           imageUrl: incomingImageUrl,
         } as Prisma.ProductUpdateInput,
-        include,
+        include: buildInclude(values.storeId),
       });
 
       // Sync stock entries when sizes are provided in the update
       if (values.sizes !== undefined) {
-        // Get the store from existing stock entries (or org's first store)
+        // Get the store from existing stock entries, the passed storeId, or the org's first store
         const firstEntry = await tx.stockEntry.findFirst({ where: { productId: id } });
-        let storeId = firstEntry?.storeId ?? null;
+        let storeId = values.storeId ?? firstEntry?.storeId ?? null;
         if (!storeId) {
           const org = await prisma.organization.findUnique({
             where: { id: orgId },
@@ -194,7 +204,7 @@ export const productService = {
         }
       }
 
-      return tx.product.findUniqueOrThrow({ where: { id: product.id }, include });
+      return tx.product.findUniqueOrThrow({ where: { id: product.id }, include: buildInclude(values.storeId) });
     });
 
     return toDto(p);

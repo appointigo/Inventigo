@@ -7,15 +7,18 @@ import type { PurchaseOrderStatus } from "@prisma/client";
 import POTable from "@/modules/purchase-orders/components/POTable";
 import { usePurchaseOrders } from "@/modules/purchase-orders/hooks/usePurchaseOrders";
 import { useSuppliers } from "@/modules/suppliers/hooks/useSuppliers";
+import { useStore } from "@/providers/StoreProvider";
 
 export default function PurchaseOrdersPage() {
   const router = useRouter();
+  const { storeId } = useStore();
   const [statusFilter, setStatusFilter] = useState<PurchaseOrderStatus | undefined>();
   const [supplierFilter, setSupplierFilter] = useState<string | undefined>();
 
   const { purchaseOrders, loading } = usePurchaseOrders({
     status: statusFilter,
     supplierId: supplierFilter,
+    storeId: storeId ?? undefined,
   });
   const { suppliers } = useSuppliers();
 

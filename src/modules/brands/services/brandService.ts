@@ -21,11 +21,26 @@ const toDto = (b: BrandWithCount): Brand => ({
   updatedAt: b.updatedAt.toISOString(),
 });
 
+const buildInclude = (storeId?: string) => ({
+  _count: {
+    select: {
+      products: storeId
+        ? { where: { stockEntries: { some: { storeId } } } }
+        : true,
+    },
+  },
+});
+
 export const brandService = {
-  async list(orgId: string): Promise<Brand[]> {
+  async list(orgId: string, storeId?: string): Promise<Brand[]> {
     const brands = await prisma.brand.findMany({
-      where: { orgId },
-      include: { _count: { select: { products: true } } },
+      where: {
+        orgId,
+        // When a storeId is given: show store-specific brands for this store
+        // OR org-level brands (storeId = null) shared across all stores
+        ...(storeId ? { OR: [{ storeId }, { storeId: null }] } : {}),
+      },
+      include: buildInclude(storeId),
       orderBy: { name: "asc" },
     });
     return brands.map(toDto);
@@ -34,15 +49,15 @@ export const brandService = {
   async getById(orgId: string, id: string): Promise<Brand | null> {
     const b = await prisma.brand.findFirst({
       where: { id, orgId },
-      include: { _count: { select: { products: true } } },
+      include: buildInclude(),
     });
     return b ? toDto(b) : null;
   },
 
   async create(orgId: string, values: BrandFormValues): Promise<Brand> {
     const b = await prisma.brand.create({
-      data: { orgId, name: values.name, logoUrl: values.logoUrl ?? null, isActive: values.isActive },
-      include: { _count: { select: { products: true } } },
+      data: { orgId, storeId: values.storeId ?? null, name: values.name, logoUrl: values.logoUrl ?? null, isActive: values.isActive },
+      include: buildInclude(),
     });
     return toDto(b);
   },
@@ -57,7 +72,7 @@ export const brandService = {
         ...(values.logoUrl !== undefined && { logoUrl: values.logoUrl ?? null }),
         ...(values.isActive !== undefined && { isActive: values.isActive }),
       },
-      include: { _count: { select: { products: true } } },
+      include: buildInclude(),
     });
     return toDto(b);
   },

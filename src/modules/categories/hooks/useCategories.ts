@@ -3,14 +3,15 @@
 import { useState, useEffect, useCallback } from "react";
 import type { Category } from "../types";
 
-export function useCategories() {
+export function useCategories(storeId?: string) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchCategories = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/categories");
+      const qs = storeId ? `?storeId=${encodeURIComponent(storeId)}` : "";
+      const res = await fetch(`/api/categories${qs}`);
       if (res.ok) {
         const data = await res.json();
         setCategories(data);
@@ -22,7 +23,7 @@ export function useCategories() {
     finally {
       setLoading(false);
     }
-  }, []);
+  }, [storeId]);
 
   useEffect(() => {
     fetchCategories();

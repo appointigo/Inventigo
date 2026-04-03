@@ -15,12 +15,20 @@ export default function StoreSelector() {
   const fetchStores = useCallback(async () => {
     try {
       const res = await fetch("/api/stores");
-      if (res.ok) setStores(await res.json());
+      if (res.ok) {
+        const data: StoreRecord[] = await res.json();
+        setStores(data);
+        // Auto-select first active store if none is selected yet
+        if (!storeId) {
+          const first = data.find((s) => s.isActive);
+          if (first) setStore(first.id, first.name);
+        }
+      }
     } 
     catch (error) {
       console.error("Failed to fetch stores:", error);
     }
-  }, []);
+  }, [storeId, setStore]);
 
   useEffect(() => {
     fetchStores();

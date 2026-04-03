@@ -6,20 +6,23 @@ import StockTable from "@/modules/stock/components/StockTable";
 import StockAdjustmentModal from "@/modules/stock/components/StockAdjustmentModal";
 import MovementHistoryTable from "@/modules/stock/components/MovementHistoryTable";
 import { useStockLevels, useStockMovements } from "@/modules/stock/hooks/useStock";
+import { useStore } from "@/providers/StoreProvider";
 import type { StockLevelRow } from "@/modules/stock/types";
 
 export default function StockPage() {
   const { message } = App.useApp();
+  const { storeId } = useStore();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
   const [adjustingRow, setAdjustingRow] = useState<StockLevelRow | null>(null);
 
   const { stockLevels, loading, refresh } = useStockLevels({
+    storeId: storeId ?? undefined,
     search: search || undefined,
     lowStockOnly: statusFilter === "low" || undefined,
     outOfStockOnly: statusFilter === "out" || undefined,
   });
-  const { movements, loading: movementsLoading, refresh: refreshMovements } = useStockMovements();
+  const { movements, loading: movementsLoading, refresh: refreshMovements } = useStockMovements(storeId ?? undefined);
 
   const handleAdjust = useCallback(
     async (values: {

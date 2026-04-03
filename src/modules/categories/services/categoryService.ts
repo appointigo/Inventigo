@@ -28,23 +28,34 @@ const toDto = (c: CategoryWithRelations): Category => ({
   updatedAt: c.updatedAt.toISOString(),
 });
 
-const include = {
+const buildInclude = (storeId?: string) => ({
   sizes: { orderBy: { sortOrder: "asc" as const } },
-  _count: { select: { products: true } },
-};
+  _count: {
+    select: {
+      products: storeId
+        ? { where: { stockEntries: { some: { storeId } } } }
+        : true,
+    },
+  },
+});
 
 export const categoryService = {
-  async list(orgId: string): Promise<Category[]> {
+  async list(orgId: string, storeId?: string): Promise<Category[]> {
     const categories = await prisma.category.findMany({
-      where: { orgId },
-      include,
+      where: {
+        orgId,
+        // When a storeId is given: show store-specific categories for this store
+        // OR org-level categories (storeId = null) that are shared across all stores
+        ...(storeId ? { OR: [{ storeId }, { storeId: null }] } : {}),
+      },
+      include: buildInclude(storeId),
       orderBy: { name: "asc" },
     });
     return categories.map(toDto);
   },
 
   async getById(orgId: string, id: string): Promise<Category | null> {
-    const c = await prisma.category.findFirst({ where: { id, orgId }, include });
+    const c = await prisma.category.findFirst({ where: { id, orgId }, include: buildInclude() });
     return c ? toDto(c) : null;
   },
 
@@ -52,6 +63,7 @@ export const categoryService = {
     const c = await prisma.category.create({
       data: {
         orgId,
+        storeId: values.storeId ?? null,
         name: values.name,
         slug: values.slug || generateSlug(values.name),
         description: values.description ?? null,
@@ -60,7 +72,7 @@ export const categoryService = {
           create: values.sizes.map((label, i) => ({ label, sortOrder: i })),
         },
       },
-      include,
+      include: buildInclude(),
     });
     return toDto(c);
   },
@@ -85,7 +97,7 @@ export const categoryService = {
           sizes: { create: values.sizes.map((label, i) => ({ label, sortOrder: i })) },
         }),
       },
-      include,
+      include: buildInclude(),
     });
     return toDto(c);
   },

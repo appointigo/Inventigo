@@ -167,12 +167,15 @@ const ProductForm = ({
     try {
       const values = await form.validateFields();
       // Guard: at least one size must have quantity > 0
-      const sizes = (values.sizes ?? []) as { sizeId: string; quantity: number }[];
+      // Coerce quantity to number (InputNumber inside Form.List can return a string)
+      const sizes = ((values.sizes ?? []) as { sizeId: string; quantity: number | string }[]).map(
+        (s) => ({ ...s, quantity: Number(s.quantity) || 0 })
+      );
       if (sizes.length === 0) {
         message.error("Please add at least one size with a quantity.");
         return;
       }
-      const hasQty = sizes.some((s) => (s.quantity ?? 0) > 0);
+      const hasQty = sizes.some((s) => s.quantity > 0);
       if (!hasQty) {
         message.error("At least one size must have a quantity greater than 0.");
         return;

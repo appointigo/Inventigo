@@ -13,6 +13,7 @@ export type CategoryFormValues = {
     fields: AttributeField[];
   };
   sizes: string[];
+  storeId?: string;
 };
 
 export type Category = {

@@ -7,13 +7,15 @@ import ProductForm from "@/modules/products/components/ProductForm";
 import { useProduct } from "@/modules/products/hooks/useProducts";
 import { useCategories } from "@/modules/categories/hooks/useCategories";
 import { useBrands } from "@/modules/brands/hooks/useBrands";
+import { useStore } from "@/providers/StoreProvider";
 import type { ProductFormValues } from "@/modules/products/types";
 
 export default function EditProductPage() {
   const { message } = App.useApp();
   const router = useRouter();
   const params = useParams<{ id: string }>();
-  const { product, loading } = useProduct(params.id);
+  const { storeId } = useStore();
+  const { product, loading } = useProduct(params.id, storeId ?? undefined);
   const { categories } = useCategories();
   const { brands } = useBrands();
   const [saving, setSaving] = useState(false);
@@ -24,7 +26,7 @@ export default function EditProductPage() {
       const res = await fetch(`/api/products/${encodeURIComponent(params.id)}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
+        body: JSON.stringify({ ...values, storeId: storeId ?? undefined }),
       });
       if (!res.ok) {
         const data = await res.json();

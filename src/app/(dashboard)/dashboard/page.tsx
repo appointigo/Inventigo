@@ -19,6 +19,7 @@ import LowStockAlertsList from "@/modules/alerts/components/LowStockAlertsList";
 import SalesKPIWidget from "@/modules/billing/components/SalesKPIWidget";
 import { useDashboard } from "@/modules/dashboard/hooks/useDashboard";
 import { useLowStockAlerts } from "@/modules/alerts/hooks/useAlerts";
+import { useStore } from "@/providers/StoreProvider";
 import type { LowStockItem } from "@/modules/alerts/types";
 
 const { Title, Text } = Typography;
@@ -109,7 +110,8 @@ function WelcomeGuide({ userName }: { userName?: string | null }) {
 export default function DashboardPage() {
   const router = useRouter();
   const { data: session } = useSession();
-  const { data, loading } = useDashboard();
+  const { storeId } = useStore();
+  const { data, loading } = useDashboard(storeId ?? undefined);
   const { items: lowStockItems, loading: lowStockLoading } = useLowStockAlerts();
 
   const handleCreatePO = (item: LowStockItem) => {

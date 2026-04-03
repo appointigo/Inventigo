@@ -1,18 +1,31 @@
 import { NextResponse } from "next/server";
 import { poService } from "@/modules/purchase-orders/services/poService";
+import { requireOrgAuth } from "@/lib/auth.middleware";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  let user;
+  try {
+    user = await requireOrgAuth();
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const { id } = await params;
-  const po = await poService.getById(id);
+  const po = await poService.getById(id, user.orgId);
   if (!po) return NextResponse.json({ error: "Purchase order not found" }, { status: 404 });
   return NextResponse.json(po);
 }
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  let user;
+  try {
+    user = await requireOrgAuth();
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const { id } = await params;
   const body = await request.json();
   try {
-    const po = await poService.update(id, body);
+    const po = await poService.update(id, user.orgId, body);
     if (!po) return NextResponse.json({ error: "Purchase order not found" }, { status: 404 });
     return NextResponse.json(po);
   } catch (err) {
@@ -22,9 +35,15 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 }
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  let user;
+  try {
+    user = await requireOrgAuth();
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const { id } = await params;
   try {
-    const po = await poService.cancelPO(id);
+    const po = await poService.cancelPO(id, user.orgId);
     if (!po) return NextResponse.json({ error: "Purchase order not found" }, { status: 404 });
     return NextResponse.json(po);
   } catch (err) {

@@ -6,11 +6,13 @@ import { Typography, Card, App } from "antd";
 import ProductForm from "@/modules/products/components/ProductForm";
 import { useCategories } from "@/modules/categories/hooks/useCategories";
 import { useBrands } from "@/modules/brands/hooks/useBrands";
+import { useStore } from "@/providers/StoreProvider";
 import type { ProductFormValues } from "@/modules/products/types";
 
 export default function NewProductPage() {
   const { message } = App.useApp();
   const router = useRouter();
+  const { storeId } = useStore();
   const { categories } = useCategories();
   const { brands } = useBrands();
   const [saving, setSaving] = useState(false);
@@ -21,7 +23,7 @@ export default function NewProductPage() {
       const res = await fetch("/api/products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
+        body: JSON.stringify({ ...values, storeId: storeId ?? undefined }),
       });
       if (!res.ok) {
         const data = await res.json();

@@ -11,6 +11,7 @@ export function useProducts(filters?: ProductListFilters) {
     setLoading(true);
     try {
       const params = new URLSearchParams();
+      if (filters?.storeId) params.set("storeId", filters.storeId);
       if (filters?.categoryId) params.set("categoryId", filters.categoryId);
       if (filters?.brandId) params.set("brandId", filters.brandId);
       if (filters?.search) params.set("search", filters.search);
@@ -25,7 +26,7 @@ export function useProducts(filters?: ProductListFilters) {
     finally {
       setLoading(false);
     }
-  }, [filters?.categoryId, filters?.brandId, filters?.search, filters?.isActive]);
+  }, [filters?.storeId, filters?.categoryId, filters?.brandId, filters?.search, filters?.isActive]);
 
   useEffect(() => {
     fetchProducts();
@@ -34,7 +35,7 @@ export function useProducts(filters?: ProductListFilters) {
   return { products, loading, refresh: fetchProducts };
 }
 
-export function useProduct(id: string | null) {
+export function useProduct(id: string | null, storeId?: string) {
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -42,7 +43,8 @@ export function useProduct(id: string | null) {
     if (!id) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/products/${encodeURIComponent(id)}`);
+      const qs = storeId ? `?storeId=${encodeURIComponent(storeId)}` : "";
+      const res = await fetch(`/api/products/${encodeURIComponent(id)}${qs}`);
       const data = res.ok ? await res.json() : null;
       setProduct(data);
     } 
@@ -52,7 +54,7 @@ export function useProduct(id: string | null) {
     finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, storeId]);
 
   useEffect(() => {
     fetchProduct();

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import type { StockLevelRow, StockMovementRow } from "../types";
 
 export type StockListFilters = {
+  storeId?: string;
   search?: string;
   lowStockOnly?: boolean;
   outOfStockOnly?: boolean;
@@ -14,9 +15,14 @@ export const useStockLevels = (filters?: StockListFilters) => {
   const [loading, setLoading] = useState(true);
 
   const fetchLevels = useCallback(async () => {
+    if (!filters?.storeId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const params = new URLSearchParams();
+      params.set("storeId", filters.storeId);
       if (filters?.search) params.set("search", filters.search);
       if (filters?.lowStockOnly) params.set("lowStockOnly", "true");
       if (filters?.outOfStockOnly) params.set("outOfStockOnly", "true");
@@ -26,7 +32,7 @@ export const useStockLevels = (filters?: StockListFilters) => {
     } finally {
       setLoading(false);
     }
-  }, [filters?.search, filters?.lowStockOnly, filters?.outOfStockOnly]);
+  }, [filters?.storeId, filters?.search, filters?.lowStockOnly, filters?.outOfStockOnly]);
 
   useEffect(() => {
     fetchLevels();
@@ -35,19 +41,23 @@ export const useStockLevels = (filters?: StockListFilters) => {
   return { stockLevels, loading, refresh: fetchLevels };
 }
 
-export const useStockMovements = () => {
+export const useStockMovements = (storeId?: string) => {
   const [movements, setMovements] = useState<StockMovementRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchMovements = useCallback(async () => {
+    if (!storeId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      const res = await fetch("/api/stock/movements");
+      const res = await fetch(`/api/stock/movements?storeId=${encodeURIComponent(storeId)}`);
       if (res.ok) setMovements(await res.json());
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [storeId]);
 
   useEffect(() => {
     fetchMovements();

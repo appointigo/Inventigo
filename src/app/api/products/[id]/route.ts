@@ -13,7 +13,8 @@ export const GET = async (_request: Request, { params }: { params: Promise<{ id:
 
   try {
     const { id } = await params;
-    const product = await productService.getById(user.orgId, id);
+    const storeId = new URL(_request.url).searchParams.get("storeId") ?? undefined;
+    const product = await productService.getById(user.orgId, id, storeId);
     if (!product) return NextResponse.json({ error: "Product not found" }, { status: 404 });
     return NextResponse.json(product);
   } 

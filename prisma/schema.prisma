@@ -108,6 +108,8 @@ model Store {
   purchaseOrders PurchaseOrder[]
   sales          Sale[]
   alertConfigs   AlertConfig[]
+  categories     Category[]
+  brands         Brand[]
 
   @@unique([code, orgId])
   @@index([orgId])
@@ -166,6 +168,7 @@ model Invitation {
 model Category {
   id              String   @id @default(uuid())
   orgId           String
+  storeId         String?
   name            String
   slug            String
   description     String?
@@ -174,6 +177,7 @@ model Category {
   updatedAt       DateTime @updatedAt
 
   org          Organization  @relation(fields: [orgId], references: [id])
+  store        Store?        @relation(fields: [storeId], references: [id])
   products     Product[]
   sizes        Size[]
   alertConfigs AlertConfig[]
@@ -181,6 +185,7 @@ model Category {
   @@unique([name, orgId])
   @@unique([slug, orgId])
   @@index([orgId])
+  @@index([storeId])
   @@map("categories")
 }
 
@@ -189,6 +194,7 @@ model Category {
 model Brand {
   id        String   @id @default(uuid())
   orgId     String
+  storeId   String?
   name      String
   logoUrl   String?
   isActive  Boolean  @default(true)
@@ -196,10 +202,12 @@ model Brand {
   updatedAt DateTime @updatedAt
 
   org      Organization @relation(fields: [orgId], references: [id])
+  store    Store?       @relation(fields: [storeId], references: [id])
   products Product[]
 
   @@unique([name, orgId])
   @@index([orgId])
+  @@index([storeId])
   @@map("brands")
 }
 

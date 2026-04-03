@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { categoryService } from "@/modules/categories/services/categoryService";
 import { requireOrgAuth } from "@/lib/auth.middleware";
 
-export const GET = async () => {
+export const GET = async (request: Request) => {
   let user;
   try { 
     user = await requireOrgAuth(); 
@@ -12,9 +12,11 @@ export const GET = async () => {
   }
 
   try {
-    const categories = await categoryService.list(user.orgId);
+    const storeId = new URL(request.url).searchParams.get("storeId") ?? undefined;
+    const categories = await categoryService.list(user.orgId, storeId);
     return NextResponse.json(categories);
-  } catch {
+  } catch (err) {
+    console.error("[categories GET]", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

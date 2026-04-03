@@ -5,11 +5,13 @@ import { Typography, Modal, App } from "antd";
 import BrandTable from "@/modules/brands/components/BrandTable";
 import BrandForm from "@/modules/brands/components/BrandForm";
 import { useBrands } from "@/modules/brands/hooks/useBrands";
+import { useStore } from "@/providers/StoreProvider";
 import type { Brand, BrandFormValues } from "@/modules/brands/types";
 
 export default function BrandsPage() {
   const { message } = App.useApp();
-  const { brands, loading, refresh } = useBrands();
+  const { storeId } = useStore();
+  const { brands, loading, refresh } = useBrands(storeId ?? undefined);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Brand | null>(null);
   const [saving, setSaving] = useState(false);
@@ -30,10 +32,12 @@ export default function BrandsPage() {
       const url = editing
         ? `/api/brands/${encodeURIComponent(editing.id)}`
         : "/api/brands";
+      // When creating a new brand, attach the currently selected store
+      const payload = editing ? values : { ...values, storeId: storeId ?? undefined };
       const res = await fetch(url, {
         method: editing ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const data = await res.json();

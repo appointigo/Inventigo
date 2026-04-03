@@ -15,9 +15,11 @@ export type ProductFormValues = {
   imageUrl?: string;
   isActive: boolean;
   sizes: SizeQuantity[]; // per-size quantities
+  storeId?: string; // which store to allocate this stock to
 };
 
 export type ProductListFilters = {
+  storeId?: string;
   categoryId?: string;
   brandId?: string;
   search?: string;

@@ -14,6 +14,7 @@ export const GET = async (request: Request) =>  {
   try {
     const { searchParams } = new URL(request.url);
     const filters = {
+      storeId: searchParams.get("storeId") || undefined,
       categoryId: searchParams.get("categoryId") || undefined,
       brandId: searchParams.get("brandId") || undefined,
       search: searchParams.get("search") || undefined,
@@ -22,7 +23,8 @@ export const GET = async (request: Request) =>  {
     const products = await productService.list(user.orgId, filters);
     return NextResponse.json(products);
   } 
-  catch {
+  catch (err) {
+    console.error("[products GET]", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
