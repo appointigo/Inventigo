@@ -1,6 +1,6 @@
 "use client";
 
-import { Descriptions, Table, Tag, Badge, Card, Space, Button, Typography, Flex } from "antd";
+import { Descriptions, Table, Tag, Badge, Card, Space, Button, Typography, Flex, Row, Col } from "antd";
 import { EditOutlined, ArrowLeftOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { Product, ProductStockSize } from "../types";
@@ -14,6 +14,11 @@ interface ProductDetailProps {
 }
 
 export default function ProductDetail({ product, onEdit, onBack }: ProductDetailProps) {
+  const variants = product.stock.map((s) => ({
+    variantSku: s.variantSku ?? `${product.sku}-${s.sizeLabel.trim().toUpperCase().replace(/\s+/g, "")}`,
+    sizeLabel: s.sizeLabel,
+  }));
+
   const stockColumns: ColumnsType<ProductStockSize> = [
     { title: "Size", dataIndex: "sizeLabel", width: 80 },
     {
@@ -21,6 +26,20 @@ export default function ProductDetail({ product, onEdit, onBack }: ProductDetail
       dataIndex: "variantSku",
       width: 140,
       render: (v: string | null) => v ? <Tag>{v}</Tag> : <Typography.Text type="secondary">—</Typography.Text>,
+    },
+    {
+      title: "Barcode",
+      dataIndex: "variantSku",
+      key: "barcode",
+      width: 180,
+      render: (sku: string | null, record) => {
+        const code = sku ?? `${product.sku}-${record.sizeLabel.trim().toUpperCase().replace(/\s+/g, "")}`;
+        return (
+          <div style={{ lineHeight: 0 }}>
+            <BarcodeGenerator value={code} height={32} width={1.0} fontSize={9} />
+          </div>
+        );
+      },
     },
     {
       title: "Quantity",
@@ -58,18 +77,32 @@ export default function ProductDetail({ product, onEdit, onBack }: ProductDetail
           Back to Products
         </Button>
         <Space>
-          <LabelPrinter sku={product.sku} productName={product.name} price={product.basePrice} />
+          <LabelPrinter
+            productName={product.name}
+            price={product.basePrice}
+            variants={variants}
+          />
           <Button icon={<EditOutlined />} onClick={onEdit}>
             Edit
           </Button>
         </Space>
       </Flex>
 
-      {/* Barcode Section */}
-      <Card size="small">
-        <div style={{ textAlign: "center" }}>
-          <BarcodeGenerator value={product.sku} height={50} />
-        </div>
+      {/* Barcodes by Size */}
+      <Card size="small" title="Barcodes by Size">
+        <Row gutter={[16, 16]}>
+          {product.stock.map((s) => {
+            const code = s.variantSku ?? `${product.sku}-${s.sizeLabel.trim().toUpperCase().replace(/\s+/g, "")}`;
+            return (
+              <Col key={s.sizeId} xs={24} sm={12} md={8} style={{ textAlign: "center" }}>
+                <Tag color="blue" style={{ marginBottom: 6, fontSize: 13 }}>{s.sizeLabel}</Tag>
+                <div style={{ display: "inline-block" }}>
+                  <BarcodeGenerator value={code} height={42} width={1.1} fontSize={10} />
+                </div>
+              </Col>
+            );
+          })}
+        </Row>
       </Card>
 
       <Card>

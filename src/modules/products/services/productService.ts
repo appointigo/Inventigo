@@ -3,6 +3,14 @@ import { prisma } from "@/lib/db";
 import type { Product, ProductFormValues, ProductListFilters } from "../types";
 import { imageService } from "@/shared/services/imageService";
 
+/** Normalizes a size label to the suffix used in variantSku, e.g. "UK 6" → "UK6" */
+const normalizeSizeLabel = (label: string) =>
+  label.trim().toUpperCase().replace(/\s+/g, "");
+
+/** Derives a variant SKU from the product SKU and size label */
+const buildVariantSku = (productSku: string, sizeLabel: string) =>
+  `${productSku}-${normalizeSizeLabel(sizeLabel)}`;
+
 const buildInclude = (storeId?: string) => ({
   category: { select: { name: true } },
   brand: { select: { name: true } },
@@ -17,7 +25,8 @@ const toDto = (p: any): Product => {
   const stock = (p.stockEntries ?? []).map((e: any) => ({
     sizeId: e.sizeId,
     sizeLabel: e.size.label,
-    variantSku: null,
+    // Use stored variantSku if present; fall back to auto-generated format for legacy entries
+    variantSku: e.variantSku ?? buildVariantSku(p.sku, e.size.label),
     quantity: e.quantity,
     reorderLevel: e.reorderLevel,
   }));
@@ -78,7 +87,8 @@ export const productService = {
   },
 
   async getByBarcode(orgId: string, barcode: string): Promise<Product | null> {
-    const p = await prisma.product.findFirst({
+    // Tier 1: match product SKU or external barcode
+    const bySkuOrBarcode = await prisma.product.findFirst({
       where: {
         orgId,
         OR: [
@@ -88,7 +98,25 @@ export const productService = {
       },
       include: buildInclude(),
     });
-    return p ? toDto(p) : null;
+    if (bySkuOrBarcode) return toDto(bySkuOrBarcode);
+
+    // Tier 2: match a size-level variant SKU (e.g. NK-TS-862-S)
+    const stockEntry = await prisma.stockEntry.findFirst({
+      where: {
+        variantSku: { equals: barcode, mode: "insensitive" },
+        product: { orgId },
+      },
+      select: { productId: true },
+    });
+    if (stockEntry) {
+      const p = await prisma.product.findUnique({
+        where: { id: stockEntry.productId },
+        include: buildInclude(),
+      });
+      return p ? toDto(p) : null;
+    }
+
+    return null;
   },
 
   async create(orgId: string, values: ProductFormValues): Promise<Product> {
@@ -122,6 +150,12 @@ export const productService = {
 
       // Create a StockEntry for each size that has quantity > 0
       if (storeId && values.sizes?.length) {
+        const sizeIds = values.sizes.filter((s) => s.quantity > 0).map((s) => s.sizeId);
+        const sizes = await tx.size.findMany({
+          where: { id: { in: sizeIds } },
+          select: { id: true, label: true },
+        });
+        const sizeLabelMap = new Map(sizes.map((s) => [s.id, s.label]));
         const stockData = values.sizes
           .filter((s) => s.quantity > 0)
           .map((s) => ({
@@ -129,6 +163,7 @@ export const productService = {
             sizeId: s.sizeId,
             storeId,
             quantity: s.quantity,
+            variantSku: buildVariantSku(product.sku, sizeLabelMap.get(s.sizeId) ?? s.sizeId),
           }));
         if (stockData.length) {
           await tx.stockEntry.createMany({ data: stockData });
@@ -194,11 +229,19 @@ export const productService = {
             where: { productId: id, storeId, sizeId: { notIn: [...incomingSizeIds] } },
           });
           // Upsert each incoming size
+          const sizeIds = values.sizes.map((s) => s.sizeId);
+          const sizes = await tx.size.findMany({
+            where: { id: { in: sizeIds } },
+            select: { id: true, label: true },
+          });
+          const sizeLabelMap = new Map(sizes.map((s) => [s.id, s.label]));
+          const productSku = (await tx.product.findUnique({ where: { id }, select: { sku: true } }))?.sku ?? id;
           for (const sz of values.sizes) {
+            const vSku = buildVariantSku(productSku, sizeLabelMap.get(sz.sizeId) ?? sz.sizeId);
             await tx.stockEntry.upsert({
               where: { productId_sizeId_storeId: { productId: id, sizeId: sz.sizeId, storeId } },
-              update: { quantity: sz.quantity },
-              create: { productId: id, sizeId: sz.sizeId, storeId, quantity: sz.quantity },
+              update: { quantity: sz.quantity, variantSku: vSku },
+              create: { productId: id, sizeId: sz.sizeId, storeId, quantity: sz.quantity, variantSku: vSku },
             });
           }
         }
@@ -213,7 +256,16 @@ export const productService = {
   async delete(orgId: string, id: string): Promise<boolean> {
     const existing = await prisma.product.findFirst({ where: { id, orgId } });
     if (!existing) return false;
-    await prisma.product.delete({ where: { id } });
+
+    await prisma.$transaction(async (tx) => {
+      // Delete in FK dependency order (children first, product last)
+      await tx.saleItem.deleteMany({ where: { productId: id } });
+      await tx.purchaseOrderItem.deleteMany({ where: { productId: id } });
+      await tx.stockMovement.deleteMany({ where: { productId: id } });
+      await tx.stockEntry.deleteMany({ where: { productId: id } });
+      await tx.product.delete({ where: { id } });
+    });
+
     return true;
   },
 };

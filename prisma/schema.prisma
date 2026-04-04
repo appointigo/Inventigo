@@ -272,6 +272,7 @@ model StockEntry {
   productId       String
   sizeId          String
   storeId         String
+  variantSku      String?   // auto-generated: {productSku}-{SIZELABEL}, e.g. NK-TS-862-S
   quantity        Int       @default(0)
   reorderLevel    Int       @default(5)
   reorderQuantity Int       @default(10)
