@@ -20,12 +20,13 @@ export const GET = async (request: Request) =>  {
       search: searchParams.get("search") || undefined,
       isActive: searchParams.has("isActive") ? searchParams.get("isActive") === "true" : undefined,
     };
+    console.log("[products GET] filters:", filters);
     const products = await productService.list(user.orgId, filters);
     return NextResponse.json(products);
   } 
   catch (err) {
     console.error("[products GET]", err);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error found" }, { status: 500 });
   }
 }
 

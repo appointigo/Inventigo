@@ -1,6 +1,7 @@
 export type SizeQuantity = {
   sizeId: string;
   quantity: number;
+  reorderLevel?: number; // per-size reorder level, defaults to 5 in DB if omitted
 };
 
 export type ProductFormValues = {

@@ -163,6 +163,7 @@ export const productService = {
             sizeId: s.sizeId,
             storeId,
             quantity: s.quantity,
+            reorderLevel: s.reorderLevel ?? 5,
             variantSku: buildVariantSku(product.sku, sizeLabelMap.get(s.sizeId) ?? s.sizeId),
           }));
         if (stockData.length) {
@@ -240,8 +241,12 @@ export const productService = {
             const vSku = buildVariantSku(productSku, sizeLabelMap.get(sz.sizeId) ?? sz.sizeId);
             await tx.stockEntry.upsert({
               where: { productId_sizeId_storeId: { productId: id, sizeId: sz.sizeId, storeId } },
-              update: { quantity: sz.quantity, variantSku: vSku },
-              create: { productId: id, sizeId: sz.sizeId, storeId, quantity: sz.quantity, variantSku: vSku },
+              update: {
+                quantity: sz.quantity,
+                variantSku: vSku,
+                ...(sz.reorderLevel !== undefined && { reorderLevel: sz.reorderLevel }),
+              },
+              create: { productId: id, sizeId: sz.sizeId, storeId, quantity: sz.quantity, reorderLevel: sz.reorderLevel ?? 5, variantSku: vSku },
             });
           }
         }

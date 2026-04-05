@@ -81,9 +81,31 @@ export const categoryService = {
     const existing = await prisma.category.findFirst({ where: { id, orgId } });
     if (!existing) return null;
 
-    // Replace sizes by deleting existing and recreating
     if (values.sizes !== undefined) {
-      await prisma.size.deleteMany({ where: { categoryId: id } });
+      const currentSizes = await prisma.size.findMany({ where: { categoryId: id } });
+      const currentByLabel = new Map(currentSizes.map((s) => [s.label, s]));
+      const newLabelSet = new Set(values.sizes);
+
+      // Remove sizes that are no longer in the list, but only when they have no FK references
+      for (const size of currentSizes) {
+        if (!newLabelSet.has(size.label)) {
+          const refs = await prisma.stockEntry.count({ where: { sizeId: size.id } });
+          if (refs === 0) {
+            await prisma.size.delete({ where: { id: size.id } });
+          }
+        }
+      }
+
+      // Upsert sizes from the new list (create if new, update sortOrder if existing)
+      for (let i = 0; i < values.sizes.length; i++) {
+        const label = values.sizes[i];
+        const match = currentByLabel.get(label);
+        if (match) {
+          await prisma.size.update({ where: { id: match.id }, data: { sortOrder: i } });
+        } else {
+          await prisma.size.create({ data: { categoryId: id, label, sortOrder: i } });
+        }
+      }
     }
 
     const c = await prisma.category.update({
@@ -91,11 +113,8 @@ export const categoryService = {
       data: {
         ...(values.name !== undefined && { name: values.name }),
         ...(values.slug !== undefined && { slug: values.slug }),
-        ...(values.description !== undefined && { description: values.description ?? null }),
+        ...(values.description !== undefined && { description: values.description || null }),
         ...(values.attributeSchema !== undefined && { attributeSchema: values.attributeSchema }),
-        ...(values.sizes !== undefined && {
-          sizes: { create: values.sizes.map((label, i) => ({ label, sortOrder: i })) },
-        }),
       },
       include: buildInclude(),
     });
