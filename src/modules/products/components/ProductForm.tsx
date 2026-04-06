@@ -3,10 +3,10 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Form, Input, InputNumber, Select, Switch, Button, Steps, Space, Divider,
-  Card, Empty, Tooltip, Upload, Image, message, Flex, Row, Col, Modal, Alert, Typography,
+  Card, Empty, Tooltip, Upload, Image, message, Flex, Row, Col, Alert, Typography,
 } from "antd";
 import {
-  ReloadOutlined, UploadOutlined, PlusOutlined, BarcodeOutlined, DeleteOutlined,
+  ReloadOutlined, UploadOutlined, BarcodeOutlined, DeleteOutlined,
 } from "@ant-design/icons";
 import { upload } from "@vercel/blob/client";
 import type { UploadRequestOption } from "@rc-component/upload/lib/interface";
@@ -43,130 +43,6 @@ const generateEAN13 = (): string => {
   return digits.join("");
 };
 
-// ─── Sizes for quick-create modal ────────────────────────────────────────────
-
-const COMMON_SIZES = [
-  "XS", "S", "M", "L", "XL", "XXL", "Free Size",
-  "26", "28", "30", "32", "34", "36", "38", "40",
-  "UK 6", "UK 7", "UK 8", "UK 9", "UK 10",
-];
-
-// ─── Quick-create modals ──────────────────────────────────────────────────────
-
-function CreateCategoryModal({
-  open, onCancel, onCreated,
-}: { open: boolean; onCancel: () => void; onCreated: (c: Category) => void }) {
-  const [form] = Form.useForm();
-  const [saving, setSaving] = useState(false);
-
-  const handleSave = async () => {
-    try {
-      const values = await form.validateFields();
-      setSaving(true);
-      const res = await fetch("/api/categories", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: values.name,
-          sizes: (values.sizes as string[]) ?? [],
-          attributeSchema: { fields: [] },
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json() as { error?: string };
-        form.setFields([{ name: "name", errors: [data.error ?? "Failed to create category"] }]);
-        return;
-      }
-      onCreated(await res.json() as Category);
-      form.resetFields();
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Modal
-      title="Create Category"
-      open={open}
-      footer={null}
-      width={480}
-      destroyOnHidden
-      onCancel={() => { form.resetFields(); onCancel(); }}
-    >
-      <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
-        <Form.Item name="name" label="Category Name" rules={[{ required: true, message: "Name is required" }]}>
-          <Input placeholder="e.g. T-Shirts" autoFocus />
-        </Form.Item>
-        <Form.Item
-          name="sizes"
-          label="Sizes"
-          extra="Select common sizes or type custom ones and press Enter"
-        >
-          <Select
-            mode="tags"
-            placeholder="S, M, L, XL…"
-            options={COMMON_SIZES.map((s) => ({ label: s, value: s }))}
-            tokenSeparators={[","]}
-          />
-        </Form.Item>
-        <Flex justify="flex-end" gap={8} style={{ marginTop: 8 }}>
-          <Button onClick={() => { form.resetFields(); onCancel(); }}>Cancel</Button>
-          <Button type="primary" loading={saving} onClick={handleSave}>Create Category</Button>
-        </Flex>
-      </Form>
-    </Modal>
-  );
-}
-
-function CreateBrandModal({
-  open, onCancel, onCreated,
-}: { open: boolean; onCancel: () => void; onCreated: (b: Brand) => void }) {
-  const [form] = Form.useForm();
-  const [saving, setSaving] = useState(false);
-
-  const handleSave = async () => {
-    try {
-      const values = await form.validateFields();
-      setSaving(true);
-      const res = await fetch("/api/brands", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: values.name, isActive: true }),
-      });
-      if (!res.ok) {
-        const data = await res.json() as { error?: string };
-        form.setFields([{ name: "name", errors: [data.error ?? "Failed to create brand"] }]);
-        return;
-      }
-      onCreated(await res.json() as Brand);
-      form.resetFields();
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Modal
-      title="Create Brand"
-      open={open}
-      footer={null}
-      width={400}
-      destroyOnHidden
-      onCancel={() => { form.resetFields(); onCancel(); }}
-    >
-      <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
-        <Form.Item name="name" label="Brand Name" rules={[{ required: true, message: "Name is required" }]}>
-          <Input placeholder="e.g. Nike" autoFocus />
-        </Form.Item>
-        <Flex justify="flex-end" gap={8} style={{ marginTop: 8 }}>
-          <Button onClick={() => { form.resetFields(); onCancel(); }}>Cancel</Button>
-          <Button type="primary" loading={saving} onClick={handleSave}>Create Brand</Button>
-        </Flex>
-      </Form>
-    </Modal>
-  );
-}
-
 // ─── ProductForm ──────────────────────────────────────────────────────────────
 
 interface ProductFormProps {
@@ -180,8 +56,8 @@ interface ProductFormProps {
 
 const ProductForm = ({
   initialValues,
-  categories: propCategories,
-  brands: propBrands,
+  categories,
+  brands,
   onSubmit,
   onCancel,
   loading,
@@ -191,21 +67,7 @@ const ProductForm = ({
   const [skuTouched, setSkuTouched] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
   const [barcodeChecking, setBarcodeChecking] = useState(false);
-  const [showCatModal, setShowCatModal] = useState(false);
-  const [showBrandModal, setShowBrandModal] = useState(false);
-  const [extraCategories, setExtraCategories] = useState<Category[]>([]);
-  const [extraBrands, setExtraBrands] = useState<Brand[]>([]);
   const isEdit = !!initialValues;
-
-  // Merge prop lists with inline-created items
-  const categories = useMemo(
-    () => [...propCategories, ...extraCategories],
-    [propCategories, extraCategories]
-  );
-  const brands = useMemo(
-    () => [...propBrands, ...extraBrands],
-    [propBrands, extraBrands]
-  );
 
   const { suppliers } = useSuppliers();
 
@@ -467,20 +329,6 @@ const ProductForm = ({
                 showSearch
                 optionFilterProp="label"
                 options={brands.filter((b) => b.isActive).map((b) => ({ label: b.name, value: b.id }))}
-                dropdownRender={(menu) => (
-                  <>
-                    {menu}
-                    <Divider style={{ margin: "8px 0" }} />
-                    <Button
-                      type="text"
-                      icon={<PlusOutlined />}
-                      onClick={() => setShowBrandModal(true)}
-                      style={{ width: "100%", textAlign: "left" }}
-                    >
-                      Create New Brand
-                    </Button>
-                  </>
-                )}
               />
             </Form.Item>
 
@@ -495,20 +343,6 @@ const ProductForm = ({
                 showSearch
                 optionFilterProp="label"
                 options={categories.map((c) => ({ label: c.name, value: c.id }))}
-                dropdownRender={(menu) => (
-                  <>
-                    {menu}
-                    <Divider style={{ margin: "8px 0" }} />
-                    <Button
-                      type="text"
-                      icon={<PlusOutlined />}
-                      onClick={() => setShowCatModal(true)}
-                      style={{ width: "100%", textAlign: "left" }}
-                    >
-                      Create New Category
-                    </Button>
-                  </>
-                )}
               />
             </Form.Item>
           </Space>
@@ -555,22 +389,22 @@ const ProductForm = ({
             rules={[{ validator: validateBarcode }]}
             extra={barcodeChecking ? "Checking for duplicate barcodes…" : "Optional · 12 digits (UPC-A) or 13 digits (EAN-13)"}
           >
-            <Input
-              placeholder="Scan barcode or enter 12–13 digits manually"
-              onPressEnter={(e) => e.preventDefault()}
-              addonAfter={
-                <Tooltip title="Generate an EAN-13 barcode if the product has none" destroyOnHidden>
-                  <BarcodeOutlined
-                    style={{ cursor: "pointer", color: "#1677ff" }}
-                    onClick={() => {
-                      const code = generateEAN13();
-                      form.setFieldValue("externalBarcode", code);
-                      form.validateFields(["externalBarcode"]);
-                    }}
-                  />
-                </Tooltip>
-              }
-            />
+            <Space.Compact style={{ width: "100%" }}>
+              <Input
+                placeholder="Scan barcode or enter 12–13 digits manually"
+                onPressEnter={(e) => e.preventDefault()}
+              />
+              <Tooltip title="Generate an EAN-13 barcode if the product has none" destroyOnHidden>
+                <Button
+                  icon={<BarcodeOutlined />}
+                  onClick={() => {
+                    const code = generateEAN13();
+                    form.setFieldValue("externalBarcode", code);
+                    form.validateFields(["externalBarcode"]);
+                  }}
+                />
+              </Tooltip>
+            </Space.Compact>
           </Form.Item>
 
           {/* 5. Pricing */}
@@ -943,25 +777,6 @@ const ProductForm = ({
         </Space>
       </Flex>
 
-      {/* Inline quick-create modals */}
-      <CreateCategoryModal
-        open={showCatModal}
-        onCancel={() => setShowCatModal(false)}
-        onCreated={(cat) => {
-          setExtraCategories((prev) => [...prev, cat]);
-          form.setFieldValue("categoryId", cat.id);
-          setShowCatModal(false);
-        }}
-      />
-      <CreateBrandModal
-        open={showBrandModal}
-        onCancel={() => setShowBrandModal(false)}
-        onCreated={(brand) => {
-          setExtraBrands((prev) => [...prev, brand]);
-          form.setFieldValue("brandId", brand.id);
-          setShowBrandModal(false);
-        }}
-      />
     </>
   );
 };

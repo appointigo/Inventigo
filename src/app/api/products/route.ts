@@ -46,7 +46,8 @@ export const POST = async (request: Request) => {
     }
     const product = await productService.create(user.orgId, body);
     return NextResponse.json(product, { status: 201 });
-  } catch {
+  } catch (err) {
+    console.error("[products POST]", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

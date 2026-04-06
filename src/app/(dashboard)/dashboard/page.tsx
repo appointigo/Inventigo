@@ -25,7 +25,7 @@ import type { LowStockItem } from "@/modules/alerts/types";
 const { Title, Text } = Typography;
 
 // ─── Welcome Guide (shown when inventory is empty) ───────────────────────────
-function WelcomeGuide({ userName }: { userName?: string | null }) {
+const WelcomeGuide = ({ userName }: { userName?: string | null }) => {
   const router = useRouter();
   const firstName = userName?.split(" ")[0] ?? "there";
 
@@ -107,7 +107,7 @@ function WelcomeGuide({ userName }: { userName?: string | null }) {
   );
 }
 
-export default function DashboardPage() {
+const DashboardPage = () => {
   const router = useRouter();
   const { data: session } = useSession();
   const { storeId } = useStore();
@@ -176,3 +176,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+export default DashboardPage;
