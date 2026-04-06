@@ -20,9 +20,11 @@ export const stockService = {
       let quantityChange: number;
       if (type === "IN" || type === "RETURN") {
         quantityChange = Math.abs(quantity);
-      } else if (type === "OUT" || type === "SALE") {
+      } 
+      else if (type === "OUT" || type === "SALE") {
         quantityChange = -Math.abs(quantity);
-      } else {
+      } 
+      else {
         // ADJUSTMENT: quantity can be positive (add) or negative (remove)
         quantityChange = quantity;
       }
@@ -85,18 +87,23 @@ export const stockService = {
     if (categoryId) where.product = { ...((where.product as object) || {}), categoryId };
     if (brandId) where.product = { ...((where.product as object) || {}), brandId };
     if (search) {
-      where.product = {
-        ...((where.product as object) || {}),
-        OR: [
-          { name: { contains: search, mode: "insensitive" } },
-          { sku: { contains: search, mode: "insensitive" } },
-        ],
-      };
+      where.OR = [
+        { variantSku: { contains: search, mode: "insensitive" } },
+        {
+          product: {
+            OR: [
+              { name: { contains: search, mode: "insensitive" } },
+              { sku: { contains: search, mode: "insensitive" } },
+            ],
+          },
+        },
+      ];
     }
 
     if (outOfStockOnly) {
       where.quantity = 0;
-    } else if (lowStockOnly) {
+    } 
+    else if (lowStockOnly) {
       // Prisma doesn't support field-to-field comparison in where directly
       // We'll filter after query or use raw SQL
       // For now, fetch all and filter

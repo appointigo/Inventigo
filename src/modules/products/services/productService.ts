@@ -30,6 +30,7 @@ const toDto = (p: any): Product => {
     quantity: e.quantity,
     reorderLevel: e.reorderLevel,
   }));
+
   return {
     id: p.id,
     name: p.name,
@@ -61,6 +62,7 @@ export const productService = {
       where.OR = [
         { name: { contains: filters.search, mode: "insensitive" } },
         { sku: { contains: filters.search, mode: "insensitive" } },
+        { stockEntries: { some: { variantSku: { contains: filters.search, mode: "insensitive" } } } },
       ];
     }
     // When a storeId is given, only return products that have stock in that store
@@ -69,6 +71,7 @@ export const productService = {
     }
     const include = buildInclude(filters?.storeId);
     const products = await prisma.product.findMany({ where, include, orderBy: { name: "asc" } });
+
     return products.map(toDto);
   },
 
@@ -83,6 +86,7 @@ export const productService = {
       where: { orgId, sku: { equals: sku, mode: "insensitive" } },
       include: buildInclude(),
     });
+
     return p ? toDto(p) : null;
   },
 
@@ -108,11 +112,13 @@ export const productService = {
       },
       select: { productId: true },
     });
+
     if (stockEntry) {
       const p = await prisma.product.findUnique({
         where: { id: stockEntry.productId },
         include: buildInclude(),
       });
+
       return p ? toDto(p) : null;
     }
 
@@ -122,6 +128,7 @@ export const productService = {
   async create(orgId: string, values: ProductFormValues): Promise<Product> {
     // Use the storeId sent by the client (selected store) or fall back to the org's first store
     let storeId = values.storeId ?? null;
+
     if (!storeId) {
       const org = await prisma.organization.findUnique({
         where: { id: orgId },
@@ -155,6 +162,7 @@ export const productService = {
           where: { id: { in: sizeIds } },
           select: { id: true, label: true },
         });
+
         const sizeLabelMap = new Map(sizes.map((s) => [s.id, s.label]));
         const stockData = values.sizes
           .filter((s) => s.quantity > 0)
@@ -166,6 +174,7 @@ export const productService = {
             reorderLevel: s.reorderLevel ?? 5,
             variantSku: buildVariantSku(product.sku, sizeLabelMap.get(s.sizeId) ?? s.sizeId),
           }));
+
         if (stockData.length) {
           await tx.stockEntry.createMany({ data: stockData });
         }
@@ -214,6 +223,7 @@ export const productService = {
         // Get the store from existing stock entries, the passed storeId, or the org's first store
         const firstEntry = await tx.stockEntry.findFirst({ where: { productId: id } });
         let storeId = values.storeId ?? firstEntry?.storeId ?? null;
+
         if (!storeId) {
           const org = await prisma.organization.findUnique({
             where: { id: orgId },
@@ -229,14 +239,17 @@ export const productService = {
           await tx.stockEntry.deleteMany({
             where: { productId: id, storeId, sizeId: { notIn: [...incomingSizeIds] } },
           });
+
           // Upsert each incoming size
           const sizeIds = values.sizes.map((s) => s.sizeId);
           const sizes = await tx.size.findMany({
             where: { id: { in: sizeIds } },
             select: { id: true, label: true },
           });
+
           const sizeLabelMap = new Map(sizes.map((s) => [s.id, s.label]));
           const productSku = (await tx.product.findUnique({ where: { id }, select: { sku: true } }))?.sku ?? id;
+          
           for (const sz of values.sizes) {
             const vSku = buildVariantSku(productSku, sizeLabelMap.get(sz.sizeId) ?? sz.sizeId);
             await tx.stockEntry.upsert({

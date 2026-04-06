@@ -5,9 +5,7 @@ import {
   Form, Input, InputNumber, Select, Switch, Button, Steps, Space, Divider,
   Card, Empty, Tooltip, Upload, Image, message, Flex, Row, Col, Alert, Typography,
 } from "antd";
-import {
-  ReloadOutlined, UploadOutlined, BarcodeOutlined, DeleteOutlined,
-} from "@ant-design/icons";
+import { ReloadOutlined, UploadOutlined, BarcodeOutlined, DeleteOutlined } from "@ant-design/icons";
 import { upload } from "@vercel/blob/client";
 import type { UploadRequestOption } from "@rc-component/upload/lib/interface";
 import type { Product, ProductFormValues } from "../types";
@@ -22,10 +20,13 @@ const { Text } = Typography;
 const abbrevName = (name: string): string => {
   const words = name.split(/[\s\-_]+/).filter(Boolean);
   if (words.length >= 2) return words.slice(0, 2).map((w) => w[0].toUpperCase()).join("");
+
   const upper = (words[0] ?? "XX").toUpperCase();
   const consonants = upper.replace(/[AEIOU]/g, "");
+
   if (consonants.length >= 2) return consonants.slice(0, 2);
   if (consonants.length === 1) return consonants + (upper[1] ?? upper[0]);
+  
   return upper.slice(0, 2);
 };
 
@@ -40,6 +41,7 @@ const generateEAN13 = (): string => {
   for (let i = 1; i < 12; i++) digits.push(Math.floor(Math.random() * 10));
   const checksum = digits.reduce((sum, d, i) => sum + d * (i % 2 === 0 ? 1 : 3), 0);
   digits.push((10 - (checksum % 10)) % 10);
+  
   return digits.join("");
 };
 

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { Typography, Tabs, Input, Button, Table, Badge, Select, App, Flex } from "antd";
+import { useState, useCallback, useEffect, useMemo } from "react";
+import { Typography, Tabs, Input, Button, Table, Badge, Select, App, Flex, Tag } from "antd";
 import { ShoppingCartOutlined, SearchOutlined, ScanOutlined, HistoryOutlined, PlusOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { Product } from "@/modules/products/types";
@@ -15,7 +15,7 @@ import type { Sale } from "@/modules/billing/types";
 
 const { Title } = Typography;
 
-export default function BillingPage() {
+const BillingPage = () => {
   const { message } = App.useApp();
   const [activeTab, setActiveTab] = useState("new-sale");
   const [search, setSearch] = useState("");
@@ -43,12 +43,57 @@ export default function BillingPage() {
   // Cart state
   const cart = useCart();
 
-  // Size selection state per product
+  // Size selection state per product (for manual dropdown selection)
   const [selectedSizes, setSelectedSizes] = useState<Record<string, string>>({});
+
+  // Auto-select size when search term exactly matches a variantSku
+  useEffect(() => {
+    if (!search) return;
+    const searchLower = search.toLowerCase().trim();
+
+    setSelectedSizes((prev) => {
+      const next = { ...prev };
+      for (const product of products) {
+        const matched = product.stock.find(
+          (s) => s.variantSku?.toLowerCase() === searchLower
+        );
+        if (matched) {
+          next[product.id] = matched.sizeId;
+        }
+      }
+
+      return next;
+    });
+  }, [search, products]);
+
+  // Derive unique attribute keys from all loaded products (exclude internal fields)
+  const attributeKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const p of products) {
+      Object.keys(p.attributes).forEach((k) => {
+        if (k !== "unit" && k !== "supplierId") keys.add(k);
+      });
+    }
+
+    return [...keys];
+  }, [products]);
+
+  /** Get the matched stock entry when search exactly equals a variantSku */
+  const getVariantMatch = useCallback(
+    (product: Product) => {
+      if (!search) return null;
+      const searchLower = search.toLowerCase().trim();
+
+      return product.stock.find((s) => s.variantSku?.toLowerCase() === searchLower) ?? null;
+    }, 
+    [search]
+  );
 
   const handleAddToCart = useCallback(
     (product: Product) => {
-      const sizeId = selectedSizes[product.id];
+      // Prefer auto-matched variantSku, then fall back to manually selected
+      const matched = getVariantMatch(product);
+      const sizeId = matched?.sizeId ?? selectedSizes[product.id];
       const sizeInfo = product.stock.find((s) => s.sizeId === sizeId);
 
       if (!sizeId || !sizeInfo) {
@@ -73,7 +118,7 @@ export default function BillingPage() {
 
       message.success(`${product.name} (${sizeInfo.sizeLabel}) added to cart`);
     },
-    [selectedSizes, cart, message]
+    [getVariantMatch, selectedSizes, cart, message]
   );
 
   const handleConfirmSale = async () => {
@@ -81,6 +126,7 @@ export default function BillingPage() {
       message.warning("Cart is empty");
       return;
     }
+
     setSaleLoading(true);
     try {
       const sale = await createSale(cart.toCreateInput());
@@ -121,37 +167,65 @@ export default function BillingPage() {
     },
     {
       title: "Stock",
-      dataIndex: "totalStock",
+      key: "stock",
       width: 80,
       align: "center",
-      render: (qty: number) => (
-        <Badge
-          color={qty === 0 ? "red" : qty <= 10 ? "orange" : "green"}
-          text={qty}
-        />
-      ),
+      render: (_, record) => {
+        const matched = getVariantMatch(record);
+        const qty = matched ? matched.quantity : record.totalStock;
+        return (
+          <Badge
+            color={qty === 0 ? "red" : qty <= 10 ? "orange" : "green"}
+            text={qty}
+          />
+        );
+      },
     },
     {
       title: "Size",
       key: "size",
       width: 130,
-      render: (_, record) => (
-        <Select
-          placeholder="Size"
-          size="small"
-          value={selectedSizes[record.id]}
-          onChange={(val) =>
-            setSelectedSizes((prev) => ({ ...prev, [record.id]: val }))
-          }
-          style={{ width: 110 }}
-          options={record.stock.map((s) => ({
-            label: `${s.sizeLabel} (${s.quantity})`,
-            value: s.sizeId,
-            disabled: s.quantity === 0,
-          }))}
-        />
-      ),
+      render: (_, record) => {
+        const matched = getVariantMatch(record);
+        if (matched) {
+          return (
+            <Tag color="blue" style={{ margin: 0 }}>
+              {matched.sizeLabel}
+            </Tag>
+          );
+        }
+        return (
+          <Select
+            placeholder="Size"
+            size="small"
+            value={selectedSizes[record.id]}
+            onChange={(val) =>
+              setSelectedSizes((prev) => ({ ...prev, [record.id]: val }))
+            }
+            style={{ width: 110 }}
+            options={record.stock.map((s) => ({
+              label: `${s.sizeLabel} (${s.quantity})`,
+              value: s.sizeId,
+              disabled: s.quantity === 0,
+            }))}
+          />
+        );
+      },
     },
+    // Dynamic attribute columns derived from loaded products
+    ...attributeKeys.map((key) => ({
+      title: key.charAt(0).toUpperCase() + key.slice(1),
+      key: `attr_${key}`,
+      width: 100,
+      render: (_: unknown, record: Product) => {
+        const val = record.attributes[key];
+        return val != null && val !== "" ? (
+          <Typography.Text style={{ fontSize: 13 }}>{String(val)}</Typography.Text>
+        ) : (
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>—</Typography.Text>
+        );
+      },
+    })),
     {
       title: "",
       key: "action",
@@ -198,7 +272,7 @@ export default function BillingPage() {
             children: (
               <div>
                 <Input
-                  placeholder="Search products by name or SKU..."
+                  placeholder="Search products by name, SKU or variant barcode…"
                   prefix={<SearchOutlined />}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -272,3 +346,5 @@ export default function BillingPage() {
     </div>
   );
 }
+
+export default BillingPage;

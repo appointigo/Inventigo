@@ -1,11 +1,5 @@
 import { prisma } from "@/lib/db";
-import type {
-  CreateSaleInput,
-  Sale,
-  SaleItem,
-  SaleFilters,
-  SaleSummary,
-} from "../types";
+import type { CreateSaleInput, Sale, SaleItem, SaleFilters, SaleSummary } from "../types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -19,6 +13,7 @@ const generateInvoiceNumber = async (storeId: string): Promise<string> => {
   const count = await prisma.sale.count({
     where: { storeId, createdAt: { gte: startOfDay, lt: endOfDay } },
   });
+
   return `INV-${dateStr}-${String(count + 1).padStart(4, "0")}`;
 };
 
@@ -99,11 +94,35 @@ export const billingService = {
         include: saleInclude,
       });
 
-      // Decrement stock for each sold item
+      // Decrement stock for each sold item (with availability check + audit records)
       for (const it of input.items) {
-        await tx.stockEntry.updateMany({
-          where: { productId: it.productId, sizeId: it.sizeId, storeId },
+        const entry = await tx.stockEntry.findUnique({
+          where: { productId_sizeId_storeId: { productId: it.productId, sizeId: it.sizeId, storeId } },
+        });
+
+        if (!entry || entry.quantity < it.quantity) {
+          throw new Error(
+            `Insufficient stock: only ${entry?.quantity ?? 0} available for size ${it.sizeId}`
+          );
+        }
+
+        await tx.stockEntry.update({
+          where: { productId_sizeId_storeId: { productId: it.productId, sizeId: it.sizeId, storeId } },
           data: { quantity: { decrement: it.quantity } },
+        });
+
+        await tx.stockMovement.create({
+          data: {
+            productId: it.productId,
+            sizeId: it.sizeId,
+            storeId,
+            type: "SALE",
+            quantity: it.quantity,
+            reason: `Sale ${invoiceNumber}`,
+            referenceType: "SALE",
+            referenceId: created.id,
+            createdBy: userId,
+          },
         });
       }
 
@@ -118,6 +137,7 @@ export const billingService = {
       where: { id, store: { orgId } },
       include: saleInclude,
     });
+
     return sale ? toSaleDto(sale) : null;
   },
 
@@ -132,6 +152,7 @@ export const billingService = {
       end.setDate(end.getDate() + 1);
       where.createdAt = { ...(where.createdAt ?? {}), lt: end };
     }
+    
     if (filters?.search) {
       where.OR = [
         { invoiceNumber: { contains: filters.search, mode: "insensitive" } },
@@ -171,11 +192,25 @@ export const billingService = {
         include: saleInclude,
       });
 
-      // Restore stock for each item
+      // Restore stock for each item + create audit records
       for (const it of existing.items) {
         await tx.stockEntry.updateMany({
           where: { productId: it.productId, sizeId: it.sizeId, storeId: existing.storeId },
           data: { quantity: { increment: it.quantity } },
+        });
+        
+        await tx.stockMovement.create({
+          data: {
+            productId: it.productId,
+            sizeId: it.sizeId,
+            storeId: existing.storeId,
+            type: "RETURN",
+            quantity: it.quantity,
+            reason: `Refund for sale ${existing.invoiceNumber}`,
+            referenceType: "SALE",
+            referenceId: saleId,
+            createdBy: existing.createdBy,
+          },
         });
       }
 
