@@ -48,9 +48,9 @@ function WelcomeGuide({ userName }: { userName?: string | null }) {
 
       <Card
         style={{ borderRadius: 16, marginBottom: 28 }}
-        bodyStyle={{ padding: "20px 24px" }}
+        styles={{ body: { padding: "20px 24px" } }}
       >
-        <Space direction="vertical" size={16} style={{ width: "100%" }}>
+        <Space orientation="vertical" size={16} style={{ width: "100%" }}>
           {steps.map((step, i) => (
             <div
               key={i}

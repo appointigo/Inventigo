@@ -37,7 +37,9 @@ export const POST = async (request: Request) => {
     }
     const category = await categoryService.create(user.orgId, body);
     return NextResponse.json(category, { status: 201 });
-  } catch {
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  } catch (err) {
+    console.error("[categories POST]", err);
+    const msg = err instanceof Error ? err.message : "Internal server error";
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
