@@ -2,8 +2,16 @@
 
 import { useEffect } from "react";
 import { Form, Input, Select, Button, Space, Divider } from "antd";
-import type { Category, CategoryFormValues } from "../types";
+import type { AttributeField, Category, CategoryFormValues } from "../types";
 import AttributeSchemaBuilder from "./AttributeSchemaBuilder";
+
+const COMMON_SIZES = ["XS", "S", "M", "L", "XL", "XXL", "Free Size",
+  "26", "28", "30", "32", "34", "36", "38", "40",
+  "UK 6", "UK 7", "UK 8", "UK 9", "UK 10"];
+
+const DEFAULT_FIELDS: AttributeField[] = [
+  { name: "color", type: "select", required: false, options: [] },
+];
 
 interface CategoryFormProps {
   initialValues?: Category | null;
@@ -12,12 +20,12 @@ interface CategoryFormProps {
   loading?: boolean;
 }
 
-export default function CategoryForm({
+const CategoryForm = ({
   initialValues,
   onSubmit,
   onCancel,
   loading,
-}: CategoryFormProps) {
+}: CategoryFormProps) => {
   const [form] = Form.useForm<CategoryFormValues>();
   const isEdit = !!initialValues;
 
@@ -30,8 +38,10 @@ export default function CategoryForm({
         attributeSchema: initialValues.attributeSchema,
         sizes: initialValues.sizes.map((s) => s.label),
       });
-    } else {
+    } 
+    else {
       form.resetFields();
+      form.setFieldValue(["attributeSchema", "fields"], DEFAULT_FIELDS);
     }
   }, [initialValues, form]);
 
@@ -52,7 +62,7 @@ export default function CategoryForm({
       layout="vertical"
       onFinish={onSubmit}
       initialValues={{
-        attributeSchema: { fields: [] },
+        attributeSchema: { fields: DEFAULT_FIELDS },
         sizes: [],
       }}
     >
@@ -90,6 +100,7 @@ export default function CategoryForm({
           mode="tags"
           placeholder="Type a size and press Enter (e.g. S, M, L, XL)"
           tokenSeparators={[","]}
+          options={COMMON_SIZES.map((s) => ({ label: s, value: s }))}
         />
       </Form.Item>
 
@@ -115,3 +126,5 @@ export default function CategoryForm({
     </Form>
   );
 }
+
+export default CategoryForm;
