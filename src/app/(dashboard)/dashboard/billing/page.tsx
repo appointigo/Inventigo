@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useMemo } from "react";
-import { Typography, Tabs, Input, Button, Table, Badge, Select, App, Flex, Tag } from "antd";
+import { Typography, Tabs, Input, Button, Table, Badge, Select, InputNumber, App, Flex, Tag } from "antd";
 import { ShoppingCartOutlined, SearchOutlined, ScanOutlined, HistoryOutlined, PlusOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { Product } from "@/modules/products/types";
@@ -45,6 +45,7 @@ const BillingPage = () => {
 
   // Size selection state per product (for manual dropdown selection)
   const [selectedSizes, setSelectedSizes] = useState<Record<string, string>>({});
+
 
   // Auto-select size when search term exactly matches a variantSku
   useEffect(() => {
@@ -101,8 +102,18 @@ const BillingPage = () => {
         return;
       }
 
+      // Guard: out of stock
       if (sizeInfo.quantity <= 0) {
         message.error("This size is out of stock");
+        return;
+      }
+
+      // Guard: don't exceed available stock vs what's already in cart
+      const existing = cart.items.find(
+        (i) => i.productId === product.id && i.sizeId === sizeId
+      );
+      if ((existing?.quantity ?? 0) + 1 > sizeInfo.quantity) {
+        message.error(`Only ${sizeInfo.quantity} in stock for size ${sizeInfo.sizeLabel}`);
         return;
       }
 
@@ -226,6 +237,44 @@ const BillingPage = () => {
         );
       },
     })),
+    {
+      title: "Qty",
+      key: "qty",
+      width: 80,
+      align: "center" as const,
+      render: (_: unknown, record: Product) => {
+        // Derive sizeId for this row (same logic as handleAddToCart)
+        const matched = getVariantMatch(record);
+        const sizeId = matched?.sizeId ?? selectedSizes[record.id];
+        const stockEntry = record.stock.find((s) => s.sizeId === sizeId);
+        const maxQty = stockEntry?.quantity ?? 999;
+
+        // Read qty directly from cart so billing table and cart drawer are in sync
+        const cartItem = cart.items.find(
+          (i) => i.productId === record.id && i.sizeId === sizeId
+        );
+        const qtyInCart = cartItem?.quantity ?? 0;
+
+        return (
+          <InputNumber
+            min={0}
+            max={maxQty}
+            value={qtyInCart}
+            onChange={(val) => {
+              if (!sizeId) return;
+              const next = val ?? 0;
+              if (next <= 0) {
+                cart.removeItem(record.id, sizeId);
+              } else {
+                cart.updateQuantity(record.id, sizeId, next);
+              }
+            }}
+            size="small"
+            style={{ width: 64 }}
+          />
+        );
+      },
+    },
     {
       title: "",
       key: "action",
