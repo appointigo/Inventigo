@@ -90,6 +90,7 @@ export const CartButton = styled(Button)`
 
 export const SearchContainer = styled.div`
   position: relative;
+  margin-bottom: 12px;
 `;
 
 export const SearchInput = styled(Input)`
@@ -165,6 +166,22 @@ export const AttrText = styled.span`
 
 export const EmptyAttrText = styled.span`
   font-size: 12px;
+  color: #d1d5db;
+`;
+
+export const VariantSkuText = styled.span`
+  font-family: "SF Mono", "Fira Code", ui-monospace, monospace;
+  font-size: 11.5px;
+  color: #374151;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 5px;
+  padding: 2px 6px;
+  letter-spacing: 0.3px;
+`;
+
+export const VariantSkuEmpty = styled.span`
+  font-size: 11.5px;
   color: #d1d5db;
 `;
 

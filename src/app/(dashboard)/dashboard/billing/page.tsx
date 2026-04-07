@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo } from "react";
-import { Tabs, Table, Select, InputNumber, App } from "antd";
+import { useState, useCallback, useMemo } from "react";
+import { Tabs, Table, App } from "antd";
 import { SearchOutlined, ScanOutlined, HistoryOutlined, PlusOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
-import type { Product } from "@/modules/products/types";
 import { useProducts } from "@/modules/products/hooks/useProducts";
 import { useSales, useCart } from "@/modules/billing/hooks/useBilling";
 import { useAppSettings } from "@/modules/settings/hooks/useAppSettings";
@@ -26,11 +25,13 @@ import {
   StockBadgeWrap,
   AttrText,
   EmptyAttrText,
+  VariantSkuText,
+  VariantSkuEmpty,
   QtyInput,
   AddButton,
   TableWrapper,
   PageTitle,
-  SizeTag
+  SizeTag,
 } from "./billing.styled";
 
 const BillingPage = () => {
@@ -62,29 +63,60 @@ const BillingPage = () => {
   const { settings } = useAppSettings();
   const defaultTaxPct = settings?.billingConfig?.taxRate ?? 0;
 
-  // Size selection state per product (for manual dropdown selection)
-  const [selectedSizes, setSelectedSizes] = useState<Record<string, string>>({});
+  // ─── Variant rows ────────────────────────────────────────────────────────────
+  // Flatten products → one row per size/variant so each barcode maps to one row.
 
+  type VariantRow = {
+    rowKey: string;
+    productId: string;
+    productName: string;
+    sku: string;
+    variantSku: string | null;
+    brandName: string;
+    categoryName: string;
+    basePrice: number;
+    isActive: boolean;
+    attributes: Record<string, unknown>;
+    sizeId: string;
+    sizeLabel: string;
+    stockQty: number;
+  };
 
-  // Auto-select size when search term exactly matches a variantSku
-  useEffect(() => {
-    if (!search) return;
-    const searchLower = search.toLowerCase().trim();
+  const variantRows = useMemo((): VariantRow[] => {
+    const rows: VariantRow[] = products.flatMap((p) =>
+      p.stock.map((s) => ({
+        rowKey: `${p.id}-${s.sizeId}`,
+        productId: p.id,
+        productName: p.name,
+        sku: p.sku,
+        variantSku: s.variantSku ?? null,
+        brandName: p.brandName,
+        categoryName: p.categoryName,
+        basePrice: p.basePrice,
+        isActive: p.isActive,
+        attributes: p.attributes,
+        sizeId: s.sizeId,
+        sizeLabel: s.sizeLabel,
+        stockQty: s.quantity,
+      }))
+    );
 
-    setSelectedSizes((prev) => {
-      const next = { ...prev };
-      for (const product of products) {
-        const matched = product.stock.find(
-          (s) => s.variantSku?.toLowerCase() === searchLower
-        );
-        if (matched) {
-          next[product.id] = matched.sizeId;
-        }
-      }
+    if (search) {
+      const s = search.toLowerCase().trim();
+      // Exact variantSku match (barcode scan) → show only that single row
+      const exact = rows.find((r) => r.variantSku?.toLowerCase() === s);
+      if (exact) return [exact];
+      // Otherwise: show all rows whose variantSku or name/sku contains the search
+      return rows.filter(
+        (r) =>
+          r.variantSku?.toLowerCase().includes(s) ||
+          r.productName.toLowerCase().includes(s) ||
+          r.sku.toLowerCase().includes(s)
+      );
+    }
 
-      return next;
-    });
-  }, [search, products]);
+    return rows;
+  }, [products, search]);
 
   // Derive unique attribute keys from all loaded products (exclude internal fields)
   const attributeKeys = useMemo(() => {
@@ -94,62 +126,38 @@ const BillingPage = () => {
         if (k !== "unit" && k !== "supplierId") keys.add(k);
       });
     }
-
     return [...keys];
   }, [products]);
 
-  /** Get the matched stock entry when search exactly equals a variantSku */
-  const getVariantMatch = useCallback(
-    (product: Product) => {
-      if (!search) return null;
-      const searchLower = search.toLowerCase().trim();
-
-      return product.stock.find((s) => s.variantSku?.toLowerCase() === searchLower) ?? null;
-    }, 
-    [search]
-  );
-
   const handleAddToCart = useCallback(
-    (product: Product) => {
-      // Prefer auto-matched variantSku, then fall back to manually selected
-      const matched = getVariantMatch(product);
-      const sizeId = matched?.sizeId ?? selectedSizes[product.id];
-      const sizeInfo = product.stock.find((s) => s.sizeId === sizeId);
-
-      if (!sizeId || !sizeInfo) {
-        message.warning("Please select a size first");
+    (row: VariantRow) => {
+      if (row.stockQty <= 0) {
+        message.error("This variant is out of stock");
         return;
       }
 
-      // Guard: out of stock
-      if (sizeInfo.quantity <= 0) {
-        message.error("This size is out of stock");
-        return;
-      }
-
-      // Guard: don't exceed available stock vs what's already in cart
       const existing = cart.items.find(
-        (i) => i.productId === product.id && i.sizeId === sizeId
+        (i) => i.productId === row.productId && i.sizeId === row.sizeId
       );
-      if ((existing?.quantity ?? 0) + 1 > sizeInfo.quantity) {
-        message.error(`Only ${sizeInfo.quantity} in stock for size ${sizeInfo.sizeLabel}`);
+      if ((existing?.quantity ?? 0) + 1 > row.stockQty) {
+        message.error(`Only ${row.stockQty} in stock for size ${row.sizeLabel}`);
         return;
       }
 
       cart.addItem({
-        productId: product.id,
-        productName: product.name,
-        sku: product.sku,
-        sizeId,
-        sizeLabel: sizeInfo.sizeLabel,
-        attributes: (product.attributes ?? {}) as Record<string, unknown>,
+        productId: row.productId,
+        productName: row.productName,
+        sku: row.sku,
+        sizeId: row.sizeId,
+        sizeLabel: row.sizeLabel,
+        attributes: row.attributes as Record<string, unknown>,
         quantity: 1,
-        unitPrice: product.basePrice,
+        unitPrice: row.basePrice,
       });
 
-      message.success(`${product.name} (${sizeInfo.sizeLabel}) added to cart`);
+      message.success(`${row.productName} (${row.sizeLabel}) added to cart`);
     },
-    [getVariantMatch, selectedSizes, cart, message]
+    [cart, message]
   );
 
   const handleConfirmSale = async () => {
@@ -174,75 +182,60 @@ const BillingPage = () => {
     }
   };
 
-  const productColumns: ColumnsType<Product> = [
+  const variantColumns: ColumnsType<VariantRow> = [
     {
       title: "Product",
       key: "product",
-      render: (_, record) => (
+      render: (_, row) => (
         <div>
-          <ProductNameText>{record.name}</ProductNameText>
+          <ProductNameText>{row.productName}</ProductNameText>
           <ProductMetaText>
-            {record.sku} · {record.brandName} · {record.categoryName}
+            {row.brandName} · {row.categoryName}
           </ProductMetaText>
         </div>
       ),
     },
     {
-      title: "Price",
-      dataIndex: "basePrice",
-      width: 100,
-      align: "right",
-      render: (price: number) => formatCurrency(price),
-    },
-    {
-      title: "Stock",
-      key: "stock",
-      width: 80,
-      align: "center",
-      render: (_, record) => {
-        const matched = getVariantMatch(record);
-        const qty = matched ? matched.quantity : record.totalStock;
-        const level = qty === 0 ? "low" : qty <= 10 ? "mid" : "high";
-        return <StockBadgeWrap $level={level}>{qty}</StockBadgeWrap>;
-      },
+      title: "Variant SKU",
+      key: "variantSku",
+      width: 160,
+      render: (_, row) =>
+        row.variantSku ? (
+          <VariantSkuText>{row.variantSku}</VariantSkuText>
+        ) : (
+          <VariantSkuEmpty>—</VariantSkuEmpty>
+        ),
     },
     {
       title: "Size",
       key: "size",
-      width: 130,
-      render: (_, record) => {
-        const matched = getVariantMatch(record);
-        if (matched) {
-          return (
-            <SizeTag color="blue">
-              {matched.sizeLabel}
-            </SizeTag>
-          );
-        }
-        return (
-          <Select
-            placeholder="Size"
-            size="small"
-            value={selectedSizes[record.id]}
-            onChange={(val) =>
-              setSelectedSizes((prev) => ({ ...prev, [record.id]: val }))
-            }
-            options={record.stock.map((s) => ({
-              label: `${s.sizeLabel} (${s.quantity})`,
-              value: s.sizeId,
-              disabled: s.quantity === 0,
-            }))}
-          />
-        );
+      width: 80,
+      render: (_, row) => <SizeTag color="blue">{row.sizeLabel}</SizeTag>,
+    },
+    {
+      title: "Price",
+      key: "price",
+      width: 100,
+      align: "right",
+      render: (_, row) => formatCurrency(row.basePrice),
+    },
+    {
+      title: "Stock",
+      key: "stock",
+      width: 72,
+      align: "center",
+      render: (_, row) => {
+        const level = row.stockQty === 0 ? "low" : row.stockQty <= 10 ? "mid" : "high";
+        return <StockBadgeWrap $level={level}>{row.stockQty}</StockBadgeWrap>;
       },
     },
-    // Dynamic attribute columns derived from loaded products
+    // Dynamic attribute columns
     ...attributeKeys.map((key) => ({
       title: key.charAt(0).toUpperCase() + key.slice(1),
       key: `attr_${key}`,
-      width: 100,
-      render: (_: unknown, record: Product) => {
-        const val = record.attributes[key];
+      width: 90,
+      render: (_: unknown, row: VariantRow) => {
+        const val = row.attributes[key];
         return val != null && val !== "" ? (
           <AttrText>{String(val)}</AttrText>
         ) : (
@@ -255,32 +248,23 @@ const BillingPage = () => {
       key: "qty",
       width: 80,
       align: "center" as const,
-      render: (_: unknown, record: Product) => {
-        // Derive sizeId for this row (same logic as handleAddToCart)
-        const matched = getVariantMatch(record);
-        const sizeId = matched?.sizeId ?? selectedSizes[record.id];
-        const stockEntry = record.stock.find((s) => s.sizeId === sizeId);
-        const maxQty = stockEntry?.quantity ?? 999;
-
-        // Read qty directly from cart so billing table and cart drawer are in sync
+      render: (_: unknown, row: VariantRow) => {
         const cartItem = cart.items.find(
-          (i) => i.productId === record.id && i.sizeId === sizeId
+          (i) => i.productId === row.productId && i.sizeId === row.sizeId
         );
         const qtyInCart = cartItem?.quantity ?? 0;
-
         return (
           <QtyInput
             min={0}
-            max={maxQty}
-            $active={(qtyInCart ?? 0) > 0}
+            max={row.stockQty}
+            $active={qtyInCart > 0}
             value={qtyInCart}
             onChange={(val) => {
-              if (!sizeId) return;
               const next = (val as number) ?? 0;
               if (next <= 0) {
-                cart.removeItem(record.id, sizeId);
+                cart.removeItem(row.productId, row.sizeId);
               } else {
-                cart.updateQuantity(record.id, sizeId, next);
+                cart.updateQuantity(row.productId, row.sizeId, next);
               }
             }}
             size="small"
@@ -291,14 +275,14 @@ const BillingPage = () => {
     {
       title: "",
       key: "action",
-      width: 60,
-      render: (_, record) => (
+      width: 56,
+      render: (_, row) => (
         <AddButton
           type="primary"
           size="small"
           icon={<PlusOutlined />}
-          onClick={() => handleAddToCart(record)}
-          disabled={!record.isActive || record.totalStock === 0}
+          onClick={() => handleAddToCart(row)}
+          disabled={!row.isActive || row.stockQty === 0}
         />
       ),
     },
@@ -338,13 +322,13 @@ const BillingPage = () => {
                     </SearchContainer>
                     <TableWrapper>
                       <Table
-                        columns={productColumns}
-                        dataSource={products}
-                        rowKey="id"
+                        columns={variantColumns}
+                        dataSource={variantRows}
+                        rowKey="rowKey"
                         loading={productsLoading}
                         size="small"
-                        pagination={{ pageSize: 8 }}
-                        scroll={{ x: 600 }}
+                        pagination={{ pageSize: 10 }}
+                        scroll={{ x: 700 }}
                       />
                     </TableWrapper>
                   </div>
