@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { Table, Tag, Input, Select, Badge, Flex, Empty } from "antd";
 import { SearchOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
@@ -19,6 +20,17 @@ const statusColors = { OK: "green", LOW: "orange", OUT: "red" } as const;
 const statusLabels = { OK: "In Stock", LOW: "Low Stock", OUT: "Out of Stock" } as const;
 
 const StockTable = ({ stockLevels, loading, search, onSearchChange, statusFilter, onStatusChange, onAdjust }: StockTableProps) => {
+  // Derive unique attribute keys from all rows (exclude internal/noise fields)
+  const attributeKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const row of stockLevels) {
+      Object.keys(row.attributes ?? {}).forEach((k) => {
+        if (k !== "unit" && k !== "supplierId") keys.add(k);
+      });
+    }
+    return [...keys];
+  }, [stockLevels]);
+
   const columns: ColumnsType<StockLevelRow> = [
     {
       title: "Product",
@@ -26,10 +38,34 @@ const StockTable = ({ stockLevels, loading, search, onSearchChange, statusFilter
       sorter: (a, b) => a.productName.localeCompare(b.productName),
       render: (name: string, record) => (
         <div>
-          <div style={{ fontWeight: 500 }}>{name}</div>
-          <div style={{ fontSize: 12, color: "#888" }}>{record.sku}</div>
+          <div style={{ fontWeight: 600, fontSize: 13.5, color: "#111827" }}>{name}</div>
+          <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 1 }}>{record.sku}</div>
         </div>
       ),
+    },
+    {
+      title: "Variant SKU",
+      dataIndex: "variantSku",
+      width: 160,
+      render: (variantSku: string | null) =>
+        variantSku ? (
+          <span
+            style={{
+              fontFamily: "'SF Mono', 'Fira Code', ui-monospace, monospace",
+              fontSize: 11.5,
+              color: "#374151",
+              background: "#f3f4f6",
+              border: "1px solid #e5e7eb",
+              borderRadius: 5,
+              padding: "2px 6px",
+              letterSpacing: "0.3px",
+            }}
+          >
+            {variantSku}
+          </span>
+        ) : (
+          <span style={{ color: "#d1d5db", fontSize: 11.5 }}>—</span>
+        ),
     },
     {
       title: "Category",
@@ -49,6 +85,21 @@ const StockTable = ({ stockLevels, loading, search, onSearchChange, statusFilter
       align: "center",
       render: (label: string) => <Tag color="blue">{label}</Tag>,
     },
+    // Dynamic attribute columns — same pattern as billing page
+    ...attributeKeys.map((key) => ({
+      title: key.charAt(0).toUpperCase() + key.slice(1),
+      key: `attr_${key}`,
+      width: 90,
+      responsive: ["lg" as const],
+      render: (_: unknown, record: StockLevelRow) => {
+        const val = record.attributes[key];
+        return val != null && val !== "" ? (
+          <span style={{ fontSize: 12.5, color: "#6b7280" }}>{String(val)}</span>
+        ) : (
+          <span style={{ fontSize: 12, color: "#d1d5db" }}>—</span>
+        );
+      },
+    })),
     {
       title: "Quantity",
       dataIndex: "quantity",
@@ -118,6 +169,7 @@ const StockTable = ({ stockLevels, loading, search, onSearchChange, statusFilter
         loading={loading}
         pagination={{ pageSize: 15, showSizeChanger: true, showTotal: (t) => `${t} entries` }}
         size="middle"
+        scroll={{ x: 800 }}
         locale={{
           emptyText: !loading && stockLevels.length === 0 ? (
             <Empty

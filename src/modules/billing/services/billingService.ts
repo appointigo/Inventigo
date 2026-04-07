@@ -36,6 +36,7 @@ const toSaleDto = (s: any): Sale => ({
     sku: i.product?.sku ?? "",
     sizeId: i.sizeId,
     sizeLabel: i.size?.label ?? "",
+    attributes: (i.product?.attributes as Record<string, unknown>) ?? {},
     quantity: i.quantity,
     unitPrice: Number(i.unitPrice),
     total: Number(i.total),
@@ -46,7 +47,7 @@ const toSaleDto = (s: any): Sale => ({
 const saleInclude = {
   items: {
     include: {
-      product: { select: { name: true, sku: true } },
+      product: { select: { name: true, sku: true, attributes: true } },
       size: { select: { label: true } },
     },
   },

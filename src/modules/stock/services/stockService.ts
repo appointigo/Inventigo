@@ -117,6 +117,7 @@ export const stockService = {
             include: {
               category: { select: { name: true } },
               brand: { select: { name: true } },
+              // attributes for dynamic columns (same as billing page)
             },
           },
           size: { select: { label: true } },
@@ -133,6 +134,8 @@ export const stockService = {
       productId: entry.productId,
       productName: entry.product.name,
       sku: entry.product.sku,
+      variantSku: entry.variantSku ?? null,
+      attributes: (entry.product.attributes ?? {}) as Record<string, unknown>,
       categoryName: entry.product.category.name,
       brandName: entry.product.brand.name,
       sizeId: entry.sizeId,
