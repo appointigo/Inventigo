@@ -31,11 +31,18 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
         if (!orgRefreshAttempted.current) {
           // JWT may be stale — re-run the JWT callback against DB once
           orgRefreshAttempted.current = true;
-          update();
+          // Await the result: if orgId is now set we do nothing (the
+          // session state change will re-render and show the dashboard);
+          // only redirect if the DB genuinely has no org for this user.
+          void update().then((updated) => {
+            if (!updated?.user?.orgId) {
+              router.replace("/onboarding");
+            }
+          });
           return;
         }
-        // Already refreshed; user genuinely has no org
-        router.replace("/onboarding");
+        // orgRefreshAttempted is already true but we never reach here now
+        // because the redirect is handled inside the update().then() above.
       }
     }
   }, [session, status, router, update]);

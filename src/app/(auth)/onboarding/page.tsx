@@ -121,12 +121,17 @@ const OnboardingInner = () => {
       }
 
       sessionStorage.removeItem("selectedPlan");
-      // Refresh JWT so orgId/storeId is picked up, then hard-navigate
-      // to force the browser to load the fresh session cookie (avoids
-      // the race condition where dashboard layout reads stale orgId:null)
-      await updateSession();
+      // Pass the server-confirmed values directly into the JWT callback via
+      // update(data). This is the reliable path in NextAuth v5: the `session`
+      // param in the jwt callback receives these values immediately under
+      // trigger="update", with no DB round-trip or timing race.
+      await updateSession({
+        orgId: data.orgId as string,
+        storeId: data.storeId as string,
+        role: "OWNER",
+      });
       message.success("Setup complete! Welcome to Stockiva 🎉");
-      window.location.href = "/dashboard";
+      router.push("/dashboard");
     } 
     catch (error) {
       console.error(error);

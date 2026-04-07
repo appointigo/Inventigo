@@ -12,14 +12,14 @@ const generateOtp = (): string => {
 
 const sendVerificationEmail = async (email: string, code: string): Promise<void> => {
   if (process.env.RESEND_API_KEY) {
-    await fetch("https://api.resend.com/emails", {
+    const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "Stockiva <noreply@stockiva.in>",
+        from: "Stockiva <onboarding@resend.dev>",
         to: email,
         subject: "Your new Stockiva verification code",
         html: `
@@ -30,10 +30,17 @@ const sendVerificationEmail = async (email: string, code: string): Promise<void>
               ${code}
             </div>
             <p style="color:#666">This code expires in 15 minutes.</p>
+            <p style="color:#999;font-size:12px">If you didn't request this, you can ignore this email.</p>
           </div>
         `,
       }),
     });
+    if (!res.ok) {
+      const err = await res.text();
+      console.error(`[resend-verification] Resend API error for ${email}:`, err);
+      throw new Error("Failed to send verification email");
+    }
+    console.log(`[resend-verification] Verification email sent to ${email}`);
   } 
   else {
     console.log(`\n[Stockiva OTP Resend] Email: ${email} | Code: ${code}\n`);

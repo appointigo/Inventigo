@@ -138,3 +138,60 @@ const attributeKeys = useMemo(() => {
 }, [products]);
 ```
 Each key becomes a column with a capitalised header and `—` for products that don't define that attribute.
+
+---
+
+## 5. Onboarding → Dashboard Redirect Failing After Business Setup
+
+### Issue
+After completing the business setup form on `/onboarding`, the user was redirected back to `/onboarding` instead of landing on `/dashboard`. The business was being created successfully in the database (confirmed by logging out and back in, which opened the dashboard correctly), so the problem was entirely in the session state after onboarding.
+
+### Root Cause
+**NextAuth v5 beta.30 `update()` does not reliably trigger a DB re-read via `trigger: "update"`.**
+
+The JWT callback included a DB re-read block guarded by `trigger === "update"`, but the call to `update()` (with no arguments) in NextAuth v5 beta issues only a GET to `/api/auth/session` rather than a PATCH — the JWT callback's `trigger` was never set to `"update"`, so the DB re-read was silently skipped and the stale token (with `orgId: null`) was returned unchanged.
+
+This caused the following chain of failure:
+1. `register-business` API wrote `orgId`/`storeId` to the DB ✅
+2. `await updateSession()` (no args) fired — JWT callback ran but `trigger` was not `"update"` in all cases, returning the old token with `orgId: null`
+3. `router.push("/dashboard")` navigated to the dashboard
+4. `dashboard/layout.tsx` read the session — `orgId` was still `null`
+5. Layout called `update()` once (one-shot guard), got the same stale token back
+6. Redirected user to `/onboarding` ❌
+
+A secondary issue: the layout's `update()` call was fire-and-forget (not awaited), so even if the refresh succeeded, the redirect to `/onboarding` could fire before the session state updated.
+
+### Fix
+
+**`src/lib/auth.ts` — JWT callback** now handles `update(data)` with explicit values directly from the `session` param, bypassing the DB round-trip:
+```ts
+async jwt({ token, user, account, trigger, session }) {
+  if (trigger === "update") {
+    const payload = session as { orgId?: string | null; storeId?: string | null; role?: string; ... };
+    if (payload?.orgId) {
+      // Apply values passed directly via updateSession(data) — no DB race
+      token.orgId = payload.orgId;
+      token.storeId = payload.storeId ?? token.storeId;
+      token.role = payload.role ?? token.role;
+    } else {
+      // Bare update() call — fall back to DB re-read
+      const fresh = await prisma.user.findUnique(...);
+      if (fresh) { token.orgId = fresh.orgId; ... }
+    }
+  }
+}
+```
+
+**`src/app/(auth)/onboarding/page.tsx`** — passes the server-returned `orgId`/`storeId` directly into `updateSession()` so the JWT callback receives them immediately under `trigger: "update"`:
+```ts
+const data = await res.json(); // { orgId, storeId } from register-business API
+await updateSession({ orgId: data.orgId, storeId: data.storeId, role: "OWNER" });
+router.push("/dashboard");
+```
+
+**`src/app/(dashboard)/layout.tsx`** — the `update()` call is now awaited inside a `.then()` handler, so the redirect to `/onboarding` only fires if the DB-refreshed session genuinely has no `orgId`:
+```ts
+void update().then((updated) => {
+  if (!updated?.user?.orgId) router.replace("/onboarding");
+});
+```
