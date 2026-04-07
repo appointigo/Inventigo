@@ -7,6 +7,7 @@ import type { ColumnsType } from "antd/es/table";
 import type { Product } from "@/modules/products/types";
 import { useProducts } from "@/modules/products/hooks/useProducts";
 import { useSales, useCart } from "@/modules/billing/hooks/useBilling";
+import { useAppSettings } from "@/modules/settings/hooks/useAppSettings";
 import CartDrawer from "@/modules/billing/components/CartDrawer";
 import SalesHistory from "@/modules/billing/components/SalesHistory";
 import InvoicePreview from "@/modules/billing/components/InvoicePreview";
@@ -58,6 +59,8 @@ const BillingPage = () => {
 
   // Cart state
   const cart = useCart();
+  const { settings } = useAppSettings();
+  const defaultTaxPct = settings?.billingConfig?.taxRate ?? 0;
 
   // Size selection state per product (for manual dropdown selection)
   const [selectedSizes, setSelectedSizes] = useState<Record<string, string>>({});
@@ -380,16 +383,18 @@ const BillingPage = () => {
       <CartDrawer
         open={cartOpen}
         items={cart.items}
-        discountAmount={cart.discountAmount}
-        taxAmount={cart.taxAmount}
+        subtotal={cart.subtotal}
+        discountPct={cart.discountPct}
+        taxPct={cart.taxPct}
+        defaultTaxPct={defaultTaxPct}
         paymentMethod={cart.paymentMethod}
         customerName={cart.customerName}
         customerPhone={cart.customerPhone}
         onClose={() => setCartOpen(false)}
         onUpdateQuantity={cart.updateQuantity}
         onRemoveItem={cart.removeItem}
-        onDiscountChange={cart.setDiscountAmount}
-        onTaxChange={cart.setTaxAmount}
+        onDiscountPctChange={cart.setDiscountPct}
+        onTaxPctChange={cart.setTaxPct}
         onPaymentMethodChange={cart.setPaymentMethod}
         onCustomerNameChange={cart.setCustomerName}
         onCustomerPhoneChange={cart.setCustomerPhone}

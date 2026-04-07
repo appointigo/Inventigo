@@ -1,7 +1,8 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { Drawer, Typography, Input } from "antd";
-import { DeleteOutlined, ShoppingCartOutlined, LockOutlined, CheckOutlined } from "@ant-design/icons";
+import { DeleteOutlined, ShoppingCartOutlined, LockOutlined, CheckOutlined, TagOutlined, CloseOutlined } from "@ant-design/icons";
 import type { CartItem, PaymentMethodType } from "../types";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
 import {
@@ -44,6 +45,18 @@ import {
   SecureNote,
   DrawerSection,
   CartDivider,
+  PromoRow,
+  PromoInput,
+  PromoApplyBtn,
+  PromoSuccessPill,
+  PromoClearBtn,
+  OffersGrid,
+  OfferCard,
+  OfferBadge,
+  OfferInfo,
+  OfferTitle,
+  OfferDesc,
+  OfferAppliedTag,
 } from "./CartDrawer.styled";
 
 const { Text } = Typography;
@@ -54,19 +67,34 @@ const PAYMENT_OPTIONS: { label: string; value: PaymentMethodType; icon: string }
   { label: "UPI", value: "UPI", icon: "📱" },
 ];
 
+interface PromoOffer {
+  code: string;
+  label: string;
+  desc: string;
+  discountPct: number;
+}
+
+const AVAILABLE_OFFERS: PromoOffer[] = [
+  { code: "SAVE10", label: "10% OFF", desc: "Flat 10% discount on your order", discountPct: 10 },
+  { code: "FLAT15", label: "15% OFF", desc: "Save 15% — use code FLAT15", discountPct: 15 },
+  { code: "NEWUSER", label: "5% OFF", desc: "Welcome discount for new customers", discountPct: 5 },
+];
+
 interface CartDrawerProps {
   open: boolean;
   items: CartItem[];
-  discountAmount: number;
-  taxAmount: number;
+  discountPct: number;
+  taxPct: number;
+  defaultTaxPct?: number;
+  subtotal: number;
   paymentMethod: PaymentMethodType;
   customerName: string;
   customerPhone: string;
   onClose: () => void;
   onUpdateQuantity: (productId: string, sizeId: string, quantity: number) => void;
   onRemoveItem: (productId: string, sizeId: string) => void;
-  onDiscountChange: (amount: number) => void;
-  onTaxChange: (amount: number) => void;
+  onDiscountPctChange: (pct: number) => void;
+  onTaxPctChange: (pct: number) => void;
   onPaymentMethodChange: (method: PaymentMethodType) => void;
   onCustomerNameChange: (name: string) => void;
   onCustomerPhoneChange: (phone: string) => void;
@@ -77,25 +105,69 @@ interface CartDrawerProps {
 const CartDrawer = ({
   open,
   items,
-  discountAmount,
-  taxAmount,
+  discountPct,
+  taxPct,
+  defaultTaxPct,
+  subtotal,
   paymentMethod,
   customerName,
   customerPhone,
   onClose,
   onUpdateQuantity,
   onRemoveItem,
-  onDiscountChange,
-  onTaxChange,
+  onDiscountPctChange,
+  onTaxPctChange,
   onPaymentMethodChange,
   onCustomerNameChange,
   onCustomerPhoneChange,
   onConfirmSale,
   loading,
 }: CartDrawerProps) => {
-  const subtotal = items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+  const [promoInput, setPromoInput] = useState("");
+  const [appliedPromo, setAppliedPromo] = useState<PromoOffer | null>(null);
+  const [promoError, setPromoError] = useState("");
+
+  // Apply default tax pct from billing config on first open
+  useEffect(() => {
+    if (open && defaultTaxPct != null && defaultTaxPct > 0 && taxPct === 0) {
+      onTaxPctChange(defaultTaxPct);
+    }
+  }, [open, defaultTaxPct]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const discountAmount = Math.round(subtotal * discountPct / 100);
+  const taxAmount = Math.round(subtotal * taxPct / 100);
   const total = subtotal - discountAmount + taxAmount;
   const totalItems = items.reduce((s, i) => s + i.quantity, 0);
+
+  const handleApplyPromo = () => {
+    const code = promoInput.trim().toUpperCase();
+    const offer = AVAILABLE_OFFERS.find((o) => o.code === code);
+    if (!offer) {
+      setPromoError("Invalid promo code");
+      return;
+    }
+    setAppliedPromo(offer);
+    setPromoError("");
+    setPromoInput("");
+    onDiscountPctChange(offer.discountPct);
+  };
+
+  const handleClearPromo = () => {
+    setAppliedPromo(null);
+    setPromoError("");
+    onDiscountPctChange(0);
+  };
+
+  const handleApplyOffer = (offer: PromoOffer) => {
+    if (appliedPromo?.code === offer.code) {
+      handleClearPromo();
+      return;
+    }
+    setAppliedPromo(offer);
+    setPromoError("");
+    setPromoInput("");
+    onDiscountPctChange(offer.discountPct);
+  };
 
   return (
     <Drawer
@@ -240,6 +312,74 @@ const CartDrawer = ({
 
           <CartDivider />
 
+          {/* Available Offers */}
+          <DrawerSection>
+            <SectionLabel><TagOutlined style={{ marginRight: 4 }} />Available Offers</SectionLabel>
+            <OffersGrid>
+              {AVAILABLE_OFFERS.map((offer) => {
+                const isApplied = appliedPromo?.code === offer.code;
+                return (
+                  <OfferCard
+                    key={offer.code}
+                    $applied={isApplied}
+                    onClick={() => handleApplyOffer(offer)}
+                  >
+                    <OfferBadge>{offer.label}</OfferBadge>
+                    <OfferInfo>
+                      <OfferTitle>{offer.code}</OfferTitle>
+                      <OfferDesc>{offer.desc}</OfferDesc>
+                    </OfferInfo>
+                    {isApplied && <OfferAppliedTag>✓ Applied</OfferAppliedTag>}
+                  </OfferCard>
+                );
+              })}
+            </OffersGrid>
+          </DrawerSection>
+
+          <CartDivider />
+
+          {/* Promo Code */}
+          <DrawerSection>
+            <SectionLabel>Promo Code</SectionLabel>
+            {appliedPromo ? (
+              <PromoSuccessPill>
+                <CheckOutlined />
+                {appliedPromo.code} — {appliedPromo.discountPct}% off applied
+                <PromoClearBtn onClick={handleClearPromo} title="Remove promo">
+                  <CloseOutlined />
+                </PromoClearBtn>
+              </PromoSuccessPill>
+            ) : (
+              <>
+                <PromoRow>
+                  <PromoInput
+                    placeholder="Enter promo code"
+                    value={promoInput}
+                    onChange={(e) => {
+                      setPromoInput(e.target.value.toUpperCase());
+                      setPromoError("");
+                    }}
+                    onPressEnter={handleApplyPromo}
+                    size="small"
+                  />
+                  <PromoApplyBtn
+                    type="default"
+                    size="small"
+                    onClick={handleApplyPromo}
+                    disabled={!promoInput.trim()}
+                  >
+                    Apply
+                  </PromoApplyBtn>
+                </PromoRow>
+                {promoError && (
+                  <Text type="danger" style={{ fontSize: 12 }}>{promoError}</Text>
+                )}
+              </>
+            )}
+          </DrawerSection>
+
+          <CartDivider />
+
           {/* Summary */}
           <DrawerSection>
             <SectionLabel>Order Summary</SectionLabel>
@@ -250,24 +390,42 @@ const CartDrawer = ({
               </SumRow>
               <SumRow>
                 <Text type="secondary">Discount</Text>
-                <SumInput
-                  min={0}
-                  max={subtotal}
-                  value={discountAmount}
-                  onChange={(val) => onDiscountChange((val as number) ?? 0)}
-                  size="small"
-                  prefix="₹"
-                />
+                <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <SumInput
+                    min={0}
+                    max={100}
+                    value={discountPct}
+                    onChange={(val) => {
+                      onDiscountPctChange((val as number) ?? 0);
+                      setAppliedPromo(null);
+                    }}
+                    size="small"
+                    suffix="%"
+                  />
+                  {discountAmount > 0 && (
+                    <Text type="secondary" style={{ fontSize: 11, whiteSpace: "nowrap" }}>
+                      = {formatCurrency(discountAmount)}
+                    </Text>
+                  )}
+                </span>
               </SumRow>
               <SumRow>
-                <Text type="secondary">Tax</Text>
-                <SumInput
-                  min={0}
-                  value={taxAmount}
-                  onChange={(val) => onTaxChange((val as number) ?? 0)}
-                  size="small"
-                  prefix="₹"
-                />
+                <Text type="secondary">Tax (GST)</Text>
+                <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <SumInput
+                    min={0}
+                    max={100}
+                    value={taxPct}
+                    onChange={(val) => onTaxPctChange((val as number) ?? 0)}
+                    size="small"
+                    suffix="%"
+                  />
+                  {taxAmount > 0 && (
+                    <Text type="secondary" style={{ fontSize: 11, whiteSpace: "nowrap" }}>
+                      = {formatCurrency(taxAmount)}
+                    </Text>
+                  )}
+                </span>
               </SumRow>
               <TotalRow>
                 <span>Total</span>

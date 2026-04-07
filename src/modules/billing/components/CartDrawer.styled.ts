@@ -1,6 +1,6 @@
 import styled from "@emotion/styled";
 import { keyframes } from "@emotion/react";
-import { Button, InputNumber } from "antd";
+import { Button, Input, InputNumber } from "antd";
 
 // ─── Keyframes ────────────────────────────────────────────────────────────────
 
@@ -473,4 +473,113 @@ export const CartDivider = styled.hr`
   border: none;
   border-top: 1px solid #f0f0f0;
   margin: 0;
+`;
+
+// ─── Promo Code ───────────────────────────────────────────────────────────────
+
+export const PromoRow = styled.div`
+  display: flex;
+  gap: 8px;
+  align-items: center;
+`;
+
+export const PromoInput = styled(Input)`
+  flex: 1;
+  border-radius: 9px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+`;
+
+export const PromoApplyBtn = styled(Button)`
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  height: 32px;
+`;
+
+export const PromoSuccessPill = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #f0fdf4;
+  border: 1.5px solid #bbf7d0;
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #16a34a;
+`;
+
+export const PromoClearBtn = styled.button`
+  background: none;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0;
+  line-height: 1;
+  margin-left: auto;
+
+  &:hover { color: #dc2626; }
+`;
+
+// ─── Available Offers ─────────────────────────────────────────────────────────
+
+export const OffersGrid = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+`;
+
+export const OfferCard = styled.div<{ $applied: boolean }>`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1.5px solid ${({ $applied }) => ($applied ? "#bbf7d0" : "#e8eaed")};
+  border-radius: 10px;
+  background: ${({ $applied }) => ($applied ? "#f0fdf4" : "#f8f9fc")};
+  cursor: pointer;
+  transition: all 0.15s;
+
+  &:hover {
+    border-color: ${({ $applied }) => ($applied ? "#86efac" : "#93c5fd")};
+    background: ${({ $applied }) => ($applied ? "#dcfce7" : "#eff4ff")};
+  }
+`;
+
+export const OfferBadge = styled.span`
+  background: linear-gradient(135deg, #2563eb, #4f46e5);
+  color: white;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  flex-shrink: 0;
+  letter-spacing: 0.3px;
+`;
+
+export const OfferInfo = styled.div`
+  flex: 1;
+  min-width: 0;
+`;
+
+export const OfferTitle = styled.div`
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #111827;
+`;
+
+export const OfferDesc = styled.div`
+  font-size: 11px;
+  color: #9ca3af;
+  margin-top: 1px;
+`;
+
+export const OfferAppliedTag = styled.span`
+  font-size: 11px;
+  font-weight: 600;
+  color: #16a34a;
+  flex-shrink: 0;
 `;

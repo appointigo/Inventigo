@@ -74,8 +74,8 @@ export function useSales(initialFilters?: SaleFilters) {
 /** Cart state management hook */
 export function useCart() {
   const [items, setItems] = useState<CartItem[]>([]);
-  const [discountAmount, setDiscountAmount] = useState(0);
-  const [taxAmount, setTaxAmount] = useState(0);
+  const [discountPct, setDiscountPct] = useState(0);
+  const [taxPct, setTaxPct] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>("CASH");
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
@@ -112,12 +112,16 @@ export function useCart() {
 
   const clearCart = () => {
     setItems([]);
-    setDiscountAmount(0);
-    setTaxAmount(0);
+    setDiscountPct(0);
+    setTaxPct(0);
     setPaymentMethod("CASH");
     setCustomerName("");
     setCustomerPhone("");
   };
+
+  const subtotal = items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+  const discountAmount = Math.round(subtotal * discountPct / 100);
+  const taxAmount = Math.round(subtotal * taxPct / 100);
 
   const toCreateInput = (): CreateSaleInput => ({
     items,
@@ -130,6 +134,9 @@ export function useCart() {
 
   return {
     items,
+    subtotal,
+    discountPct,
+    taxPct,
     discountAmount,
     taxAmount,
     paymentMethod,
@@ -139,8 +146,8 @@ export function useCart() {
     updateQuantity,
     removeItem,
     clearCart,
-    setDiscountAmount,
-    setTaxAmount,
+    setDiscountPct,
+    setTaxPct,
     setPaymentMethod,
     setCustomerName,
     setCustomerPhone,
