@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, useCallback, useEffect, useMemo } from "react";
-import { Tabs, Table, Badge, Select, InputNumber, App } from "antd";
-import { ShoppingCartOutlined, SearchOutlined, ScanOutlined, HistoryOutlined, PlusOutlined } from "@ant-design/icons";
+import { Tabs, Table, Select, InputNumber, App } from "antd";
+import { SearchOutlined, ScanOutlined, HistoryOutlined, PlusOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { Product } from "@/modules/products/types";
 import { useProducts } from "@/modules/products/hooks/useProducts";
 import { useSales, useCart } from "@/modules/billing/hooks/useBilling";
 import { useAppSettings } from "@/modules/settings/hooks/useAppSettings";
-import CartDrawer from "@/modules/billing/components/CartDrawer";
+import CartPanel from "@/modules/billing/components/CartPanel";
 import SalesHistory from "@/modules/billing/components/SalesHistory";
 import InvoicePreview from "@/modules/billing/components/InvoicePreview";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
@@ -16,8 +16,9 @@ import type { Sale } from "@/modules/billing/types";
 import {
   PageWrapper,
   PageHeader,
-  CartBadge,
-  CartButton,
+  SplitLayout,
+  ProductPane,
+  CartPane,
   SearchContainer,
   SearchInput,
   ProductNameText,
@@ -36,7 +37,6 @@ const BillingPage = () => {
   const { message } = App.useApp();
   const [activeTab, setActiveTab] = useState("new-sale");
   const [search, setSearch] = useState("");
-  const [cartOpen, setCartOpen] = useState(false);
   const [saleLoading, setSaleLoading] = useState(false);
   const [completedSale, setCompletedSale] = useState<Sale | null>(null);
   const [invoiceOpen, setInvoiceOpen] = useState(false);
@@ -164,7 +164,6 @@ const BillingPage = () => {
       setCompletedSale(sale);
       setInvoiceOpen(true);
       cart.clearCart();
-      setCartOpen(false);
       message.success(`Sale created: ${sale.invoiceNumber}`);
     } 
     catch {
@@ -307,102 +306,99 @@ const BillingPage = () => {
 
   return (
     <PageWrapper>
-      <PageHeader>
-        <PageTitle>Billing</PageTitle>
-        <CartBadge count={cart.items.reduce((s, i) => s + i.quantity, 0)}>
-          <CartButton
-            type="primary"
-            icon={<ShoppingCartOutlined />}
-            onClick={() => setCartOpen(true)}
-            size="large"
-          >
-            Cart
-          </CartButton>
-        </CartBadge>
-      </PageHeader>
+      <SplitLayout>
+        {/* Left: product search + table */}
+        <ProductPane>
+          <PageHeader>
+            <PageTitle>Billing</PageTitle>
+          </PageHeader>
 
-      <Tabs
-        activeKey={activeTab}
-        onChange={setActiveTab}
-        items={[
-          {
-            key: "new-sale",
-            label: (
-              <span>
-                <ScanOutlined /> New Sale
-              </span>
-            ),
-            children: (
-              <div>
-                <SearchContainer>
-                  <SearchInput
-                    placeholder="Search products by name, SKU or variant barcode…"
-                    prefix={<SearchOutlined />}
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    allowClear
-                    size="large"
+          <Tabs
+            activeKey={activeTab}
+            onChange={setActiveTab}
+            items={[
+              {
+                key: "new-sale",
+                label: (
+                  <span>
+                    <ScanOutlined /> New Sale
+                  </span>
+                ),
+                children: (
+                  <div>
+                    <SearchContainer>
+                      <SearchInput
+                        placeholder="Search products by name, SKU or variant barcode…"
+                        prefix={<SearchOutlined />}
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        allowClear
+                        size="large"
+                      />
+                    </SearchContainer>
+                    <TableWrapper>
+                      <Table
+                        columns={productColumns}
+                        dataSource={products}
+                        rowKey="id"
+                        loading={productsLoading}
+                        size="small"
+                        pagination={{ pageSize: 8 }}
+                        scroll={{ x: 600 }}
+                      />
+                    </TableWrapper>
+                  </div>
+                ),
+              },
+              {
+                key: "history",
+                label: (
+                  <span>
+                    <HistoryOutlined /> Sales History
+                  </span>
+                ),
+                children: (
+                  <SalesHistory
+                    sales={sales}
+                    loading={salesLoading}
+                    filters={salesFilters}
+                    onFiltersChange={setSalesFilters}
+                    onRefund={refundSale}
+                    onViewSale={getSaleById}
                   />
-                </SearchContainer>
-                <TableWrapper>
-                  <Table
-                    columns={productColumns}
-                    dataSource={products}
-                    rowKey="id"
-                    loading={productsLoading}
-                    size="small"
-                    pagination={{ pageSize: 8 }}
-                    scroll={{ x: 600 }}
-                  />
-                </TableWrapper>
-              </div>
-            ),
-          },
-          {
-            key: "history",
-            label: (
-              <span>
-                <HistoryOutlined /> Sales History
-              </span>
-            ),
-            children: (
-              <SalesHistory
-                sales={sales}
-                loading={salesLoading}
-                filters={salesFilters}
-                onFiltersChange={setSalesFilters}
-                onRefund={refundSale}
-                onViewSale={getSaleById}
-              />
-            ),
-          },
-        ]}
-      />
+                ),
+              },
+            ]}
+          />
+        </ProductPane>
 
-      {/* Cart Drawer */}
-      <CartDrawer
-        open={cartOpen}
-        items={cart.items}
-        subtotal={cart.subtotal}
-        discountPct={cart.discountPct}
-        taxPct={cart.taxPct}
-        defaultTaxPct={defaultTaxPct}
-        paymentMethod={cart.paymentMethod}
-        customerName={cart.customerName}
-        customerPhone={cart.customerPhone}
-        onClose={() => setCartOpen(false)}
-        onUpdateQuantity={cart.updateQuantity}
-        onRemoveItem={cart.removeItem}
-        onDiscountPctChange={cart.setDiscountPct}
-        onTaxPctChange={cart.setTaxPct}
-        onPaymentMethodChange={cart.setPaymentMethod}
-        onCustomerNameChange={cart.setCustomerName}
-        onCustomerPhoneChange={cart.setCustomerPhone}
-        onConfirmSale={handleConfirmSale}
-        loading={saleLoading}
-      />
+        {/* Right: always-visible cart panel */}
+        {activeTab === "new-sale" && (
+          <CartPane>
+            <CartPanel
+              items={cart.items}
+              subtotal={cart.subtotal}
+              discountPct={cart.discountPct}
+              taxPct={cart.taxPct}
+              defaultTaxPct={defaultTaxPct}
+              paymentMethod={cart.paymentMethod}
+              customerName={cart.customerName}
+              customerPhone={cart.customerPhone}
+              onUpdateQuantity={cart.updateQuantity}
+              onRemoveItem={cart.removeItem}
+              onDiscountPctChange={cart.setDiscountPct}
+              onTaxPctChange={cart.setTaxPct}
+              onPaymentMethodChange={cart.setPaymentMethod}
+              onCustomerNameChange={cart.setCustomerName}
+              onCustomerPhoneChange={cart.setCustomerPhone}
+              onConfirmSale={handleConfirmSale}
+              loading={saleLoading}
+            />
+          </CartPane>
+        )}
+      </SplitLayout>
 
-      {/* Invoice Preview after sale */}
+      {/* Invoice preview modal after sale */}
       <InvoicePreview
         sale={completedSale}
         open={invoiceOpen}

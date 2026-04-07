@@ -17,17 +17,48 @@ export const addPulse = keyframes`
 // ─── Page Shell ───────────────────────────────────────────────────────────────
 
 export const PageWrapper = styled.div`
-  padding: 24px;
   height: 100%;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 16px;
 `;
 
 export const PageHeader = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-shrink: 0;
+`;
+
+// ─── Split Layout ─────────────────────────────────────────────────────────────
+
+export const SplitLayout = styled.div`
+  flex: 1;
+  display: flex;
+  min-height: 0;
+`;
+
+export const ProductPane = styled.div`
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  &::-webkit-scrollbar { width: 4px; }
+  &::-webkit-scrollbar-thumb { background: #e8eaed; border-radius: 2px; }
+`;
+
+export const CartPane = styled.div`
+  width: 420px;
+  flex-shrink: 0;
+  border-left: 1.5px solid #e8eaed;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 `;
 
 // ─── Cart Button ──────────────────────────────────────────────────────────────
