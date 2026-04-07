@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useMemo } from "react";
-import { Typography, Tabs, Input, Button, Table, Badge, Select, InputNumber, App, Flex, Tag } from "antd";
+import { Tabs, Table, Badge, Select, InputNumber, App } from "antd";
 import { ShoppingCartOutlined, SearchOutlined, ScanOutlined, HistoryOutlined, PlusOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { Product } from "@/modules/products/types";
@@ -12,8 +12,24 @@ import SalesHistory from "@/modules/billing/components/SalesHistory";
 import InvoicePreview from "@/modules/billing/components/InvoicePreview";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
 import type { Sale } from "@/modules/billing/types";
-
-const { Title } = Typography;
+import {
+  PageWrapper,
+  PageHeader,
+  CartBadge,
+  CartButton,
+  SearchContainer,
+  SearchInput,
+  ProductNameText,
+  ProductMetaText,
+  StockBadgeWrap,
+  AttrText,
+  EmptyAttrText,
+  QtyInput,
+  AddButton,
+  TableWrapper,
+  PageTitle,
+  SizeTag
+} from "./billing.styled";
 
 const BillingPage = () => {
   const { message } = App.useApp();
@@ -123,6 +139,7 @@ const BillingPage = () => {
         sku: product.sku,
         sizeId,
         sizeLabel: sizeInfo.sizeLabel,
+        attributes: (product.attributes ?? {}) as Record<string, unknown>,
         quantity: 1,
         unitPrice: product.basePrice,
       });
@@ -161,11 +178,10 @@ const BillingPage = () => {
       key: "product",
       render: (_, record) => (
         <div>
-          <Typography.Text strong>{record.name}</Typography.Text>
-          <br />
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          <ProductNameText>{record.name}</ProductNameText>
+          <ProductMetaText>
             {record.sku} · {record.brandName} · {record.categoryName}
-          </Typography.Text>
+          </ProductMetaText>
         </div>
       ),
     },
@@ -184,12 +200,8 @@ const BillingPage = () => {
       render: (_, record) => {
         const matched = getVariantMatch(record);
         const qty = matched ? matched.quantity : record.totalStock;
-        return (
-          <Badge
-            color={qty === 0 ? "red" : qty <= 10 ? "orange" : "green"}
-            text={qty}
-          />
-        );
+        const level = qty === 0 ? "low" : qty <= 10 ? "mid" : "high";
+        return <StockBadgeWrap $level={level}>{qty}</StockBadgeWrap>;
       },
     },
     {
@@ -200,9 +212,9 @@ const BillingPage = () => {
         const matched = getVariantMatch(record);
         if (matched) {
           return (
-            <Tag color="blue" style={{ margin: 0 }}>
+            <SizeTag color="blue">
               {matched.sizeLabel}
-            </Tag>
+            </SizeTag>
           );
         }
         return (
@@ -213,7 +225,6 @@ const BillingPage = () => {
             onChange={(val) =>
               setSelectedSizes((prev) => ({ ...prev, [record.id]: val }))
             }
-            style={{ width: 110 }}
             options={record.stock.map((s) => ({
               label: `${s.sizeLabel} (${s.quantity})`,
               value: s.sizeId,
@@ -231,9 +242,9 @@ const BillingPage = () => {
       render: (_: unknown, record: Product) => {
         const val = record.attributes[key];
         return val != null && val !== "" ? (
-          <Typography.Text style={{ fontSize: 13 }}>{String(val)}</Typography.Text>
+          <AttrText>{String(val)}</AttrText>
         ) : (
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>—</Typography.Text>
+          <EmptyAttrText>—</EmptyAttrText>
         );
       },
     })),
@@ -256,13 +267,14 @@ const BillingPage = () => {
         const qtyInCart = cartItem?.quantity ?? 0;
 
         return (
-          <InputNumber
+          <QtyInput
             min={0}
             max={maxQty}
+            $active={(qtyInCart ?? 0) > 0}
             value={qtyInCart}
             onChange={(val) => {
               if (!sizeId) return;
-              const next = val ?? 0;
+              const next = (val as number) ?? 0;
               if (next <= 0) {
                 cart.removeItem(record.id, sizeId);
               } else {
@@ -270,7 +282,6 @@ const BillingPage = () => {
               }
             }}
             size="small"
-            style={{ width: 64 }}
           />
         );
       },
@@ -280,7 +291,7 @@ const BillingPage = () => {
       key: "action",
       width: 60,
       render: (_, record) => (
-        <Button
+        <AddButton
           type="primary"
           size="small"
           icon={<PlusOutlined />}
@@ -292,20 +303,20 @@ const BillingPage = () => {
   ];
 
   return (
-    <div style={{ padding: 24 }}>
-      <Flex justify="space-between" align="center" style={{ marginBottom: 16 }}>
-        <Title level={3} style={{ margin: 0 }}>Billing</Title>
-        <Badge count={cart.items.length}>
-          <Button
+    <PageWrapper>
+      <PageHeader>
+        <PageTitle>Billing</PageTitle>
+        <CartBadge count={cart.items.reduce((s, i) => s + i.quantity, 0)}>
+          <CartButton
             type="primary"
             icon={<ShoppingCartOutlined />}
             onClick={() => setCartOpen(true)}
             size="large"
           >
             Cart
-          </Button>
-        </Badge>
-      </Flex>
+          </CartButton>
+        </CartBadge>
+      </PageHeader>
 
       <Tabs
         activeKey={activeTab}
@@ -320,24 +331,27 @@ const BillingPage = () => {
             ),
             children: (
               <div>
-                <Input
-                  placeholder="Search products by name, SKU or variant barcode…"
-                  prefix={<SearchOutlined />}
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  allowClear
-                  size="large"
-                  style={{ marginBottom: 16 }}
-                />
-                <Table
-                  columns={productColumns}
-                  dataSource={products}
-                  rowKey="id"
-                  loading={productsLoading}
-                  size="small"
-                  pagination={{ pageSize: 8 }}
-                  scroll={{ x: 600 }}
-                />
+                <SearchContainer>
+                  <SearchInput
+                    placeholder="Search products by name, SKU or variant barcode…"
+                    prefix={<SearchOutlined />}
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    allowClear
+                    size="large"
+                  />
+                </SearchContainer>
+                <TableWrapper>
+                  <Table
+                    columns={productColumns}
+                    dataSource={products}
+                    rowKey="id"
+                    loading={productsLoading}
+                    size="small"
+                    pagination={{ pageSize: 8 }}
+                    scroll={{ x: 600 }}
+                  />
+                </TableWrapper>
               </div>
             ),
           },
@@ -392,7 +406,7 @@ const BillingPage = () => {
           setCompletedSale(null);
         }}
       />
-    </div>
+    </PageWrapper>
   );
 }
 

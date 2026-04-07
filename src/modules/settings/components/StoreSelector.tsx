@@ -18,10 +18,14 @@ export default function StoreSelector() {
       if (res.ok) {
         const data: StoreRecord[] = await res.json();
         setStores(data);
-        // Auto-select first active store if none is selected yet
         if (!storeId) {
+          // No store selected yet — auto-select first active
           const first = data.find((s) => s.isActive);
           if (first) setStore(first.id, first.name);
+        } else {
+          // storeId already set from session but name may still be the default
+          const current = data.find((s) => s.id === storeId);
+          if (current) setStore(current.id, current.name);
         }
       }
     } 

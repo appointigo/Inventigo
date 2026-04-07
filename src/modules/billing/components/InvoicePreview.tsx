@@ -1,11 +1,46 @@
 "use client";
 
-import { Modal, Table, Descriptions, Tag, Typography, Divider, Button, Space } from "antd";
-import { PrinterOutlined } from "@ant-design/icons";
+import { Modal, Table, Typography } from "antd";
+import { PrinterOutlined, CheckCircleFilled, CloseOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { Sale, SaleItem } from "../types";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
 import dayjs from "dayjs";
+import { useStore } from "@/providers/StoreProvider";
+import {
+  InvoiceHeader,
+  SuccessRow,
+  SuccessIconCircle,
+  SuccessTextWrap,
+  SuccessTitle,
+  SuccessSubtext,
+  InvoiceNumBadge,
+  MetaPills,
+  MetaPill,
+  PillLabel,
+  PartiesRow,
+  Party,
+  PartyLabel,
+  PartyName,
+  PartyDetail,
+  SectionLabel,
+  TableWrap,
+  ItemNameCell,
+  ItemSkuCell,
+  SizeBadge,
+  AttrBadge,
+  SummaryCard,
+  SumRow,
+  TotalSumRow,
+  NewSaleBanner,
+  NewSaleBannerText,
+  NewSaleBtn,
+  FooterActions,
+  ActionButton,
+  PrintButton,
+  InvoiceBodyContent,
+  DiscountText,
+} from "./InvoicePreview.styled";
 
 interface InvoicePreviewProps {
   sale: Sale | null;
@@ -13,9 +48,11 @@ interface InvoicePreviewProps {
   onClose: () => void;
 }
 
-const { Text, Title } = Typography;
+const { Text } = Typography;
 
-export default function InvoicePreview({ sale, open, onClose }: InvoicePreviewProps) {
+const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
+  const { storeName } = useStore();
+
   if (!sale) return null;
 
   const handlePrint = () => {
@@ -23,16 +60,25 @@ export default function InvoicePreview({ sale, open, onClose }: InvoicePreviewPr
     if (!printWindow) return;
 
     const itemRows = sale.items
-      .map(
-        (item, i) => `
-        <tr>
-          <td>${i + 1}</td>
-          <td>${item.productName}<br><small>${item.sku} · Size: ${item.sizeLabel}</small></td>
-          <td style="text-align:right">${formatCurrency(item.unitPrice)}</td>
-          <td style="text-align:center">${item.quantity}</td>
-          <td style="text-align:right">${formatCurrency(item.total)}</td>
-        </tr>`
-      )
+      .map((item, i) => {
+        const attrValues = Object.values(item.attributes ?? {})
+          .filter((v) => {
+            const s = String(v).trim().toLowerCase();
+            return s !== "" && !["pcs", "pc", "piece", "pieces", "unit", "units"].includes(s);
+          })
+          .map((v) => `<span style="display:inline-block;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:3px;font-size:9pt;padding:0 5px;margin-left:3px;">${String(v)}</span>`)
+          .join("");
+
+        return `
+          <tr>
+            <td>${i + 1}</td>
+            <td>${item.productName}<br><small style="color:#888">${item.sku} · <span style="display:inline-block;background:#eff4ff;border:1px solid #bfdbfe;border-radius:3px;font-size:9pt;padding:0 5px;color:#2563eb;">${item.sizeLabel}</span>${attrValues}</small></td>
+            <td style="text-align:right">${formatCurrency(item.unitPrice)}</td>
+            <td style="text-align:center">${item.quantity}</td>
+            <td style="text-align:right">${formatCurrency(item.total)}</td>
+          </tr>
+        `;
+      })
       .join("");
 
     printWindow.document.write(`
@@ -60,7 +106,7 @@ export default function InvoicePreview({ sale, open, onClose }: InvoicePreviewPr
         </head>
         <body>
           <div class="header">
-            <h1>Stockiva</h1>
+            <h1>${storeName}</h1>
             <p>Tax Invoice</p>
           </div>
           <div class="info">
@@ -107,19 +153,29 @@ export default function InvoicePreview({ sale, open, onClose }: InvoicePreviewPr
     {
       title: "#",
       width: 40,
-      render: (_, __, index) => index + 1,
+      render: (_, __, index) => (
+        <Text type="secondary">{index + 1}</Text>
+      ),
     },
     {
       title: "Product",
       key: "product",
       render: (_, record) => (
-        <div>
-          <Text strong>{record.productName}</Text>
-          <br />
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            {record.sku} · Size: {record.sizeLabel}
-          </Text>
-        </div>
+        <>
+          <ItemNameCell>{record.productName}</ItemNameCell>
+          <ItemSkuCell>
+            {record.sku}
+            <SizeBadge>{record.sizeLabel}</SizeBadge>
+            {Object.values(record.attributes)
+              .filter((v) => {
+                const s = String(v).trim().toLowerCase();
+                return s !== "" && !["pcs", "pc", "piece", "pieces", "unit", "units"].includes(s);
+              })
+              .map((v, i) => (
+                <AttrBadge key={i}>{String(v)}</AttrBadge>
+              ))}
+          </ItemSkuCell>
+        </>
       ),
     },
     {
@@ -127,85 +183,144 @@ export default function InvoicePreview({ sale, open, onClose }: InvoicePreviewPr
       dataIndex: "unitPrice",
       width: 100,
       align: "right",
-      render: (price: number) => formatCurrency(price),
+      render: (price: number) => <Text type="secondary">{formatCurrency(price)}</Text>,
     },
     {
       title: "Qty",
       dataIndex: "quantity",
       width: 60,
       align: "center",
+      render: (qty: number) => <Text strong>{qty}</Text>,
     },
     {
       title: "Total",
       dataIndex: "total",
       width: 100,
       align: "right",
-      render: (total: number) => formatCurrency(total),
+      render: (total: number) => <Text strong>{formatCurrency(total)}</Text>,
     },
   ];
 
-  const statusColor = sale.status === "COMPLETED" ? "green" : "red";
+  const isCompleted = sale.status === "COMPLETED";
 
   return (
     <Modal
-      title={`Invoice ${sale.invoiceNumber}`}
       open={open}
       onCancel={onClose}
-      width={640}
-      footer={
-        <Space>
-          <Button onClick={onClose}>Close</Button>
-          <Button type="primary" icon={<PrinterOutlined />} onClick={handlePrint}>
-            Print Invoice
-          </Button>
-        </Space>
-      }
+      width={660}
+      footer={null}
+      title={null}
+      closeIcon={<CloseOutlined />}
+      styles={{ body: { padding: 0 } }}
     >
-      <Descriptions column={2} size="small" style={{ marginBottom: 16 }}>
-        <Descriptions.Item label="Invoice">{sale.invoiceNumber}</Descriptions.Item>
-        <Descriptions.Item label="Date">
-          {dayjs(sale.createdAt).format("DD MMM YYYY, hh:mm A")}
-        </Descriptions.Item>
-        <Descriptions.Item label="Payment">
-          <Tag>{sale.paymentMethod}</Tag>
-        </Descriptions.Item>
-        <Descriptions.Item label="Status">
-          <Tag color={statusColor}>{sale.status}</Tag>
-        </Descriptions.Item>
-        {sale.customerName && (
-          <Descriptions.Item label="Customer">{sale.customerName}</Descriptions.Item>
-        )}
-        {sale.customerPhone && (
-          <Descriptions.Item label="Phone">{sale.customerPhone}</Descriptions.Item>
-        )}
-      </Descriptions>
+      {/* Gradient header */}
+      <InvoiceHeader>
+        <SuccessRow>
+          <SuccessIconCircle>
+            <CheckCircleFilled />
+          </SuccessIconCircle>
+          <SuccessTextWrap>
+            <SuccessTitle>Sale {isCompleted ? "Complete" : "Voided"}</SuccessTitle>
+            <SuccessSubtext>
+              {dayjs(sale.createdAt).format("DD MMM YYYY · hh:mm A")}
+            </SuccessSubtext>
+          </SuccessTextWrap>
+          <InvoiceNumBadge>{sale.invoiceNumber}</InvoiceNumBadge>
+        </SuccessRow>
+        <MetaPills>
+          <MetaPill>
+            <PillLabel>Payment</PillLabel>
+            {sale.paymentMethod}
+          </MetaPill>
+          <MetaPill $green={isCompleted}>
+            <PillLabel>Status</PillLabel>
+            {sale.status}
+          </MetaPill>
+          <MetaPill>
+            <PillLabel>Items</PillLabel>
+            {sale.items.reduce((s, i) => s + i.quantity, 0)}
+          </MetaPill>
+        </MetaPills>
+      </InvoiceHeader>
 
-      <Table
-        columns={columns}
-        dataSource={sale.items}
-        rowKey="id"
-        pagination={false}
-        size="small"
-      />
+      {/* Body */}
+      <InvoiceBodyContent>
+        {/* Parties */}
+        <PartiesRow>
+          <Party>
+            <PartyLabel>From</PartyLabel>
+            <PartyName>{storeName}</PartyName>
+            <PartyDetail>Point of Sale</PartyDetail>
+          </Party>
+          {(sale.customerName || sale.customerPhone) && (
+            <Party $right>
+              <PartyLabel>Customer</PartyLabel>
+              {sale.customerName && <PartyName>{sale.customerName}</PartyName>}
+              {sale.customerPhone && <PartyDetail>{sale.customerPhone}</PartyDetail>}
+            </Party>
+          )}
+        </PartiesRow>
 
-      <Divider style={{ margin: "12px 0" }} />
-
-      <div style={{ textAlign: "right" }}>
-        <div style={{ marginBottom: 4 }}>
-          <Text>Subtotal: {formatCurrency(sale.subtotal)}</Text>
+        {/* Items */}
+        <div>
+          <SectionLabel>Items Purchased</SectionLabel>
+          <TableWrap>
+            <Table
+              columns={columns}
+              dataSource={sale.items}
+              rowKey="id"
+              pagination={false}
+              size="small"
+            />
+          </TableWrap>
         </div>
-        {sale.discountAmount > 0 && (
-          <div style={{ marginBottom: 4 }}>
-            <Text type="success">Discount: -{formatCurrency(sale.discountAmount)}</Text>
-          </div>
+
+        {/* Summary */}
+        <SummaryCard>
+          <SumRow>
+            <span>Subtotal</span>
+            <span>{formatCurrency(sale.subtotal)}</span>
+          </SumRow>
+          {sale.discountAmount > 0 && (
+            <SumRow>
+              <DiscountText>Discount</DiscountText>
+              <DiscountText>−{formatCurrency(sale.discountAmount)}</DiscountText>
+            </SumRow>
+          )}
+          {sale.taxAmount > 0 && (
+            <SumRow>
+              <span>Tax</span>
+              <span>{formatCurrency(sale.taxAmount)}</span>
+            </SumRow>
+          )}
+          <TotalSumRow>
+            <span>Total</span>
+            <span>{formatCurrency(sale.total)}</span>
+          </TotalSumRow>
+        </SummaryCard>
+
+        {/* New sale banner */}
+        {isCompleted && (
+          <NewSaleBanner>
+            <span>🎉</span>
+            <NewSaleBannerText>Transaction recorded successfully!</NewSaleBannerText>
+            <NewSaleBtn onClick={onClose}>New Sale</NewSaleBtn>
+          </NewSaleBanner>
         )}
-        {sale.taxAmount > 0 && (
-          <div style={{ marginBottom: 4 }}>
-            <Text>Tax: {formatCurrency(sale.taxAmount)}</Text>
-          </div>
-        )}
-        <Title level={4} style={{ margin: 0 }}>Total: {formatCurrency(sale.total)}</Title>
-      </div>
+
+        {/* Footer actions */}
+        <FooterActions>
+          <ActionButton onClick={onClose}>
+            <CloseOutlined />
+            Close
+          </ActionButton>
+          <PrintButton type="primary" icon={<PrinterOutlined />} onClick={handlePrint}>
+            Print Invoice
+          </PrintButton>
+        </FooterActions>
+      </InvoiceBodyContent>
     </Modal>
   );
 }
+
+export default InvoicePreview;

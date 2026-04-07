@@ -1,12 +1,58 @@
 "use client";
 
-import { Drawer, Table, InputNumber, Button, Typography, Divider, Input, Select, Space, Empty, Flex } from "antd";
-import { DeleteOutlined, ShoppingCartOutlined } from "@ant-design/icons";
-import type { ColumnsType } from "antd/es/table";
+import { Drawer, Typography, Input } from "antd";
+import { DeleteOutlined, ShoppingCartOutlined, LockOutlined, CheckOutlined } from "@ant-design/icons";
 import type { CartItem, PaymentMethodType } from "../types";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
+import {
+  DrawerTitleRow,
+  DrawerTitleText,
+  ItemCountBadge,
+  StepsBar,
+  StepItem,
+  StepCircle,
+  StepLabel,
+  CartItemsContainer,
+  CartItemCard,
+  ItemBody,
+  ItemNameText,
+  ItemMetaText,
+  SizeChip,
+  AttrChip,
+  ItemPriceRow,
+  UnitPriceText,
+  LineTotalText,
+  QtyController,
+  QtyControlBtn,
+  QtyDisplay,
+  DeleteBtn,
+  EmptyCartWrap,
+  EmptyCartIcon,
+  EmptyCartText,
+  SectionLabel,
+  PayPillsRow,
+  PayPill,
+  PayIcon,
+  CustomerRow,
+  SummaryCard,
+  SumRow,
+  TotalRow,
+  SavingsRow,
+  SumInput,
+  DrawerFooter,
+  ConfirmButton,
+  SecureNote,
+  DrawerSection,
+  CartDivider,
+} from "./CartDrawer.styled";
 
-const { Text, Title } = Typography;
+const { Text } = Typography;
+
+const PAYMENT_OPTIONS: { label: string; value: PaymentMethodType; icon: string }[] = [
+  { label: "Cash", value: "CASH", icon: "💵" },
+  { label: "Card", value: "CARD", icon: "💳" },
+  { label: "UPI", value: "UPI", icon: "📱" },
+];
 
 interface CartDrawerProps {
   open: boolean;
@@ -28,7 +74,7 @@ interface CartDrawerProps {
   loading: boolean;
 }
 
-export default function CartDrawer({
+const CartDrawer = ({
   open,
   items,
   discountAmount,
@@ -46,192 +92,218 @@ export default function CartDrawer({
   onCustomerPhoneChange,
   onConfirmSale,
   loading,
-}: CartDrawerProps) {
+}: CartDrawerProps) => {
   const subtotal = items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
   const total = subtotal - discountAmount + taxAmount;
-
-  const columns: ColumnsType<CartItem> = [
-    {
-      title: "Item",
-      key: "item",
-      render: (_, record) => (
-        <div>
-          <Text strong style={{ fontSize: 13 }}>{record.productName}</Text>
-          <br />
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            {record.sku} · Size: {record.sizeLabel}
-          </Text>
-        </div>
-      ),
-    },
-    {
-      title: "Price",
-      dataIndex: "unitPrice",
-      width: 90,
-      render: (price: number) => formatCurrency(price),
-    },
-    {
-      title: "Qty",
-      width: 80,
-      render: (_, record) => (
-        <InputNumber
-          min={1}
-          max={99}
-          value={record.quantity}
-          size="small"
-          onChange={(val) => onUpdateQuantity(record.productId, record.sizeId, val ?? 1)}
-        />
-      ),
-    },
-    {
-      title: "Total",
-      width: 90,
-      render: (_, record) => formatCurrency(record.unitPrice * record.quantity),
-    },
-    {
-      width: 40,
-      render: (_, record) => (
-        <Button
-          type="text"
-          danger
-          icon={<DeleteOutlined />}
-          size="small"
-          onClick={() => onRemoveItem(record.productId, record.sizeId)}
-        />
-      ),
-    },
-  ];
+  const totalItems = items.reduce((s, i) => s + i.quantity, 0);
 
   return (
     <Drawer
       title={
-        <Space>
+        <DrawerTitleRow>
           <ShoppingCartOutlined />
-          Cart ({items.length} items)
-        </Space>
+          <DrawerTitleText>Cart</DrawerTitleText>
+          {items.length > 0 && (
+            <ItemCountBadge>{totalItems} item{totalItems !== 1 ? "s" : ""}</ItemCountBadge>
+          )}
+        </DrawerTitleRow>
       }
       open={open}
       onClose={onClose}
-      size={520}
-      footer={
-        <div style={{ padding: "8px 0" }}>
-          <Button
-            type="primary"
-            block
-            size="large"
-            onClick={onConfirmSale}
-            loading={loading}
-            disabled={items.length === 0}
-          >
-            Confirm Sale — {formatCurrency(total)}
-          </Button>
-        </div>
-      }
+      size={480}
+      styles={{ body: { padding: 0, display: "flex", flexDirection: "column", height: "100%" } }}
+      footer={null}
     >
+      {/* Progress steps */}
+      <StepsBar>
+        <StepItem $state="done">
+          <StepCircle $state="done"><CheckOutlined /></StepCircle>
+          <StepLabel $active>Products</StepLabel>
+        </StepItem>
+        <StepItem $state="active">
+          <StepCircle $state="active">2</StepCircle>
+          <StepLabel $active>Review</StepLabel>
+        </StepItem>
+        <StepItem $state="idle">
+          <StepCircle $state="idle">3</StepCircle>
+          <StepLabel $active={false}>Confirm</StepLabel>
+        </StepItem>
+      </StepsBar>
+
+      {/* Scrollable body */}
       {items.length === 0 ? (
-        <Empty description="No items in cart" />
-      ) : (
+        <EmptyCartWrap>
+          <EmptyCartIcon>🛒</EmptyCartIcon>
+          <EmptyCartText>No items added yet</EmptyCartText>
+        </EmptyCartWrap>
+      ) 
+      : (
         <>
-          <Table
-            columns={columns}
-            dataSource={items}
-            rowKey={(r) => `${r.productId}-${r.sizeId}`}
-            pagination={false}
-            size="small"
-          />
+          {/* Items */}
+          <CartItemsContainer>
+            {items.map((item) => (
+              <CartItemCard key={`${item.productId}-${item.sizeId}`}>
+                <ItemBody>
+                  <ItemNameText>{item.productName}</ItemNameText>
+                  <ItemMetaText>
+                    {item.sku}
+                    <SizeChip>{item.sizeLabel}</SizeChip>
+                    {Object.values(item.attributes ?? {})
+                      .filter((v) => {
+                        const s = String(v).trim().toLowerCase();
+                        return s !== "" && !["pcs", "pc", "piece", "pieces", "unit", "units"].includes(s);
+                      })
+                      .map((v, i) => (
+                        <AttrChip key={i}>{String(v)}</AttrChip>
+                      ))}
+                  </ItemMetaText>
+                  <ItemPriceRow>
+                    <UnitPriceText>{formatCurrency(item.unitPrice)} each</UnitPriceText>
+                    <QtyController>
+                      <QtyControlBtn
+                        onClick={() =>
+                          onUpdateQuantity(item.productId, item.sizeId, Math.max(1, item.quantity - 1))
+                        }
+                      >
+                        −
+                      </QtyControlBtn>
+                      <QtyDisplay>{item.quantity}</QtyDisplay>
+                      <QtyControlBtn
+                        onClick={() =>
+                          onUpdateQuantity(item.productId, item.sizeId, item.quantity + 1)
+                        }
+                      >
+                        +
+                      </QtyControlBtn>
+                    </QtyController>
+                    <LineTotalText>{formatCurrency(item.unitPrice * item.quantity)}</LineTotalText>
+                  </ItemPriceRow>
+                </ItemBody>
+                <DeleteBtn
+                  onClick={() => onRemoveItem(item.productId, item.sizeId)}
+                  title="Remove"
+                >
+                  <DeleteOutlined />
+                </DeleteBtn>
+              </CartItemCard>
+            ))}
+          </CartItemsContainer>
 
-          <Divider />
+          <CartDivider />
 
-          {/* Customer Info */}
-          <div style={{ marginBottom: 16 }}>
-            <Text strong style={{ display: "block", marginBottom: 8 }}>Customer (optional)</Text>
-            <Space orientation="vertical" style={{ width: "100%" }} size={8}>
+          {/* Customer */}
+          <DrawerSection>
+            <SectionLabel>Customer (Optional)</SectionLabel>
+            <CustomerRow>
               <Input
                 placeholder="Customer name"
                 value={customerName}
-                onChange={(e) => onCustomerNameChange(e.target.value)}
-                size="small"
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === "" || /^[a-zA-Z\s]*$/.test(val)) {
+                    onCustomerNameChange(val);
+                  }
+                }}
+                size="middle"
               />
               <Input
                 placeholder="Phone number"
                 value={customerPhone}
-                onChange={(e) => onCustomerPhoneChange(e.target.value)}
-                size="small"
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, "").slice(0, 10);
+                  onCustomerPhoneChange(val);
+                }}
+                maxLength={10}
+                size="middle"
               />
-            </Space>
-          </div>
+            </CustomerRow>
+          </DrawerSection>
 
-          <Divider />
+          <CartDivider />
 
-          {/* Payment & Totals */}
-          <div style={{ marginBottom: 8 }}>
-            <Text strong style={{ display: "block", marginBottom: 8 }}>Payment Method</Text>
-            <Select
-              value={paymentMethod}
-              onChange={onPaymentMethodChange}
-              style={{ width: "100%" }}
-              size="small"
-              options={[
-                { label: "Cash", value: "CASH" },
-                { label: "Card", value: "CARD" },
-                { label: "UPI", value: "UPI" },
-              ]}
-            />
-          </div>
+          {/* Payment */}
+          <DrawerSection>
+            <SectionLabel>Payment Method</SectionLabel>
+            <PayPillsRow>
+              {PAYMENT_OPTIONS.map((opt) => (
+                <PayPill
+                  key={opt.value}
+                  $active={paymentMethod === opt.value}
+                  onClick={() => onPaymentMethodChange(opt.value)}
+                >
+                  <PayIcon>{opt.icon}</PayIcon>
+                  {opt.label}
+                </PayPill>
+              ))}
+            </PayPillsRow>
+          </DrawerSection>
 
-          <div style={{ marginBottom: 8 }}>
-            <Space style={{ width: "100%", justifyContent: "space-between" }}>
-              <Text>Discount</Text>
-              <InputNumber
-                min={0}
-                max={subtotal}
-                value={discountAmount}
-                onChange={(val) => onDiscountChange(val ?? 0)}
-                size="small"
-                prefix="₹"
-                style={{ width: 120 }}
-              />
-            </Space>
-          </div>
+          <CartDivider />
 
-          <div style={{ marginBottom: 8 }}>
-            <Space style={{ width: "100%", justifyContent: "space-between" }}>
-              <Text>Tax</Text>
-              <InputNumber
-                min={0}
-                value={taxAmount}
-                onChange={(val) => onTaxChange(val ?? 0)}
-                size="small"
-                prefix="₹"
-                style={{ width: 120 }}
-              />
-            </Space>
-          </div>
-
-          <Divider style={{ margin: "12px 0" }} />
-
-          <Flex justify="space-between" style={{ marginBottom: 4 }}>
-            <Text>Subtotal</Text>
-            <Text>{formatCurrency(subtotal)}</Text>
-          </Flex>
-          {discountAmount > 0 && (
-            <Flex justify="space-between" style={{ marginBottom: 4 }}>
-              <Text type="success">Discount</Text>
-              <Text type="success">-{formatCurrency(discountAmount)}</Text>
-            </Flex>
-          )}
-          {taxAmount > 0 && (
-            <Flex justify="space-between" style={{ marginBottom: 4 }}>
-              <Text>Tax</Text>
-              <Text>{formatCurrency(taxAmount)}</Text>
-            </Flex>
-          )}
-          <Flex justify="space-between" style={{ marginTop: 8 }}>
-            <Title level={4} style={{ margin: 0 }}>Total</Title>
-            <Title level={4} style={{ margin: 0 }}>{formatCurrency(total)}</Title>
-          </Flex>
+          {/* Summary */}
+          <DrawerSection>
+            <SectionLabel>Order Summary</SectionLabel>
+            <SummaryCard>
+              <SumRow>
+                <Text type="secondary">Subtotal ({totalItems} items)</Text>
+                <Text>{formatCurrency(subtotal)}</Text>
+              </SumRow>
+              <SumRow>
+                <Text type="secondary">Discount</Text>
+                <SumInput
+                  min={0}
+                  max={subtotal}
+                  value={discountAmount}
+                  onChange={(val) => onDiscountChange((val as number) ?? 0)}
+                  size="small"
+                  prefix="₹"
+                />
+              </SumRow>
+              <SumRow>
+                <Text type="secondary">Tax</Text>
+                <SumInput
+                  min={0}
+                  value={taxAmount}
+                  onChange={(val) => onTaxChange((val as number) ?? 0)}
+                  size="small"
+                  prefix="₹"
+                />
+              </SumRow>
+              <TotalRow>
+                <span>Total</span>
+                <span>{formatCurrency(total)}</span>
+              </TotalRow>
+              {discountAmount > 0 && (
+                <SavingsRow>
+                  <CheckOutlined />
+                  You save {formatCurrency(discountAmount)}
+                </SavingsRow>
+              )}
+            </SummaryCard>
+          </DrawerSection>
         </>
       )}
+
+      {/* Footer */}
+      <DrawerFooter>
+        <ConfirmButton
+          type="primary"
+          block
+          size="large"
+          onClick={onConfirmSale}
+          loading={loading}
+          disabled={items.length === 0}
+        >
+          <CheckOutlined />
+          Confirm Sale — {formatCurrency(total)}
+        </ConfirmButton>
+        <SecureNote>
+          <LockOutlined />
+          Secure checkout · All transactions encrypted
+        </SecureNote>
+      </DrawerFooter>
     </Drawer>
   );
 }
+
+export default CartDrawer;

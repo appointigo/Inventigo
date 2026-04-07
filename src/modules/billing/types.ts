@@ -19,6 +19,7 @@ export type CartItem = {
   sku: string;
   sizeId: string;
   sizeLabel: string;
+  attributes: Record<string, unknown>;
   quantity: number;
   unitPrice: number;
 };
@@ -59,6 +60,7 @@ export type SaleItem = {
   sku: string;
   sizeId: string;
   sizeLabel: string;
+  attributes: Record<string, unknown>;
   quantity: number;
   unitPrice: number;
   total: number;
