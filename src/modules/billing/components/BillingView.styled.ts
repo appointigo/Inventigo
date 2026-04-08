@@ -123,8 +123,8 @@ export const KbdKey = styled.kbd`
 // ─── Scan flash (green ribbon shown for ~2.5s after successful scan) ──────────
 
 export const ScanFlash = styled.div`
-  background: #f0fdf4;
-  border: 1.5px solid #bbf7d0;
+  background: ${p => p.theme.isDark ? "rgba(22, 163, 74, 0.15)" : "#f0fdf4"};
+  border: 1.5px solid ${p => p.theme.isDark ? "rgba(22, 163, 74, 0.4)" : "#bbf7d0"};
   border-radius: 12px;
   padding: 12px 16px;
   display: flex;
@@ -366,7 +366,7 @@ export const CartRowItem = styled.div`
   border-radius: 8px;
   transition: background 0.12s;
 
-  &:hover { background: #fafeff; }
+  &:hover { background: ${p => p.theme.bg.subtle}; }
 `;
 
 export const RowNumber = styled.span`
