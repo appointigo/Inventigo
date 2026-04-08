@@ -5,7 +5,7 @@ import { requireRole } from "@/lib/auth.middleware";
 
 export async function GET() {
   try {
-    await requireRole(Role.ADMIN);
+    await requireRole(Role.OWNER, Role.ADMIN);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Forbidden";
     return NextResponse.json({ error: msg }, { status: msg === "Unauthorized" ? 401 : 403 });
@@ -16,7 +16,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    await requireRole(Role.ADMIN);
+    await requireRole(Role.OWNER, Role.ADMIN);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Forbidden";
     return NextResponse.json({ error: msg }, { status: msg === "Unauthorized" ? 401 : 403 });
