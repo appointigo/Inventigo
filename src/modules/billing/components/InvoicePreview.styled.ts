@@ -151,7 +151,7 @@ export const Party = styled.div<{ $right?: boolean }>`
 export const PartyLabel = styled.div`
   font-size: 10.5px;
   font-weight: 600;
-  color: #9ca3af;
+  color: ${p => p.theme.text.faint};
   text-transform: uppercase;
   letter-spacing: 0.6px;
   margin-bottom: 6px;
@@ -160,12 +160,12 @@ export const PartyLabel = styled.div`
 export const PartyName = styled.div`
   font-size: 14px;
   font-weight: 700;
-  color: #111827;
+  color: ${p => p.theme.text.primary};
 `;
 
 export const PartyDetail = styled.div`
   font-size: 12px;
-  color: #6b7280;
+  color: ${p => p.theme.text.muted};
   margin-top: 3px;
   line-height: 1.6;
 `;
@@ -173,7 +173,7 @@ export const PartyDetail = styled.div`
 export const SectionLabel = styled.div`
   font-size: 10.5px;
   font-weight: 600;
-  color: #9ca3af;
+  color: ${p => p.theme.text.faint};
   text-transform: uppercase;
   letter-spacing: 0.6px;
   margin-bottom: 10px;
@@ -183,13 +183,13 @@ export const SectionLabel = styled.div`
 
 export const TableWrap = styled.div`
   .ant-table-thead > tr > th {
-    background: #f8f9fc;
+    background: ${p => p.theme.bg.subtle};
     font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.4px;
-    color: #6b7280;
-    border-bottom: 1.5px solid #e8eaed;
+    color: ${p => p.theme.text.muted};
+    border-bottom: 1.5px solid ${p => p.theme.border.primary};
   }
 
   .ant-table-tbody > tr > td {
@@ -202,11 +202,11 @@ export const TableWrap = styled.div`
   }
 
   .ant-table-tbody > tr:hover > td {
-    background: #f8f9fc !important;
+    background: ${p => p.theme.bg.subtle} !important;
   }
 
   .ant-table {
-    border: 1px solid #e8eaed;
+    border: 1px solid ${p => p.theme.border.primary};
     border-radius: 12px;
     overflow: hidden;
   }
@@ -215,7 +215,7 @@ export const TableWrap = styled.div`
 export const ItemNameCell = styled.span`
   font-weight: 600;
   font-size: 13px;
-  color: #111827;
+  color: ${p => p.theme.text.primary};
   display: block;
 `;
 
@@ -242,9 +242,9 @@ export const SizeBadge = styled.span`
 
 export const AttrBadge = styled.span`
   display: inline-block;
-  background: #f3f4f6;
-  color: #374151;
-  border: 1px solid #e5e7eb;
+  background: ${p => p.theme.bg.muted};
+  color: ${p => p.theme.text.secondary};
+  border: 1px solid ${p => p.theme.border.primary};
   border-radius: 5px;
   font-size: 11px;
   font-weight: 500;
@@ -254,8 +254,8 @@ export const AttrBadge = styled.span`
 // ─── Summary Card ─────────────────────────────────────────────────────────────
 
 export const SummaryCard = styled.div`
-  background: #f8f9fc;
-  border: 1.5px solid #e8eaed;
+  background: ${p => p.theme.bg.subtle};
+  border: 1.5px solid ${p => p.theme.border.primary};
   border-radius: 12px;
   overflow: hidden;
 `;
@@ -266,8 +266,8 @@ export const SumRow = styled.div`
   align-items: center;
   padding: 10px 16px;
   font-size: 13px;
-  border-bottom: 1px solid #f3f4f6;
-  color: #6b7280;
+  border-bottom: 1px solid ${p => p.theme.border.subtle};
+  color: ${p => p.theme.text.muted};
 `;
 
 export const TotalSumRow = styled.div`

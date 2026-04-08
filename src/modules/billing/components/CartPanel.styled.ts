@@ -16,7 +16,7 @@ export const PanelWrapper = styled.div`
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-  background: #fff;
+  background: ${p => p.theme.bg.surface};
 `;
 
 export const PanelHeader = styled.div`
@@ -24,9 +24,9 @@ export const PanelHeader = styled.div`
   align-items: center;
   gap: 10px;
   padding: 16px 20px 14px;
-  border-bottom: 1.5px solid #e8eaed;
+  border-bottom: 1.5px solid ${p => p.theme.border.primary};
   flex-shrink: 0;
-  background: #fff;
+  background: ${p => p.theme.bg.surface};
 `;
 
 export const PanelTitleIcon = styled.span`
@@ -39,7 +39,7 @@ export const PanelTitleIcon = styled.span`
 export const PanelTitle = styled.span`
   font-size: 15px;
   font-weight: 700;
-  color: #111827;
+  color: ${p => p.theme.text.primary};
   letter-spacing: -0.2px;
 `;
 
@@ -66,15 +66,15 @@ export const ItemsArea = styled.div`
   gap: 8px;
 
   &::-webkit-scrollbar { width: 3px; }
-  &::-webkit-scrollbar-thumb { background: #e8eaed; border-radius: 2px; }
+  &::-webkit-scrollbar-thumb { background: ${p => p.theme.border.primary}; border-radius: 2px; }
 `;
 
 export const CartItemCard = styled.div`
   display: flex;
   gap: 10px;
   align-items: flex-start;
-  background: #f8f9fc;
-  border: 1.5px solid #e8eaed;
+  background: ${p => p.theme.bg.subtle};
+  border: 1.5px solid ${p => p.theme.border.primary};
   border-radius: 10px;
   padding: 10px 12px;
   animation: ${slideItem} 0.22s ease both;
@@ -94,7 +94,7 @@ export const ItemBody = styled.div`
 export const ItemNameText = styled.span`
   font-size: 13px;
   font-weight: 600;
-  color: #111827;
+  color: ${p => p.theme.text.primary};
   display: block;
   white-space: nowrap;
   overflow: hidden;
@@ -124,9 +124,9 @@ export const SizeChip = styled.span`
 
 export const AttrChip = styled.span`
   display: inline-block;
-  background: #f3f4f6;
-  color: #374151;
-  border: 1px solid #e5e7eb;
+  background: ${p => p.theme.bg.muted};
+  color: ${p => p.theme.text.secondary};
+  border: 1px solid ${p => p.theme.border.primary};
   border-radius: 5px;
   font-size: 10.5px;
   font-weight: 500;
@@ -143,13 +143,13 @@ export const ItemPriceRow = styled.div`
 
 export const UnitPriceText = styled.span`
   font-size: 11.5px;
-  color: #6b7280;
+  color: ${p => p.theme.text.muted};
 `;
 
 export const LineTotalText = styled.span`
   font-size: 13.5px;
   font-weight: 700;
-  color: #111827;
+  color: ${p => p.theme.text.primary};
   margin-left: auto;
 `;
 
@@ -158,10 +158,10 @@ export const LineTotalText = styled.span`
 export const QtyController = styled.div`
   display: flex;
   align-items: center;
-  border: 1.5px solid #e8eaed;
+  border: 1.5px solid ${p => p.theme.border.primary};
   border-radius: 7px;
   overflow: hidden;
-  background: #fff;
+  background: ${p => p.theme.bg.surface};
 `;
 
 export const QtyControlBtn = styled.button`
@@ -171,7 +171,7 @@ export const QtyControlBtn = styled.button`
   background: transparent;
   font-size: 15px;
   cursor: pointer;
-  color: #6b7280;
+  color: ${p => p.theme.text.muted};
   display: flex;
   align-items: center;
   justify-content: center;
@@ -189,8 +189,8 @@ export const QtyDisplay = styled.span`
   text-align: center;
   font-size: 12px;
   font-weight: 700;
-  border-left: 1px solid #e8eaed;
-  border-right: 1px solid #e8eaed;
+  border-left: 1px solid ${p => p.theme.border.primary};
+  border-right: 1px solid ${p => p.theme.border.primary};
   line-height: 26px;
 `;
 
@@ -232,7 +232,7 @@ export const EmptyCartIcon = styled.div`
 export const EmptyCartText = styled.span`
   font-size: 14px;
   font-weight: 600;
-  color: #374151;
+  color: ${p => p.theme.text.secondary};
 `;
 
 export const EmptyCartHint = styled.span`
@@ -253,7 +253,7 @@ export const PanelScrollBody = styled.div`
   padding-bottom: 8px;
 
   &::-webkit-scrollbar { width: 3px; }
-  &::-webkit-scrollbar-thumb { background: #e8eaed; border-radius: 2px; }
+  &::-webkit-scrollbar-thumb { background: ${p => p.theme.border.primary}; border-radius: 2px; }
 `;
 
 export const PanelSection = styled.div`
@@ -266,7 +266,7 @@ export const PanelSection = styled.div`
 export const SectionLabel = styled.div`
   font-size: 10.5px;
   font-weight: 600;
-  color: #9ca3af;
+  color: ${p => p.theme.text.faint};
   text-transform: uppercase;
   letter-spacing: 0.6px;
   display: flex;
@@ -276,7 +276,7 @@ export const SectionLabel = styled.div`
 
 export const PanelDivider = styled.hr`
   border: none;
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid ${p => p.theme.border.primary};
   margin: 0;
   flex-shrink: 0;
 `;
@@ -293,7 +293,7 @@ export const PayPill = styled.button<{ $active: boolean }>`
   padding: 8px 4px;
   border: 1.5px solid ${({ $active }) => ($active ? "#2563eb" : "#e8eaed")};
   border-radius: 9px;
-  background: ${({ $active }) => ($active ? "#eff4ff" : "#f8f9fc")};
+  background: ${({ $active, theme }) => ($active ? "#eff4ff" : theme.bg.subtle)};
   color: ${({ $active }) => ($active ? "#2563eb" : "#6b7280")};
   text-align: center;
   cursor: pointer;
@@ -351,7 +351,7 @@ export const OfferOptionInfo = styled.div`
 export const OfferOptionTitle = styled.div`
   font-size: 12.5px;
   font-weight: 600;
-  color: #111827;
+  color: ${p => p.theme.text.primary};
 `;
 
 export const OfferOptionDesc = styled.div`
@@ -362,8 +362,8 @@ export const OfferOptionDesc = styled.div`
 // ─── Summary Card ─────────────────────────────────────────────────────────────
 
 export const SummaryCard = styled.div`
-  background: #f8f9fc;
-  border: 1.5px solid #e8eaed;
+  background: ${p => p.theme.bg.subtle};
+  border: 1.5px solid ${p => p.theme.border.primary};
   border-radius: 12px;
   padding: 12px 14px;
   display: flex;
@@ -385,9 +385,9 @@ export const TotalRow = styled.div`
   align-items: center;
   font-size: 16px;
   font-weight: 700;
-  color: #111827;
+  color: ${p => p.theme.text.primary};
   padding-top: 10px;
-  border-top: 1.5px solid #e8eaed;
+  border-top: 1.5px solid ${p => p.theme.border.primary};
 `;
 
 export const SavingsRow = styled.div`

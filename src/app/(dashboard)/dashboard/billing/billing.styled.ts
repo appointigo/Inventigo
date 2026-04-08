@@ -48,14 +48,14 @@ export const ProductPane = styled.div`
   gap: 16px;
 
   &::-webkit-scrollbar { width: 4px; }
-  &::-webkit-scrollbar-thumb { background: #e8eaed; border-radius: 2px; }
+  &::-webkit-scrollbar-thumb { background: ${p => p.theme.border.primary}; border-radius: 2px; }
 `;
 
 export const CartPane = styled.div`
   width: 420px;
   flex-shrink: 0;
-  border-left: 1.5px solid #e8eaed;
-  background: #fff;
+  border-left: 1.5px solid ${p => p.theme.border.primary};
+  background: ${p => p.theme.bg.surface};
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -97,8 +97,8 @@ export const SearchInput = styled(Input)`
   border-radius: 10px;
   height: 44px;
   font-size: 14px;
-  border: 1.5px solid #e8eaed;
-  background: #fff;
+  border: 1.5px solid ${p => p.theme.border.primary};
+  background: ${p => p.theme.bg.surface};
   transition: border-color 0.2s, box-shadow 0.2s;
 
   &:hover {
@@ -120,13 +120,13 @@ export const SearchInput = styled(Input)`
 export const ProductNameText = styled.span`
   font-weight: 600;
   font-size: 13.5px;
-  color: #111827;
+  color: ${p => p.theme.text.primary};
   display: block;
 `;
 
 export const ProductMetaText = styled.span`
   font-size: 11.5px;
-  color: #9ca3af;
+  color: ${p => p.theme.text.faint};
   margin-top: 2px;
   display: block;
 `;
@@ -278,7 +278,7 @@ export const TableWrapper = styled.div`
 export const PageTitle = styled.div`
   font-size: 20px;
   font-weight: 700;
-  color: #111827;
+  color: ${p => p.theme.text.primary};
   letter-spacing: -0.3px;
 `;
 
@@ -307,8 +307,9 @@ export const BillingPageTabs = styled(Tabs)`
     margin: 0;
     padding: 0 24px;
     flex-shrink: 0;
-    background: #ffffff;
-    border-bottom: 1.5px solid #e8eaed;
+    /* Let Ant Design token control the background — do NOT hardcode #ffffff
+       (dark algorithm sets tab text to white; white text on white bg = invisible) */
+    border-bottom: 1.5px solid var(--border-primary);
   }
 
   /* Remove the default bottom border of the tab bar — we use our own */
@@ -339,5 +340,5 @@ export const HistoryPane = styled.div`
   padding: 24px;
 
   &::-webkit-scrollbar { width: 4px; }
-  &::-webkit-scrollbar-thumb { background: #e8eaed; border-radius: 2px; }
+  &::-webkit-scrollbar-thumb { background: ${p => p.theme.border.primary}; border-radius: 2px; }
 `;

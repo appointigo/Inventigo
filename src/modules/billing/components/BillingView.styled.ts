@@ -20,7 +20,7 @@ export const ViewAWrapper = styled.div`
   display: flex;
   height: 100%;
   overflow: hidden;
-  background: #f6f7fb;
+  background: ${p => p.theme.bg.layout};
 `;
 
 export const ScanProductPane = styled.div`
@@ -33,14 +33,14 @@ export const ScanProductPane = styled.div`
   overflow-y: auto;
 
   &::-webkit-scrollbar { width: 4px; }
-  &::-webkit-scrollbar-thumb { background: #e8eaed; border-radius: 2px; }
+  &::-webkit-scrollbar-thumb { background: ${p => p.theme.border.primary}; border-radius: 2px; }
 `;
 
 export const CheckoutPane = styled.div`
   width: 380px;
   flex-shrink: 0;
-  border-left: 1.5px solid #e8eaed;
-  background: #fff;
+  border-left: 1.5px solid ${p => p.theme.border.primary};
+  background: ${p => p.theme.bg.surface};
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -49,7 +49,7 @@ export const CheckoutPane = styled.div`
 // ─── Scan hero box ────────────────────────────────────────────────────────────
 
 export const ScanHeroBox = styled.div`
-  background: #fff;
+  background: ${p => p.theme.bg.surface};
   border: 2px solid #2563eb;
   border-radius: 16px;
   padding: 20px 22px 16px;
@@ -85,15 +85,15 @@ export const ScanHeroInput = styled(Input)`
   height: 52px;
   font-size: 16px;
   border-radius: 12px;
-  border: 1.5px solid #e5e7eb;
-  background: #f9fafb;
+  border: 1.5px solid ${p => p.theme.border.primary};
+  background: ${p => p.theme.bg.subtle};
 
   &:hover { border-color: #93c5fd; }
 
   &.ant-input-affix-wrapper:focus,
   &.ant-input-affix-wrapper-focused {
     border-color: #2563eb;
-    background: #fff;
+    background: ${p => p.theme.bg.surface};
     box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
   }
 
@@ -111,13 +111,13 @@ export const ScanHeroHint = styled.div`
 `;
 
 export const KbdKey = styled.kbd`
-  background: #f3f4f6;
-  border: 1px solid #e5e7eb;
+  background: ${p => p.theme.bg.muted};
+  border: 1px solid ${p => p.theme.border.primary};
   border-radius: 3px;
   padding: 1px 5px;
   font-size: 10px;
   font-family: monospace;
-  color: #6b7280;
+  color: ${p => p.theme.text.muted};
 `;
 
 // ─── Scan flash (green ribbon shown for ~2.5s after successful scan) ──────────
@@ -142,7 +142,7 @@ export const ScanFlashInfo = styled.div`
 export const ScanFlashName = styled.div`
   font-size: 13.5px;
   font-weight: 700;
-  color: #111827;
+  color: ${p => p.theme.text.primary};
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -150,7 +150,7 @@ export const ScanFlashName = styled.div`
 
 export const ScanFlashMeta = styled.div`
   font-size: 11.5px;
-  color: #6b7280;
+  color: ${p => p.theme.text.muted};
   margin-top: 3px;
   display: flex;
   align-items: center;
@@ -160,11 +160,11 @@ export const ScanFlashMeta = styled.div`
 export const ScanFlashSku = styled.span`
   font-family: "SF Mono", "Fira Code", monospace;
   font-size: 10.5px;
-  background: #f3f4f6;
-  border: 1px solid #e5e7eb;
+  background: ${p => p.theme.bg.muted};
+  border: 1px solid ${p => p.theme.border.primary};
   border-radius: 4px;
   padding: 1px 5px;
-  color: #374151;
+  color: ${p => p.theme.text.secondary};
 `;
 
 export const ScanFlashSize = styled.span`
@@ -180,7 +180,7 @@ export const ScanFlashSize = styled.span`
 export const ScanFlashPrice = styled.div`
   font-size: 17px;
   font-weight: 800;
-  color: #111827;
+  color: ${p => p.theme.text.primary};
   white-space: nowrap;
 `;
 
@@ -200,8 +200,8 @@ export const ScanAddedBadge = styled.div`
 // ─── Search results panel ─────────────────────────────────────────────────────
 
 export const ResultsBox = styled.div`
-  background: #fff;
-  border: 1.5px solid #e5e7eb;
+  background: ${p => p.theme.bg.surface};
+  border: 1.5px solid ${p => p.theme.border.primary};
   border-radius: 12px;
   overflow: hidden;
   flex-shrink: 0;
@@ -213,21 +213,21 @@ export const ResultsBoxHeader = styled.div`
   align-items: center;
   justify-content: space-between;
   padding: 8px 14px;
-  border-bottom: 1px solid #f3f4f6;
-  background: #fafafa;
+  border-bottom: 1px solid ${p => p.theme.border.subtle};
+  background: ${p => p.theme.bg.subtle};
 `;
 
 export const ResultsBoxTitle = styled.span`
   font-size: 11.5px;
-  color: #6b7280;
+  color: ${p => p.theme.text.muted};
   font-weight: 500;
 `;
 
 export const ResultsCountBadge = styled.span`
   font-size: 11px;
-  color: #9ca3af;
-  background: #f3f4f6;
-  border: 1px solid #e5e7eb;
+  color: ${p => p.theme.text.faint};
+  background: ${p => p.theme.bg.muted};
+  border: 1px solid ${p => p.theme.border.primary};
   border-radius: 5px;
   padding: 2px 7px;
 `;
@@ -237,7 +237,7 @@ export const ResultsScrollBody = styled.div`
   overflow-y: auto;
 
   &::-webkit-scrollbar { width: 3px; }
-  &::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 2px; }
+  &::-webkit-scrollbar-thumb { background: ${p => p.theme.border.primary}; border-radius: 2px; }
 `;
 
 export const ResultRow = styled.div`
@@ -245,11 +245,11 @@ export const ResultRow = styled.div`
   align-items: center;
   gap: 10px;
   padding: 9px 14px;
-  border-bottom: 1px solid #f9fafb;
+  border-bottom: 1px solid ${p => p.theme.border.subtle};
   transition: background 0.12s;
 
   &:last-child { border-bottom: none; }
-  &:hover { background: #f9fafb; }
+  &:hover { background: ${p => p.theme.bg.subtle}; }
 `;
 
 export const ResultProductCol = styled.div`
@@ -260,7 +260,7 @@ export const ResultProductCol = styled.div`
 export const ResultProductName = styled.div`
   font-size: 12.5px;
   font-weight: 600;
-  color: #111827;
+  color: ${p => p.theme.text.primary};
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -268,16 +268,16 @@ export const ResultProductName = styled.div`
 
 export const ResultProductBrand = styled.div`
   font-size: 11px;
-  color: #9ca3af;
+  color: ${p => p.theme.text.faint};
   margin-top: 1px;
 `;
 
 export const ResultSkuPill = styled.span`
   font-family: "SF Mono", "Fira Code", monospace;
   font-size: 10.5px;
-  background: #f3f4f6;
-  color: #374151;
-  border: 1px solid #e5e7eb;
+  background: ${p => p.theme.bg.muted};
+  color: ${p => p.theme.text.secondary};
+  border: 1px solid ${p => p.theme.border.primary};
   border-radius: 5px;
   padding: 2px 6px;
   white-space: nowrap;
@@ -304,7 +304,7 @@ export const ResultStockText = styled.span<{ $out: boolean; $low: boolean }>`
 export const ResultPriceText = styled.span`
   font-size: 13px;
   font-weight: 700;
-  color: #111827;
+  color: ${p => p.theme.text.primary};
   white-space: nowrap;
 `;
 
@@ -329,7 +329,7 @@ export const CartListHeader = styled.div`
 export const CartListTitle = styled.span`
   font-size: 11.5px;
   font-weight: 700;
-  color: #374151;
+  color: ${p => p.theme.text.secondary};
   text-transform: uppercase;
   letter-spacing: 0.5px;
 `;
@@ -361,8 +361,8 @@ export const CartRowItem = styled.div`
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
-  background: #fff;
-  border: 1px solid #f3f4f6;
+  background: ${p => p.theme.bg.surface};
+  border: 1px solid ${p => p.theme.border.subtle};
   border-radius: 8px;
   transition: background 0.12s;
 
@@ -391,7 +391,7 @@ export const RowInfoWrap = styled.div`
 export const RowProductName = styled.div`
   font-size: 12.5px;
   font-weight: 600;
-  color: #111827;
+  color: ${p => p.theme.text.primary};
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -441,16 +441,16 @@ export const RowQtyCtrl = styled.div`
 export const RowQtyBtn = styled.button`
   width: 22px;
   height: 22px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid ${p => p.theme.border.primary};
   border-radius: 5px;
-  background: #f9fafb;
+  background: ${p => p.theme.bg.subtle};
   font-size: 13px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  color: #374151;
+  color: ${p => p.theme.text.secondary};
   line-height: 1;
 
   &:hover { background: #eff4ff; border-color: #93c5fd; color: #2563eb; }
@@ -461,13 +461,13 @@ export const RowQtyVal = styled.span`
   text-align: center;
   font-size: 12.5px;
   font-weight: 700;
-  color: #111827;
+  color: ${p => p.theme.text.primary};
 `;
 
 export const RowTotal = styled.span`
   font-size: 13px;
   font-weight: 700;
-  color: #111827;
+  color: ${p => p.theme.text.primary};
   min-width: 62px;
   text-align: right;
   white-space: nowrap;
@@ -514,14 +514,14 @@ export const CheckoutHeader = styled.div`
   align-items: center;
   gap: 8px;
   padding: 14px 18px 12px;
-  border-bottom: 1.5px solid #e8eaed;
+  border-bottom: 1.5px solid ${p => p.theme.border.primary};
   flex-shrink: 0;
 `;
 
 export const CheckoutHeaderTitle = styled.span`
   font-size: 14px;
   font-weight: 700;
-  color: #111827;
+  color: ${p => p.theme.text.primary};
 `;
 
 export const CheckoutItemCount = styled.span`
@@ -540,7 +540,7 @@ export const CheckoutScrollBody = styled.div`
   overflow-y: auto;
 
   &::-webkit-scrollbar { width: 3px; }
-  &::-webkit-scrollbar-thumb { background: #e8eaed; border-radius: 2px; }
+  &::-webkit-scrollbar-thumb { background: ${p => p.theme.border.primary}; border-radius: 2px; }
 `;
 
 export const CheckoutSection = styled.div`
@@ -609,7 +609,7 @@ export const PayPillsGrid = styled.div`
 export const APayPill = styled.div<{ $active: boolean }>`
   border: 1.5px solid ${({ $active }) => ($active ? "#2563eb" : "#e5e7eb")};
   border-radius: 9px;
-  background: ${({ $active }) => ($active ? "#eff4ff" : "#fafafa")};
+  background: ${({ $active, theme }) => ($active ? "#eff4ff" : theme.bg.subtle)};
   color: ${({ $active }) => ($active ? "#2563eb" : "#6b7280")};
   font-size: 12px;
   font-weight: ${({ $active }) => ($active ? "700" : "500")};
@@ -673,8 +673,8 @@ export const APromoClearBtn = styled.button`
 `;
 
 export const SummaryCardWrap = styled.div`
-  background: #f8f9fc;
-  border: 1px solid #e8eaed;
+  background: ${p => p.theme.bg.subtle};
+  border: 1px solid ${p => p.theme.border.primary};
   border-radius: 10px;
   padding: 12px 14px;
   display: flex;
@@ -687,7 +687,7 @@ export const ASumRow = styled.div`
   justify-content: space-between;
   align-items: center;
   font-size: 12.5px;
-  color: #6b7280;
+  color: ${p => p.theme.text.muted};
 `;
 
 export const ASumPctGroup = styled.div`
@@ -699,12 +699,12 @@ export const ASumPctGroup = styled.div`
 export const ASumPctInput = styled(InputNumber)`
   width: 80px;
   border-radius: 6px;
-  border: 1.5px solid #e5e7eb;
+  border: 1.5px solid ${p => p.theme.border.primary};
 
   .ant-input-number-input {
     text-align: right;
     font-size: 13px;
-    color: #111827;
+    color: ${p => p.theme.text.primary};
     padding-right: 6px;
   }
 
@@ -719,17 +719,17 @@ export const ATotalRow = styled.div`
   align-items: center;
   font-size: 16px;
   font-weight: 800;
-  color: #111827;
+  color: ${p => p.theme.text.primary};
   padding-top: 10px;
-  border-top: 1.5px solid #e5e7eb;
+  border-top: 1.5px solid ${p => p.theme.border.primary};
   margin-top: 2px;
 `;
 
 export const CheckoutFooter = styled.div`
   padding: 14px 18px;
-  border-top: 1.5px solid #e8eaed;
+  border-top: 1.5px solid ${p => p.theme.border.primary};
   flex-shrink: 0;
-  background: #fff;
+  background: ${p => p.theme.bg.surface};
 `;
 
 export const ConfirmHint = styled.div`

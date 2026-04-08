@@ -12,8 +12,8 @@ export const StatsRow = styled.div`
 `;
 
 export const StatCard = styled.div`
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: ${p => p.theme.bg.surface};
+  border: 1px solid ${p => p.theme.border.primary};
   border-radius: 12px;
   padding: 16px 20px;
   display: flex;
@@ -43,12 +43,12 @@ export const StatIcon = styled.div<{ $color: "blue" | "green" | "amber" }>`
 export const StatVal = styled.div`
   font-size: 22px;
   font-weight: 800;
-  color: #111827;
+  color: ${p => p.theme.text.primary};
 `;
 
 export const StatLbl = styled.div`
   font-size: 12px;
-  color: #9ca3af;
+  color: ${p => p.theme.text.faint};
   margin-top: 2px;
 `;
 
@@ -60,7 +60,7 @@ export const TopBar = styled.div`
   h2 {
     font-size: 16px;
     font-weight: 700;
-    color: #111827;
+    color: ${p => p.theme.text.primary};
     margin: 0;
     flex: 1;
   }
@@ -73,8 +73,8 @@ export const PromoGrid = styled.div`
 `;
 
 export const PromoCard = styled.div<{ $inactive?: boolean }>`
-  background: #fff;
-  border: 1.5px solid #e5e7eb;
+  background: ${p => p.theme.bg.surface};
+  border: 1.5px solid ${p => p.theme.border.primary};
   border-radius: 14px;
   overflow: hidden;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
@@ -153,7 +153,7 @@ export const CardBody = styled.div`
 
 export const PromoDesc = styled.div`
   font-size: 12.5px;
-  color: #6b7280;
+  color: ${p => p.theme.text.muted};
   line-height: 1.5;
   margin-bottom: 12px;
   min-height: 38px;
@@ -196,7 +196,7 @@ export const CardActions = styled.div`
   display: flex;
   gap: 6px;
   padding: 10px 20px 14px;
-  border-top: 1px solid #f3f4f6;
+  border-top: 1px solid ${p => p.theme.border.subtle};
   align-items: center;
 `;
 

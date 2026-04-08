@@ -20,7 +20,7 @@ export const DrawerTitleRow = styled.div`
 export const DrawerTitleText = styled.span`
   font-size: 16px;
   font-weight: 700;
-  color: #111827;
+  color: ${p => p.theme.text.primary};
   letter-spacing: -0.2px;
 `;
 
@@ -120,8 +120,8 @@ export const CartItemCard = styled.div`
   display: flex;
   gap: 12px;
   align-items: flex-start;
-  background: #f8f9fc;
-  border: 1.5px solid #e8eaed;
+  background: ${p => p.theme.bg.subtle};
+  border: 1.5px solid ${p => p.theme.border.primary};
   border-radius: 12px;
   padding: 12px 14px;
   animation: ${slideItem} 0.25s ease both;
@@ -153,7 +153,7 @@ export const ItemBody = styled.div`
 export const ItemNameText = styled.span`
   font-size: 13.5px;
   font-weight: 600;
-  color: #111827;
+  color: ${p => p.theme.text.primary};
   display: block;
   white-space: nowrap;
   overflow: hidden;
@@ -183,9 +183,9 @@ export const SizeChip = styled.span`
 
 export const AttrChip = styled.span`
   display: inline-block;
-  background: #f3f4f6;
-  color: #374151;
-  border: 1px solid #e5e7eb;
+  background: ${p => p.theme.bg.muted};
+  color: ${p => p.theme.text.secondary};
+  border: 1px solid ${p => p.theme.border.primary};
   border-radius: 5px;
   font-size: 11px;
   font-weight: 500;
@@ -202,13 +202,13 @@ export const ItemPriceRow = styled.div`
 
 export const UnitPriceText = styled.span`
   font-size: 12px;
-  color: #6b7280;
+  color: ${p => p.theme.text.muted};
 `;
 
 export const LineTotalText = styled.span`
   font-size: 14px;
   font-weight: 700;
-  color: #111827;
+  color: ${p => p.theme.text.primary};
   margin-left: auto;
 `;
 
@@ -217,10 +217,10 @@ export const LineTotalText = styled.span`
 export const QtyController = styled.div`
   display: flex;
   align-items: center;
-  border: 1.5px solid #e8eaed;
+  border: 1.5px solid ${p => p.theme.border.primary};
   border-radius: 8px;
   overflow: hidden;
-  background: #fff;
+  background: ${p => p.theme.bg.surface};
 `;
 
 export const QtyControlBtn = styled.button`
@@ -349,8 +349,8 @@ export const CustomerRow = styled.div`
 // ─── Footer Summary Card ──────────────────────────────────────────────────────
 
 export const SummaryCard = styled.div`
-  background: #f8f9fc;
-  border: 1.5px solid #e8eaed;
+  background: ${p => p.theme.bg.subtle};
+  border: 1.5px solid ${p => p.theme.border.primary};
   border-radius: 12px;
   padding: 12px 14px;
   display: flex;
@@ -372,9 +372,9 @@ export const TotalRow = styled.div`
   align-items: center;
   font-size: 16px;
   font-weight: 700;
-  color: #111827;
+  color: ${p => p.theme.text.primary};
   padding-top: 10px;
-  border-top: 1.5px solid #e8eaed;
+  border-top: 1.5px solid ${p => p.theme.border.primary};
 `;
 
 export const SavingsRow = styled.div`
@@ -433,19 +433,19 @@ export const ConfirmButton = styled(Button)`
 
 export const BackLink = styled.button`
   background: transparent;
-  border: 1.5px solid #e8eaed;
+  border: 1.5px solid ${p => p.theme.border.primary};
   border-radius: 10px;
   padding: 9px;
   font-size: 13px;
   font-weight: 500;
-  color: #6b7280;
+  color: ${p => p.theme.text.muted};
   cursor: pointer;
   width: 100%;
   transition: all 0.15s;
 
   &:hover {
-    background: #f8f9fc;
-    color: #111827;
+    background: ${p => p.theme.bg.subtle};
+    color: ${p => p.theme.text.primary};
   }
 `;
 
@@ -471,7 +471,7 @@ export const DrawerSection = styled.div`
 
 export const CartDivider = styled.hr`
   border: none;
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid ${p => p.theme.border.primary};
   margin: 0;
 `;
 
@@ -539,7 +539,7 @@ export const OfferCard = styled.div<{ $applied: boolean }>`
   padding: 9px 12px;
   border: 1.5px solid ${({ $applied }) => ($applied ? "#bbf7d0" : "#e8eaed")};
   border-radius: 10px;
-  background: ${({ $applied }) => ($applied ? "#f0fdf4" : "#f8f9fc")};
+  background: ${({ $applied, theme }) => ($applied ? "#f0fdf4" : theme.bg.subtle)};
   cursor: pointer;
   transition: all 0.15s;
 
@@ -568,7 +568,7 @@ export const OfferInfo = styled.div`
 export const OfferTitle = styled.div`
   font-size: 12.5px;
   font-weight: 600;
-  color: #111827;
+  color: ${p => p.theme.text.primary};
 `;
 
 export const OfferDesc = styled.div`

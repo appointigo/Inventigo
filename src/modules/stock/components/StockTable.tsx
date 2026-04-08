@@ -28,6 +28,7 @@ const StockTable = ({ stockLevels, loading, search, onSearchChange, statusFilter
         if (k !== "unit" && k !== "supplierId") keys.add(k);
       });
     }
+    
     return [...keys];
   }, [stockLevels]);
 
@@ -38,8 +39,8 @@ const StockTable = ({ stockLevels, loading, search, onSearchChange, statusFilter
       sorter: (a, b) => a.productName.localeCompare(b.productName),
       render: (name: string, record) => (
         <div>
-          <div style={{ fontWeight: 600, fontSize: 13.5, color: "#111827" }}>{name}</div>
-          <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 1 }}>{record.sku}</div>
+          <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--text-primary)" }}>{name}</div>
+          <div style={{ fontSize: 11.5, color: "var(--text-faint)", marginTop: 1 }}>{record.sku}</div>
         </div>
       ),
     },
@@ -53,9 +54,9 @@ const StockTable = ({ stockLevels, loading, search, onSearchChange, statusFilter
             style={{
               fontFamily: "'SF Mono', 'Fira Code', ui-monospace, monospace",
               fontSize: 11.5,
-              color: "#374151",
-              background: "#f3f4f6",
-              border: "1px solid #e5e7eb",
+              color: "var(--text-secondary)",
+              background: "var(--bg-subtle)",
+              border: "1px solid var(--border-primary)",
               borderRadius: 5,
               padding: "2px 6px",
               letterSpacing: "0.3px",
