@@ -99,12 +99,21 @@ const AdminBannerStats = () => {
 }
 
 const ProfilePane = ({ user }: { user: CurrentUser }) => {
+  const { stores } = useStoreRecords();
+
   const initials = user.name
     .split(" ")
     .map((n) => n[0])
     .join("")
     .toUpperCase()
     .slice(0, 2);
+
+  const isAllStores =
+    user.role === Role.OWNER || user.role === Role.ADMIN || !user.storeId;
+
+  const storeName = !isAllStores
+    ? (stores.find((s) => s.id === user.storeId)?.name ?? user.storeId)
+    : null;
 
   return (
     <TwoCol>
@@ -137,10 +146,10 @@ const ProfilePane = ({ user }: { user: CurrentUser }) => {
           </ProfileRow>
           <ProfileRow>
             <ProfileLbl>Store Access</ProfileLbl>
-            {user.storeId ? (
-              <ProfileValMono>{user.storeId}</ProfileValMono>
-            ) : (
+            {isAllStores ? (
               <ProfileVal>All stores</ProfileVal>
+            ) : (
+              <ProfileVal>{storeName}</ProfileVal>
             )}
           </ProfileRow>
         </ProfileRows>
