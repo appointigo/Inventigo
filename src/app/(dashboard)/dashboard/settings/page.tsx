@@ -1,7 +1,7 @@
 "use client";
 
 import { Card, Typography, Tabs, Descriptions, Tag, Space, Divider } from "antd";
-import { UserOutlined, ShopOutlined, DollarOutlined, BgColorsOutlined, TeamOutlined } from "@ant-design/icons";
+import { UserOutlined, ShopOutlined, DollarOutlined, BgColorsOutlined, TeamOutlined, TagOutlined } from "@ant-design/icons";
 import { Role } from "@prisma/client";
 import { useCurrentUser } from "@/modules/auth/hooks/useAuth";
 import { ROLE_LABELS, ROLE_COLORS } from "@/shared/constants/roles";
@@ -10,6 +10,7 @@ import StoreTable from "@/modules/settings/components/StoreTable";
 import StoreProfileCard from "@/modules/settings/components/StoreProfileCard";
 import BillingConfigForm from "@/modules/settings/components/BillingConfigForm";
 import AppearanceSettings from "@/modules/settings/components/AppearanceSettings";
+import PromoCodesSettings from "@/modules/promo-codes/components/PromoCodesSettings";
 
 const { Title, Text } = Typography;
 
@@ -100,6 +101,20 @@ export default function SettingsPage() {
             children: (
               <div style={{ padding: "24px 0" }}>
                 <BillingConfigForm />
+              </div>
+            ),
+          },
+          {
+            key: "promo-codes",
+            label: (
+              <Space>
+                <TagOutlined />
+                Promo Codes
+              </Space>
+            ),
+            children: (
+              <div style={{ padding: "24px 0" }}>
+                <PromoCodesSettings />
               </div>
             ),
           },

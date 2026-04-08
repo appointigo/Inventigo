@@ -80,6 +80,7 @@ export function useCart() {
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
+  const [promoCodeId, setPromoCodeId] = useState<string | null>(null);
 
   const addItem = (item: CartItem) => {
     setItems((prev) => {
@@ -119,6 +120,7 @@ export function useCart() {
     setCustomerName("");
     setCustomerPhone("");
     setCustomerEmail("");
+    setPromoCodeId(null);
   };
 
   const subtotal = items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
@@ -133,6 +135,7 @@ export function useCart() {
     customerName: customerName || undefined,
     customerPhone: customerPhone || undefined,
     customerEmail: customerEmail || undefined,
+    promoCodeId: promoCodeId ?? undefined,
   });
 
   return {
@@ -156,6 +159,8 @@ export function useCart() {
     setCustomerName,
     setCustomerPhone,
     setCustomerEmail,
+    promoCodeId,
+    setPromoCodeId,
     toCreateInput,
   };
 }

@@ -12,6 +12,7 @@ export type CreateSaleInput = {
   customerName?: string;
   customerPhone?: string;
   customerEmail?: string;
+  promoCodeId?: string;
 };
 
 export type CartItem = {

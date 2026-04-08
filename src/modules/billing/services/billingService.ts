@@ -66,7 +66,35 @@ export const billingService = {
     input: CreateSaleInput
   ): Promise<Sale> {
     const subtotal = input.items.reduce((sum, it) => sum + it.unitPrice * it.quantity, 0);
-    const total = subtotal - input.discountAmount + input.taxAmount;
+
+    // Server-side promo validation — never trust client discountAmount when a promo is applied
+    let discountAmount = input.discountAmount;
+    let resolvedPromoCodeId: string | null = null;
+
+    if (input.promoCodeId) {
+      const promo = await prisma.promoCode.findFirst({
+        where: { id: input.promoCodeId, orgId },
+      });
+
+      if (!promo) {
+        throw new Error("Promo code not found");
+      }
+      if (!promo.isActive) {
+        throw new Error("Promo code is inactive");
+      }
+      if (promo.expiresAt && promo.expiresAt < new Date()) {
+        throw new Error("Promo code has expired");
+      }
+      if (promo.maxUses !== null && promo.usageCount >= promo.maxUses) {
+        throw new Error("Promo code usage limit reached");
+      }
+
+      // Recompute discount server-side from promo.discountPct
+      discountAmount = Math.round(subtotal * Number(promo.discountPct)) / 100;
+      resolvedPromoCodeId = promo.id;
+    }
+
+    const total = subtotal - discountAmount + input.taxAmount;
     const invoiceNumber = await generateInvoiceNumber(storeId);
 
     const sale = await prisma.$transaction(async (tx) => {
@@ -78,12 +106,13 @@ export const billingService = {
           customerPhone: input.customerPhone ?? null,
           customerEmail: input.customerEmail ?? null,
           subtotal,
-          discountAmount: input.discountAmount,
+          discountAmount,
           taxAmount: input.taxAmount,
           total,
           paymentMethod: input.paymentMethod,
           status: "COMPLETED",
           createdBy: userId,
+          promoCodeId: resolvedPromoCodeId,
           items: {
             create: input.items.map((it) => ({
               productId: it.productId,
@@ -96,6 +125,14 @@ export const billingService = {
         },
         include: saleInclude,
       });
+
+      // Atomically increment promo usageCount
+      if (resolvedPromoCodeId) {
+        await tx.promoCode.update({
+          where: { id: resolvedPromoCodeId },
+          data: { usageCount: { increment: 1 } },
+        });
+      }
 
       // Decrement stock for each sold item (with availability check + audit records)
       for (const it of input.items) {

@@ -8,7 +8,10 @@ import { useCart } from "@/modules/billing/hooks/useBilling";
 import InvoicePreview from "./InvoicePreview";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
 import type { VariantRow, CreateSaleInput, Sale, PaymentMethodType } from "@/modules/billing/types";
-import { AVAILABLE_OFFERS, PAYMENT_OPTIONS, type PromoOffer } from "@/modules/billing/constants";
+import { PAYMENT_OPTIONS } from "@/modules/billing/constants";
+import { usePromoCodes } from "@/modules/promo-codes/hooks/usePromoCodes";
+import type { PromoCode } from "@/modules/promo-codes/types";
+import { GRADIENTS } from "@/modules/promo-codes/components/PromoCodesSettings.styled";
 import { OfferOptionRow, OfferBadge, OfferOptionInfo, OfferOptionTitle, OfferOptionDesc } from "./CartPanel.styled";
 import {
   ViewAWrapper,
@@ -111,11 +114,12 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
 
   // ─── Promo state ───────────────────────────────────────────────────────────
   const [promoInput, setPromoInput] = useState("");
-  const [appliedPromo, setAppliedPromo] = useState<PromoOffer | null>(null);
+  const [appliedPromo, setAppliedPromo] = useState<PromoCode | null>(null);
   const [promoError, setPromoError] = useState("");
 
   // ─── Cart + products ───────────────────────────────────────────────────────
   const cart = useCart();
+  const { promos } = usePromoCodes();
   const { products, loading: productsLoading } = useProducts(
     search.trim() ? { search: search.trim() } : undefined
   );
@@ -152,6 +156,7 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
       const s = search.toLowerCase().trim();
       const exact = rows.find((r) => r.variantSku?.toLowerCase() === s);
       if (exact) return [exact];
+
       return rows.filter(
         (r) =>
           r.variantSku?.toLowerCase().includes(s) ||
@@ -194,6 +199,7 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
       // Show the flash ribbon for 2.5 seconds
       setLastAdded(row);
       const timer = setTimeout(() => setLastAdded(null), 2500);
+
       return () => clearTimeout(timer);
     },
     [cart, message]
@@ -227,7 +233,8 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
       cart.clearCart();
       message.success(`Sale created: ${sale.invoiceNumber}`);
     } 
-    catch {
+    catch (error) {
+      console.error(error);
       message.error("Failed to create sale");
     } 
     finally {
@@ -238,9 +245,9 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
   // ─── Promo handlers ────────────────────────────────────────────────────────
   const handleApplyPromo = () => {
     const code = promoInput.trim().toUpperCase();
-    const offer = AVAILABLE_OFFERS.find((o) => o.code === code);
+    const offer = promos.find((o) => o.code === code && o.isActive);
     if (!offer) {
-      setPromoError("Invalid promo code");
+      setPromoError("Invalid or inactive promo code");
       return;
     }
 
@@ -248,27 +255,30 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
     setPromoError("");
     setPromoInput("");
     cart.setDiscountPct(offer.discountPct);
+    cart.setPromoCodeId(offer.id);
   };
 
   const handleClearPromo = () => {
     setAppliedPromo(null);
     setPromoError("");
     cart.setDiscountPct(0);
+    cart.setPromoCodeId(null);
   };
 
-  const handleSelectOffer = (code: string | null) => {
-    if (!code) {
+  const handleSelectOffer = (id: string | null) => {
+    if (!id) {
       handleClearPromo();
       return;
     }
 
-    const offer = AVAILABLE_OFFERS.find((o) => o.code === code);
+    const offer = promos.find((o) => o.id === id);
     if (!offer) return;
 
     setAppliedPromo(offer);
     setPromoError("");
     setPromoInput("");
     cart.setDiscountPct(offer.discountPct);
+    cart.setPromoCodeId(offer.id);
   };
 
   // ─── Derived values ────────────────────────────────────────────────────────
@@ -547,39 +557,46 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
             </CheckoutSectionLabel>
             <Select
               placeholder="Select an offer…"
-              value={appliedPromo?.code ?? null}
+              value={appliedPromo?.id ?? null}
               allowClear
               onClear={handleClearPromo}
               style={{ width: "100%" }}
               onChange={handleSelectOffer}
               optionRender={(option) => {
-                const data = option.data as { label: string; desc: string };
+                const data = option.data as { label: string; code: string; desc: string; gradient: string };
                 return (
                   <OfferOptionRow>
-                    <OfferBadge>{data.label}</OfferBadge>
+                    <OfferBadge style={{ background: data.gradient }}>{data.label}</OfferBadge>
                     <OfferOptionInfo>
-                      <OfferOptionTitle>{option.value as string}</OfferOptionTitle>
+                      <OfferOptionTitle>{data.code}</OfferOptionTitle>
                       <OfferOptionDesc>{data.desc}</OfferOptionDesc>
                     </OfferOptionInfo>
                   </OfferOptionRow>
                 );
               }}
               labelRender={(props) => {
-                const offer = AVAILABLE_OFFERS.find((o) => o.code === props.value);
+                const activePromos = promos.filter((o) => o.isActive);
+                const offerIdx = activePromos.findIndex((o) => o.id === props.value);
+                const offer = offerIdx >= 0 ? activePromos[offerIdx] : null;
+                const gradient = offer ? GRADIENTS[offerIdx % GRADIENTS.length] : undefined;
                 if (!offer) return <span>{String(props.label ?? "")}</span>;
                 return (
                   <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <OfferBadge>{offer.label}</OfferBadge>
+                    <OfferBadge style={{ background: gradient }}>{offer.label}</OfferBadge>
                     <span style={{ fontSize: 12, color: "#374151" }}>{offer.code}</span>
                   </span>
                 );
               }}
-              options={AVAILABLE_OFFERS.map((o) => ({
-                value: o.code,
-                label: o.label,
-                desc: o.desc,
-                discountPct: o.discountPct,
-              }))}
+              options={promos
+                .filter((o) => o.isActive)
+                .map((o, idx) => ({
+                  value: o.id,
+                  label: o.label,
+                  code: o.code,
+                  desc: o.desc,
+                  discountPct: o.discountPct,
+                  gradient: GRADIENTS[idx % GRADIENTS.length],
+                }))}
             />
           </CheckoutSection>
 
@@ -642,6 +659,7 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
                     onChange={(val) => {
                       cart.setDiscountPct((val as number) ?? 0);
                       setAppliedPromo(null);
+                      cart.setPromoCodeId(null);
                     }}
                     size="small"
                     suffix="%"

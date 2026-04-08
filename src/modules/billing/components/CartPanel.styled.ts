@@ -327,7 +327,7 @@ export const CustomerRow = styled.div`
 export const OfferOptionRow = styled.div`
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   padding: 3px 0;
 `;
 

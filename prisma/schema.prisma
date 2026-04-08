@@ -84,6 +84,7 @@ model Organization {
   suppliers   Supplier[]
   invitations Invitation[]
   alertConfigs AlertConfig[]
+  promoCodes   PromoCode[]
 
   @@map("organizations")
 }
@@ -401,13 +402,17 @@ model Sale {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  store Store      @relation(fields: [storeId], references: [id])
-  user  User       @relation(fields: [createdBy], references: [id])
-  items SaleItem[]
+  store     Store      @relation(fields: [storeId], references: [id])
+  user      User       @relation(fields: [createdBy], references: [id])
+  items     SaleItem[]
+  promoCode PromoCode? @relation(fields: [promoCodeId], references: [id], onDelete: SetNull)
+
+  promoCodeId String?
 
   @@index([storeId])
   @@index([createdAt])
   @@index([status])
+  @@index([promoCodeId])
   @@map("sales")
 }
 
@@ -451,6 +456,30 @@ model AlertConfig {
 
   @@index([orgId])
   @@map("alert_configs")
+}
+
+// ─── PROMO CODE ─────────────────────────────────────────────────────────────────
+
+model PromoCode {
+  id          String    @id @default(uuid())
+  orgId       String
+  code        String
+  label       String
+  desc        String    @default("")
+  discountPct Decimal   @db.Decimal(5, 2)
+  isActive    Boolean   @default(true)
+  maxUses     Int?
+  usageCount  Int       @default(0)
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  org   Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  sales Sale[]
+
+  @@unique([code, orgId])
+  @@index([orgId])
+  @@map("promo_codes")
 }
 
 // ─── EMAIL VERIFICATION ──────────────────────────────────────────────────────────
