@@ -43,7 +43,7 @@ export function usePromoCodes() {
     });
     const json = await res.json();
     if (!res.ok) return { error: json.error ?? "Failed to update promo" };
-    await fetchPromos();
+    setPromos((prev) => prev.map((p) => (p.id === id ? (json as PromoCode) : p)));
     return { data: json };
   };
 
