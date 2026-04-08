@@ -1,6 +1,6 @@
 import styled from "@emotion/styled";
 import { keyframes } from "@emotion/react";
-import { Button, Badge, Input, InputNumber, Tag, Select } from "antd";
+import { Button, Badge, Input, InputNumber, Tag, Select, Tabs } from "antd";
 
 // ─── Keyframes ────────────────────────────────────────────────────────────────
 
@@ -294,4 +294,50 @@ export const SizeSelect = styled(Select)`
     border-radius: 8px !important;
     font-size: 12.5px !important;
   }
+`;
+
+// ─── Top-level billing page tabs (fills full available height) ────────────────
+
+export const BillingPageTabs = styled(Tabs)`
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+
+  .ant-tabs-nav {
+    margin: 0;
+    padding: 0 24px;
+    flex-shrink: 0;
+    background: #ffffff;
+    border-bottom: 1.5px solid #e8eaed;
+  }
+
+  /* Remove the default bottom border of the tab bar — we use our own */
+  .ant-tabs-nav::before {
+    border-bottom: none !important;
+  }
+
+  .ant-tabs-content-holder {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .ant-tabs-content {
+    height: 100%;
+  }
+
+  .ant-tabs-tabpane {
+    height: 100%;
+    overflow: hidden;
+  }
+`;
+
+// Wrapper for the Sales History tab pane content
+export const HistoryPane = styled.div`
+  height: 100%;
+  overflow-y: auto;
+  padding: 24px;
+
+  &::-webkit-scrollbar { width: 4px; }
+  &::-webkit-scrollbar-thumb { background: #e8eaed; border-radius: 2px; }
 `;

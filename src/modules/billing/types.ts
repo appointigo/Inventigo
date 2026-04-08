@@ -67,6 +67,26 @@ export type SaleItem = {
 };
 
 /**
+ * A flattened row representing one product × size combination, used for
+ * billing product search and selection.
+ */
+export type VariantRow = {
+  rowKey: string;
+  productId: string;
+  productName: string;
+  sku: string;
+  variantSku: string | null;
+  brandName: string;
+  categoryName: string;
+  basePrice: number;
+  isActive: boolean;
+  attributes: Record<string, unknown>;
+  sizeId: string;
+  sizeLabel: string;
+  stockQty: number;
+};
+
+/**
  * Sale summary for list display.
  */
 export type SaleSummary = {
