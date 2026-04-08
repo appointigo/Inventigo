@@ -264,7 +264,7 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
 
     const offer = AVAILABLE_OFFERS.find((o) => o.code === code);
     if (!offer) return;
-    
+
     setAppliedPromo(offer);
     setPromoError("");
     setPromoInput("");
@@ -509,7 +509,12 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
                   Email{" "}
                   <span style={{ color: "#9ca3af", fontWeight: "normal" }}>(optional)</span>
                 </FieldLabel>
-                <Input placeholder="customer@email.com" size="small" />
+                <Input
+                  placeholder="customer@email.com"
+                  size="small"
+                  value={cart.customerEmail}
+                  onChange={(e) => cart.setCustomerEmail(e.target.value)}
+                />
               </CustomerFieldFull>
             </CustomerGrid>
             {cart.items.length > 0 &&

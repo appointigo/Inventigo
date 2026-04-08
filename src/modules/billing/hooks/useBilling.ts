@@ -79,6 +79,7 @@ export function useCart() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>("CASH");
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
 
   const addItem = (item: CartItem) => {
     setItems((prev) => {
@@ -117,6 +118,7 @@ export function useCart() {
     setPaymentMethod("CASH");
     setCustomerName("");
     setCustomerPhone("");
+    setCustomerEmail("");
   };
 
   const subtotal = items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
@@ -130,6 +132,7 @@ export function useCart() {
     taxAmount,
     customerName: customerName || undefined,
     customerPhone: customerPhone || undefined,
+    customerEmail: customerEmail || undefined,
   });
 
   return {
@@ -142,6 +145,7 @@ export function useCart() {
     paymentMethod,
     customerName,
     customerPhone,
+    customerEmail,
     addItem,
     updateQuantity,
     removeItem,
@@ -151,6 +155,7 @@ export function useCart() {
     setPaymentMethod,
     setCustomerName,
     setCustomerPhone,
+    setCustomerEmail,
     toCreateInput,
   };
 }

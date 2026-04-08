@@ -11,6 +11,7 @@ export type CreateSaleInput = {
   taxAmount: number;
   customerName?: string;
   customerPhone?: string;
+  customerEmail?: string;
 };
 
 export type CartItem = {
@@ -43,6 +44,7 @@ export type Sale = {
   invoiceNumber: string;
   customerName: string | null;
   customerPhone: string | null;
+  customerEmail: string | null;
   subtotal: number;
   discountAmount: number;
   taxAmount: number;
