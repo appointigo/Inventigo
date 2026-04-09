@@ -22,7 +22,7 @@ body {
 
 :root,
 [data-theme="light"] {
-  --bg-layout:       #f5f5f5;
+  --bg-layout:       #f0f4f8;
   --bg-surface:      #ffffff;
   --bg-elevated:     #ffffff;
   --bg-subtle:       #f8fafc;

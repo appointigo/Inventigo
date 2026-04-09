@@ -25,6 +25,24 @@ export const platformService = {
       _count: { id: true },
     });
 
+    // Weekly signups — last 7 weeks (Sun → Sat boundaries)
+    const weeklySignups = await (async () => {
+      const now = new Date();
+      const weeks: { week: string; count: number }[] = [];
+      for (let i = 6; i >= 0; i--) {
+        const start = new Date(now);
+        start.setDate(now.getDate() - now.getDay() - i * 7);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(start);
+        end.setDate(start.getDate() + 7);
+        const count = await prisma.organization.count({
+          where: { createdAt: { gte: start, lt: end } },
+        });
+        weeks.push({ week: `W${7 - i}`, count });
+      }
+      return weeks;
+    })();
+
     return {
       totalOrgs,
       activeOrgs,
@@ -32,6 +50,7 @@ export const platformService = {
       totalStores,
       newOrgsThisMonth,
       planDistribution: planGroups.map((g) => ({ plan: g.plan, count: g._count.id })),
+      weeklySignups,
     };
   },
 

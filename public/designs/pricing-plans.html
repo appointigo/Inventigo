@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stockiva — Pricing Plans</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --sidebar-bg:    #0f172a;
+      --sidebar-hover: #1e293b;
+      --primary:       #1677ff;
+      --surface:       #ffffff;
+      --layout-bg:     #f0f4f8;
+      --text-primary:  #111827;
+      --text-secondary:#6b7280;
+      --text-faint:    #9ca3af;
+      --border:        #e5e7eb;
+      --success:       #16a34a;
+      --warning:       #d97706;
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:var(--layout-bg); display:flex; height:100vh; overflow:hidden; color:var(--text-primary); }
+
+    /* ─ Sidebar ──────────────────────────────────────────────────── */
+    .sidebar { width:220px;min-width:220px;background:var(--sidebar-bg);display:flex;flex-direction:column;border-right:1px solid #1e293b; }
+    .sidebar-brand { padding:20px 20px 16px;border-bottom:1px solid #1e293b;display:flex;align-items:center;gap:10px; }
+    .brand-icon { width:32px;height:32px;background:linear-gradient(135deg,#1677ff,#38bdf8);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;color:#fff;box-shadow:0 0 12px #1677ff44; }
+    .brand-name { color:#f1f5f9;font-size:15px;font-weight:700; }
+    .brand-badge { display:inline-block;background:#1677ff22;color:#60a5fa;font-size:9px;font-weight:600;padding:1px 6px;border-radius:20px;border:1px solid #1677ff44;letter-spacing:0.5px; }
+    .sidebar-section-label { font-size:10px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:1px;padding:16px 20px 6px; }
+    .nav-item { display:flex;align-items:center;gap:10px;padding:10px 16px 10px 20px;color:#94a3b8;font-size:13.5px;font-weight:500;cursor:pointer;transition:all 0.15s;border-left:3px solid transparent;text-decoration:none; }
+    .nav-item:hover { background:#1e293b;color:#e2e8f0; }
+    .nav-item.active { background:#1677ff18;color:#60a5fa;border-left-color:#1677ff; }
+    .nav-icon { font-size:16px;width:18px;text-align:center; }
+    .nav-badge { margin-left:auto;background:#ef4444;color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:20px; }
+    .sidebar-footer { margin-top:auto;border-top:1px solid #1e293b;padding:14px 20px;display:flex;align-items:center;gap:10px; }
+    .avatar { width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#1677ff,#7c3aed);display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:700; }
+    .footer-name { color:#e2e8f0;font-size:12.5px;font-weight:600; }
+    .footer-role { color:#475569;font-size:11px; }
+
+    /* ─ Main ─────────────────────────────────────────────────────── */
+    .main { flex:1;display:flex;flex-direction:column;overflow:hidden; }
+    .topbar { background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;height:56px;display:flex;align-items:center;gap:16px; }
+    .topbar-breadcrumb { color:var(--text-faint);font-size:13px; }
+    .topbar-breadcrumb span { color:var(--text-primary);font-weight:600; }
+    .content { flex:1;overflow-y:auto;padding:28px 28px 60px; }
+
+    @keyframes fadeUp { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
+
+    /* ─ Tabs ─────────────────────────────────────────────────────── */
+    .tab-row { display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:24px;animation:fadeUp 0.3s ease both; }
+    .tab-btn {
+      padding:10px 20px;font-size:13.5px;font-weight:600;cursor:pointer;
+      color:var(--text-faint);background:none;border:none;border-bottom:2px solid transparent;
+      margin-bottom:-2px;transition:color 0.15s,border-color 0.15s;
+    }
+    .tab-btn.active { color:var(--primary);border-bottom-color:var(--primary); }
+    .tab-btn:hover:not(.active) { color:var(--text-secondary); }
+
+    .tab-pane { display:none; }
+    .tab-pane.active { display:block; }
+
+    /* ─ Page header ─────────────────────────────────────────────── */
+    .page-top { display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;animation:fadeUp 0.3s ease both; }
+    .page-title { font-size:24px;font-weight:700;letter-spacing:-0.4px; }
+    .page-subtitle { font-size:13px;color:var(--text-secondary);margin-top:3px; }
+    .btn-primary { background:var(--primary);color:#fff;border:none;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;transition:background 0.15s,box-shadow 0.15s;box-shadow:0 2px 8px #1677ff33; }
+    .btn-primary:hover { background:#0958d9; }
+    .btn-ghost { background:var(--surface);color:var(--text-secondary);border:1px solid var(--border);border-radius:8px;padding:9px 16px;font-size:13px;font-weight:500;cursor:pointer;transition:border-color 0.15s; }
+    .btn-ghost:hover { border-color:var(--primary);color:var(--primary); }
+
+    /* ─ Plan Cards ───────────────────────────────────────────────── */
+    .plans-grid { display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-bottom:28px; }
+
+    .plan-card {
+      background:var(--surface);border:2px solid var(--border);border-radius:16px;
+      padding:24px;position:relative;overflow:hidden;
+      transition:box-shadow 0.2s,border-color 0.2s,transform 0.2s;
+      animation:fadeUp 0.4s ease both;
+    }
+
+    .plan-card:nth-child(1) { animation-delay:0.05s; }
+    .plan-card:nth-child(2) { animation-delay:0.10s; }
+    .plan-card:nth-child(3) { animation-delay:0.15s; }
+
+    .plan-card:hover { box-shadow:0 12px 32px rgba(0,0,0,0.1);transform:translateY(-3px); }
+    .plan-card.pro { border-color:#bfdbfe; box-shadow:0 0 0 1px #bfdbfe; }
+    .plan-card.enterprise { border-color:#fcd34d; box-shadow:0 0 0 1px #fcd34d; }
+
+    .plan-card-shine {
+      position:absolute;top:0;right:0;
+      width:120px;height:120px;border-radius:50%;
+      opacity:0.07;transform:translate(40px,-40px);
+      pointer-events:none;
+    }
+
+    .most-popular {
+      position:absolute;top:16px;right:16px;
+      background:linear-gradient(135deg,#1677ff,#38bdf8);
+      color:#fff;font-size:10px;font-weight:700;
+      padding:3px 10px;border-radius:20px;letter-spacing:0.3px;
+    }
+
+    .plan-icon-wrap {
+      width:44px;height:44px;border-radius:12px;
+      display:flex;align-items:center;justify-content:center;
+      font-size:22px;margin-bottom:16px;
+    }
+
+    .plan-name { font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-faint);margin-bottom:6px; }
+    .plan-price-row { display:flex;align-items:baseline;gap:3px;margin-bottom:4px; }
+    .plan-price { font-size:32px;font-weight:900;letter-spacing:-1.5px;color:var(--text-primary); }
+    .plan-per { font-size:13px;color:var(--text-faint); }
+    .plan-tagline { font-size:12.5px;color:var(--text-secondary);margin-bottom:20px; }
+
+    .plan-divider { height:1px;background:var(--border);margin-bottom:16px; }
+
+    .plan-limits { display:flex;flex-direction:column;gap:8px;margin-bottom:16px; }
+    .plan-limit-row { display:flex;align-items:center;justify-content:space-between; }
+    .plan-limit-label { font-size:12.5px;color:var(--text-secondary); }
+    .plan-limit-val { font-size:12.5px;font-weight:700;color:var(--text-primary); }
+    .plan-limit-val.unlimited { color:var(--success); }
+
+    .plan-features { display:flex;flex-direction:column;gap:7px;margin-bottom:20px; }
+    .plan-feature { display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text-secondary); }
+    .feature-check { font-size:13px;color:var(--success);flex-shrink:0; }
+    .feature-x { font-size:13px;color:var(--text-faint);flex-shrink:0; }
+
+    .plan-card-actions { display:flex;gap:8px; }
+    .edit-btn { flex:1;padding:9px;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:var(--layout-bg);color:var(--text-secondary);transition:all 0.15s;text-align:center; }
+    .edit-btn:hover { border-color:var(--primary);color:var(--primary);background:#fff; }
+
+    .orgs-count-badge {
+      display:inline-flex;align-items:center;gap:4px;
+      background:var(--layout-bg);border:1px solid var(--border);
+      border-radius:20px;font-size:11px;font-weight:600;
+      padding:3px 10px;color:var(--text-secondary);
+      margin-bottom:16px;
+    }
+
+    /* ─ Assignments Table ─────────────────────────────────────────── */
+    .section-label { font-size:11.5px;font-weight:700;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:12px;display:flex;align-items:center;gap:8px; }
+    .section-label-line { flex:1;height:1px;background:var(--border); }
+
+    .assignments-panel { background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;animation:fadeUp 0.4s 0.25s ease both; }
+
+    .assignment-toolbar { padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px; }
+    .search-box { display:flex;align-items:center;gap:8px;background:var(--layout-bg);border:1px solid var(--border);border-radius:8px;padding:7px 13px;flex:1;max-width:300px; }
+    .search-box input { border:none;background:transparent;outline:none;font-size:13px;color:var(--text-primary);width:100%; }
+    .search-box input::placeholder { color:var(--text-faint); }
+    .filter-select { border:1px solid var(--border);border-radius:8px;padding:7px 12px;font-size:13px;color:var(--text-secondary);background:var(--surface);cursor:pointer;outline:none; }
+
+    .upgrade-badge { display:inline-flex;align-items:center;gap:5px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:6px;font-size:11.5px;font-weight:600;padding:4px 10px;cursor:pointer;transition:all 0.15s; }
+    .upgrade-badge:hover { background:#1677ff;color:#fff;border-color:#1677ff; }
+
+    table { width:100%;border-collapse:collapse; }
+    thead th { padding:10px 20px;font-size:11px;font-weight:700;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.6px;background:#f8fafc;text-align:left;white-space:nowrap;border-bottom:1px solid var(--border); }
+    tbody tr { border-bottom:1px solid #f3f4f6;transition:background 0.12s; }
+    tbody tr:hover { background:#f8faff; }
+    tbody tr:last-child { border-bottom:none; }
+    td { padding:12px 20px;font-size:13px;vertical-align:middle; }
+
+    .org-cell { display:flex;align-items:center;gap:10px; }
+    .org-av { width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0; }
+    .org-name { font-weight:600; }
+    .org-slug { font-size:11px;color:var(--text-faint); }
+
+    .badge { display:inline-flex;align-items:center;font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px; }
+    .badge-free { background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb; }
+    .badge-pro { background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe; }
+    .badge-enterprise { background:#fef3c7;color:#92400e;border:1px solid #fcd34d; }
+
+    /* ─ Edit Modal ───────────────────────────────────────────────── */
+    .modal-backdrop { position:fixed;inset:0;background:rgba(0,0,0,0.4);backdrop-filter:blur(4px);z-index:200;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity 0.2s; }
+    .modal-backdrop.open { opacity:1;pointer-events:auto; }
+
+    .modal {
+      background:var(--surface);border-radius:16px;width:480px;max-height:85vh;overflow-y:auto;
+      box-shadow:0 24px 80px rgba(0,0,0,0.2);
+      transform:scale(0.95) translateY(16px);transition:transform 0.25s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    .modal-backdrop.open .modal { transform:scale(1) translateY(0); }
+
+    .modal-header { padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px; }
+    .modal-title { font-size:16px;font-weight:700;flex:1; }
+    .modal-close { background:none;border:none;cursor:pointer;font-size:18px;color:var(--text-faint);padding:2px;line-height:1; }
+    .modal-close:hover { color:var(--text-primary); }
+
+    .modal-body { padding:24px; }
+
+    .form-group { margin-bottom:18px; }
+    .form-label { font-size:12.5px;font-weight:600;color:var(--text-secondary);margin-bottom:6px;display:block; }
+    .form-hint { font-size:11px;color:var(--text-faint);margin-top:4px; }
+
+    .form-input {
+      width:100%;padding:9px 13px;border:1px solid var(--border);border-radius:8px;
+      font-size:13.5px;color:var(--text-primary);outline:none;
+      transition:border-color 0.15s,box-shadow 0.15s;background:var(--surface);
+    }
+    .form-input:focus { border-color:var(--primary);box-shadow:0 0 0 3px #1677ff18; }
+
+    .form-row { display:grid;grid-template-columns:1fr 1fr;gap:14px; }
+
+    .features-grid { display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px; }
+    .feature-toggle {
+      display:flex;align-items:center;justify-content:space-between;
+      background:var(--layout-bg);border:1px solid var(--border);border-radius:8px;
+      padding:10px 12px;cursor:pointer;transition:border-color 0.15s;
+    }
+    .feature-toggle:hover { border-color:var(--primary); }
+    .feature-toggle .label { font-size:12.5px;font-weight:500;color:var(--text-secondary); }
+
+    .toggle-switch {
+      width:34px;height:18px;border-radius:9px;background:#e5e7eb;position:relative;
+      transition:background 0.2s;flex-shrink:0;cursor:pointer;
+    }
+    .toggle-switch.on { background:var(--primary); }
+    .toggle-switch::after {
+      content:'';position:absolute;top:2px;left:2px;
+      width:14px;height:14px;border-radius:50%;background:#fff;
+      transition:transform 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.2);
+    }
+    .toggle-switch.on::after { transform:translateX(16px); }
+
+    .modal-footer { padding:16px 24px;border-top:1px solid var(--border);display:flex;gap:10px;justify-content:flex-end; }
+    .modal-btn-cancel { background:var(--surface);color:var(--text-secondary);border:1px solid var(--border);border-radius:8px;padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer; }
+    .modal-btn-save { background:var(--primary);color:#fff;border:none;border-radius:8px;padding:9px 20px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px #1677ff33; }
+    .modal-btn-save:hover { background:#0958d9; }
+
+    ::-webkit-scrollbar { width:4px; }
+    ::-webkit-scrollbar-thumb { background:var(--border);border-radius:3px; }
+  </style>
+</head>
+<body>
+
+<!-- ─── Sidebar ─────────────────────────────────────────────────── -->
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-icon">⬡</div>
+    <div>
+      <div class="brand-name">Stockiva</div>
+      <div class="brand-badge">PLATFORM ADMIN</div>
+    </div>
+  </div>
+  <div class="sidebar-section-label">Overview</div>
+  <a class="nav-item"><span class="nav-icon">▦</span> Dashboard</a>
+  <a class="nav-item"><span class="nav-icon">⌂</span> Organizations</a>
+  <div class="sidebar-section-label" style="margin-top:8px;">Manage</div>
+  <a class="nav-item active"><span class="nav-icon">◈</span> Pricing Plans</a>
+  <a class="nav-item"><span class="nav-icon">♟</span> Platform Users <span class="nav-badge">3</span></a>
+  <a class="nav-item"><span class="nav-icon">⚑</span> Feature Flags</a>
+  <a class="nav-item"><span class="nav-icon">◎</span> Announcements</a>
+  <div class="sidebar-section-label" style="margin-top:8px;">Insights</div>
+  <a class="nav-item"><span class="nav-icon">▨</span> Analytics</a>
+  <a class="nav-item"><span class="nav-icon">≡</span> Audit Log</a>
+  <div class="sidebar-footer">
+    <div class="avatar">U</div>
+    <div>
+      <div class="footer-name">Urooj Ahmad</div>
+      <div class="footer-role">Super Admin</div>
+    </div>
+  </div>
+</aside>
+
+<!-- ─── Main ──────────────────────────────────────────────────────── -->
+<main class="main">
+  <div class="topbar">
+    <div class="topbar-breadcrumb">Stockiva Platform &rsaquo; <span>Pricing Plans</span></div>
+  </div>
+
+  <div class="content">
+
+    <div class="page-top">
+      <div>
+        <div class="page-title">Pricing Plans</div>
+        <div class="page-subtitle">Define plan limits, features, and pricing. Changes apply to new signups immediately.</div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn-ghost">📋 Copy Limits to All</button>
+        <button class="btn-primary" onclick="openEditModal('new')">+ New Plan</button>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tab-row">
+      <button class="tab-btn active" onclick="switchTab('definitions', this)">Plan Definitions</button>
+      <button class="tab-btn" onclick="switchTab('assignments', this)">Plan Assignments</button>
+    </div>
+
+    <!-- ── Tab: Plan Definitions ── -->
+    <div class="tab-pane active" id="tab-definitions">
+
+      <div class="plans-grid">
+
+        <!-- FREE -->
+        <div class="plan-card">
+          <div class="plan-card-shine" style="background:#9ca3af;"></div>
+          <div class="plan-icon-wrap" style="background:#f3f4f6; color:#6b7280;">🆓</div>
+          <div class="orgs-count-badge">⌂ 8 organizations on this plan</div>
+          <div class="plan-name">Free</div>
+          <div class="plan-price-row">
+            <span class="plan-price">$0</span>
+            <span class="plan-per">/ mo</span>
+          </div>
+          <div class="plan-tagline">Get started at no cost. Perfect for single-store retailers.</div>
+          <div class="plan-divider"></div>
+          <div class="plan-limits">
+            <div class="plan-limit-row"><span class="plan-limit-label">Max Users</span><span class="plan-limit-val">5</span></div>
+            <div class="plan-limit-row"><span class="plan-limit-label">Max Stores</span><span class="plan-limit-val">1</span></div>
+            <div class="plan-limit-row"><span class="plan-limit-label">Max Products</span><span class="plan-limit-val">100</span></div>
+          </div>
+          <div class="plan-features">
+            <div class="plan-feature"><span class="feature-check">✓</span> Inventory management</div>
+            <div class="plan-feature"><span class="feature-check">✓</span> Sales &amp; billing</div>
+            <div class="plan-feature"><span class="feature-check">✓</span> Basic reports</div>
+            <div class="plan-feature"><span class="feature-x">✗</span> <span style="color:var(--text-faint);">Purchase orders</span></div>
+            <div class="plan-feature"><span class="feature-x">✗</span> <span style="color:var(--text-faint);">Promo codes</span></div>
+            <div class="plan-feature"><span class="feature-x">✗</span> <span style="color:var(--text-faint);">API access</span></div>
+          </div>
+          <div class="plan-card-actions">
+            <button class="edit-btn" onclick="openEditModal('FREE')">✎ Edit Plan</button>
+          </div>
+        </div>
+
+        <!-- PRO -->
+        <div class="plan-card pro">
+          <div class="plan-card-shine" style="background:#1677ff;"></div>
+          <div class="most-popular">Most Popular</div>
+          <div class="plan-icon-wrap" style="background:#eff6ff; color:#1677ff;">⚡</div>
+          <div class="orgs-count-badge">⌂ 0 organizations on this plan</div>
+          <div class="plan-name" style="color:#1d4ed8;">Pro</div>
+          <div class="plan-price-row">
+            <span class="plan-price" style="color:#1677ff;">$29</span>
+            <span class="plan-per">/ mo</span>
+          </div>
+          <div class="plan-tagline">For growing businesses managing multiple stores.</div>
+          <div class="plan-divider"></div>
+          <div class="plan-limits">
+            <div class="plan-limit-row"><span class="plan-limit-label">Max Users</span><span class="plan-limit-val">25</span></div>
+            <div class="plan-limit-row"><span class="plan-limit-label">Max Stores</span><span class="plan-limit-val">5</span></div>
+            <div class="plan-limit-row"><span class="plan-limit-label">Max Products</span><span class="plan-limit-val">1,000</span></div>
+          </div>
+          <div class="plan-features">
+            <div class="plan-feature"><span class="feature-check">✓</span> Everything in Free</div>
+            <div class="plan-feature"><span class="feature-check">✓</span> Purchase orders</div>
+            <div class="plan-feature"><span class="feature-check">✓</span> Promo codes</div>
+            <div class="plan-feature"><span class="feature-check">✓</span> Advanced reports</div>
+            <div class="plan-feature"><span class="feature-x">✗</span> <span style="color:var(--text-faint);">API access</span></div>
+            <div class="plan-feature"><span class="feature-x">✗</span> <span style="color:var(--text-faint);">White-label</span></div>
+          </div>
+          <div class="plan-card-actions">
+            <button class="edit-btn" style="border-color:#bfdbfe;color:#1677ff;background:#eff6ff;" onclick="openEditModal('PRO')">✎ Edit Plan</button>
+          </div>
+        </div>
+
+        <!-- ENTERPRISE -->
+        <div class="plan-card enterprise">
+          <div class="plan-card-shine" style="background:#f59e0b;"></div>
+          <div class="plan-icon-wrap" style="background:#fef3c7; color:#d97706;">👑</div>
+          <div class="orgs-count-badge">⌂ 0 organizations on this plan</div>
+          <div class="plan-name" style="color:#92400e;">Enterprise</div>
+          <div class="plan-price-row">
+            <span class="plan-price" style="color:#d97706;">$99</span>
+            <span class="plan-per">/ mo</span>
+          </div>
+          <div class="plan-tagline">Unlimited scale for enterprise retail chains.</div>
+          <div class="plan-divider"></div>
+          <div class="plan-limits">
+            <div class="plan-limit-row"><span class="plan-limit-label">Max Users</span><span class="plan-limit-val unlimited">Unlimited</span></div>
+            <div class="plan-limit-row"><span class="plan-limit-label">Max Stores</span><span class="plan-limit-val unlimited">Unlimited</span></div>
+            <div class="plan-limit-row"><span class="plan-limit-label">Max Products</span><span class="plan-limit-val unlimited">Unlimited</span></div>
+          </div>
+          <div class="plan-features">
+            <div class="plan-feature"><span class="feature-check">✓</span> Everything in Pro</div>
+            <div class="plan-feature"><span class="feature-check">✓</span> API access</div>
+            <div class="plan-feature"><span class="feature-check">✓</span> White-label branding</div>
+            <div class="plan-feature"><span class="feature-check">✓</span> Custom integrations</div>
+            <div class="plan-feature"><span class="feature-check">✓</span> Dedicated support</div>
+            <div class="plan-feature"><span class="feature-check">✓</span> SLA guarantee</div>
+          </div>
+          <div class="plan-card-actions">
+            <button class="edit-btn" style="border-color:#fcd34d;color:#d97706;background:#fef3c7;" onclick="openEditModal('ENTERPRISE')">✎ Edit Plan</button>
+          </div>
+        </div>
+
+      </div><!-- /plans-grid -->
+
+    </div><!-- /tab definitions -->
+
+    <!-- ── Tab: Plan Assignments ── -->
+    <div class="tab-pane" id="tab-assignments">
+      <div class="assignments-panel">
+        <div class="assignment-toolbar">
+          <div class="search-box">
+            <span style="color:var(--text-faint);">⌕</span>
+            <input type="text" placeholder="Search organizations…" />
+          </div>
+          <select class="filter-select">
+            <option>All Plans</option>
+            <option>FREE</option>
+            <option>PRO</option>
+            <option>ENTERPRISE</option>
+          </select>
+          <div style="flex:1;"></div>
+          <span style="font-size:12.5px;color:var(--text-faint);">8 organizations</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Organization</th>
+              <th>Current Plan</th>
+              <th>Users</th>
+              <th>Stores</th>
+              <th>Products</th>
+              <th>Created</th>
+              <th>Change Plan</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><div class="org-cell"><div class="org-av" style="background:linear-gradient(135deg,#1677ff,#38bdf8);">F</div><div><div class="org-name">Fashion Insta</div><div class="org-slug">/fashion-insta</div></div></div></td>
+              <td><span class="badge badge-free">FREE</span></td>
+              <td>1</td><td>1</td><td style="color:var(--text-faint);">0</td>
+              <td style="color:var(--text-faint);font-size:12px;">07/04/2026</td>
+              <td><span class="upgrade-badge" onclick="openEditModal('assign')">⬆ Upgrade to Pro</span></td>
+            </tr>
+            <tr>
+              <td><div class="org-cell"><div class="org-av" style="background:linear-gradient(135deg,#d97706,#fbbf24);">L</div><div><div class="org-name">Luxury Fashion</div><div class="org-slug">/luxury-fashion</div></div></div></td>
+              <td><span class="badge badge-free">FREE</span></td>
+              <td>1</td><td>2</td><td>4</td>
+              <td style="color:var(--text-faint);font-size:12px;">06/04/2026</td>
+              <td><span class="upgrade-badge" onclick="openEditModal('assign')">⬆ Upgrade to Pro</span></td>
+            </tr>
+            <tr>
+              <td><div class="org-cell"><div class="org-av" style="background:linear-gradient(135deg,#16a34a,#4ade80);">G</div><div><div class="org-name">Grocery Shop</div><div class="org-slug">/grocery-shop</div></div></div></td>
+              <td><span class="badge badge-free">FREE</span></td>
+              <td style="color:var(--text-faint);">0</td><td>2</td><td>10</td>
+              <td style="color:var(--text-faint);font-size:12px;">02/04/2026</td>
+              <td><span class="upgrade-badge" onclick="openEditModal('assign')">⬆ Upgrade to Pro</span></td>
+            </tr>
+            <tr>
+              <td><div class="org-cell"><div class="org-av" style="background:linear-gradient(135deg,#7c3aed,#a78bfa);">S</div><div><div class="org-name">Skincare</div><div class="org-slug">/skincare</div></div></div></td>
+              <td><span class="badge badge-free">FREE</span></td>
+              <td style="color:var(--text-faint);">0</td><td>1</td><td style="color:var(--text-faint);">0</td>
+              <td style="color:var(--text-faint);font-size:12px;">07/04/2026</td>
+              <td><span class="upgrade-badge" onclick="openEditModal('assign')">⬆ Upgrade to Pro</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div><!-- /tab assignments -->
+
+  </div><!-- /content -->
+</main>
+
+<!-- ─── Edit Plan Modal ─────────────────────────────────────────── -->
+<div class="modal-backdrop" id="editModal" onclick="closeModal(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="plan-icon-wrap" style="width:36px;height:36px;background:#eff6ff;color:#1677ff;margin-bottom:0;border-radius:8px;font-size:16px;">⚡</div>
+      <div class="modal-title" id="modalTitle">Edit PRO Plan</div>
+      <button class="modal-close" onclick="closeModalDirect()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Plan Name</label>
+          <input class="form-input" value="PRO" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Price ($/month)</label>
+          <input class="form-input" type="number" value="29" />
+          <div class="form-hint">Set 0 for free plans</div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Max Users</label>
+          <input class="form-input" type="number" value="25" />
+          <div class="form-hint">-1 for unlimited</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Max Stores</label>
+          <input class="form-input" type="number" value="5" />
+          <div class="form-hint">-1 for unlimited</div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Max Products</label>
+        <input class="form-input" type="number" value="1000" />
+        <div class="form-hint">-1 for unlimited</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Included Features</label>
+        <div class="features-grid">
+          <div class="feature-toggle" onclick="toggleFeature(this)">
+            <span class="label">Purchase Orders</span>
+            <div class="toggle-switch on"></div>
+          </div>
+          <div class="feature-toggle" onclick="toggleFeature(this)">
+            <span class="label">Promo Codes</span>
+            <div class="toggle-switch on"></div>
+          </div>
+          <div class="feature-toggle" onclick="toggleFeature(this)">
+            <span class="label">Advanced Reports</span>
+            <div class="toggle-switch on"></div>
+          </div>
+          <div class="feature-toggle" onclick="toggleFeature(this)">
+            <span class="label">API Access</span>
+            <div class="toggle-switch"></div>
+          </div>
+          <div class="feature-toggle" onclick="toggleFeature(this)">
+            <span class="label">Barcode Scanning</span>
+            <div class="toggle-switch on"></div>
+          </div>
+          <div class="feature-toggle" onclick="toggleFeature(this)">
+            <span class="label">White-label</span>
+            <div class="toggle-switch"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn-cancel" onclick="closeModalDirect()">Cancel</button>
+      <button class="modal-btn-save">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function switchTab(id, btn) {
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('tab-' + id).classList.add('active');
+    btn.classList.add('active');
+  }
+
+  function openEditModal(plan) {
+    const titles = { FREE:'Edit FREE Plan', PRO:'Edit PRO Plan', ENTERPRISE:'Edit ENTERPRISE Plan', new:'Create New Plan', assign:'Change Plan' };
+    document.getElementById('modalTitle').textContent = titles[plan] || 'Edit Plan';
+    document.getElementById('editModal').classList.add('open');
+  }
+
+  function closeModal(e) {
+    if (e.target === document.getElementById('editModal')) closeModalDirect();
+  }
+
+  function closeModalDirect() {
+    document.getElementById('editModal').classList.remove('open');
+  }
+
+  function toggleFeature(el) {
+    el.querySelector('.toggle-switch').classList.toggle('on');
+  }
+</script>
+
+</body>
+</html>

@@ -5,7 +5,7 @@ import type { Theme } from "@emotion/react";
 export const lightTheme: Theme = {
   isDark: false,
   bg: {
-    layout:  "#f5f5f5",
+    layout:  "#f0f4f8",
     surface: "#ffffff",
     subtle:  "#f8fafc",
     muted:   "#f3f4f6",

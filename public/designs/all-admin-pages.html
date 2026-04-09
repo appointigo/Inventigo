@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stockiva — All Platform Admin Pages</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --sidebar-bg:#0f172a; --sidebar-hover:#1e293b; --primary:#1677ff;
+      --surface:#ffffff; --layout-bg:#f0f4f8; --text-primary:#111827;
+      --text-secondary:#6b7280; --text-faint:#9ca3af; --border:#e5e7eb;
+      --success:#16a34a; --warning:#d97706; --error:#dc2626; --purple:#7c3aed;
+    }
+    body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:var(--layout-bg); display:flex; height:100vh; overflow:hidden; color:var(--text-primary); }
+
+    /* ─ Sidebar ──────────────────────────────────── */
+    .sidebar { width:220px;min-width:220px;background:var(--sidebar-bg);display:flex;flex-direction:column;border-right:1px solid #1e293b; }
+    .sidebar-brand { padding:20px 20px 16px;border-bottom:1px solid #1e293b;display:flex;align-items:center;gap:10px; }
+    .brand-icon { width:32px;height:32px;background:linear-gradient(135deg,#1677ff,#38bdf8);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;color:#fff;box-shadow:0 0 12px #1677ff44; }
+    .brand-name { color:#f1f5f9;font-size:15px;font-weight:700; }
+    .brand-badge { display:inline-block;background:#1677ff22;color:#60a5fa;font-size:9px;font-weight:600;padding:1px 6px;border-radius:20px;border:1px solid #1677ff44;letter-spacing:0.5px; }
+    .sidebar-section-label { font-size:10px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:1px;padding:16px 20px 6px; }
+    .nav-item { display:flex;align-items:center;gap:10px;padding:10px 16px 10px 20px;color:#94a3b8;font-size:13.5px;font-weight:500;cursor:pointer;transition:all .15s;border-left:3px solid transparent;text-decoration:none; }
+    .nav-item:hover { background:#1e293b;color:#e2e8f0; }
+    .nav-item.active { background:#1677ff18;color:#60a5fa;border-left-color:#1677ff; }
+    .nav-icon { font-size:16px;width:18px;text-align:center; }
+    .nav-badge { margin-left:auto;background:#ef4444;color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:20px; }
+    .sidebar-footer { margin-top:auto;border-top:1px solid #1e293b;flex-shrink:0; }
+    .footer-profile { padding:13px 18px;display:flex;align-items:center;gap:10px; }
+    .avatar { width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#1677ff,#7c3aed);display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:700; }
+    .footer-name { color:#e2e8f0;font-size:12.5px;font-weight:600; }
+    .footer-role { color:#475569;font-size:11px; }
+    .footer-actions { display:flex;gap:6px;padding:0 18px 12px; }
+    .footer-icon-btn { display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:6px;border:1px solid #1e293b;background:transparent;color:#94a3b8;font-size:14px;cursor:pointer;transition:all .15s; }
+    .footer-icon-btn:hover { background:#1e293b;color:#e2e8f0;border-color:#475569; }
+    .sign-out-btn { flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:6px 0;border-radius:6px;border:1px solid #1e293b;background:transparent;color:#94a3b8;font-size:11.5px;font-weight:600;cursor:pointer;transition:all .15s; }
+    .sign-out-btn:hover { background:#ef444422;color:#f87171;border-color:#ef444466; }
+
+    /* ─ Main ─────────────────────────────────────── */
+    .main { flex:1;display:flex;flex-direction:column;overflow:hidden; }
+    .topbar { background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;height:56px;display:flex;align-items:center;gap:16px;flex-shrink:0; }
+    .topbar-breadcrumb { color:var(--text-faint);font-size:13px; }
+    .topbar-breadcrumb span { color:var(--text-primary);font-weight:600; }
+    .topbar-spacer { flex:1; }
+    .topbar-chip { display:flex;align-items:center;gap:6px;background:var(--layout-bg);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-size:12px;color:var(--text-secondary);cursor:pointer;transition:border-color .15s; }
+    .topbar-chip:hover { border-color:var(--primary); }
+    @keyframes livePulse { 0%,100%{box-shadow:0 0 0 0 rgba(22,163,74,.27)} 50%{box-shadow:0 0 0 5px rgba(22,163,74,0)} }
+    .live-dot { width:7px;height:7px;border-radius:50%;background:#16a34a;animation:livePulse 2s infinite; }
+    .content { flex:1;overflow-y:auto;padding:28px 28px 60px; }
+    @keyframes fadeUp { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
+
+    /* ─ Page ──────────────────────────────────────── */
+    .page-top { display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;animation:fadeUp .3s ease both; }
+    .page-title { font-size:24px;font-weight:700;letter-spacing:-.4px; }
+    .page-subtitle { font-size:13px;color:var(--text-secondary);margin-top:3px; }
+    .btn-primary { background:var(--primary);color:#fff;border:none;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;box-shadow:0 2px 8px #1677ff33;transition:background .15s; }
+    .btn-primary:hover { background:#0958d9; }
+    .btn-ghost { background:var(--surface);color:var(--text-secondary);border:1px solid var(--border);border-radius:8px;padding:9px 16px;font-size:13px;font-weight:500;cursor:pointer;transition:border-color .15s; }
+    .btn-ghost:hover { border-color:var(--primary);color:var(--primary); }
+
+    .tab-pane { display:none;animation:fadeUp .3s ease both; }
+    .tab-pane.active { display:block; }
+
+    /* ─ Panels ────────────────────────────────────── */
+    .panel { background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;animation:fadeUp .4s .1s ease both; }
+    .toolbar { background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 18px;display:flex;align-items:center;gap:12px;margin-bottom:12px;animation:fadeUp .35s ease both; }
+    .search-box { display:flex;align-items:center;gap:8px;background:var(--layout-bg);border:1px solid var(--border);border-radius:8px;padding:7px 13px;flex:1;max-width:300px; }
+    .search-box input { border:none;background:transparent;outline:none;font-size:13px;color:var(--text-primary);width:100%; }
+    .search-box input::placeholder { color:var(--text-faint); }
+    .filter-select { border:1px solid var(--border);border-radius:8px;padding:7px 12px;font-size:13px;color:var(--text-secondary);background:var(--surface);cursor:pointer;outline:none; }
+
+    table { width:100%;border-collapse:collapse; }
+    thead th { padding:10px 20px;font-size:11px;font-weight:700;color:var(--text-faint);text-transform:uppercase;letter-spacing:.6px;background:#f8fafc;text-align:left;white-space:nowrap;border-bottom:1px solid var(--border); }
+    tbody tr { border-bottom:1px solid #f3f4f6;transition:background .12s; }
+    tbody tr:hover { background:#f8faff; }
+    tbody tr:last-child { border-bottom:none; }
+    td { padding:12px 20px;font-size:13px;vertical-align:middle; }
+
+    .badge { display:inline-flex;align-items:center;font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px; }
+    .badge-green { background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0; }
+    .badge-red { background:#fef2f2;color:#dc2626;border:1px solid #fecaca; }
+    .badge-blue { background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe; }
+    .badge-purple { background:#f5f3ff;color:#7c3aed;border:1px solid #ddd6fe; }
+    .badge-orange { background:#fffbeb;color:#d97706;border:1px solid #fde68a; }
+    .badge-gray { background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb; }
+
+    .pagination { padding:14px 20px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border);font-size:12px;color:var(--text-faint); }
+    .page-btns { display:flex;gap:4px; }
+    .page-btn { width:28px;height:28px;border-radius:6px;border:1px solid var(--border);background:var(--surface);cursor:pointer;font-size:12px;font-weight:600;color:var(--text-secondary);display:flex;align-items:center;justify-content:center;transition:all .15s; }
+    .page-btn:hover { border-color:var(--primary);color:var(--primary); }
+    .page-btn.active { background:var(--primary);color:#fff;border-color:var(--primary); }
+
+    /* ─ KPI ───────────────────────────────────────── */
+    .kpi-row { display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;animation:fadeUp .35s ease both; }
+    .kpi-card { background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px 20px;position:relative;overflow:hidden;transition:box-shadow .2s,transform .2s; }
+    .kpi-card:hover { box-shadow:0 8px 24px rgba(0,0,0,.06);transform:translateY(-2px); }
+    .kpi-icon { width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;margin-bottom:12px; }
+    .kpi-label { font-size:12px;color:var(--text-faint);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px; }
+    .kpi-value { font-size:28px;font-weight:800;letter-spacing:-1px; }
+    .kpi-delta { font-size:11.5px;font-weight:600;margin-top:4px; }
+    .kpi-delta.up { color:var(--success); }
+    .kpi-delta.warn { color:var(--warning); }
+    .kpi-shine { position:absolute;top:0;right:0;width:90px;height:90px;border-radius:50%;opacity:.06;transform:translate(30px,-30px);pointer-events:none; }
+
+    /* ─ Users ─────────────────────────────────────── */
+    .user-cell { display:flex;align-items:center;gap:10px; }
+    .user-av { width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0; }
+    .user-name { font-weight:600; }
+    .user-email { font-size:11px;color:var(--text-faint); }
+    .action-btn { padding:5px 10px;border-radius:6px;font-size:11.5px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:var(--surface);color:var(--text-secondary);transition:all .15s;margin-right:4px; }
+    .action-btn:hover { border-color:var(--primary);color:var(--primary); }
+    .action-btn.danger:hover { border-color:var(--error);color:var(--error);background:#fef2f2; }
+    .more-btn { width:28px;height:28px;border-radius:6px;border:1px solid var(--border);background:var(--surface);cursor:pointer;font-size:14px;color:var(--text-faint);display:flex;align-items:center;justify-content:center;transition:all .15s; }
+    .more-btn:hover { border-color:var(--primary);color:var(--primary); }
+
+    /* ─ Analytics charts ──────────────────────────── */
+    .chart-grid { display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;animation:fadeUp .4s ease both; }
+    .chart-card { background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px; }
+    .chart-title { font-size:13px;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:8px; }
+    .chart-title .icon { font-size:16px; }
+    .chart-subtitle { font-size:11.5px;color:var(--text-faint);margin-left:auto;font-weight:500; }
+    .bar-chart { display:flex;align-items:flex-end;gap:8px;height:140px;padding-top:8px; }
+    .bar-col { display:flex;flex-direction:column;align-items:center;flex:1;gap:4px; }
+    .bar { border-radius:6px 6px 2px 2px;width:100%;transition:height .6s cubic-bezier(.34,1.56,.64,1); }
+    .bar-label { font-size:10px;color:var(--text-faint);font-weight:600; }
+    .bar-value { font-size:10px;font-weight:700;color:var(--text-primary); }
+    .donut-wrap { display:flex;align-items:center;gap:24px; }
+    .donut-svg { width:120px;height:120px; }
+    .donut-ring { fill:none;stroke-width:18;stroke-linecap:round; }
+    .donut-label { font-size:18px;font-weight:800;fill:var(--text-primary); }
+    .donut-sub { font-size:10px;fill:var(--text-faint); }
+    .donut-legend { display:flex;flex-direction:column;gap:8px; }
+    .legend-item { display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text-secondary); }
+    .legend-dot { width:10px;height:10px;border-radius:3px;flex-shrink:0; }
+    .legend-val { margin-left:auto;font-weight:700;color:var(--text-primary); }
+    .retention-grid { display:grid;grid-template-columns:repeat(3,1fr);gap:12px; }
+    .retention-card { text-align:center;background:var(--layout-bg);border-radius:10px;padding:16px 12px; }
+    .retention-pct { font-size:28px;font-weight:800;letter-spacing:-1px; }
+    .retention-label { font-size:11px;color:var(--text-faint);font-weight:600;margin-top:4px; }
+    .leaderboard { display:flex;flex-direction:column;gap:8px; }
+    .lb-row { display:flex;align-items:center;gap:12px;padding:8px 0; }
+    .lb-rank { width:22px;height:22px;border-radius:6px;background:#f3f4f6;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--text-faint);flex-shrink:0; }
+    .lb-rank.gold { background:#fef3c7;color:#d97706; }
+    .lb-rank.silver { background:#f1f5f9;color:#64748b; }
+    .lb-rank.bronze { background:#fff7ed;color:#ea580c; }
+    .lb-name { font-size:13px;font-weight:600;flex:1; }
+    .lb-bar-wrap { width:120px;height:6px;background:#f3f4f6;border-radius:3px;overflow:hidden; }
+    .lb-bar { height:100%;border-radius:3px;transition:width .8s cubic-bezier(.34,1.56,.64,1); }
+    .lb-val { font-size:12px;font-weight:700;color:var(--text-primary);width:50px;text-align:right; }
+
+    /* ─ Audit ─────────────────────────────────────── */
+    .timeline { display:flex;flex-direction:column; }
+    .tl-item { display:flex;gap:14px;padding:14px 20px;border-bottom:1px solid #f3f4f6;transition:background .12s; }
+    .tl-item:hover { background:#f8faff; }
+    .tl-item:last-child { border-bottom:none; }
+    .tl-dot-col { display:flex;flex-direction:column;align-items:center;width:20px;padding-top:3px; }
+    .tl-dot { width:10px;height:10px;border-radius:50%;flex-shrink:0;border:2px solid #fff;box-shadow:0 0 0 2px; }
+    .tl-line { flex:1;width:2px;background:#e5e7eb;margin-top:4px;border-radius:1px; }
+    .tl-body { flex:1;min-width:0; }
+    .tl-action { font-size:13px;font-weight:600; }
+    .tl-action .target { color:var(--primary);font-weight:700; }
+    .tl-meta { display:flex;align-items:center;gap:12px;margin-top:3px;font-size:11.5px;color:var(--text-faint);flex-wrap:wrap; }
+    .tl-meta .by { color:var(--text-secondary);font-weight:500; }
+    .tl-detail { margin-top:6px;background:var(--layout-bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--text-secondary); }
+    .tl-detail code { background:#e5e7eb;padding:1px 5px;border-radius:4px;font-size:11.5px;font-family:monospace; }
+
+    /* ─ Feature Flags ─────────────────────────────── */
+    .flags-grid { display:grid;grid-template-columns:1fr 1fr;gap:14px;animation:fadeUp .4s ease both; }
+    .flag-card { background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 20px;transition:box-shadow .2s,transform .2s; }
+    .flag-card:hover { box-shadow:0 8px 24px rgba(0,0,0,.06);transform:translateY(-2px); }
+    .flag-header { display:flex;align-items:center;justify-content:space-between;margin-bottom:10px; }
+    .flag-key { font-size:13px;font-weight:700;font-family:'SF Mono',Consolas,monospace;color:var(--text-primary); }
+    .flag-desc { font-size:12px;color:var(--text-secondary);margin-bottom:14px;line-height:1.5; }
+    .flag-meta { display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-faint); }
+    .toggle { width:38px;height:20px;border-radius:10px;background:#e5e7eb;position:relative;cursor:pointer;transition:background .2s;flex-shrink:0; }
+    .toggle.on { background:var(--primary); }
+    .toggle::after { content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.2); }
+    .toggle.on::after { transform:translateX(18px); }
+    .scope-badge { font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:2px 7px;border-radius:4px; }
+    .scope-global { background:#eff6ff;color:#1d4ed8; }
+    .scope-org { background:#f5f3ff;color:#7c3aed; }
+
+    /* ─ Announcements ─────────────────────────────── */
+    .ann-list { display:flex;flex-direction:column;gap:14px;animation:fadeUp .4s ease both; }
+    .ann-card { background:var(--surface);border-radius:12px;overflow:hidden;transition:box-shadow .2s,transform .2s; }
+    .ann-card:hover { box-shadow:0 8px 24px rgba(0,0,0,.06);transform:translateY(-2px); }
+    .ann-stripe { height:4px; }
+    .ann-stripe.info { background:linear-gradient(90deg,#1677ff,#38bdf8); }
+    .ann-stripe.warning { background:linear-gradient(90deg,#d97706,#fbbf24); }
+    .ann-stripe.critical { background:linear-gradient(90deg,#dc2626,#f87171); }
+    .ann-body { padding:18px 20px;border:1px solid var(--border);border-top:none;border-radius:0 0 12px 12px; }
+    .ann-top { display:flex;align-items:center;gap:10px;margin-bottom:8px; }
+    .ann-severity { font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:2px 8px;border-radius:4px; }
+    .ann-severity.info { background:#eff6ff;color:#1d4ed8; }
+    .ann-severity.warning { background:#fffbeb;color:#d97706; }
+    .ann-severity.critical { background:#fef2f2;color:#dc2626; }
+    .ann-title { font-size:15px;font-weight:700;margin-bottom:6px; }
+    .ann-msg { font-size:13px;color:var(--text-secondary);line-height:1.6;margin-bottom:12px; }
+    .ann-footer { display:flex;align-items:center;gap:12px;font-size:11.5px;color:var(--text-faint);flex-wrap:wrap; }
+    .ann-footer .divider { color:var(--border); }
+    .ann-actions { margin-left:auto;display:flex;gap:6px; }
+    .ann-actions button { padding:5px 10px;border-radius:6px;font-size:11.5px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:var(--surface);color:var(--text-secondary);transition:all .15s; }
+    .ann-actions button:hover { border-color:var(--primary);color:var(--primary); }
+    .ann-actions button.danger:hover { border-color:var(--error);color:var(--error);background:#fef2f2; }
+
+    ::-webkit-scrollbar { width:4px; }
+    ::-webkit-scrollbar-thumb { background:var(--border);border-radius:3px; }
+  </style>
+</head>
+<body>
+
+<!-- ── Sidebar ─────────────────────────────────── -->
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-icon">⬡</div>
+    <div><div class="brand-name">Stockiva</div><div class="brand-badge">PLATFORM ADMIN</div></div>
+  </div>
+  <div class="sidebar-section-label">Overview</div>
+  <a class="nav-item active" id="nav-dashboard" onclick="goTo('dashboard')"><span class="nav-icon">▦</span> Dashboard</a>
+  <a class="nav-item" id="nav-organizations" onclick="goTo('organizations')"><span class="nav-icon">⌂</span> Organizations</a>
+  <div class="sidebar-section-label" style="margin-top:8px;">Manage</div>
+  <a class="nav-item" id="nav-pricing" onclick="goTo('pricing')"><span class="nav-icon">◈</span> Pricing Plans</a>
+  <a class="nav-item" id="nav-users" onclick="goTo('users')"><span class="nav-icon">♟</span> Platform Users <span class="nav-badge">3</span></a>
+  <a class="nav-item" id="nav-flags" onclick="goTo('flags')"><span class="nav-icon">⚑</span> Feature Flags</a>
+  <a class="nav-item" id="nav-announcements" onclick="goTo('announcements')"><span class="nav-icon">◎</span> Announcements</a>
+  <div class="sidebar-section-label" style="margin-top:8px;">Insights</div>
+  <a class="nav-item" id="nav-analytics" onclick="goTo('analytics')"><span class="nav-icon">▨</span> Analytics</a>
+  <a class="nav-item" id="nav-audit" onclick="goTo('audit')"><span class="nav-icon">≡</span> Audit Log</a>
+  <div class="sidebar-footer">
+    <div class="footer-profile"><div class="avatar">U</div><div><div class="footer-name">Urooj Ahmad</div><div class="footer-role">Super Admin</div></div></div>
+    <div class="footer-actions"><button class="footer-icon-btn">☽</button><button class="sign-out-btn">↗ Sign Out</button></div>
+  </div>
+</aside>
+
+<!-- ── Main ────────────────────────────────────── -->
+<main class="main">
+  <div class="topbar">
+    <div class="topbar-breadcrumb">Stockiva Platform › <span id="bc-current">Dashboard</span></div>
+    <div class="topbar-spacer"></div>
+    <div class="topbar-chip"><div class="live-dot"></div> Live · 30s refresh</div>
+    <div class="topbar-chip">🌏 9 Apr 2026</div>
+  </div>
+
+  <div class="content">
+
+    <!-- ════════════════════════════════════════════ -->
+    <!-- PAGE: Dashboard (stub)                      -->
+    <!-- ════════════════════════════════════════════ -->
+    <div class="tab-pane active" id="page-dashboard">
+      <div class="page-top"><div><div class="page-title">Platform Dashboard</div><div class="page-subtitle">Real-time overview of all organizations, users and platform health.</div></div></div>
+      <div class="kpi-row">
+        <div class="kpi-card"><div class="kpi-shine" style="background:#1677ff;"></div><div class="kpi-icon" style="background:#eff6ff;color:#1677ff;">🏢</div><div class="kpi-label">Total Organizations</div><div class="kpi-value">8</div><div class="kpi-delta up">↑ +8 this month</div></div>
+        <div class="kpi-card"><div class="kpi-shine" style="background:#16a34a;"></div><div class="kpi-icon" style="background:#f0fdf4;color:#16a34a;">👤</div><div class="kpi-label">Active Users</div><div class="kpi-value">2</div><div class="kpi-delta" style="color:var(--text-faint);">— across all orgs</div></div>
+        <div class="kpi-card"><div class="kpi-shine" style="background:#d97706;"></div><div class="kpi-icon" style="background:#fffbeb;color:#d97706;">🏪</div><div class="kpi-label">Total Stores</div><div class="kpi-value">10</div><div class="kpi-delta up">↑ +10 vs last month</div></div>
+        <div class="kpi-card"><div class="kpi-shine" style="background:#7c3aed;"></div><div class="kpi-icon" style="background:#f5f3ff;color:#7c3aed;">📅</div><div class="kpi-label">New This Month</div><div class="kpi-value">8</div><div class="kpi-delta up">↑ Best month yet</div></div>
+      </div>
+      <div style="text-align:center;padding:40px;color:var(--text-faint);font-size:13px;">Chart and activity feed shown on main dashboard — see <strong>dashboard.html</strong></div>
+    </div>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!-- PAGE: Organizations (stub)                  -->
+    <!-- ════════════════════════════════════════════ -->
+    <div class="tab-pane" id="page-organizations">
+      <div class="page-top"><div><div class="page-title">Organizations</div><div class="page-subtitle">Manage all organizations on the platform. Suspend, upgrade, or view details.</div></div></div>
+      <div style="text-align:center;padding:40px;color:var(--text-faint);font-size:13px;">Full table shown on main organizations page — see <strong>organizations.html</strong></div>
+    </div>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!-- PAGE: Pricing Plans (stub)                  -->
+    <!-- ════════════════════════════════════════════ -->
+    <div class="tab-pane" id="page-pricing">
+      <div class="page-top"><div><div class="page-title">Pricing Plans</div><div class="page-subtitle">Define plan limits, features, and pricing. Changes apply to new signups immediately.</div></div></div>
+      <div style="text-align:center;padding:40px;color:var(--text-faint);font-size:13px;">Plan cards and assignment table shown — see <strong>pricing-plans.html</strong></div>
+    </div>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!-- PAGE: Platform Users                        -->
+    <!-- ════════════════════════════════════════════ -->
+    <div class="tab-pane" id="page-users">
+      <div class="page-top">
+        <div><div class="page-title">Platform Users</div><div class="page-subtitle">Manage all users across every organization. Deactivate, reset passwords, and monitor activity.</div></div>
+        <div style="display:flex;gap:10px;"><button class="btn-ghost">📤 Export CSV</button><button class="btn-primary">+ Invite User</button></div>
+      </div>
+      <div class="kpi-row">
+        <div class="kpi-card"><div class="kpi-shine" style="background:#1677ff;"></div><div class="kpi-icon" style="background:#eff6ff;color:#1677ff;">👤</div><div class="kpi-label">Total Users</div><div class="kpi-value">24</div><div class="kpi-delta up">↑ +6 this month</div></div>
+        <div class="kpi-card"><div class="kpi-shine" style="background:#16a34a;"></div><div class="kpi-icon" style="background:#f0fdf4;color:#16a34a;">✓</div><div class="kpi-label">Active Users</div><div class="kpi-value">21</div><div class="kpi-delta up">87.5% active</div></div>
+        <div class="kpi-card"><div class="kpi-shine" style="background:#d97706;"></div><div class="kpi-icon" style="background:#fffbeb;color:#d97706;">⚡</div><div class="kpi-label">Admin Users</div><div class="kpi-value">8</div><div class="kpi-delta warn">33% of total</div></div>
+        <div class="kpi-card"><div class="kpi-shine" style="background:#7c3aed;"></div><div class="kpi-icon" style="background:#f5f3ff;color:#7c3aed;">🏢</div><div class="kpi-label">Organizations</div><div class="kpi-value">8</div><div class="kpi-delta up">↑ 3 avg users/org</div></div>
+      </div>
+      <div class="toolbar">
+        <div class="search-box"><span style="color:var(--text-faint);">⌕</span><input type="text" placeholder="Search by name or email…" /></div>
+        <select class="filter-select"><option>All Roles</option><option>ADMIN</option><option>MANAGER</option><option>STAFF</option></select>
+        <select class="filter-select"><option>All Status</option><option>Active</option><option>Inactive</option></select>
+        <div style="flex:1;"></div>
+        <span style="font-size:12.5px;color:var(--text-faint);">24 users</span>
+      </div>
+      <div class="panel">
+        <table>
+          <thead><tr><th>User</th><th>Organization</th><th>Role</th><th>Status</th><th>Last Active</th><th>Created</th><th>Actions</th></tr></thead>
+          <tbody>
+            <tr><td><div class="user-cell"><div class="user-av" style="background:linear-gradient(135deg,#1677ff,#38bdf8);">U</div><div><div class="user-name">Urooj Ahmad</div><div class="user-email">urooj@stockiva.com</div></div></div></td><td style="font-weight:500;">Fashion Insta</td><td><span class="badge badge-purple">SUPER ADMIN</span></td><td><span class="badge badge-green">Active</span></td><td style="color:var(--text-faint);font-size:12px;">Just now</td><td style="color:var(--text-faint);font-size:12px;">01/04/2026</td><td><button class="more-btn">⋯</button></td></tr>
+            <tr><td><div class="user-cell"><div class="user-av" style="background:linear-gradient(135deg,#16a34a,#4ade80);">A</div><div><div class="user-name">Ali Hassan</div><div class="user-email">ali@luxuryfashion.com</div></div></div></td><td style="font-weight:500;">Luxury Fashion</td><td><span class="badge badge-blue">ADMIN</span></td><td><span class="badge badge-green">Active</span></td><td style="color:var(--text-faint);font-size:12px;">2 hours ago</td><td style="color:var(--text-faint);font-size:12px;">03/04/2026</td><td><button class="action-btn">🔑 Reset</button><button class="action-btn danger">⏸ Deactivate</button></td></tr>
+            <tr><td><div class="user-cell"><div class="user-av" style="background:linear-gradient(135deg,#d97706,#fbbf24);">S</div><div><div class="user-name">Sara Khan</div><div class="user-email">sara@grocery.com</div></div></div></td><td style="font-weight:500;">Grocery Shop</td><td><span class="badge badge-orange">MANAGER</span></td><td><span class="badge badge-green">Active</span></td><td style="color:var(--text-faint);font-size:12px;">Yesterday</td><td style="color:var(--text-faint);font-size:12px;">05/04/2026</td><td><button class="action-btn">🔑 Reset</button><button class="action-btn danger">⏸ Deactivate</button></td></tr>
+            <tr><td><div class="user-cell"><div class="user-av" style="background:linear-gradient(135deg,#7c3aed,#a78bfa);">M</div><div><div class="user-name">Maria Lopez</div><div class="user-email">maria@skincare.com</div></div></div></td><td style="font-weight:500;">Skincare</td><td><span class="badge badge-gray">STAFF</span></td><td><span class="badge badge-red">Inactive</span></td><td style="color:var(--text-faint);font-size:12px;">3 days ago</td><td style="color:var(--text-faint);font-size:12px;">06/04/2026</td><td><button class="action-btn">🔑 Reset</button><button class="action-btn" style="border-color:#bbf7d0;color:#16a34a;">▶ Activate</button></td></tr>
+          </tbody>
+        </table>
+        <div class="pagination"><span>Showing 1–4 of 24 users</span><div class="page-btns"><button class="page-btn">‹</button><button class="page-btn active">1</button><button class="page-btn">2</button><button class="page-btn">3</button><button class="page-btn">›</button></div></div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!-- PAGE: Analytics                             -->
+    <!-- ════════════════════════════════════════════ -->
+    <div class="tab-pane" id="page-analytics">
+      <div class="page-top">
+        <div><div class="page-title">Analytics</div><div class="page-subtitle">Business intelligence for platform health, retention, and revenue insights.</div></div>
+        <div style="display:flex;gap:10px;"><select class="filter-select"><option>Last 30 Days</option><option>Last 7 Days</option><option>Last 90 Days</option></select><button class="btn-ghost">📤 Export Report</button></div>
+      </div>
+      <div class="kpi-row">
+        <div class="kpi-card"><div class="kpi-shine" style="background:#1677ff;"></div><div class="kpi-icon" style="background:#eff6ff;color:#1677ff;">📈</div><div class="kpi-label">Monthly Signups</div><div class="kpi-value">8</div><div class="kpi-delta up">↑ Best month</div></div>
+        <div class="kpi-card"><div class="kpi-shine" style="background:#16a34a;"></div><div class="kpi-icon" style="background:#f0fdf4;color:#16a34a;">💰</div><div class="kpi-label">Est. MRR</div><div class="kpi-value">$0</div><div class="kpi-delta" style="color:var(--text-faint);">All on FREE</div></div>
+        <div class="kpi-card"><div class="kpi-shine" style="background:#d97706;"></div><div class="kpi-icon" style="background:#fffbeb;color:#d97706;">🔄</div><div class="kpi-label">30-Day Retention</div><div class="kpi-value">100%</div><div class="kpi-delta up">No churn</div></div>
+        <div class="kpi-card"><div class="kpi-shine" style="background:#7c3aed;"></div><div class="kpi-icon" style="background:#f5f3ff;color:#7c3aed;">🛒</div><div class="kpi-label">Platform Sales</div><div class="kpi-value">$4,230</div><div class="kpi-delta up">↑ +18%</div></div>
+      </div>
+      <div class="chart-grid">
+        <div class="chart-card">
+          <div class="chart-title"><span class="icon">📊</span> Signups Over Time <span class="chart-subtitle">Last 8 weeks</span></div>
+          <div class="bar-chart">
+            <div class="bar-col"><div class="bar-value">1</div><div class="bar" style="height:12%;background:linear-gradient(180deg,#1677ff,#38bdf8);"></div><div class="bar-label">W1</div></div>
+            <div class="bar-col"><div class="bar-value">0</div><div class="bar" style="height:2%;background:#e5e7eb;"></div><div class="bar-label">W2</div></div>
+            <div class="bar-col"><div class="bar-value">2</div><div class="bar" style="height:25%;background:linear-gradient(180deg,#1677ff,#38bdf8);"></div><div class="bar-label">W3</div></div>
+            <div class="bar-col"><div class="bar-value">1</div><div class="bar" style="height:12%;background:linear-gradient(180deg,#1677ff,#38bdf8);"></div><div class="bar-label">W4</div></div>
+            <div class="bar-col"><div class="bar-value">0</div><div class="bar" style="height:2%;background:#e5e7eb;"></div><div class="bar-label">W5</div></div>
+            <div class="bar-col"><div class="bar-value">1</div><div class="bar" style="height:12%;background:linear-gradient(180deg,#1677ff,#38bdf8);"></div><div class="bar-label">W6</div></div>
+            <div class="bar-col"><div class="bar-value">3</div><div class="bar" style="height:37%;background:linear-gradient(180deg,#1677ff,#38bdf8);"></div><div class="bar-label">W7</div></div>
+            <div class="bar-col"><div class="bar-value">8</div><div class="bar" style="height:100%;background:linear-gradient(180deg,#1677ff,#60a5fa);box-shadow:0 0 12px #1677ff44;"></div><div class="bar-label">W8</div></div>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title"><span class="icon">🔄</span> Organization Retention</div>
+          <div class="retention-grid">
+            <div class="retention-card"><div class="retention-pct" style="color:#16a34a;">100%</div><div class="retention-label">30-Day</div></div>
+            <div class="retention-card"><div class="retention-pct" style="color:#1677ff;">100%</div><div class="retention-label">60-Day</div></div>
+            <div class="retention-card"><div class="retention-pct" style="color:#d97706;">—</div><div class="retention-label">90-Day</div></div>
+          </div>
+          <div style="margin-top:16px;text-align:center;font-size:11.5px;color:var(--text-faint);">✨ Zero churn — all organizations still active</div>
+        </div>
+      </div>
+      <div class="chart-card" style="animation:fadeUp .4s .15s ease both;">
+        <div class="chart-title"><span class="icon">🏆</span> Most Active Orgs by Revenue <span class="chart-subtitle">All time</span></div>
+        <div class="leaderboard">
+          <div class="lb-row"><div class="lb-rank gold">1</div><div class="lb-name">Luxury Fashion</div><div class="lb-bar-wrap"><div class="lb-bar" style="width:100%;background:linear-gradient(90deg,#d97706,#fbbf24);"></div></div><div class="lb-val">$1,840</div></div>
+          <div class="lb-row"><div class="lb-rank silver">2</div><div class="lb-name">Fashion Insta</div><div class="lb-bar-wrap"><div class="lb-bar" style="width:72%;background:linear-gradient(90deg,#1677ff,#38bdf8);"></div></div><div class="lb-val">$1,320</div></div>
+          <div class="lb-row"><div class="lb-rank bronze">3</div><div class="lb-name">Grocery Shop</div><div class="lb-bar-wrap"><div class="lb-bar" style="width:45%;background:linear-gradient(90deg,#16a34a,#4ade80);"></div></div><div class="lb-val">$830</div></div>
+          <div class="lb-row"><div class="lb-rank">4</div><div class="lb-name">Skincare</div><div class="lb-bar-wrap"><div class="lb-bar" style="width:13%;background:#e5e7eb;"></div></div><div class="lb-val">$240</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!-- PAGE: Feature Flags                         -->
+    <!-- ════════════════════════════════════════════ -->
+    <div class="tab-pane" id="page-flags">
+      <div class="page-top"><div><div class="page-title">Feature Flags</div><div class="page-subtitle">Control feature availability per-organization or globally without a code deploy.</div></div><button class="btn-primary">+ New Flag</button></div>
+      <div class="toolbar">
+        <div class="search-box"><span style="color:var(--text-faint);">⌕</span><input type="text" placeholder="Search flags…" /></div>
+        <select class="filter-select"><option>All Scopes</option><option>Global</option><option>Per-Org</option></select>
+        <select class="filter-select"><option>All States</option><option>Enabled</option><option>Disabled</option></select>
+        <div style="flex:1;"></div>
+        <span style="font-size:12.5px;color:var(--text-faint);">8 flags</span>
+      </div>
+      <div class="flags-grid">
+        <div class="flag-card"><div class="flag-header"><div><div class="flag-key">promoCodesEnabled</div><span class="scope-badge scope-global">GLOBAL</span></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div><div class="flag-desc">Enable promotional codes and discounts across the platform.</div><div class="flag-meta">Updated 2 days ago · Affects 8 orgs</div></div>
+        <div class="flag-card"><div class="flag-header"><div><div class="flag-key">purchaseOrdersEnabled</div><span class="scope-badge scope-global">GLOBAL</span></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div><div class="flag-desc">Allow creation and management of purchase orders.</div><div class="flag-meta">Updated 3 days ago · Affects 8 orgs</div></div>
+        <div class="flag-card"><div class="flag-header"><div><div class="flag-key">barcodeEnabled</div><span class="scope-badge scope-global">GLOBAL</span></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div><div class="flag-desc">Enable barcode generation, scanning, and label printing.</div><div class="flag-meta">Updated 1 week ago · Affects 8 orgs</div></div>
+        <div class="flag-card"><div class="flag-header"><div><div class="flag-key">apiAccessEnabled</div><span class="scope-badge scope-global">GLOBAL</span></div><div class="toggle" onclick="this.classList.toggle('on')"></div></div><div class="flag-desc">Provide REST API access for third-party integrations.</div><div class="flag-meta">Updated 5 days ago · Affects 0 orgs</div></div>
+        <div class="flag-card"><div class="flag-header"><div><div class="flag-key">advancedReportsEnabled</div><span class="scope-badge scope-org">PER-ORG</span></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div><div class="flag-desc">Unlock advanced analytics dashboards and custom reports.</div><div class="flag-meta">Enabled for: Luxury Fashion, Fashion Insta</div></div>
+        <div class="flag-card"><div class="flag-header"><div><div class="flag-key">betaDashboard_v2</div><span class="scope-badge scope-org">PER-ORG</span></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div><div class="flag-desc">New dashboard v2 layout with enhanced charts. Beta only.</div><div class="flag-meta">Enabled for: Fashion Insta</div></div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!-- PAGE: Announcements                         -->
+    <!-- ════════════════════════════════════════════ -->
+    <div class="tab-pane" id="page-announcements">
+      <div class="page-top"><div><div class="page-title">Announcements</div><div class="page-subtitle">Platform-wide notices displayed to logged-in users. Supports scheduling and plan targeting.</div></div><button class="btn-primary">+ New Announcement</button></div>
+      <div class="ann-list">
+        <div class="ann-card"><div class="ann-stripe critical"></div><div class="ann-body"><div class="ann-top"><span class="ann-severity critical">CRITICAL</span><span class="badge badge-gray">All Plans</span><span class="badge badge-green">Active</span></div><div class="ann-title">Scheduled Maintenance — April 12, 2026</div><div class="ann-msg">We will perform database maintenance on <strong>April 12, 2026 from 2:00 AM to 4:00 AM UTC</strong>. Platform may be temporarily unavailable.</div><div class="ann-footer"><span>By <strong>Urooj Ahmad</strong></span><span class="divider">·</span><span>Apr 9 – Apr 12</span><div class="ann-actions"><button>✎ Edit</button><button class="danger">✕ End</button></div></div></div></div>
+        <div class="ann-card"><div class="ann-stripe warning"></div><div class="ann-body"><div class="ann-top"><span class="ann-severity warning">WARNING</span><span class="badge badge-gray">FREE Plan</span><span class="badge badge-green">Active</span></div><div class="ann-title">Free Plan Storage Limits Changing</div><div class="ann-msg">Starting <strong>May 1, 2026</strong>, free plan organizations limited to <strong>100 products</strong>. Upgrade to PRO for higher limits.</div><div class="ann-footer"><span>By <strong>Urooj Ahmad</strong></span><span class="divider">·</span><span>Apr 8 – May 1</span><div class="ann-actions"><button>✎ Edit</button><button class="danger">✕ End</button></div></div></div></div>
+        <div class="ann-card"><div class="ann-stripe info"></div><div class="ann-body"><div class="ann-top"><span class="ann-severity info">INFO</span><span class="badge badge-gray">All Plans</span><span class="badge badge-green">Active</span></div><div class="ann-title">🎉 New Feature: Purchase Orders</div><div class="ann-msg">Create, track, and receive supplier orders directly from your inventory dashboard. Available for PRO and Enterprise.</div><div class="ann-footer"><span>By <strong>Urooj Ahmad</strong></span><span class="divider">·</span><span>Apr 5 – Permanent</span><div class="ann-actions"><button>✎ Edit</button><button class="danger">✕ End</button></div></div></div></div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!-- PAGE: Audit Log                             -->
+    <!-- ════════════════════════════════════════════ -->
+    <div class="tab-pane" id="page-audit">
+      <div class="page-top">
+        <div><div class="page-title">Audit Log</div><div class="page-subtitle">Every significant platform-level action, logged with full context and metadata.</div></div>
+        <div style="display:flex;gap:10px;"><select class="filter-select"><option>Last 7 Days</option><option>Last 30 Days</option><option>All Time</option></select><button class="btn-ghost">📤 Export Log</button></div>
+      </div>
+      <div class="toolbar">
+        <div class="search-box"><span style="color:var(--text-faint);">⌕</span><input type="text" placeholder="Search by action, user, or target…" /></div>
+        <select class="filter-select"><option>All Actions</option><option>ORG_CREATED</option><option>PLAN_CHANGED</option><option>USER_DEACTIVATED</option><option>ADMIN_LOGIN</option></select>
+        <div style="flex:1;"></div>
+        <span style="font-size:12.5px;color:var(--text-faint);">42 events</span>
+      </div>
+      <div class="panel">
+        <div class="timeline">
+          <div class="tl-item"><div class="tl-dot-col"><div class="tl-dot" style="background:#16a34a;"></div><div class="tl-line"></div></div><div class="tl-body"><div class="tl-action">Organization <span class="target">Fashion Insta</span> was created</div><div class="tl-meta"><span class="by">by Urooj Ahmad</span> · 2 hours ago · <span class="badge badge-green" style="font-size:10px;padding:1px 7px;">ORG_CREATED</span></div><div class="tl-detail">Plan: <code>FREE</code> · User: <code>urooj@stockiva.com</code></div></div></div>
+          <div class="tl-item"><div class="tl-dot-col"><div class="tl-dot" style="background:#1677ff;"></div><div class="tl-line"></div></div><div class="tl-body"><div class="tl-action">Admin <span class="target">Urooj Ahmad</span> logged in</div><div class="tl-meta"><span class="by">System</span> · 2 hours ago · <span class="badge badge-blue" style="font-size:10px;padding:1px 7px;">ADMIN_LOGIN</span></div><div class="tl-detail">IP: <code>192.168.1.42</code> · Chrome 124 · Karachi, PK</div></div></div>
+          <div class="tl-item"><div class="tl-dot-col"><div class="tl-dot" style="background:#d97706;"></div><div class="tl-line"></div></div><div class="tl-body"><div class="tl-action">Plan changed for <span class="target">Luxury Fashion</span></div><div class="tl-meta"><span class="by">by Urooj Ahmad</span> · 5 hours ago · <span class="badge badge-orange" style="font-size:10px;padding:1px 7px;">PLAN_CHANGED</span></div><div class="tl-detail"><code>FREE</code> → <code>PRO</code> · "Upgrade requested by customer"</div></div></div>
+          <div class="tl-item"><div class="tl-dot-col"><div class="tl-dot" style="background:#dc2626;"></div><div class="tl-line"></div></div><div class="tl-body"><div class="tl-action">Organization <span class="target">Spam Corp</span> was suspended</div><div class="tl-meta"><span class="by">by Urooj Ahmad</span> · 1 day ago · <span class="badge badge-red" style="font-size:10px;padding:1px 7px;">ORG_SUSPENDED</span></div><div class="tl-detail">Reason: "Suspicious automated signup activity"</div></div></div>
+          <div class="tl-item"><div class="tl-dot-col"><div class="tl-dot" style="background:#7c3aed;"></div></div><div class="tl-body"><div class="tl-action">Plan definition <span class="target">ENTERPRISE</span> was edited</div><div class="tl-meta"><span class="by">by Urooj Ahmad</span> · 2 days ago · <span class="badge badge-purple" style="font-size:10px;padding:1px 7px;">PLAN_EDITED</span></div><div class="tl-detail">Changed <code>maxProducts</code>: <code>5000</code> → <code>Unlimited</code></div></div></div>
+        </div>
+        <div class="pagination"><span>Showing 1–5 of 42 events</span><div class="page-btns"><button class="page-btn">‹</button><button class="page-btn active">1</button><button class="page-btn">2</button><button class="page-btn">3</button><button class="page-btn">…</button><button class="page-btn">6</button><button class="page-btn">›</button></div></div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<script>
+  const PAGES = ['dashboard','organizations','pricing','users','analytics','flags','announcements','audit'];
+  const PAGE_NAMES = {
+    dashboard:'Dashboard', organizations:'Organizations', pricing:'Pricing Plans',
+    users:'Platform Users', analytics:'Analytics', flags:'Feature Flags',
+    announcements:'Announcements', audit:'Audit Log'
+  };
+
+  function goTo(id) {
+    // Hide all pages
+    PAGES.forEach(p => {
+      const el = document.getElementById('page-' + p);
+      if (el) el.classList.remove('active');
+    });
+    // Show target
+    const target = document.getElementById('page-' + id);
+    if (target) target.classList.add('active');
+
+    // Update sidebar
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    const navEl = document.getElementById('nav-' + id);
+    if (navEl) navEl.classList.add('active');
+
+    // Update breadcrumb
+    document.getElementById('bc-current').textContent = PAGE_NAMES[id] || id;
+  }
+</script>
+
+</body>
+</html>

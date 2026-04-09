@@ -76,15 +76,16 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users       User[]
-  stores      Store[]
-  categories  Category[]
-  brands      Brand[]
-  products    Product[]
-  suppliers   Supplier[]
-  invitations Invitation[]
+  users        User[]
+  stores       Store[]
+  categories   Category[]
+  brands       Brand[]
+  products     Product[]
+  suppliers    Supplier[]
+  invitations  Invitation[]
   alertConfigs AlertConfig[]
   promoCodes   PromoCode[]
+  featureFlags FeatureFlag[]
 
   @@map("organizations")
 }
@@ -494,4 +495,60 @@ model EmailVerification {
 
   @@index([email])
   @@map("email_verifications")
+}
+
+// ─── ADMIN AUDIT LOG ─────────────────────────────────────────────────────────
+
+model AdminAuditLog {
+  id          String   @id @default(uuid())
+  action      String   // "ORG_CREATED" | "ORG_SUSPENDED" | "PLAN_CHANGED" | "USER_DEACTIVATED" | "ADMIN_LOGIN" | "PLAN_EDITED"
+  targetType  String   // "Organization" | "User" | "PlanDefinition"
+  targetId    String
+  targetName  String?  // Human-readable name of the target
+  performedBy String   // super admin user id
+  metadata    Json?    // e.g. { oldPlan: "FREE", newPlan: "PRO" }
+  createdAt   DateTime @default(now())
+
+  @@index([action])
+  @@index([createdAt])
+  @@map("admin_audit_logs")
+}
+
+// ─── FEATURE FLAG ────────────────────────────────────────────────────────────
+
+model FeatureFlag {
+  id        String   @id @default(uuid())
+  orgId     String?  // null = global default
+  key       String   // e.g. "promoCodesEnabled"
+  value     Boolean  @default(false)
+  scope     String   @default("GLOBAL") // "GLOBAL" | "PER_ORG"
+  description String @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org Organization? @relation(fields: [orgId], references: [id])
+
+  @@unique([orgId, key])
+  @@index([key])
+  @@map("feature_flags")
+}
+
+// ─── ANNOUNCEMENT ────────────────────────────────────────────────────────────
+
+model Announcement {
+  id          String    @id @default(uuid())
+  title       String
+  body        String
+  severity    String    @default("INFO") // "INFO" | "WARNING" | "CRITICAL"
+  targetPlan  String?   // null = all plans
+  activeFrom  DateTime  @default(now())
+  activeUntil DateTime?
+  isActive    Boolean   @default(true)
+  createdBy   String    // super admin user id
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([isActive])
+  @@index([createdAt])
+  @@map("announcements")
 }
