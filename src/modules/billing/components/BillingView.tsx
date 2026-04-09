@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import dynamic from "next/dynamic";
 import { App, Input, Select, Spin } from "antd";
-import { SearchOutlined, CheckOutlined, CloseOutlined, TagOutlined, LockOutlined } from "@ant-design/icons";
+import { SearchOutlined, CheckOutlined, CloseOutlined, TagOutlined, LockOutlined, CameraOutlined } from "@ant-design/icons";
 import { useProducts } from "@/modules/products/hooks/useProducts";
 import { useCart } from "@/modules/billing/hooks/useBilling";
 import InvoicePreview from "./InvoicePreview";
@@ -96,6 +97,13 @@ import {
   SecureText,
 } from "./BillingView.styled";
 import { Button } from "antd";
+import { ScanHeroInputRow, CameraScanBtn } from "./BillingView.styled";
+
+// Dynamic import — camera modal must only run client-side (uses getUserMedia)
+const CameraBarcodeScannerModal = dynamic(
+  () => import("@/modules/barcode/components/CameraBarcodeScannerModal"),
+  { ssr: false }
+);
 
 interface BillingViewProps {
   createSale: (input: CreateSaleInput) => Promise<Sale>;
@@ -111,6 +119,21 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
   const [saleLoading, setSaleLoading] = useState(false);
   const [completedSale, setCompletedSale] = useState<Sale | null>(null);
   const [invoiceOpen, setInvoiceOpen] = useState(false);
+
+  // ─── Camera scanner state ─────────────────────────────────────────────────
+  const [cameraScanOpen, setCameraScanOpen] = useState(false);
+  const [cameraSupported, setCameraSupported] = useState(false);
+
+  // Detect camera support once on mount (client-only)
+  useEffect(() => {
+    if (
+      typeof window !== "undefined" &&
+      typeof navigator !== "undefined" &&
+      !!navigator.mediaDevices?.getUserMedia
+    ) {
+      setCameraSupported(true);
+    }
+  }, []);
 
   // ─── Promo state ───────────────────────────────────────────────────────────
   const [promoInput, setPromoInput] = useState("");
@@ -204,6 +227,33 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
     },
     [cart, message]
   );
+
+  // pendingCameraScan holds the raw SKU string after a camera scan until we can
+  // attempt an auto-add (we need variantRows to re-derive first).
+  const pendingCameraScanRef = useRef<string | null>(null);
+
+  // Called when barcode is scanned via camera
+  const handleCameraScan = useCallback((decodedText: string) => {
+    pendingCameraScanRef.current = decodedText;
+    setSearch(decodedText);
+    setCameraScanOpen(false);
+  }, []);
+
+  // After a camera scan the search query changes → useProducts fetches data →
+  // variantRows re-derives. Once it settles, try an exact-match auto-add.
+  useEffect(() => {
+    const pending = pendingCameraScanRef.current;
+    if (!pending || productsLoading) return;
+
+    const s = pending.toLowerCase().trim();
+    const exact = variantRows.find((r) => r.variantSku?.toLowerCase() === s);
+    if (exact) {
+      pendingCameraScanRef.current = null;
+      handleAddToCart(exact);
+      setSearch("");
+    }
+    // If no exact match leave the search results panel visible for manual pick.
+  }, [variantRows, productsLoading, handleAddToCart]);
 
   // Called when user presses Enter in the scan input (barcode scanner sends Enter)
   const handleScanEnter = useCallback(() => {
@@ -302,18 +352,34 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
             <ScanBlinker />
             <ScanHeroLabelText>Ready to Scan</ScanHeroLabelText>
           </ScanHeroLabelRow>
-          <ScanHeroInput
-            prefix={<SearchOutlined />}
-            placeholder="Scan barcode or search by name / SKU…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onPressEnter={handleScanEnter}
-            allowClear
-            size="large"
-          />
+          <ScanHeroInputRow>
+            <ScanHeroInput
+              prefix={<SearchOutlined />}
+              placeholder="Scan barcode or search by name / SKU…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onPressEnter={handleScanEnter}
+              allowClear
+              size="large"
+              style={{ flex: 1 }}
+            />
+            {cameraSupported && (
+              <CameraScanBtn
+                type="button"
+                onClick={() => setCameraScanOpen(true)}
+                title="Scan via camera"
+              >
+                <CameraOutlined style={{ fontSize: 16 }} />
+                Scan
+              </CameraScanBtn>
+            )}
+          </ScanHeroInputRow>
           <ScanHeroHint>
             Barcode scanners auto-press Enter — exact barcode match is added instantly &nbsp;·&nbsp; Focus:
             <KbdKey>F2</KbdKey>
+            {cameraSupported && (
+              <>&nbsp;·&nbsp; Camera: <KbdKey>Scan</KbdKey> button</>
+            )}
           </ScanHeroHint>
         </ScanHeroBox>
 
@@ -737,6 +803,15 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
           setCompletedSale(null);
         }}
       />
+
+      {/* Camera barcode scanner modal */}
+      {cameraScanOpen && (
+        <CameraBarcodeScannerModal
+          open={cameraScanOpen}
+          onScan={handleCameraScan}
+          onClose={() => setCameraScanOpen(false)}
+        />
+      )}
     </ViewAWrapper>
   );
 };
