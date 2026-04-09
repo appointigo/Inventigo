@@ -19,7 +19,8 @@
     { "key": "alertId",       "value": "",  "type": "string" },
     { "key": "inviteToken",   "value": "",  "type": "string" },
     { "key": "sizeId",        "value": "",  "type": "string" },
-    { "key": "adminOrgId",    "value": "",  "type": "string" }
+    { "key": "adminOrgId",    "value": "",  "type": "string" },
+    { "key": "promoId",       "value": "",  "type": "string" }
   ],
   "item": [
 
@@ -94,16 +95,53 @@
           }
         },
         {
-          "name": "Register New Organization",
+          "name": "Register New User",
           "request": {
             "method": "POST",
             "url":    "{{baseUrl}}/api/auth/register",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"orgName\": \"My Retail Store\",\n  \"ownerName\": \"John Doe\",\n  \"email\": \"john.doe@myretail.com\",\n  \"password\": \"SecurePass123\"\n}"
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john.doe@myretail.com\",\n  \"password\": \"SecurePass123\"\n}"
             },
-            "description": "Creates a new Organization + OWNER user + default Store in one transaction.\nRequired fields: orgName, ownerName, email, password (min 8 chars)"
+            "description": "Registers a new OWNER user (no org yet). Sends a 6-digit OTP to the email for verification.\nRequired fields: name, email, password (min 8 chars).\nAfter registration, verify email at POST /api/auth/verify-email, then complete onboarding at POST /api/onboarding/register-business."
+          }
+        },
+        {
+          "name": "Sign In (Super Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var cookies = pm.response.headers.get('Set-Cookie') || '';",
+                  "var match = cookies.match(/((?:authjs|next-auth|__Secure-authjs|__Secure-next-auth)\\.session-token=[^;]+)/);",
+                  "if (match) {",
+                  "  pm.collectionVariables.set('sessionCookie', match[1]);",
+                  "  console.log('Super admin session saved: ' + match[1].substring(0, 40) + '...');",
+                  "} else {",
+                  "  console.warn('No session cookie found. Check credentials.');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url":    "{{baseUrl}}/api/auth/callback/credentials",
+            "header": [{ "key": "Content-Type", "value": "application/x-www-form-urlencoded" }],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "email",       "value": "superadmin@stockiva.com" },
+                { "key": "password",    "value": "superadmin@1234" },
+                { "key": "csrfToken",   "value": "{{csrfToken}}" },
+                { "key": "callbackUrl", "value": "{{baseUrl}}" },
+                { "key": "redirect",    "value": "false" }
+              ]
+            },
+            "description": "Sign in as SUPER_ADMIN. Run 'Get CSRF Token' first.\nAuto-saves the session cookie to {{sessionCookie}}.\nMake sure to create the super admin first via Admin → Create Super Admin (or at /stockiva-admin/signup)."
           }
         },
         {
@@ -999,7 +1037,7 @@
             "method": "GET",
             "url":    "{{baseUrl}}/api/users",
             "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }],
-            "description": "Requires ADMIN role."
+            "description": "Requires OWNER or ADMIN role."
           }
         },
         {
@@ -1015,7 +1053,7 @@
               "mode": "raw",
               "raw": "{\n  \"name\": \"Rahul Verma\",\n  \"email\": \"rahul.verma@stockiva.com\",\n  \"password\": \"StaffPass@123\",\n  \"role\": \"STAFF\",\n  \"storeId\": \"{{storeId}}\"\n}"
             },
-            "description": "Requires ADMIN role.\nrole enum: OWNER | ADMIN | MANAGER | STAFF"
+            "description": "Requires OWNER or ADMIN role.\nrole enum: OWNER | ADMIN | MANAGER | STAFF"
           }
         },
         {
@@ -1065,6 +1103,104 @@
             "url":    "{{baseUrl}}/api/users/{{userId}}",
             "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }],
             "description": "Requires ADMIN role."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🎟️ Promo Codes",
+      "item": [
+        {
+          "name": "List Promo Codes",
+          "request": {
+            "method": "GET",
+            "url":    "{{baseUrl}}/api/promo-codes",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }],
+            "description": "Returns all promo codes for the current org."
+          }
+        },
+        {
+          "name": "Create Promo Code",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.id) pm.collectionVariables.set('promoId', json.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url":    "{{baseUrl}}/api/promo-codes",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Cookie",       "value": "{{sessionCookie}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"SUMMER20\",\n  \"label\": \"Summer Sale 20%\",\n  \"discountPct\": 20,\n  \"isActive\": true,\n  \"maxUses\": 100,\n  \"expiresAt\": null\n}"
+            },
+            "description": "Required: code (unique string), label, discountPct (1–100).\nOptional: isActive (default true), maxUses, expiresAt (ISO date string)."
+          }
+        },
+        {
+          "name": "Update Promo Code",
+          "request": {
+            "method": "PATCH",
+            "url":    "{{baseUrl}}/api/promo-codes/{{promoId}}",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Cookie",       "value": "{{sessionCookie}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"discountPct\": 25,\n  \"isActive\": true\n}"
+            },
+            "description": "Partial update. All fields optional: code, label, discountPct, isActive, maxUses, expiresAt."
+          }
+        },
+        {
+          "name": "Delete Promo Code",
+          "request": {
+            "method": "DELETE",
+            "url":    "{{baseUrl}}/api/promo-codes/{{promoId}}",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }]
+          }
+        },
+        {
+          "name": "Get Promo Code Usage",
+          "request": {
+            "method": "GET",
+            "url":    "{{baseUrl}}/api/promo-codes/{{promoId}}/usage",
+            "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }],
+            "description": "Returns usage history (sales that applied this promo code)."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🚀 Onboarding",
+      "item": [
+        {
+          "name": "Register Business (Post-signup)",
+          "request": {
+            "method": "POST",
+            "url":    "{{baseUrl}}/api/onboarding/register-business",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Cookie",       "value": "{{sessionCookie}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"businessName\": \"My Retail Store\",\n  \"industry\": \"Retail\",\n  \"storeName\": \"Main Branch\",\n  \"storeCity\": \"Mumbai\",\n  \"plan\": \"FREE\"\n}"
+            },
+            "description": "Called after email verification to set up the user's organization and first store.\nRequires: authenticated session with emailVerified=true and orgId=null.\nAfter success, call session.update() on the client to refresh the JWT.\nRequired: businessName.\nOptional: industry, storeName, storeCity, plan (FREE | PRO | ENTERPRISE, default FREE)."
           }
         }
       ]
@@ -1148,6 +1284,65 @@
       "name": "🔑 Admin (Super Admin only)",
       "item": [
         {
+          "name": "Bootstrap Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "pm.test('Status 200', function() { pm.response.to.have.status(200); });",
+                  "pm.test('Has bootstrapAvailable field', function() {",
+                  "  pm.expect(json).to.have.property('bootstrapAvailable');",
+                  "});",
+                  "console.log('Bootstrap available: ' + json.bootstrapAvailable);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url":    "{{baseUrl}}/api/admin/bootstrap-status",
+            "header": [],
+            "description": "Check whether the one-time super admin signup is still available.\nReturns { bootstrapAvailable: true } if no SUPER_ADMIN exists yet, false otherwise.\nPublic endpoint — no session required."
+          }
+        },
+        {
+          "name": "Create Super Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "pm.test('Created or already exists', function() {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([201, 409]);",
+                  "});",
+                  "if (pm.response.code === 201) {",
+                  "  console.log('Super admin created: ' + json.user.email);",
+                  "} else {",
+                  "  console.warn('Bootstrap disabled: ' + json.error);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url":    "{{baseUrl}}/api/admin/create-super-admin",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Urooj\",\n  \"email\": \"superadmin@stockiva.com\",\n  \"password\": \"superadmin@1234\"\n}"
+            },
+            "description": "One-time bootstrap — creates the first SUPER_ADMIN.\nNo session or secret header required.\nAutomatically disabled (returns 409) once any SUPER_ADMIN exists.\n\nAlternatively use the browser UI at /stockiva-admin/signup."
+          }
+        },
+        {
           "name": "List All Organizations",
           "event": [
             {
@@ -1168,7 +1363,7 @@
             "method": "GET",
             "url":    "{{baseUrl}}/api/admin/organizations",
             "header": [{ "key": "Cookie", "value": "{{sessionCookie}}" }],
-            "description": "Requires SUPER_ADMIN role.\nSign in as superadmin@stockiva.com first."
+            "description": "Requires SUPER_ADMIN role.\nSign in as superadmin@stockiva.com first using Auth → Sign In (Super Admin)."
           }
         },
         {
@@ -1191,6 +1386,7 @@
         }
       ]
     },
+
 
     {
       "name": "⏰ Cron",
