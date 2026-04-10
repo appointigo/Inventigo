@@ -29,6 +29,7 @@ export type StockLevelRow = {
   productId: string;
   productName: string;
   sku: string;
+  externalBarcode: string | null;
   variantSku: string | null;
   attributes: Record<string, unknown>;
   categoryName: string;

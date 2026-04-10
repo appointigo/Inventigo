@@ -5,6 +5,15 @@ import { Table, Tag, Input, Select, Badge, Flex, Empty } from "antd";
 import { SearchOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { StockLevelRow } from "../types";
+import dynamic from "next/dynamic";
+import { CameraOutlined } from "@ant-design/icons";
+import { useState } from "react";
+import { CameraScanBtn } from "@/modules/billing/components/BillingView.styled";
+
+const CameraBarcodeScannerModal = dynamic(
+  () => import("@/modules/barcode/components/CameraBarcodeScannerModal"),
+  { ssr: false }
+);
 
 interface StockTableProps {
   stockLevels: StockLevelRow[];
@@ -139,6 +148,13 @@ const StockTable = ({ stockLevels, loading, search, onSearchChange, statusFilter
     },
   ];
 
+  const [cameraScanOpen, setCameraScanOpen] = useState(false);
+
+  const handleCameraScan = (decodedText: string) => {
+    onSearchChange(decodedText);
+    setCameraScanOpen(false);
+  };
+
   return (
     <>
       <Flex gap={12} wrap style={{ marginBottom: 16 }}>
@@ -150,6 +166,14 @@ const StockTable = ({ stockLevels, loading, search, onSearchChange, statusFilter
           allowClear
           style={{ width: 260 }}
         />
+        <CameraScanBtn
+          type="button"
+          onClick={() => setCameraScanOpen(true)}
+          title="Scan barcode via camera"
+        >
+          <CameraOutlined style={{ fontSize: 16 }} />
+          Scan
+        </CameraScanBtn>
         <Select
           placeholder="All Status"
           value={statusFilter}
@@ -163,6 +187,13 @@ const StockTable = ({ stockLevels, loading, search, onSearchChange, statusFilter
           ]}
         />
       </Flex>
+      {cameraScanOpen && (
+        <CameraBarcodeScannerModal
+          open={cameraScanOpen}
+          onScan={handleCameraScan}
+          onClose={() => setCameraScanOpen(false)}
+        />
+      )}
       <Table
         columns={columns}
         dataSource={stockLevels}

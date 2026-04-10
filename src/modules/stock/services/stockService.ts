@@ -94,6 +94,7 @@ export const stockService = {
             OR: [
               { name: { contains: search, mode: "insensitive" } },
               { sku: { contains: search, mode: "insensitive" } },
+              { externalBarcode: { contains: search, mode: "insensitive" } },
             ],
           },
         },
@@ -134,6 +135,7 @@ export const stockService = {
       productId: entry.productId,
       productName: entry.product.name,
       sku: entry.product.sku,
+      externalBarcode: entry.product.externalBarcode ?? null,
       variantSku: entry.variantSku ?? null,
       attributes: (entry.product.attributes ?? {}) as Record<string, unknown>,
       categoryName: entry.product.category.name,

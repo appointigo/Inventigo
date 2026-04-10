@@ -178,10 +178,11 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
 
     if (search.trim()) {
       const s = search.toLowerCase().trim();
-      const exact = rows.find(
+      const exactMatches = rows.filter(
         (r) => r.variantSku?.toLowerCase() === s || r.externalBarcode?.toLowerCase() === s
       );
-      if (exact) return [exact];
+      if (exactMatches.length === 1) return exactMatches;
+      if (exactMatches.length > 1) return exactMatches;
 
       return rows.filter(
         (r) =>
@@ -250,15 +251,15 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
     if (!pending || productsLoading) return;
 
     const s = pending.toLowerCase().trim();
-    const exact = variantRows.find(
+    const exactMatches = variantRows.filter(
       (r) => r.variantSku?.toLowerCase() === s || r.externalBarcode?.toLowerCase() === s
     );
-    if (exact) {
+    if (exactMatches.length === 1) {
       pendingCameraScanRef.current = null;
-      handleAddToCart(exact);
+      handleAddToCart(exactMatches[0]);
       setSearch("");
     }
-    // If no exact match leave the search results panel visible for manual pick.
+    // If multiple or zero exact matches, show the list for user selection.
   }, [variantRows, productsLoading, handleAddToCart]);
 
   // Called when user presses Enter in the scan input (barcode scanner sends Enter)
