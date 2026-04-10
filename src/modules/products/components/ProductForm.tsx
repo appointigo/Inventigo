@@ -12,6 +12,7 @@ import type { Product, ProductFormValues } from "../types";
 import type { Category } from "@/modules/categories/types";
 import type { Brand } from "@/modules/brands/types";
 import { useSuppliers } from "@/modules/suppliers/hooks/useSuppliers";
+import { COLOR_PALETTE } from "@/modules/categories/components/AttributeSchemaBuilder";
 
 const { Text } = Typography;
 
@@ -590,30 +591,52 @@ const ProductForm = ({
             />
           ) : (
             <Card size="small" title={`${selectedCategory.name} Attributes`}>
-              {selectedCategory.attributeSchema.fields.map((field) => (
-                <Form.Item
-                  key={field.name}
-                  name={["attributes", field.name]}
-                  label={field.name.charAt(0).toUpperCase() + field.name.slice(1)}
-                  rules={
-                    field.required
-                      ? [{ required: true, message: `${field.name} is required` }]
-                      : undefined
-                  }
-                >
-                  {field.type === "select" ? (
-                    <Select
-                      placeholder={`Select ${field.name}`}
-                      options={(field.options ?? []).map((o) => ({ label: o, value: o }))}
-                      allowClear={!field.required}
-                    />
-                  ) : field.type === "number" ? (
-                    <InputNumber style={{ width: "100%" }} placeholder={`Enter ${field.name}`} />
-                  ) : (
-                    <Input placeholder={`Enter ${field.name}`} />
-                  )}
-                </Form.Item>
-              ))}
+              {selectedCategory.attributeSchema.fields.map((field) => {
+                const isColorField = field.name.trim().toLowerCase() === "color" && field.type === "select";
+                return (
+                  <Form.Item
+                    key={field.name}
+                    name={["attributes", field.name]}
+                    label={field.name.charAt(0).toUpperCase() + field.name.slice(1)}
+                    rules={
+                      field.required
+                        ? [{ required: true, message: `${field.name} is required` }]
+                        : undefined
+                    }
+                  >
+                    {field.type === "select" ? (
+                      <Select
+                        placeholder={`Select ${field.name}`}
+                        options={(field.options ?? []).map((o) => ({ label: o, value: o }))}
+                        allowClear={!field.required}
+                        optionRender={isColorField ? (opt) => {
+                          // Color swatch for color dropdown
+                          const colorHex = COLOR_PALETTE.find((c) => c.name.toLowerCase() === String(opt.value).toLowerCase())?.hex;
+                          return (
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                              <span style={{
+                                display: "inline-block",
+                                width: 14,
+                                height: 14,
+                                borderRadius: "50%",
+                                background: colorHex ?? "#ccc",
+                                border: "1px solid rgba(0,0,0,0.15)",
+                                flexShrink: 0,
+                                verticalAlign: "middle",
+                              }} />
+                              {String(opt.label)}
+                            </span>
+                          );
+                        } : undefined}
+                      />
+                    ) : field.type === "number" ? (
+                      <InputNumber style={{ width: "100%" }} placeholder={`Enter ${field.name}`} />
+                    ) : (
+                      <Input placeholder={`Enter ${field.name}`} />
+                    )}
+                  </Form.Item>
+                );
+              })}
             </Card>
           )}
         </div>

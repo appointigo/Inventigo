@@ -15,7 +15,7 @@ const FIELD_TYPES = [
   { label: "Number", value: "number" },
 ] as const;
 
-const COLOR_PALETTE = [
+export const COLOR_PALETTE = [
   { name: "Red", hex: "#E53E3E" },
   { name: "Coral", hex: "#FF6B6B" },
   { name: "Orange", hex: "#F6863A" },
@@ -108,9 +108,19 @@ const AttributeSchemaBuilder = ({ value: fields = [], onChange }: AttributeSchem
                     mode="multiple"
                     placeholder="Select colors…"
                     value={field.options ?? []}
-                    onChange={(opts) => updateField(index, { options: opts })}
+                    onChange={(opts) => {
+                      // If Select All is chosen, select all colors
+                      if (opts.includes("__ALL__")) {
+                        updateField(index, { options: COLOR_PALETTE.map((c) => c.name) });
+                      } else {
+                        updateField(index, { options: opts });
+                      }
+                    }}
                     style={{ minWidth: 220, flex: 1 }}
                     optionRender={(opt) => {
+                      if (opt.value === "__ALL__") {
+                        return <b>Select All</b>;
+                      }
                       const hex = colorHex(String(opt.value));
                       return (
                         <Space size={6}>
@@ -131,29 +141,37 @@ const AttributeSchemaBuilder = ({ value: fields = [], onChange }: AttributeSchem
                       );
                     }}
                     tagRender={(props) => {
+                      if (props.value === "__ALL__") return <></>;
                       const hex = colorHex(String(props.value));
+
                       return (
                         <Tag
                           closable={props.closable}
                           onClose={props.onClose}
-                          style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
                         >
                           <span
                             style={{
-                              display: "inline-block",
                               width: 10,
                               height: 10,
                               borderRadius: "50%",
                               background: hex ?? "#ccc",
-                              border: "1px solid rgba(0,0,0,0.15)",
-                              flexShrink: 0,
+                              display: "inline-block",
+                              marginRight: 4,
                             }}
                           />
-                          {String(props.value)}
+                          {props.label}
                         </Tag>
                       );
                     }}
-                    options={COLOR_PALETTE.map((c) => ({ label: c.name, value: c.name }))}
+
+                    options={[
+                      { label: "Select All", value: "__ALL__" },
+                      ...COLOR_PALETTE.map((c) => ({ label: c.name, value: c.name })),
+                    ]}
+                    maxTagCount={3}
+                    maxTagPlaceholder={(omittedValues) => {
+                      return `+${Array.isArray(omittedValues) ? omittedValues.length : 0} more`;
+                    }}
                   />
                 )}
                 {field.type === "select" && !isColorField(field) && (
@@ -161,9 +179,26 @@ const AttributeSchemaBuilder = ({ value: fields = [], onChange }: AttributeSchem
                     mode="tags"
                     placeholder="Type options and press Enter"
                     value={field.options ?? []}
-                    onChange={(options) => updateField(index, { options })}
+                    onChange={(options) => {
+                      // If Select All is chosen, select all available options (excluding __ALL__)
+                      if (options.includes("__ALL__")) {
+                        // All options are those already present in the dropdown (excluding __ALL__)
+                        const allOpts = options.filter((o) => o !== "__ALL__");
+                        updateField(index, { options: allOpts });
+                      } else {
+                        updateField(index, { options });
+                      }
+                    }}
                     style={{ minWidth: 200, flex: 1 }}
                     tokenSeparators={[","]}
+                    options={[
+                      { label: "Select All", value: "__ALL__" },
+                      ...(field.options ?? []).map((o) => ({ label: o, value: o })),
+                    ]}
+                    maxTagCount={3}
+                    maxTagPlaceholder={(omittedValues) => {
+                      return `+${Array.isArray(omittedValues) ? omittedValues.length : 0} more`;
+                    }}
                   />
                 )}
                 <Space size={4} style={{ marginTop: 4 }}>
