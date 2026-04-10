@@ -78,6 +78,7 @@ export type VariantRow = {
   productId: string;
   productName: string;
   sku: string;
+  externalBarcode: string | null;
   variantSku: string | null;
   brandName: string;
   categoryName: string;

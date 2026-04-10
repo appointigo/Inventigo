@@ -163,6 +163,7 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
         productId: p.id,
         productName: p.name,
         sku: p.sku,
+        externalBarcode: p.externalBarcode ?? null,
         variantSku: s.variantSku ?? null,
         brandName: p.brandName,
         categoryName: p.categoryName,
@@ -177,14 +178,17 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
 
     if (search.trim()) {
       const s = search.toLowerCase().trim();
-      const exact = rows.find((r) => r.variantSku?.toLowerCase() === s);
+      const exact = rows.find(
+        (r) => r.variantSku?.toLowerCase() === s || r.externalBarcode?.toLowerCase() === s
+      );
       if (exact) return [exact];
 
       return rows.filter(
         (r) =>
           r.variantSku?.toLowerCase().includes(s) ||
           r.productName.toLowerCase().includes(s) ||
-          r.sku.toLowerCase().includes(s)
+          r.sku.toLowerCase().includes(s) ||
+          r.externalBarcode?.toLowerCase().includes(s)
       );
     }
 
@@ -246,7 +250,9 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
     if (!pending || productsLoading) return;
 
     const s = pending.toLowerCase().trim();
-    const exact = variantRows.find((r) => r.variantSku?.toLowerCase() === s);
+    const exact = variantRows.find(
+      (r) => r.variantSku?.toLowerCase() === s || r.externalBarcode?.toLowerCase() === s
+    );
     if (exact) {
       pendingCameraScanRef.current = null;
       handleAddToCart(exact);
@@ -260,7 +266,9 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
     const s = search.trim().toLowerCase();
     if (!s || productsLoading) return;
     
-    const exact = variantRows.find((r) => r.variantSku?.toLowerCase() === s);
+    const exact = variantRows.find(
+      (r) => r.variantSku?.toLowerCase() === s || r.externalBarcode?.toLowerCase() === s
+    );
     if (exact) {
       handleAddToCart(exact);
       setSearch("");

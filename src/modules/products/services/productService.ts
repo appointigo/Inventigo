@@ -62,6 +62,7 @@ export const productService = {
       where.OR = [
         { name: { contains: filters.search, mode: "insensitive" } },
         { sku: { contains: filters.search, mode: "insensitive" } },
+        { externalBarcode: { contains: filters.search, mode: "insensitive" } },
         { stockEntries: { some: { variantSku: { contains: filters.search, mode: "insensitive" } } } },
       ];
     }
