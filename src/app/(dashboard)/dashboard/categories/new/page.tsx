@@ -34,7 +34,7 @@ export default function NewCategoryPage() {
   };
 
   return (
-    <div style={{ padding: 24, maxWidth: 800 }}>
+    <div style={{ padding: "8px 24px", maxWidth: 1100 }}>
       <Typography.Title level={3} style={{ marginBottom: 24 }}>
         New Category
       </Typography.Title>
