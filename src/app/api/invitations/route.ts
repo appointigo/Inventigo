@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireOrgAuth } from "@/lib/auth.middleware";
 import { prisma } from "@/lib/db";
 import type { Role } from "@prisma/client";
+import { canAssignRole, canManageUsers, requiresStoreAssignment } from "@/lib/rbac";
 
 const generateToken = (): string => {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -21,14 +22,17 @@ export const GET = async () => {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (user.role !== "OWNER" && user.role !== "ADMIN") {
+  if (!canManageUsers(user.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   try {
     const invitations = await prisma.invitation.findMany({
       where: { orgId: user.orgId },
-      include: { inviter: { select: { name: true } } },
+      include: {
+        inviter: { select: { name: true } },
+        store: { select: { name: true } },
+      },
       orderBy: { createdAt: "desc" },
     });
 
@@ -37,6 +41,8 @@ export const GET = async () => {
         id: i.id,
         email: i.email,
         role: i.role,
+        storeId: i.storeId ?? null,
+        storeName: i.store?.name ?? null,
         status: i.status,
         inviterName: i.inviter.name,
         expiresAt: i.expiresAt.toISOString(),
@@ -58,18 +64,18 @@ export const POST = async (req: NextRequest) => {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (user.role !== "OWNER" && user.role !== "ADMIN") {
+  if (!canManageUsers(user.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  let body: { email?: string; role?: string };
+  let body: { email?: string; role?: string; storeId?: string | null };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { email, role } = body;
+  const { email, role, storeId } = body;
   if (!email || !role) {
     return NextResponse.json({ error: "email and role are required" }, { status: 400 });
   }
@@ -77,12 +83,16 @@ export const POST = async (req: NextRequest) => {
   const emailLower = email.toLowerCase().trim();
   const validRoles: Role[] = ["ADMIN", "MANAGER", "STAFF"];
 
-  if (user.role === "ADMIN" && !["MANAGER", "STAFF"].includes(role)) {
-    return NextResponse.json({ error: "Admins can only invite MANAGER or STAFF" }, { status: 403 });
-  }
-
   if (!validRoles.includes(role as Role)) {
     return NextResponse.json({ error: "Invalid role" }, { status: 400 });
+  }
+
+  if (!canAssignRole(user.role, role as Role)) {
+    return NextResponse.json({ error: "You are not allowed to invite that role" }, { status: 403 });
+  }
+
+  if (requiresStoreAssignment(role as Role) && !storeId) {
+    return NextResponse.json({ error: "A store is required for Manager and Staff invitations" }, { status: 400 });
   }
 
   const inviteToken = generateToken();
@@ -101,8 +111,26 @@ export const POST = async (req: NextRequest) => {
       return NextResponse.json({ error: "An invitation for this email is already pending" }, { status: 409 });
     }
 
+    if (storeId) {
+      const store = await prisma.store.findFirst({
+        where: { id: storeId, orgId: user.orgId, isActive: true },
+        select: { id: true },
+      });
+      if (!store) {
+        return NextResponse.json({ error: "Assigned store not found" }, { status: 400 });
+      }
+    }
+
     const invitation = await prisma.invitation.create({
-      data: { orgId: user.orgId, email: emailLower, role: role as Role, invitedBy: user.id, token: inviteToken, expiresAt },
+      data: {
+        orgId: user.orgId,
+        storeId: storeId ?? null,
+        email: emailLower,
+        role: role as Role,
+        invitedBy: user.id,
+        token: inviteToken,
+        expiresAt,
+      },
     });
 
     console.log(`[INFO] Invitation created for ${emailLower}: /invite/${inviteToken}`);

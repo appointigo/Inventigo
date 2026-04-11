@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireOrgAuth } from "@/lib/auth.middleware";
 import { prisma } from "@/lib/db";
+import { canReadTeam, getTeamScope } from "@/lib/rbac";
 
 // GET /api/team — list team members for current org
 export const GET = async () => {
@@ -11,9 +12,14 @@ export const GET = async () => {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  if (!canReadTeam(user.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   try {
+    const scope = getTeamScope(user);
     const members = await prisma.user.findMany({
-      where: { orgId: user.orgId },
+      where: scope,
       include: { store: { select: { name: true } } },
       orderBy: [{ role: "asc" }, { name: "asc" }],
     });

@@ -8,6 +8,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ROLE_LABELS, ROLE_COLORS } from "@/shared/constants/roles";
 import type { TeamMember, Invitation, CreateInvitationInput } from "@/modules/settings/types/org";
 import type { Role } from "@prisma/client";
+import { useStoreRecords } from "@/modules/settings/hooks/useStoreRecords";
 
 const { Title, Text } = Typography;
 
@@ -17,8 +18,10 @@ const TeamPage = () => {
   const { user } = useAuth();
   const { message } = App.useApp();
   const queryClient = useQueryClient();
+  const { stores } = useStoreRecords();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [form] = Form.useForm();
+  const selectedRole = Form.useWatch("role", form);
 
   const canManage = user?.role === "OWNER" || user?.role === "ADMIN";
 
@@ -139,6 +142,12 @@ const TeamPage = () => {
       ),
     },
     {
+      title: "Store",
+      dataIndex: "storeName",
+      key: "storeName",
+      render: (storeName: string | null) => storeName ?? <Text type="secondary">—</Text>,
+    },
+    {
       title: "Status",
       dataIndex: "status",
       key: "status",
@@ -251,6 +260,22 @@ const TeamPage = () => {
           <Form.Item name="role" label="Role" rules={[{ required: true }]} initialValue="STAFF">
             <Select
               options={INVITABLE_ROLES.map((r) => ({ value: r, label: ROLE_LABELS[r] }))}
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="storeId"
+            label="Assigned Store"
+            rules={selectedRole === "MANAGER" || selectedRole === "STAFF"
+              ? [{ required: true, message: "Please assign a store" }]
+              : undefined}
+          >
+            <Select
+              allowClear
+              placeholder="All stores (Admin only)"
+              options={stores
+                .filter((store) => store.isActive)
+                .map((store) => ({ value: store.id, label: store.name }))}
             />
           </Form.Item>
 

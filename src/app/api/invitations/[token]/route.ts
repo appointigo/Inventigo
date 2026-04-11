@@ -15,6 +15,7 @@ export const GET = async (
       include: {
         org: { select: { name: true } },
         inviter: { select: { name: true } },
+        store: { select: { name: true } },
       },
     });
 
@@ -33,6 +34,8 @@ export const GET = async (
       email: inv.email,
       orgName: inv.org.name,
       role: inv.role,
+      storeId: inv.storeId ?? null,
+      storeName: inv.store?.name ?? null,
       inviterName: inv.inviter.name,
     });
   } 
@@ -84,7 +87,15 @@ export const POST = async (
       if (existingUser) throw new Error("EMAIL_EXISTS");
 
       const user = await tx.user.create({
-        data: { name, email: inv.email, passwordHash, role: inv.role, orgId: inv.orgId, storeId: null },
+        data: {
+          name,
+          email: inv.email,
+          passwordHash,
+          role: inv.role,
+          orgId: inv.orgId,
+          storeId: inv.storeId ?? null,
+          emailVerified: true,
+        },
       });
 
       await tx.invitation.update({ where: { token }, data: { status: "ACCEPTED" } });
