@@ -1,55 +1,76 @@
 import { NextResponse } from "next/server";
 import { Role } from "@prisma/client";
 import { userService } from "@/modules/settings/services/userService";
-import { requireRole } from "@/lib/auth.middleware";
+import { requireOrgAuth } from "@/lib/auth.middleware";
+
+function canManageUsers(role: Role): boolean {
+  return role === Role.OWNER || role === Role.ADMIN;
+}
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  let user;
   try {
-    await requireRole(Role.ADMIN);
-  } 
+    user = await requireOrgAuth();
+  }
   catch (err) {
-    const msg = err instanceof Error ? err.message : "Forbidden";
+    const msg = err instanceof Error ? err.message : "Unauthorized";
     return NextResponse.json({ error: msg }, { status: msg === "Unauthorized" ? 401 : 403 });
   }
+
+  if (!canManageUsers(user.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const { id } = await params;
-  const user = await userService.getById(id);
-  if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
-  return NextResponse.json(user);
+  const targetUser = await userService.getById(user.orgId, id);
+  if (!targetUser) return NextResponse.json({ error: "User not found" }, { status: 404 });
+  return NextResponse.json(targetUser);
 }
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  let user;
   try {
-    await requireRole(Role.ADMIN);
-  } 
+    user = await requireOrgAuth();
+  }
   catch (err) {
-    const msg = err instanceof Error ? err.message : "Forbidden";
+    const msg = err instanceof Error ? err.message : "Unauthorized";
     return NextResponse.json({ error: msg }, { status: msg === "Unauthorized" ? 401 : 403 });
+  }
+
+  if (!canManageUsers(user.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const { id } = await params;
   const body = await request.json();
   try {
-    const user = await userService.update(id, body);
-    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
-    return NextResponse.json(user);
-  } 
+    const updatedUser = await userService.update(user.orgId, id, body);
+    if (!updatedUser) return NextResponse.json({ error: "User not found" }, { status: 404 });
+    return NextResponse.json(updatedUser);
+  }
   catch (err) {
+    console.error("[users PUT]", err);
     const message = err instanceof Error ? err.message : "Update failed";
     return NextResponse.json({ error: message }, { status: 409 });
   }
 }
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  let user;
   try {
-    await requireRole(Role.ADMIN);
-  } 
+    user = await requireOrgAuth();
+  }
   catch (err) {
-    const msg = err instanceof Error ? err.message : "Forbidden";
+    const msg = err instanceof Error ? err.message : "Unauthorized";
     return NextResponse.json({ error: msg }, { status: msg === "Unauthorized" ? 401 : 403 });
   }
-  
+
+  if (!canManageUsers(user.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const { id } = await params;
-  const deleted = await userService.delete(id);
+  const deleted = await userService.delete(user.orgId, id);
   if (!deleted) return NextResponse.json({ error: "User not found" }, { status: 404 });
   return NextResponse.json({ success: true });
 }
