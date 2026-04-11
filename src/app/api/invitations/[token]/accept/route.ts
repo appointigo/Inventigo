@@ -33,7 +33,17 @@ export const POST = async (
 
     const inv = await prisma.invitation.findUnique({
       where: { token },
-      include: {
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        orgId: true,
+        storeId: true,
+        invitedBy: true,
+        status: true,
+        token: true,
+        expiresAt: true,
+        createdAt: true,
         org: {
           select: {
             name: true,

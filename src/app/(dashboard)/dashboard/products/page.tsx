@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Typography, App } from "antd";
 import ProductTable from "@/modules/products/components/ProductTable";
+import ProductBulkUploadDrawer from "@/modules/products/components/BulkUploadDrawer";
 import { useProducts } from "@/modules/products/hooks/useProducts";
 import { useCategories } from "@/modules/categories/hooks/useCategories";
 import { useBrands } from "@/modules/brands/hooks/useBrands";
@@ -16,6 +17,7 @@ export default function ProductsPage() {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string | undefined>();
   const [brandFilter, setBrandFilter] = useState<string | undefined>();
+  const [bulkDrawerOpen, setBulkDrawerOpen] = useState(false);
 
   const { products, loading, refresh } = useProducts({
     storeId: storeId ?? undefined,
@@ -60,6 +62,12 @@ export default function ProductsPage() {
         onView={(p) => router.push(`/dashboard/products/${p.id}`)}
         onEdit={(p) => router.push(`/dashboard/products/${p.id}/edit`)}
         onDelete={handleDelete}
+        onBulkUpload={() => setBulkDrawerOpen(true)}
+      />
+      <ProductBulkUploadDrawer
+        open={bulkDrawerOpen}
+        onClose={() => setBulkDrawerOpen(false)}
+        onSuccess={refresh}
       />
     </div>
   );

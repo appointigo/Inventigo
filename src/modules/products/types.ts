@@ -1,3 +1,48 @@
+// ─── Bulk Upload ─────────────────────────────────────────────────────────────
+
+/** Raw row as parsed from CSV / Excel. */
+export type BulkProductRow = {
+  brand_name: string;
+  category_name: string;
+  sku: string;                   // optional — blank triggers auto-generation
+  name: string;
+  base_price: string;
+  cost_price: string;
+  sizes_and_quantities: string;  // "S:10,M:20,L:15" — optional
+  external_barcode: string;      // optional
+  image_url: string;             // optional
+  attributes: string;            // "color:Blue;material:Cotton" — optional
+  [key: string]: string;
+};
+
+/** Validated and coerced row ready to send to the server. */
+export type BulkProductValidated = {
+  brandName: string;
+  categoryName: string;
+  sku: string;                        // may be empty string (server auto-generates)
+  name: string;
+  basePrice: number;
+  costPrice: number;
+  sizesAndQuantities: Record<string, number>; // { S: 10, M: 20 }
+  externalBarcode: string | null;
+  imageUrl: string | null;
+  attributes: Record<string, string>; // { color: "Blue", material: "Cotton" }
+};
+
+/** A single row-level error. */
+export type BulkUploadRowError = {
+  row: number;
+  identifier: string;
+  message: string;
+};
+
+/** Result from POST /api/products/bulk. */
+export type BulkUploadResult =
+  | { success: true; imported: number }
+  | { success: false; errors: BulkUploadRowError[] };
+
+// ─── Single-entity forms ──────────────────────────────────────────────────────
+
 export type SizeQuantity = {
   sizeId: string;
   quantity: number;

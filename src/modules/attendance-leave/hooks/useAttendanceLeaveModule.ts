@@ -15,6 +15,7 @@ import type {
   AttendanceStatus,
   CalendarEntry,
   LeaveRecord,
+  RequestDisplayStatus,
   UnifiedRequestRecord,
   WeeklyOffDayConfig,
 } from "../types";
@@ -145,11 +146,11 @@ export function useAttendanceLeaveModule(): AttendanceLeaveModuleData {
           userId: record.userId,
           userName: record.userName,
           requestType: "LEAVE" as const,
-          status: cancelledByRequester ? "CANCELLED" : record.status,
+          status: (cancelledByRequester ? "CANCELLED" : record.status) as RequestDisplayStatus,
           dateLabel: record.startDate === record.endDate ? record.startDate : `${record.startDate} - ${record.endDate}`,
           summary: `${leaveTypeMeta[record.leaveType].label} • ${record.reason}`,
           remark: cancelledByRequester
-            ? (record.reviewerComment.slice(CANCELLED_BY_REQUESTER_PREFIX.length).replace(/^:\s*/, "") || null)
+            ? (record.reviewerComment!.slice(CANCELLED_BY_REQUESTER_PREFIX.length).replace(/^:\s*/, "") || null)
             : record.reviewerComment,
           sourceId: record.id,
           canCancel: !canReviewRequests && record.status === "PENDING",

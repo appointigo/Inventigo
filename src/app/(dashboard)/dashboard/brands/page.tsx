@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import { Typography, Modal, App } from "antd";
 import BrandTable from "@/modules/brands/components/BrandTable";
 import BrandForm from "@/modules/brands/components/BrandForm";
+import BrandBulkUploadDrawer from "@/modules/brands/components/BulkUploadDrawer";
 import { useBrands } from "@/modules/brands/hooks/useBrands";
 import { useStore } from "@/providers/StoreProvider";
 import type { Brand, BrandFormValues } from "@/modules/brands/types";
@@ -15,6 +16,7 @@ export default function BrandsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Brand | null>(null);
   const [saving, setSaving] = useState(false);
+  const [bulkDrawerOpen, setBulkDrawerOpen] = useState(false);
 
   const openAdd = () => {
     setEditing(null);
@@ -90,6 +92,7 @@ export default function BrandsPage() {
         onEdit={openEdit}
         onDelete={handleDelete}
         onToggleActive={handleToggleActive}
+        onBulkUpload={() => setBulkDrawerOpen(true)}
       />
       <Modal
         title={editing ? "Edit Brand" : "New Brand"}
@@ -105,6 +108,11 @@ export default function BrandsPage() {
           loading={saving}
         />
       </Modal>
+      <BrandBulkUploadDrawer
+        open={bulkDrawerOpen}
+        onClose={() => setBulkDrawerOpen(false)}
+        onSuccess={refresh}
+      />
     </div>
   );
 }

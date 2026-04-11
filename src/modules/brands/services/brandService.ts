@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
-import type { Brand, BrandFormValues } from "../types";
+import type { Brand, BrandFormValues, BulkBrandValidated, BulkUploadResult } from "../types";
+import { normalizeNameKey } from "@/shared/utils/normalization";
 
 type BrandWithCount = {
   id: string;
@@ -86,5 +87,63 @@ export const brandService = {
     if (b._count.products > 0) throw new Error("Cannot delete brand with existing products");
     await prisma.brand.delete({ where: { id } });
     return true;
+  },
+
+  // ─── Bulk Upload ──────────────────────────────────────────────────────────
+
+  async bulkCreate(
+    rows: BulkBrandValidated[],
+    orgId: string
+  ): Promise<BulkUploadResult> {
+    return prisma.$transaction(async (tx) => {
+      // Pre-check: case-insensitive uniqueness against existing brands in DB
+      const existing = await tx.brand.findMany({
+        where: { orgId },
+        select: { name: true },
+      });
+      const existingNormalized = new Set(existing.map((b) => normalizeNameKey(b.name)));
+
+      // Also detect duplicates within the incoming batch itself
+      const seenInBatch = new Set<string>();
+      for (const [i, row] of rows.entries()) {
+        const norm = normalizeNameKey(row.name);
+        if (existingNormalized.has(norm)) {
+          return {
+            success: false,
+            errors: [
+              {
+                row: i + 1,
+                identifier: row.name,
+                message: `Brand with same name already exists (row ${i + 1}: "${row.name}")`,
+              },
+            ],
+          };
+        }
+        if (seenInBatch.has(norm)) {
+          return {
+            success: false,
+            errors: [
+              {
+                row: i + 1,
+                identifier: row.name,
+                message: `Duplicate brand name within the batch (row ${i + 1}: "${row.name}")`,
+              },
+            ],
+          };
+        }
+        seenInBatch.add(norm);
+      }
+
+      await tx.brand.createMany({
+        data: rows.map((r) => ({
+          orgId,
+          name: r.name,           // stored with original casing
+          logoUrl: r.logoUrl,
+          isActive: r.isActive,
+        })),
+      });
+
+      return { success: true, imported: rows.length };
+    });
   },
 };

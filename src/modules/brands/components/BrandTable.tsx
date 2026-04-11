@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Table, Button, Space, Input, Popconfirm, Tooltip, Switch, Flex, Empty } from "antd";
-import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined } from "@ant-design/icons";
+import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, UploadOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { Brand } from "../types";
 
@@ -13,9 +13,10 @@ interface BrandTableProps {
   onEdit: (brand: Brand) => void;
   onDelete: (id: string) => Promise<void>;
   onToggleActive: (brand: Brand) => Promise<void>;
+  onBulkUpload?: () => void;
 }
 
-const BrandTable = ({ brands, loading, onAdd, onEdit, onDelete, onToggleActive }: BrandTableProps) => {
+const BrandTable = ({ brands, loading, onAdd, onEdit, onDelete, onToggleActive, onBulkUpload }: BrandTableProps) => {
   const [search, setSearch] = useState("");
 
   const filtered = brands.filter((b) =>
@@ -90,9 +91,16 @@ const BrandTable = ({ brands, loading, onAdd, onEdit, onDelete, onToggleActive }
           allowClear
           style={{ maxWidth: 300 }}
         />
-        <Button type="primary" icon={<PlusOutlined />} onClick={onAdd}>
-          Add Brand
-        </Button>
+        <Space>
+          {onBulkUpload && (
+            <Button icon={<UploadOutlined />} onClick={onBulkUpload}>
+              Bulk Upload
+            </Button>
+          )}
+          <Button type="primary" icon={<PlusOutlined />} onClick={onAdd}>
+            Add Brand
+          </Button>
+        </Space>
       </Flex>
       <Table
         columns={columns}

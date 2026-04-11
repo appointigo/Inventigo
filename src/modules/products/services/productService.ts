@@ -1,7 +1,8 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import type { Product, ProductFormValues, ProductListFilters } from "../types";
+import type { Product, ProductFormValues, ProductListFilters, BulkProductValidated, BulkUploadResult } from "../types";
 import { imageService } from "@/shared/services/imageService";
+import { normalizeNameKey, normalizeSku } from "@/shared/utils/normalization";
 
 /** Normalizes a size label to the suffix used in variantSku, e.g. "UK 6" → "UK6" */
 const normalizeSizeLabel = (label: string) =>
@@ -286,5 +287,182 @@ export const productService = {
     });
 
     return true;
+  },
+
+  // ─── Bulk Upload ──────────────────────────────────────────────────────────
+
+  async bulkCreate(
+    rows: BulkProductValidated[],
+    orgId: string,
+    storeId?: string
+  ): Promise<BulkUploadResult> {
+    return prisma.$transaction(async (tx) => {
+      // 1. Resolve default storeId if not provided
+      let resolvedStoreId = storeId ?? null;
+      if (!resolvedStoreId) {
+        const org = await tx.organization.findUnique({
+          where: { id: orgId },
+          include: { stores: { orderBy: { createdAt: "asc" }, take: 1 } },
+        });
+        resolvedStoreId = org?.stores[0]?.id ?? null;
+      }
+
+      // 2. Build category and brand lookup maps
+      const [allCategories, allBrands] = await Promise.all([
+        tx.category.findMany({
+          where: { orgId },
+          select: { id: true, name: true },
+        }),
+        tx.brand.findMany({
+          where: { orgId },
+          select: { id: true, name: true },
+        }),
+      ]);
+
+      const categoryMap = new Map(
+        allCategories.map((c) => [normalizeNameKey(c.name), c.id])
+      );
+      const brandMap = new Map(
+        allBrands.map((b) => [normalizeNameKey(b.name), b.id])
+      );
+
+      // 3. Validate all rows before writing anything
+      const errors: Array<{ row: number; identifier: string; message: string }> = [];
+      for (const [i, row] of rows.entries()) {
+        const rowNum = i + 1;
+        if (!brandMap.has(normalizeNameKey(row.brandName))) {
+          errors.push({ row: rowNum, identifier: row.name, message: `Brand "${row.brandName}" not found (row ${rowNum})` });
+        }
+        if (!categoryMap.has(normalizeNameKey(row.categoryName))) {
+          errors.push({ row: rowNum, identifier: row.name, message: `Category "${row.categoryName}" not found (row ${rowNum})` });
+        }
+      }
+      if (errors.length > 0) return { success: false, errors };
+
+      // 4. Pre-check SKU uniqueness for non-blank SKUs
+      const existingProducts = await tx.product.findMany({
+        where: { orgId },
+        select: { sku: true },
+      });
+      const existingSkus = new Set(existingProducts.map((p) => normalizeSku(p.sku)));
+
+      // Detect non-blank SKU conflicts in DB and within the batch
+      const seenSkusInBatch = new Set<string>();
+      // Also auto-generate counters per brand+category prefix
+      const autoGenCounters = new Map<string, number>();
+
+      const resolvedRows = rows.map((row, i) => {
+        const rowNum = i + 1;
+        const categoryId = categoryMap.get(normalizeNameKey(row.categoryName))!;
+        const brandId = brandMap.get(normalizeNameKey(row.brandName))!;
+
+        let sku = row.sku ? normalizeSku(row.sku) : "";
+
+        if (sku) {
+          // Explicit SKU — check uniqueness
+          if (existingSkus.has(sku)) {
+            errors.push({ row: rowNum, identifier: row.name, message: `SKU "${sku}" already exists (row ${rowNum})` });
+          } else if (seenSkusInBatch.has(sku)) {
+            errors.push({ row: rowNum, identifier: row.name, message: `Duplicate SKU "${sku}" within batch (row ${rowNum})` });
+          } else {
+            seenSkusInBatch.add(sku);
+            existingSkus.add(sku); // prevent later rows from reusing it
+          }
+        } else {
+          // Auto-generate: {BRAND_PREFIX}-{CAT_PREFIX}-{seq}
+          const bPrefix = row.brandName.trim().replace(/\s+/g, "").toUpperCase().slice(0, 3);
+          const cPrefix = row.categoryName.trim().replace(/\s+/g, "").toUpperCase().slice(0, 3);
+          const prefix = `${bPrefix}-${cPrefix}`;
+          const counter = (autoGenCounters.get(prefix) ?? 0) + 1;
+          autoGenCounters.set(prefix, counter);
+          let candidate = `${prefix}-${String(counter).padStart(3, "0")}`;
+          // Ensure uniqueness across DB + batch
+          let attempt = counter;
+          while (existingSkus.has(candidate) || seenSkusInBatch.has(candidate)) {
+            attempt++;
+            candidate = `${prefix}-${String(attempt).padStart(3, "0")}`;
+          }
+          sku = candidate;
+          seenSkusInBatch.add(sku);
+          existingSkus.add(sku);
+          autoGenCounters.set(prefix, attempt);
+        }
+
+        return { row, sku, brandId, categoryId };
+      });
+
+      if (errors.length > 0) return { success: false, errors };
+
+      // 5. Insert all products in one createMany call
+      await tx.product.createMany({
+        data: resolvedRows.map(({ row, sku, brandId, categoryId }) => ({
+          orgId,
+          name: row.name,
+          sku,
+          externalBarcode: row.externalBarcode ?? null,
+          categoryId,
+          brandId,
+          basePrice: row.basePrice,
+          costPrice: row.costPrice,
+          attributes: (row.attributes ?? {}) as Prisma.InputJsonValue,
+          imageUrl: row.imageUrl ?? null,
+          isActive: true,
+        })),
+      });
+
+      // 6. Re-fetch created products to get IDs
+      const createdSkus = resolvedRows.map((r) => r.sku);
+      const createdProducts = await tx.product.findMany({
+        where: { orgId, sku: { in: createdSkus } },
+        select: { id: true, sku: true },
+      });
+      const skuToId = new Map(createdProducts.map((p) => [p.sku, p.id]));
+
+      // 7. Build StockEntry records (only when storeId available and sizes have quantities)
+      if (resolvedStoreId) {
+        const allStockData: Array<{
+          productId: string;
+          sizeId: string;
+          storeId: string;
+          quantity: number;
+          reorderLevel: number;
+          variantSku: string;
+        }> = [];
+
+        for (const { row, sku } of resolvedRows) {
+          const productId = skuToId.get(sku);
+          if (!productId || !row.sizesAndQuantities || Object.keys(row.sizesAndQuantities).length === 0) continue;
+
+          // Resolve category sizes for this product
+          const categoryId = categoryMap.get(normalizeNameKey(row.categoryName))!;
+          const sizes = await tx.size.findMany({
+            where: { categoryId },
+            select: { id: true, label: true },
+          });
+          const labelToSize = new Map(sizes.map((s) => [s.label.trim().toLowerCase(), s]));
+
+          for (const [sizeLabel, quantity] of Object.entries(row.sizesAndQuantities)) {
+            if (quantity <= 0) continue;
+            const size = labelToSize.get(sizeLabel.trim().toLowerCase());
+            if (!size) continue; // skip unknown sizes gracefully
+
+            allStockData.push({
+              productId,
+              sizeId: size.id,
+              storeId: resolvedStoreId,
+              quantity,
+              reorderLevel: 5,
+              variantSku: buildVariantSku(sku, size.label),
+            });
+          }
+        }
+
+        if (allStockData.length > 0) {
+          await tx.stockEntry.createMany({ data: allStockData });
+        }
+      }
+
+      return { success: true, imported: rows.length };
+    });
   },
 };
