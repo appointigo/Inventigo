@@ -64,6 +64,8 @@ enum SaleStatus {
   REFUNDED
 }
 
+// ExpenseCategory enum removed — categories are now dynamic per org (ExpenseCategoryOption)
+
 // ─── ORGANIZATION ────────────────────────────────────────────────────────────────
 
 model Organization {
@@ -84,8 +86,10 @@ model Organization {
   suppliers    Supplier[]
   invitations  Invitation[]
   alertConfigs AlertConfig[]
-  promoCodes   PromoCode[]
-  featureFlags FeatureFlag[]
+  promoCodes             PromoCode[]
+  featureFlags           FeatureFlag[]
+  storeExpenses          StoreExpense[]
+  expenseCategoryOptions ExpenseCategoryOption[]
 
   @@map("organizations")
 }
@@ -112,6 +116,7 @@ model Store {
   alertConfigs   AlertConfig[]
   categories     Category[]
   brands         Brand[]
+  storeExpenses  StoreExpense[]
 
   @@unique([code, orgId])
   @@index([orgId])
@@ -139,6 +144,7 @@ model User {
   purchaseOrders  PurchaseOrder[]
   sales           Sale[]
   sentInvitations Invitation[]   @relation("SentInvitations")
+  storeExpenses   StoreExpense[]
 
   @@index([orgId])
   @@map("users")
@@ -481,6 +487,46 @@ model PromoCode {
   @@unique([code, orgId])
   @@index([orgId])
   @@map("promo_codes")
+}
+
+// ─── EXPENSE CATEGORIES & STORE EXPENSES ────────────────────────────────────
+
+model ExpenseCategoryOption {
+  id        String   @id @default(uuid())
+  orgId     String
+  name      String
+  colorKey  String   @default("default")
+  createdAt DateTime @default(now())
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, name])
+  @@index([orgId])
+  @@map("expense_category_options")
+}
+
+// ─── STORE EXPENSE ────────────────────────────────────────────────────────────
+
+model StoreExpense {
+  id        String   @id @default(uuid())
+  orgId     String
+  storeId   String
+  category  String
+  amount    Decimal  @db.Decimal(10, 2)
+  date      DateTime        @db.Date
+  note      String?
+  createdBy String
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  org   Organization @relation(fields: [orgId], references: [id])
+  store Store        @relation(fields: [storeId], references: [id])
+  user  User         @relation(fields: [createdBy], references: [id])
+
+  @@index([orgId])
+  @@index([storeId])
+  @@index([date])
+  @@map("store_expenses")
 }
 
 // ─── EMAIL VERIFICATION ──────────────────────────────────────────────────────────

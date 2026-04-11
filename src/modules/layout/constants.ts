@@ -1,4 +1,4 @@
-import { DashboardOutlined, ShoppingOutlined, AppstoreOutlined, TagsOutlined, InboxOutlined, FileTextOutlined, ScanOutlined, BarChartOutlined, SettingOutlined, ShopOutlined, AlertOutlined, DollarOutlined, TeamOutlined } from "@ant-design/icons";
+import { DashboardOutlined, ShoppingOutlined, AppstoreOutlined, TagsOutlined, InboxOutlined, FileTextOutlined, ScanOutlined, BarChartOutlined, SettingOutlined, ShopOutlined, AlertOutlined, DollarOutlined, TeamOutlined, AccountBookOutlined } from "@ant-design/icons";
 import { Role } from "@prisma/client";
 
 export type MenuItem = {
@@ -54,6 +54,12 @@ export const MENU_ITEMS: MenuItem[] = [
     path: "/dashboard/purchase-orders",
     name: "Purchase Orders",
     icon: FileTextOutlined,
+    roles: ADMIN_MANAGER,
+  },
+  {
+    path: "/dashboard/expenses",
+    name: "Expenses",
+    icon: AccountBookOutlined,
     roles: ADMIN_MANAGER,
   },
   {

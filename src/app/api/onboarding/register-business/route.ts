@@ -120,6 +120,19 @@ export const POST = async (request: NextRequest) => {
         },
       });
 
+      // Seed default expense categories for the new org
+      await tx.expenseCategoryOption.createMany({
+        data: [
+          { orgId: org.id, name: "Rent", colorKey: "blue" },
+          { orgId: org.id, name: "Electricity", colorKey: "gold" },
+          { orgId: org.id, name: "Employee Salary", colorKey: "green" },
+          { orgId: org.id, name: "Cleaning", colorKey: "cyan" },
+          { orgId: org.id, name: "Miscellaneous", colorKey: "default" },
+          { orgId: org.id, name: "Stationery", colorKey: "purple" },
+        ],
+        skipDuplicates: true,
+      });
+
       return { orgId: org.id, storeId: store.id };
     });
 
