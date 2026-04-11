@@ -5,13 +5,19 @@ import {
   Form, Input, InputNumber, Select, Switch, Button, Steps, Space, Divider,
   Card, Empty, Tooltip, Upload, Image, message, Flex, Row, Col, Alert, Typography,
 } from "antd";
-import { ReloadOutlined, UploadOutlined, BarcodeOutlined, DeleteOutlined } from "@ant-design/icons";
+import { ReloadOutlined, UploadOutlined, DeleteOutlined, CameraOutlined } from "@ant-design/icons";
+import dynamic from "next/dynamic";
 import { upload } from "@vercel/blob/client";
 import type { UploadRequestOption } from "@rc-component/upload/lib/interface";
 import type { Product, ProductFormValues } from "../types";
 import type { Category } from "@/modules/categories/types";
 import type { Brand } from "@/modules/brands/types";
 import { useSuppliers } from "@/modules/suppliers/hooks/useSuppliers";
+
+const CameraBarcodeScannerModal = dynamic(
+  () => import("@/modules/barcode/components/CameraBarcodeScannerModal"),
+  { ssr: false }
+);
 import { COLOR_PALETTE } from "@/modules/categories/components/AttributeSchemaBuilder";
 
 const { Text } = Typography;
@@ -70,6 +76,7 @@ const ProductForm = ({
   const [skuTouched, setSkuTouched] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
   const [barcodeChecking, setBarcodeChecking] = useState(false);
+  const [cameraScanOpen, setCameraScanOpen] = useState(false);
   const isEdit = !!initialValues;
 
   const { suppliers } = useSuppliers();
@@ -383,7 +390,7 @@ const ProductForm = ({
             />
           </Form.Item>
 
-          {/* 4. External Barcode — with format validation, duplicate check, and generate button */}
+          {/* 4. External Barcode — with format validation, duplicate check, and camera scan */}
           <Form.Item
             name="externalBarcode"
             label="External Barcode (EAN-13 / UPC-A)"
@@ -392,22 +399,21 @@ const ProductForm = ({
             rules={[{ validator: validateBarcode }]}
             extra={barcodeChecking ? "Checking for duplicate barcodes…" : "Optional · 12 digits (UPC-A) or 13 digits (EAN-13)"}
           >
-            <Space.Compact style={{ width: "100%" }}>
-              <Input
-                placeholder="Scan barcode or enter 12–13 digits manually"
-                onPressEnter={(e) => e.preventDefault()}
-              />
-              <Tooltip title="Generate an EAN-13 barcode if the product has none" destroyOnHidden>
-                <Button
-                  icon={<BarcodeOutlined />}
-                  onClick={() => {
-                    const code = generateEAN13();
-                    form.setFieldValue("externalBarcode", code);
-                    form.validateFields(["externalBarcode"]);
-                  }}
-                />
-              </Tooltip>
-            </Space.Compact>
+            <Input
+              placeholder="Scan barcode or enter 12–13 digits manually"
+              onPressEnter={(e) => e.preventDefault()}
+              suffix={
+                <Tooltip title="Scan barcode via camera" destroyOnHidden>
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<CameraOutlined />}
+                    onClick={() => setCameraScanOpen(true)}
+                    style={{ height: "auto", padding: 0, display: "flex", alignItems: "center" }}
+                  />
+                </Tooltip>
+              }
+            />
           </Form.Item>
 
           {/* 5. Pricing */}
@@ -802,6 +808,15 @@ const ProductForm = ({
         </Space>
       </Flex>
 
+      {cameraScanOpen && (
+        <CameraBarcodeScannerModal
+          open={cameraScanOpen}
+          onScan={(decodedText) => {
+            form.setFieldValue("externalBarcode", decodedText);
+          }}
+          onClose={() => setCameraScanOpen(false)}
+        />
+      )}
     </>
   );
 };
