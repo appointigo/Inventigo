@@ -66,7 +66,7 @@ const AttributeSchemaBuilder = ({ value: fields = [], onChange }: AttributeSchem
   };
 
   const isColorField = (field: AttributeField) =>
-    field.name.trim().toLowerCase() === "color" && field.type === "select";
+    (field.name ?? "").trim().toLowerCase() === "color" && field.type === "select";
 
   return (
     <div>

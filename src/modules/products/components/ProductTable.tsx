@@ -1,7 +1,7 @@
 "use client";
 
 import { Table, Button, Space, Tag, Input, Select, Popconfirm, Tooltip, Badge, Flex, Empty } from "antd";
-import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, EyeOutlined } from "@ant-design/icons";
+import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, EyeOutlined, UploadOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { Product } from "../types";
 import type { Category } from "@/modules/categories/types";
@@ -22,6 +22,7 @@ interface ProductTableProps {
   onView: (product: Product) => void;
   onEdit: (product: Product) => void;
   onDelete: (id: string) => Promise<void>;
+  onBulkUpload?: () => void;
 }
 
 const ProductTable = ({
@@ -39,6 +40,7 @@ const ProductTable = ({
   onView,
   onEdit,
   onDelete,
+  onBulkUpload,
 }: ProductTableProps) => {
   const columns: ColumnsType<Product> = [
     {
@@ -155,9 +157,16 @@ const ProductTable = ({
             options={brands.map((b) => ({ label: b.name, value: b.id }))}
           />
         </Space>
-        <Button type="primary" icon={<PlusOutlined />} onClick={onAdd}>
-          Add Product
-        </Button>
+        <Space>
+          {onBulkUpload && (
+            <Button icon={<UploadOutlined />} onClick={onBulkUpload}>
+              Bulk Upload
+            </Button>
+          )}
+          <Button type="primary" icon={<PlusOutlined />} onClick={onAdd}>
+            Add Product
+          </Button>
+        </Space>
       </Flex>
       <Table
         columns={columns}

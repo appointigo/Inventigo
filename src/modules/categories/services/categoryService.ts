@@ -1,5 +1,12 @@
 import { prisma } from "@/lib/db";
-import type { Category, CategoryFormValues, AttributeField } from "../types";
+import type {
+  Category,
+  CategoryFormValues,
+  AttributeField,
+  BulkCategoryValidated,
+  BulkUploadResult,
+} from "../types";
+import { normalizeCategoryName } from "@/shared/utils/normalization";
 
 const generateSlug = (name: string): string =>
   name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -134,5 +141,89 @@ export const categoryService = {
     await prisma.size.deleteMany({ where: { categoryId: id } });
     await prisma.category.delete({ where: { id } });
     return true;
+  },
+
+  // ─── Bulk Upload ──────────────────────────────────────────────────────────
+
+  async bulkCreate(
+    rows: BulkCategoryValidated[],
+    orgId: string
+  ): Promise<BulkUploadResult> {
+    return prisma.$transaction(async (tx) => {
+      // Pre-check: normalized uniqueness against existing categories in DB
+      const existing = await tx.category.findMany({
+        where: { orgId },
+        select: { name: true },
+      });
+      const existingNormalized = new Set(
+        existing.map((c) => normalizeCategoryName(c.name))
+      );
+
+      // Detect duplicates within the batch
+      const seenInBatch = new Set<string>();
+      for (const [i, row] of rows.entries()) {
+        const norm = normalizeCategoryName(row.name);
+        if (existingNormalized.has(norm)) {
+          return {
+            success: false,
+            errors: [
+              {
+                row: i + 1,
+                identifier: row.name,
+                message: `Category with same name already exists (row ${i + 1}: "${row.name}")`,
+              },
+            ],
+          };
+        }
+        if (seenInBatch.has(norm)) {
+          return {
+            success: false,
+            errors: [
+              {
+                row: i + 1,
+                identifier: row.name,
+                message: `Duplicate category name within the batch (row ${i + 1}: "${row.name}")`,
+              },
+            ],
+          };
+        }
+        seenInBatch.add(norm);
+      }
+
+      // 1. Insert all categories in one query
+      await tx.category.createMany({
+        data: rows.map((r) => ({
+          orgId,
+          name: r.name,            // stored with original casing
+          slug: generateSlug(r.name),
+          description: r.description,
+          attributeSchema: r.attributeSchema as object,
+        })),
+      });
+
+      // 2. Re-fetch created records to get IDs (slug is unique per org)
+      const slugs = rows.map((r) => generateSlug(r.name));
+      const created = await tx.category.findMany({
+        where: { orgId, slug: { in: slugs } },
+        select: { id: true, slug: true },
+      });
+      const slugToId = new Map(created.map((c) => [c.slug, c.id]));
+
+      // 3. Build all Size records across all categories and insert in one query
+      const allSizes: Array<{ categoryId: string; label: string; sortOrder: number }> = [];
+      for (const row of rows) {
+        const categoryId = slugToId.get(generateSlug(row.name));
+        if (!categoryId) continue;
+        row.sizes.forEach((label, index) => {
+          allSizes.push({ categoryId, label, sortOrder: index });
+        });
+      }
+
+      if (allSizes.length > 0) {
+        await tx.size.createMany({ data: allSizes });
+      }
+
+      return { success: true, imported: rows.length };
+    });
   },
 };

@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Typography, App } from "antd";
 import CategoryTable from "@/modules/categories/components/CategoryTable";
+import CategoryBulkUploadDrawer from "@/modules/categories/components/BulkUploadDrawer";
 import { useCategories } from "@/modules/categories/hooks/useCategories";
 import { useStore } from "@/providers/StoreProvider";
 
@@ -12,6 +13,7 @@ export default function CategoriesPage() {
   const router = useRouter();
   const { storeId } = useStore();
   const { categories, loading, refresh } = useCategories(storeId ?? undefined);
+  const [bulkDrawerOpen, setBulkDrawerOpen] = useState(false);
 
   const handleDelete = useCallback(
     async (id: string) => {
@@ -38,6 +40,12 @@ export default function CategoriesPage() {
         onAdd={() => router.push("/dashboard/categories/new")}
         onEdit={(cat) => router.push(`/dashboard/categories/${cat.id}`)}
         onDelete={handleDelete}
+        onBulkUpload={() => setBulkDrawerOpen(true)}
+      />
+      <CategoryBulkUploadDrawer
+        open={bulkDrawerOpen}
+        onClose={() => setBulkDrawerOpen(false)}
+        onSuccess={refresh}
       />
     </div>
   );

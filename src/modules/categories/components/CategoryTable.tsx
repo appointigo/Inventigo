@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Table, Button, Space, Tag, Input, Popconfirm, Tooltip, Flex, Empty } from "antd";
-import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined } from "@ant-design/icons";
+import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, UploadOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { Category } from "../types";
 
@@ -12,9 +12,10 @@ interface CategoryTableProps {
   onAdd: () => void;
   onEdit: (category: Category) => void;
   onDelete: (id: string) => Promise<void>;
+  onBulkUpload?: () => void;
 }
 
-const CategoryTable = ({ categories, loading, onAdd, onEdit, onDelete }: CategoryTableProps) => {
+const CategoryTable = ({ categories, loading, onAdd, onEdit, onDelete, onBulkUpload }: CategoryTableProps) => {
   const [search, setSearch] = useState("");
 
   const filtered = categories.filter(
@@ -126,9 +127,16 @@ const CategoryTable = ({ categories, loading, onAdd, onEdit, onDelete }: Categor
           allowClear
           style={{ maxWidth: 300 }}
         />
-        <Button type="primary" icon={<PlusOutlined />} onClick={onAdd}>
-          Add Category
-        </Button>
+        <Space>
+          {onBulkUpload && (
+            <Button icon={<UploadOutlined />} onClick={onBulkUpload}>
+              Bulk Upload
+            </Button>
+          )}
+          <Button type="primary" icon={<PlusOutlined />} onClick={onAdd}>
+            Add Category
+          </Button>
+        </Space>
       </Flex>
       <Table
         columns={columns}
