@@ -70,6 +70,18 @@ export type LeaveBalanceRecord = {
   remaining: number;
 };
 
+export type StoreLeavePolicyRecord = {
+  storeId: string;
+  storeName: string;
+  leaveType: LeaveType;
+  allocated: number;
+};
+
+export type UpdateStoreLeavePolicyInput = {
+  leaveType: LeaveType;
+  allocated: number;
+};
+
 export type LeaveListResponse = {
   records: LeaveRecord[];
   balances: LeaveBalanceRecord[];

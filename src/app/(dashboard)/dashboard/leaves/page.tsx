@@ -1,7 +1,7 @@
 "use client";
 
-import LeaveManagementView from "@/modules/staff/components/LeaveManagementView";
+import { AttendanceLeavePage } from "@/modules/attendance-leave/components/AttendanceLeavePage";
 
 export default function LeavesPage() {
-  return <LeaveManagementView />;
+  return <AttendanceLeavePage initialTab="leaves" />;
 }

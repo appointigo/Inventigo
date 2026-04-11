@@ -113,6 +113,7 @@ model Organization {
   leaveRequests          LeaveRequest[]
   leaveBalances          LeaveBalance[]
   weeklyOffs             WeeklyOff[]
+  leavePolicies          StoreLeavePolicy[]
 
   @@map("organizations")
 }
@@ -144,6 +145,7 @@ model Store {
   attendances    StaffAttendance[]
   leaveRequests  LeaveRequest[]
   weeklyOffs     WeeklyOff[]
+  leavePolicies  StoreLeavePolicy[]
 
   @@unique([code, orgId])
   @@index([orgId])
@@ -645,6 +647,23 @@ model WeeklyOff {
   @@unique([storeId, dayOfWeek])
   @@index([orgId, storeId])
   @@map("weekly_offs")
+}
+
+model StoreLeavePolicy {
+  id        String    @id @default(uuid())
+  orgId     String
+  storeId   String
+  leaveType LeaveType
+  allocated Int       @default(0)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  org   Organization @relation(fields: [orgId], references: [id])
+  store Store        @relation(fields: [storeId], references: [id])
+
+  @@unique([storeId, leaveType])
+  @@index([orgId, storeId])
+  @@map("store_leave_policies")
 }
 
 model LeaveBalance {

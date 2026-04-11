@@ -2,6 +2,6 @@
 
 import { AttendanceLeavePage } from "@/modules/attendance-leave/components/AttendanceLeavePage";
 
-export default function AttendancePage() {
-  return <AttendanceLeavePage initialTab="attendance" />;
+export default function AttendanceLeaveDashboardPage() {
+  return <AttendanceLeavePage />;
 }

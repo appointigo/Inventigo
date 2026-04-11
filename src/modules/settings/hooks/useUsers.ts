@@ -3,15 +3,38 @@
 import { useState, useEffect, useCallback } from "react";
 import type { AppUser, CreateUserInput, UpdateUserInput } from "../types";
 
-export function useUsers() {
+type UseUsersOptions = {
+  enabled?: boolean;
+};
+
+async function readErrorMessage(res: Response, fallback: string): Promise<string> {
+  try {
+    const payload = await res.json() as { error?: string };
+    return payload.error ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export function useUsers(options: UseUsersOptions = {}) {
+  const { enabled = true } = options;
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchUsers = useCallback(async () => {
+    if (!enabled) {
+      setUsers([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await fetch("/api/users");
-      if (res.ok) setUsers(await res.json());
+      if (!res.ok) {
+        throw new Error(await readErrorMessage(res, "Failed to load users"));
+      }
+      setUsers(await res.json());
     } 
     catch (error) {
       console.error("Failed to fetch users:", error);
@@ -19,10 +42,10 @@ export function useUsers() {
     finally {
       setLoading(false);
     }
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
-    fetchUsers();
+    void fetchUsers();
   }, [fetchUsers]);
 
   const createUser = useCallback(
@@ -34,8 +57,7 @@ export function useUsers() {
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error ?? "Create failed");
+        throw new Error(await readErrorMessage(res, "Create failed"));
       }
 
       const user = await res.json();
@@ -53,8 +75,7 @@ export function useUsers() {
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error ?? "Update failed");
+        throw new Error(await readErrorMessage(res, "Update failed"));
       }
 
       const user = await res.json();
@@ -70,8 +91,7 @@ export function useUsers() {
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error ?? "Delete failed");
+        throw new Error(await readErrorMessage(res, "Delete failed"));
       }
 
       await fetchUsers();
@@ -90,8 +110,7 @@ export function useUsers() {
       );
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error ?? "Password reset failed");
+        throw new Error(await readErrorMessage(res, "Password reset failed"));
       }
     }, []
   );
