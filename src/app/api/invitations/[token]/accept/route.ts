@@ -64,13 +64,14 @@ export const POST = async (
     }
 
     const firstStoreId = inv.org.stores[0]?.id ?? null;
+    const assignedStoreId = inv.storeId ?? firstStoreId;
 
     await prisma.$transaction([
       prisma.user.update({
         where: { id: userId },
         data: {
           orgId: inv.orgId,
-          storeId: firstStoreId,
+          storeId: assignedStoreId,
           role: inv.role,
         },
       }),

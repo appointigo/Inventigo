@@ -64,6 +64,25 @@ enum SaleStatus {
   REFUNDED
 }
 
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  OFF
+  LEAVE
+}
+
+enum LeaveType {
+  SICK
+  CASUAL
+  PAID
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 // ExpenseCategory enum removed — categories are now dynamic per org (ExpenseCategoryOption)
 
 // ─── ORGANIZATION ────────────────────────────────────────────────────────────────
@@ -90,6 +109,10 @@ model Organization {
   featureFlags           FeatureFlag[]
   storeExpenses          StoreExpense[]
   expenseCategoryOptions ExpenseCategoryOption[]
+  attendances            StaffAttendance[]
+  leaveRequests          LeaveRequest[]
+  leaveBalances          LeaveBalance[]
+  weeklyOffs             WeeklyOff[]
 
   @@map("organizations")
 }
@@ -117,6 +140,10 @@ model Store {
   categories     Category[]
   brands         Brand[]
   storeExpenses  StoreExpense[]
+  invitations    Invitation[]
+  attendances    StaffAttendance[]
+  leaveRequests  LeaveRequest[]
+  weeklyOffs     WeeklyOff[]
 
   @@unique([code, orgId])
   @@index([orgId])
@@ -145,6 +172,10 @@ model User {
   sales           Sale[]
   sentInvitations Invitation[]   @relation("SentInvitations")
   storeExpenses   StoreExpense[]
+  attendances     StaffAttendance[]
+  leaveRequests   LeaveRequest[]  @relation("LeaveRequester")
+  reviewedLeaves  LeaveRequest[]  @relation("LeaveReviewer")
+  leaveBalances   LeaveBalance[]
 
   @@index([orgId])
   @@map("users")
@@ -155,6 +186,7 @@ model User {
 model Invitation {
   id        String           @id @default(uuid())
   orgId     String
+  storeId   String?
   email     String
   role      Role
   invitedBy String
@@ -164,9 +196,11 @@ model Invitation {
   createdAt DateTime         @default(now())
 
   org     Organization @relation(fields: [orgId], references: [id])
+  store   Store?       @relation(fields: [storeId], references: [id])
   inviter User         @relation("SentInvitations", fields: [invitedBy], references: [id])
 
   @@index([orgId])
+  @@index([storeId])
   @@index([email])
   @@map("invitations")
 }
@@ -541,6 +575,95 @@ model EmailVerification {
 
   @@index([email])
   @@map("email_verifications")
+}
+
+model StaffAttendance {
+  id             String           @id @default(uuid())
+  orgId          String
+  storeId        String
+  userId         String
+  date           DateTime         @db.Date
+  status         AttendanceStatus @default(PRESENT)
+  checkInAt      DateTime?
+  checkOutAt     DateTime?
+  totalMinutes   Int?
+  note           String?
+  source         String           @default("SYSTEM")
+  overrideReason String?
+  overriddenBy   String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  org   Organization @relation(fields: [orgId], references: [id])
+  store Store        @relation(fields: [storeId], references: [id])
+  user  User         @relation(fields: [userId], references: [id])
+
+  @@unique([userId, date])
+  @@index([orgId, storeId, date])
+  @@index([userId, date])
+  @@map("staff_attendances")
+}
+
+model LeaveRequest {
+  id              String      @id @default(uuid())
+  orgId           String
+  storeId         String
+  userId          String
+  leaveType       LeaveType
+  startDate       DateTime    @db.Date
+  endDate         DateTime    @db.Date
+  reason          String
+  status          LeaveStatus @default(PENDING)
+  reviewerComment String?
+  reviewedBy      String?
+  decidedAt       DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  org      Organization @relation(fields: [orgId], references: [id])
+  store    Store        @relation(fields: [storeId], references: [id])
+  user     User         @relation("LeaveRequester", fields: [userId], references: [id])
+  reviewer User?        @relation("LeaveReviewer", fields: [reviewedBy], references: [id])
+
+  @@index([orgId, storeId, status])
+  @@index([userId, startDate, endDate])
+  @@map("leave_requests")
+}
+
+model WeeklyOff {
+  id         String   @id @default(uuid())
+  orgId      String
+  storeId    String
+  dayOfWeek  Int
+  isOptional Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  org   Organization @relation(fields: [orgId], references: [id])
+  store Store        @relation(fields: [storeId], references: [id])
+
+  @@unique([storeId, dayOfWeek])
+  @@index([orgId, storeId])
+  @@map("weekly_offs")
+}
+
+model LeaveBalance {
+  id           String    @id @default(uuid())
+  orgId        String
+  userId       String
+  leaveType    LeaveType
+  year         Int
+  allocated    Int       @default(0)
+  used         Int       @default(0)
+  carryForward Int       @default(0)
+  updatedAt    DateTime  @updatedAt
+
+  org  Organization @relation(fields: [orgId], references: [id])
+  user User         @relation(fields: [userId], references: [id])
+
+  @@unique([userId, leaveType, year])
+  @@index([orgId, userId])
+  @@map("leave_balances")
 }
 
 // ─── ADMIN AUDIT LOG ─────────────────────────────────────────────────────────

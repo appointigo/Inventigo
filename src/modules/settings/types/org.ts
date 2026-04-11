@@ -30,6 +30,8 @@ export type Invitation = {
   id: string;
   email: string;
   role: Role;
+  storeId: string | null;
+  storeName: string | null;
   status: InvitationStatus;
   inviterName: string;
   expiresAt: string;
@@ -39,6 +41,7 @@ export type Invitation = {
 export type CreateInvitationInput = {
   email: string;
   role: Role;
+  storeId?: string | null;
 };
 
 // ── Team Member ──────────────────────────────────────────────────────────────
