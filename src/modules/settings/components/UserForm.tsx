@@ -33,6 +33,7 @@ export default function UserForm({
 }: UserFormProps) {
   const [form] = Form.useForm<UserFormValues>();
   const isEdit = !!initialValues;
+  const selectedRole = Form.useWatch("role", form);
 
   useEffect(() => {
     if (initialValues) {
@@ -58,7 +59,7 @@ export default function UserForm({
     return onSubmit(values as CreateUserInput);
   };
 
-    const roleOptions = Object.values(Role).map((r) => ({
+    const roleOptions = [Role.ADMIN, Role.MANAGER, Role.STAFF].map((r) => ({
         value: r,
         label: (
             <span style={{ color: ROLE_COLORS[r], fontWeight: 500 }}>
@@ -70,6 +71,8 @@ export default function UserForm({
     const storeOptions = stores
         .filter((s) => s.isActive)
         .map((s) => ({ value: s.id, label: s.name }));
+
+  const storeRequired = selectedRole === Role.MANAGER || selectedRole === Role.STAFF;
     
   return (
     <Form form={form} layout="vertical" onFinish={handleFinish}>
@@ -113,7 +116,11 @@ export default function UserForm({
         <Select options={roleOptions} />
       </Form.Item>
 
-      <Form.Item name="storeId" label="Assigned Store">
+      <Form.Item
+        name="storeId"
+        label="Assigned Store"
+        rules={storeRequired ? [{ required: true, message: "Please assign a store" }] : undefined}
+      >
         <Select
           allowClear
           placeholder="All stores (Admin)"

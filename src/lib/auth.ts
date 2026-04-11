@@ -26,14 +26,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
+          console.warn("[auth authorize] missing credentials payload");
           return null;
         }
+
+        const email = String(credentials.email).trim().toLowerCase();
 
         // Gracefully handle DB unavailability (demo mode without a database)
         let user = null;
         try {
           user = await prisma.user.findUnique({
-            where: { email: credentials.email as string },
+            where: { email },
             select: {
               id: true,
               name: true,
@@ -47,11 +50,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               org: { select: { name: true } },
             },
           });
-        } catch {
+        } catch (error) {
+          console.error("[auth authorize] user lookup failed", { email, error });
           return null;
         }
 
-        if (!user || !user.isActive) {
+        if (!user) {
+          console.warn("[auth authorize] user not found", { email });
+          return null;
+        }
+
+        if (!user.isActive) {
+          console.warn("[auth authorize] inactive user blocked", { email, userId: user.id });
           return null;
         }
 
@@ -61,8 +71,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         );
 
         if (!isPasswordValid) {
+          console.warn("[auth authorize] password mismatch", { email, userId: user.id });
           return null;
         }
+
+        console.info("[auth authorize] login success", {
+          email,
+          userId: user.id,
+          role: user.role,
+          orgId: user.orgId,
+          storeId: user.storeId,
+        });
 
         return {
           id: user.id,
