@@ -3,6 +3,8 @@
 import { CalendarOutlined, InfoCircleOutlined, LeftOutlined, RightOutlined } from "@ant-design/icons";
 import { Button, Card, Col, Flex, Row, Select, Space, Tag, Typography } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
+import localeData from "dayjs/plugin/localeData";
+dayjs.extend(localeData);
 import { useEffect, useMemo, useState } from "react";
 import type { AttendanceLeaveModuleData } from "../../types";
 
