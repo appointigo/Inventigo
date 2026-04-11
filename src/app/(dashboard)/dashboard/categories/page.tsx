@@ -1,15 +1,20 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { Typography, App } from "antd";
 import CategoryTable from "@/modules/categories/components/CategoryTable";
 import CategoryBulkUploadDrawer from "@/modules/categories/components/BulkUploadDrawer";
 import { useCategories } from "@/modules/categories/hooks/useCategories";
+import { useMobileViewport } from "@/modules/mobile-dashboard/hooks/useMobileViewport";
 import { useStore } from "@/providers/StoreProvider";
+
+const MobileCategoriesPage = dynamic(() => import("@/modules/mobile-dashboard/pages/CategoriesPage"));
 
 export default function CategoriesPage() {
   const { message } = App.useApp();
+  const { isMobile, isReady } = useMobileViewport();
   const router = useRouter();
   const { storeId } = useStore();
   const { categories, loading, refresh } = useCategories(storeId ?? undefined);
@@ -28,6 +33,14 @@ export default function CategoriesPage() {
     },
     [refresh]
   );
+
+  if (!isReady) {
+    return null;
+  }
+
+  if (isMobile) {
+    return <MobileCategoriesPage />;
+  }
 
   return (
     <div style={{ padding: 24 }}>

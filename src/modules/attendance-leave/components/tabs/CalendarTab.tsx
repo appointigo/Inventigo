@@ -60,6 +60,10 @@ export function CalendarTab({ module }: { module: AttendanceLeaveModuleData }) {
     const year = dayjs().year() - 3 + index;
     return { label: String(year), value: year };
   });
+  const monthOptions = Array.from({ length: 12 }, (_, index) => ({
+    label: monthValue.month(index).format("MMMM"),
+    value: index,
+  }));
 
   return (
     <Row gutter={[16, 16]}>
@@ -79,7 +83,7 @@ export function CalendarTab({ module }: { module: AttendanceLeaveModuleData }) {
               <Select
                 value={monthValue.month()}
                 onChange={(value) => updateMonth(monthValue.month(value))}
-                options={dayjs.months().map((label, index) => ({ label, value: index }))}
+                options={monthOptions}
                 style={{ width: 120 }}
               />
               <Select

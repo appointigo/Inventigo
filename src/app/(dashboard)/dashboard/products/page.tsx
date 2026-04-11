@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Typography, App } from "antd";
@@ -8,10 +9,14 @@ import ProductBulkUploadDrawer from "@/modules/products/components/BulkUploadDra
 import { useProducts } from "@/modules/products/hooks/useProducts";
 import { useCategories } from "@/modules/categories/hooks/useCategories";
 import { useBrands } from "@/modules/brands/hooks/useBrands";
+import { useMobileViewport } from "@/modules/mobile-dashboard/hooks/useMobileViewport";
 import { useStore } from "@/providers/StoreProvider";
+
+const MobileProductsPage = dynamic(() => import("@/modules/mobile-dashboard/pages/ProductsPage"));
 
 export default function ProductsPage() {
   const { message } = App.useApp();
+  const { isMobile, isReady } = useMobileViewport();
   const router = useRouter();
   const { storeId } = useStore();
   const [search, setSearch] = useState("");
@@ -41,6 +46,14 @@ export default function ProductsPage() {
     },
     [refresh]
   );
+
+  if (!isReady) {
+    return null;
+  }
+
+  if (isMobile) {
+    return <MobileProductsPage />;
+  }
 
   return (
     <div style={{ padding: 24 }}>

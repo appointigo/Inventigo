@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { Typography, Row, Col, Spin, Button, Space, Card } from "antd";
 import {
@@ -21,6 +22,9 @@ import { useDashboard } from "@/modules/dashboard/hooks/useDashboard";
 import { useLowStockAlerts } from "@/modules/alerts/hooks/useAlerts";
 import { useStore } from "@/providers/StoreProvider";
 import type { LowStockItem } from "@/modules/alerts/types";
+import { useMobileViewport } from "@/modules/mobile-dashboard/hooks/useMobileViewport";
+
+const MobileDashboardPage = dynamic(() => import("@/modules/mobile-dashboard/pages/DashboardPage"));
 
 const { Title, Text } = Typography;
 
@@ -109,6 +113,7 @@ const WelcomeGuide = ({ userName }: { userName?: string | null }) => {
 
 const DashboardPage = () => {
   const router = useRouter();
+  const { isMobile, isReady } = useMobileViewport();
   const { data: session } = useSession();
   const { storeId } = useStore();
   const { data, loading } = useDashboard(storeId ?? undefined);
@@ -117,6 +122,14 @@ const DashboardPage = () => {
   const handleCreatePO = (item: LowStockItem) => {
     router.push(`/dashboard/purchase-orders/new?productId=${encodeURIComponent(item.productId)}`);
   };
+
+  if (!isReady) {
+    return null;
+  }
+
+  if (isMobile) {
+    return <MobileDashboardPage />;
+  }
 
   if (loading && !data) {
     return (

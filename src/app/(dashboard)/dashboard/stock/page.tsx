@@ -1,16 +1,21 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useState, useCallback } from "react";
 import { Typography, Tabs, App } from "antd";
 import StockTable from "@/modules/stock/components/StockTable";
 import StockAdjustmentModal from "@/modules/stock/components/StockAdjustmentModal";
 import MovementHistoryTable from "@/modules/stock/components/MovementHistoryTable";
+import { useMobileViewport } from "@/modules/mobile-dashboard/hooks/useMobileViewport";
 import { useStockLevels, useStockMovements } from "@/modules/stock/hooks/useStock";
 import { useStore } from "@/providers/StoreProvider";
 import type { StockLevelRow } from "@/modules/stock/types";
 
+const MobileStockPage = dynamic(() => import("@/modules/mobile-dashboard/pages/StockPage"));
+
 export default function StockPage() {
   const { message } = App.useApp();
+  const { isMobile, isReady } = useMobileViewport();
   const { storeId } = useStore();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
@@ -49,6 +54,14 @@ export default function StockPage() {
     },
     [refresh, refreshMovements]
   );
+
+  if (!isReady) {
+    return null;
+  }
+
+  if (isMobile) {
+    return <MobileStockPage />;
+  }
 
   return (
     <div style={{ padding: 24 }}>

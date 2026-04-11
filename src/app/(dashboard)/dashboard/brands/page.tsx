@@ -1,16 +1,21 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useState, useCallback } from "react";
 import { Typography, Modal, App } from "antd";
 import BrandTable from "@/modules/brands/components/BrandTable";
 import BrandForm from "@/modules/brands/components/BrandForm";
 import BrandBulkUploadDrawer from "@/modules/brands/components/BulkUploadDrawer";
 import { useBrands } from "@/modules/brands/hooks/useBrands";
+import { useMobileViewport } from "@/modules/mobile-dashboard/hooks/useMobileViewport";
 import { useStore } from "@/providers/StoreProvider";
 import type { Brand, BrandFormValues } from "@/modules/brands/types";
 
+const MobileBrandsPage = dynamic(() => import("@/modules/mobile-dashboard/pages/BrandsPage"));
+
 export default function BrandsPage() {
   const { message } = App.useApp();
+  const { isMobile, isReady } = useMobileViewport();
   const { storeId } = useStore();
   const { brands, loading, refresh } = useBrands(storeId ?? undefined);
   const [modalOpen, setModalOpen] = useState(false);
@@ -79,6 +84,14 @@ export default function BrandsPage() {
     },
     [refresh]
   );
+
+  if (!isReady) {
+    return null;
+  }
+
+  if (isMobile) {
+    return <MobileBrandsPage />;
+  }
 
   return (
     <div style={{ padding: 24 }}>

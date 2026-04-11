@@ -1,15 +1,20 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useState } from "react";
 import { ScanOutlined, HistoryOutlined } from "@ant-design/icons";
 import { useSales } from "@/modules/billing/hooks/useBilling";
 import { useAppSettings } from "@/modules/settings/hooks/useAppSettings";
 import SalesHistory from "@/modules/billing/components/SalesHistory";
+import { useMobileViewport } from "@/modules/mobile-dashboard/hooks/useMobileViewport";
 import { BillingPageTabs, HistoryPane, PageWrapper, PageTitle } from "./billing.styled";
 import BillingView from "@/modules/billing/components/BillingView";
 
+const MobileBillingPage = dynamic(() => import("@/modules/mobile-dashboard/pages/BillingPage"));
+
 const BillingPage = () => {
   const [activeTab, setActiveTab] = useState("new-sale");
+  const { isMobile, isReady } = useMobileViewport();
 
   const {
     sales,
@@ -23,6 +28,14 @@ const BillingPage = () => {
 
   const { settings } = useAppSettings();
   const defaultTaxPct = settings?.billingConfig?.taxRate ?? 0;
+
+  if (!isReady) {
+    return null;
+  }
+
+  if (isMobile) {
+    return <MobileBillingPage />;
+  }
 
   return (
     <PageWrapper>

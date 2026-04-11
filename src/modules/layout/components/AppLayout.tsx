@@ -14,6 +14,9 @@ import { getMenuForRole } from "@/modules/layout/constants";
 import { Role } from "@prisma/client";
 import StoreSelector from "@/modules/settings/components/StoreSelector";
 import { type ReactNode, useState, useEffect, useRef } from "react";
+import { BottomNavigation } from "@/modules/mobile-dashboard/components/BottomNavigation";
+import { MobileWorkspaceProvider } from "@/modules/mobile-dashboard/context/MobileWorkspaceContext";
+import { useMobileViewport } from "@/modules/mobile-dashboard/hooks/useMobileViewport";
 
 const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
@@ -37,6 +40,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const [fetchedOrgName, setFetchedOrgName] = useState<string | null>(null);
   const orgFetched = useRef(false);
   const { token } = theme.useToken();
+  const { isMobile } = useMobileViewport();
 
   useEffect(() => {
     setMounted(true);
@@ -96,8 +100,83 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     label: item.name,
   }));
 
+  if (isMobile) {
+    return (
+      <MobileWorkspaceProvider>
+        <Layout style={{ minHeight: "100vh", background: "linear-gradient(180deg, #f4f7fb 0%, #eef3f9 100%)", overflowX: "hidden" }}>
+          <Header
+            style={{
+              background: "rgba(255,255,255,0.88)",
+              backdropFilter: "blur(18px)",
+              padding: "10px 16px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              minHeight: 68,
+              lineHeight: "normal",
+              borderBottom: `1px solid ${token.colorBorderSecondary}`,
+              position: "sticky",
+              top: 0,
+              zIndex: 20,
+              overflow: "hidden",
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <Text strong style={{ fontSize: 20, color: token.colorTextHeading }}>Stockiva</Text>
+              {(currentUser?.orgName || fetchedOrgName) ? (
+                <div style={{ color: token.colorTextSecondary, fontSize: 12, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {currentUser?.orgName ?? fetchedOrgName}
+                </div>
+              ) : null}
+            </div>
+
+            <Space size={10} align="center">
+              {canSwitchStores ? <StoreSelector /> : null}
+              <Dropdown
+                menu={{
+                  items: [
+                    {
+                      key: "info",
+                      label: (
+                        <div style={{ padding: "4px 0" }}>
+                          <div>
+                            <Text strong>{currentUser?.name}</Text>
+                          </div>
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            {currentUser?.email}
+                          </Text>
+                        </div>
+                      ),
+                      disabled: true,
+                    },
+                    { type: "divider" },
+                    {
+                      key: "logout",
+                      icon: <LogoutOutlined />,
+                      label: "Sign Out",
+                      onClick: logout,
+                    },
+                  ],
+                }}
+                placement="bottomRight"
+              >
+                <Avatar size="small" icon={<UserOutlined />} style={{ cursor: "pointer" }} />
+              </Dropdown>
+            </Space>
+          </Header>
+
+          <Content style={{ overflowY: "auto", overflowX: "hidden", minHeight: "calc(100vh - 68px)", paddingBottom: 120 }}>
+            {children}
+          </Content>
+          <BottomNavigation />
+        </Layout>
+      </MobileWorkspaceProvider>
+    );
+  }
+
   return (
-    <Layout style={{ height: "100vh", overflow: "hidden" }}>
+    <MobileWorkspaceProvider>
+      <Layout style={{ height: "100vh", overflow: "hidden" }}>
       <Sider
         trigger={null}
         collapsible
@@ -262,6 +341,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           {children}
         </Content>
       </Layout>
-    </Layout>
+      </Layout>
+    </MobileWorkspaceProvider>
   );
 }
