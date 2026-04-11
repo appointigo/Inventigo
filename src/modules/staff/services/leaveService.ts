@@ -9,21 +9,18 @@ import {
   toDateRange,
   type OrgAuthUser,
 } from "./staffUtils";
+import { DEFAULT_STORE_LEAVE_POLICY, leavePolicyService } from "./leavePolicyService";
 import { weeklyOffService } from "./weeklyOffService";
 
-const LEAVE_ALLOCATIONS: Record<LeaveType, number> = {
-  SICK: 12,
-  CASUAL: 12,
-  PAID: 18,
-};
+async function ensureBalances(orgId: string, userId: string, year: number, storeId: string) {
+  const policyMap = await leavePolicyService.getPolicyMap(orgId, storeId);
 
-async function ensureBalances(orgId: string, userId: string, year: number) {
   await Promise.all(
-    (Object.entries(LEAVE_ALLOCATIONS) as Array<[LeaveType, number]>).map(([leaveType, allocated]) =>
+    (Object.entries(DEFAULT_STORE_LEAVE_POLICY) as Array<[LeaveType, number]>).map(([leaveType, fallbackAllocated]) =>
       prisma.leaveBalance.upsert({
         where: { userId_leaveType_year: { userId, leaveType, year } },
-        update: {},
-        create: { orgId, userId, leaveType, year, allocated },
+        update: { allocated: policyMap.get(leaveType) ?? fallbackAllocated },
+        create: { orgId, userId, leaveType, year, allocated: policyMap.get(leaveType) ?? fallbackAllocated },
       })
     )
   );
@@ -146,12 +143,20 @@ export const leaveService = {
     });
 
     const balanceUserId = actor.role === "STAFF" ? actor.id : options.userId ?? actor.id;
+    const balanceStoreId = options.storeId
+      ?? actor.storeId
+      ?? (balanceUserId
+        ? (await prisma.user.findFirst({ where: { id: balanceUserId, orgId: actor.orgId }, select: { storeId: true } }))?.storeId
+        : null);
     const year = end.getUTCFullYear();
-    await ensureBalances(actor.orgId, balanceUserId, year);
-    const balances = await prisma.leaveBalance.findMany({
-      where: { orgId: actor.orgId, userId: balanceUserId, year },
-      orderBy: { leaveType: "asc" },
-    });
+    let balances = [] as Array<{ leaveType: LeaveType; year: number; allocated: number; carryForward: number; used: number }>;
+    if (balanceStoreId) {
+      await ensureBalances(actor.orgId, balanceUserId, year, balanceStoreId);
+      balances = await prisma.leaveBalance.findMany({
+        where: { orgId: actor.orgId, userId: balanceUserId, year },
+        orderBy: { leaveType: "asc" },
+      });
+    }
 
     return {
       records: rows.map(toLeaveRecord),
@@ -202,7 +207,7 @@ export const leaveService = {
     }
 
     const year = request.startDate.getUTCFullYear();
-    await ensureBalances(actor.orgId, request.userId, year);
+    await ensureBalances(actor.orgId, request.userId, year, request.storeId);
     const chargedDays = await countChargeableDays(actor.orgId, request.storeId, request.startDate, request.endDate);
 
     const [updated] = await prisma.$transaction([
@@ -263,6 +268,45 @@ export const leaveService = {
         status: "REJECTED",
         reviewerComment: input.comment?.trim() || null,
         reviewedBy: actor.id,
+        decidedAt: new Date(),
+      },
+      include: {
+        user: { select: { name: true } },
+        store: { select: { id: true, name: true } },
+        reviewer: { select: { name: true } },
+      },
+    });
+
+    return toLeaveRecord(updated);
+  },
+
+  async cancel(actor: OrgAuthUser, input: LeaveDecisionInput): Promise<LeaveRecord> {
+    const request = await prisma.leaveRequest.findFirst({
+      where: {
+        id: input.leaveRequestId,
+        orgId: actor.orgId,
+        userId: actor.id,
+      },
+      include: {
+        user: { select: { name: true } },
+        store: { select: { id: true, name: true } },
+        reviewer: { select: { name: true } },
+      },
+    });
+    if (!request) {
+      throw new Error("Leave request not found");
+    }
+    if (request.status !== "PENDING") {
+      throw new Error("Only pending leave requests can be cancelled");
+    }
+
+    const comment = input.comment?.trim();
+    const updated = await prisma.leaveRequest.update({
+      where: { id: request.id },
+      data: {
+        status: "REJECTED",
+        reviewerComment: comment ? `Cancelled by requester: ${comment}` : "Cancelled by requester",
+        reviewedBy: null,
         decidedAt: new Date(),
       },
       include: {

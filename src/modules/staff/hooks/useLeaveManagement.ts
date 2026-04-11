@@ -3,6 +3,15 @@
 import { useCallback, useEffect, useState } from "react";
 import type { LeaveApplicationInput, LeaveDecisionInput, LeaveListResponse } from "../types";
 
+async function readErrorMessage(res: Response, fallback: string): Promise<string> {
+  try {
+    const payload = await res.json() as { error?: string };
+    return payload.error ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 type LeaveFilters = {
   storeId?: string | null;
   userId?: string | null;
@@ -25,7 +34,7 @@ export function useLeaveManagement(filters: LeaveFilters) {
       if (filters.to) params.set("to", filters.to);
       if (filters.status) params.set("status", filters.status);
       const res = await fetch(`/api/leave/list?${params.toString()}`);
-      if (!res.ok) throw new Error((await res.json()).error ?? "Failed to load leave records");
+      if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to load leave records"));
       setData(await res.json());
     } finally {
       setLoading(false);
@@ -42,7 +51,7 @@ export function useLeaveManagement(filters: LeaveFilters) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
     });
-    if (!res.ok) throw new Error((await res.json()).error ?? "Failed to apply leave");
+    if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to apply leave"));
     await refresh();
     return res.json();
   }, [refresh]);
@@ -53,7 +62,7 @@ export function useLeaveManagement(filters: LeaveFilters) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
     });
-    if (!res.ok) throw new Error((await res.json()).error ?? "Failed to approve leave");
+    if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to approve leave"));
     await refresh();
     return res.json();
   }, [refresh]);
@@ -64,7 +73,18 @@ export function useLeaveManagement(filters: LeaveFilters) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
     });
-    if (!res.ok) throw new Error((await res.json()).error ?? "Failed to reject leave");
+    if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to reject leave"));
+    await refresh();
+    return res.json();
+  }, [refresh]);
+
+  const cancelLeave = useCallback(async (input: LeaveDecisionInput) => {
+    const res = await fetch("/api/leave/cancel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    if (!res.ok) throw new Error(await readErrorMessage(res, "Failed to cancel leave"));
     await refresh();
     return res.json();
   }, [refresh]);
@@ -76,5 +96,6 @@ export function useLeaveManagement(filters: LeaveFilters) {
     applyLeave,
     approveLeave,
     rejectLeave,
+    cancelLeave,
   };
 }

@@ -1,4 +1,4 @@
-import { DashboardOutlined, ShoppingOutlined, AppstoreOutlined, TagsOutlined, InboxOutlined, FileTextOutlined, ScanOutlined, BarChartOutlined, SettingOutlined, ShopOutlined, AlertOutlined, DollarOutlined, TeamOutlined, AccountBookOutlined, ClockCircleOutlined, CalendarOutlined } from "@ant-design/icons";
+import { DashboardOutlined, ShoppingOutlined, AppstoreOutlined, TagsOutlined, InboxOutlined, FileTextOutlined, ScanOutlined, BarChartOutlined, SettingOutlined, ShopOutlined, AlertOutlined, DollarOutlined, TeamOutlined, AccountBookOutlined, CalendarOutlined } from "@ant-design/icons";
 import { Role } from "@prisma/client";
 
 export type MenuItem = {
@@ -75,14 +75,8 @@ export const MENU_ITEMS: MenuItem[] = [
     roles: ALL_ROLES,
   },
   {
-    path: "/dashboard/attendance",
-    name: "Attendance",
-    icon: ClockCircleOutlined,
-    roles: ALL_ROLES,
-  },
-  {
-    path: "/dashboard/leaves",
-    name: "Leaves",
+    path: "/dashboard/attendance-leave",
+    name: "Attendance & Leave",
     icon: CalendarOutlined,
     roles: ALL_ROLES,
   },
