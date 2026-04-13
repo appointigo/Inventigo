@@ -1,13 +1,5 @@
 import { prisma } from "@/lib/db";
-import type {
-  ExpenseFormValues,
-  StoreExpense,
-  ExpenseListFilters,
-  ExpenseSummary,
-  ExpenseCategoryTotals,
-  ExpenseMonthSummary,
-  ExpenseCategory,
-} from "../types";
+import type { ExpenseFormValues, StoreExpense, ExpenseListFilters, ExpenseSummary, ExpenseCategoryTotals, ExpenseMonthSummary, ExpenseCategory } from "../types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const toDto = (e: any): StoreExpense => ({
@@ -39,7 +31,7 @@ const expenseInclude = {
   user: { select: { name: true } },
 } as const;
 
-function monthRange(year: number, month: number): { gte: Date; lt: Date } {
+const monthRange = (year: number, month: number): { gte: Date; lt: Date } => {
   const start = new Date(Date.UTC(year, month - 1, 1));
   const end = new Date(Date.UTC(year, month, 1));
   return { gte: start, lt: end };

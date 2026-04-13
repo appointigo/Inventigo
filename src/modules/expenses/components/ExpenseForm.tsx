@@ -1,40 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  Form,
-  Input,
-  InputNumber,
-  Select,
-  DatePicker,
-  Button,
-  Space,
-  Modal,
-  Flex,
-  App,
-  Switch,
-  Upload,
-  Checkbox,
-  Segmented,
-  Typography,
-  Image,
-} from "antd";
-import {
-  PaperClipOutlined,
-  LoadingOutlined,
-  FilePdfOutlined,
-  PercentageOutlined,
-} from "@ant-design/icons";
+import { Form, Input, InputNumber, Select, DatePicker, Button, Space, Modal, Flex, App, Switch, Upload, Checkbox, Segmented, Typography, Image } from "antd";
+import { PaperClipOutlined, LoadingOutlined, FilePdfOutlined, PercentageOutlined } from "@ant-design/icons";
 import { upload } from "@vercel/blob/client";
 type UploadRequestOption = Parameters<NonNullable<import("antd/es/upload").UploadProps["customRequest"]>>[0];
 import dayjs from "dayjs";
 import type { ExpenseFormValues, StoreExpense } from "../types";
 import type { ExpenseCategoryOption } from "../services/expenseCategoryService";
-import {
-  PAYMENT_MODES,
-  RECURRENCE_FREQS,
-  GST_RATES,
-} from "../types";
+import { PAYMENT_MODES, RECURRENCE_FREQS, GST_RATES } from "../types";
 
 const ANT_COLOR_MAP: Record<string, string> = {
   default: "#d9d9d9", blue: "#1677ff", purple: "#722ed1",
@@ -59,7 +33,7 @@ interface ExpenseFormProps {
 
 type ExpenseFormFields = Omit<ExpenseFormValues, "date"> & { date: dayjs.Dayjs };
 
-export default function ExpenseForm({
+const ExpenseForm = ({
   open,
   onClose,
   onSubmit,
@@ -70,7 +44,7 @@ export default function ExpenseForm({
   onAddCategory,
   onDeleteCategory,
   canManageCategories = false,
-}: ExpenseFormProps) {
+}: ExpenseFormProps) => {
   const [form] = Form.useForm<ExpenseFormFields>();
   const { message } = App.useApp();
   const isEdit = !!initialValues;
@@ -106,7 +80,8 @@ export default function ExpenseForm({
         });
         setReceiptUrl(initialValues.receiptUrl ?? undefined);
         setIsRecurring(initialValues.isRecurring);
-      } else {
+      } 
+      else {
         form.resetFields();
         form.setFieldsValue({ storeId, date: dayjs() });
         setReceiptUrl(undefined);
@@ -467,3 +442,4 @@ export default function ExpenseForm({
   );
 }
 
+export default ExpenseForm;

@@ -957,17 +957,7 @@ const CategoryManagerTab = ({
 }
 
 //  Main Export
-export default function ExpenseAdvancedTab({
-  expenses,
-  categories,
-  onAddCategory,
-  onDeleteCategory,
-  canModify,
-  monthLabel,
-  selectedMonth,
-  selectedYear,
-  summary,
-}: Props) {
+const ExpenseAdvancedTab = ({ expenses, categories, onAddCategory, onDeleteCategory, canModify, monthLabel, selectedMonth, selectedYear, summary }: Props) => {
   const tabItems = [
     {
       key: "petty",
@@ -1022,3 +1012,5 @@ export default function ExpenseAdvancedTab({
     </div>
   );
 }
+
+export default ExpenseAdvancedTab;
