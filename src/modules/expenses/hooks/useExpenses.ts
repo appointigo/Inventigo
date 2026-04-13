@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import type { StoreExpense, ExpenseListFilters, ExpenseSummary } from "../types";
+import type { StoreExpense, ExpenseListFilters, ExpenseSummary, ExpenseBudget, BudgetFormValues } from "../types";
 import type { ExpenseCategoryOption } from "../services/expenseCategoryService";
 
 export function useExpenses(filters?: Partial<ExpenseListFilters>) {
@@ -94,4 +94,56 @@ export function useExpenseCategories() {
   };
 
   return { categories, loading, refresh: fetchCategories, addCategory, removeCategory };
+}
+
+export function useExpenseBudgets(storeId: string | null, month: number, year: number) {
+  const [budgets, setBudgets] = useState<ExpenseBudget[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const fetchBudgets = useCallback(async () => {
+    if (!storeId) return;
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ storeId, month: String(month), year: String(year) });
+      const res = await fetch(`/api/expenses/budgets?${params.toString()}`);
+      if (res.ok) setBudgets(await res.json());
+    } finally {
+      setLoading(false);
+    }
+  }, [storeId, month, year]);
+
+  useEffect(() => {
+    fetchBudgets();
+  }, [fetchBudgets]);
+
+  const saveBudget = async (values: BudgetFormValues): Promise<ExpenseBudget | null> => {
+    const res = await fetch("/api/expenses/budgets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(values),
+    });
+    if (!res.ok) return null;
+    const saved: ExpenseBudget = await res.json();
+    setBudgets((prev) => {
+      const idx = prev.findIndex(
+        (b) => b.category === saved.category && b.month === saved.month && b.year === saved.year
+      );
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = saved;
+        return next;
+      }
+      return [...prev, saved];
+    });
+    return saved;
+  };
+
+  const removeBudget = async (id: string): Promise<boolean> => {
+    const res = await fetch(`/api/expenses/budgets/${id}`, { method: "DELETE" });
+    if (!res.ok && res.status !== 204) return false;
+    setBudgets((prev) => prev.filter((b) => b.id !== id));
+    return true;
+  };
+
+  return { budgets, loading, refresh: fetchBudgets, saveBudget, removeBudget };
 }

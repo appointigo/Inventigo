@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Advanced Expense Features — Stockiva</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --primary:#4f46e5;--primary-light:#eef2ff;
+    --success:#10b981;--success-light:#ecfdf5;
+    --warning:#f59e0b;--warning-light:#fffbeb;
+    --danger:#ef4444;--danger-light:#fef2f2;
+    --info:#06b6d4;--info-light:#ecfeff;
+    --purple:#8b5cf6;--purple-light:#f5f3ff;
+    --orange:#f97316;--orange-light:#fff7ed;
+    --teal:#14b8a6;--teal-light:#f0fdfa;
+    --bg:#f8fafc;--surface:#ffffff;--border:#e2e8f0;
+    --text-primary:#0f172a;--text-secondary:#64748b;--text-muted:#94a3b8;
+    --sidebar-bg:#1e1b4b;
+    --radius:12px;
+    --shadow-lg:0 10px 15px -3px rgba(0,0,0,.1),0 4px 6px -4px rgba(0,0,0,.1);
+    --shadow-xl:0 20px 25px -5px rgba(0,0,0,.1),0 8px 10px -6px rgba(0,0,0,.1);
+  }
+  body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text-primary);display:flex;height:100vh;overflow:hidden}
+
+  /* sidebar (same as other files) */
+  .sidebar{width:240px;min-width:240px;background:var(--sidebar-bg);display:flex;flex-direction:column;overflow-y:auto}
+  .sidebar-logo{padding:20px 20px 16px;border-bottom:1px solid rgba(255,255,255,.08)}
+  .sidebar-logo h2{color:#fff;font-size:20px;font-weight:800;letter-spacing:-.5px}
+  .sidebar-logo span{color:#a5b4fc;font-size:12px}
+  .sidebar-org{margin:12px 12px 0;background:rgba(255,255,255,.06);border-radius:8px;padding:10px 12px;display:flex;align-items:center;gap:8px;cursor:pointer}
+  .sidebar-org .org-icon{width:28px;height:28px;border-radius:6px;background:var(--primary);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700}
+  .sidebar-org .org-name{color:#e0e7ff;font-size:13px;font-weight:500}
+  .sidebar-section{padding:16px 12px 4px}
+  .sidebar-section-label{color:#6366f1;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;padding:0 8px}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;color:#a5b4fc;font-size:13.5px;font-weight:500;cursor:pointer;transition:all .2s;text-decoration:none;margin-bottom:2px}
+  .nav-item:hover{background:rgba(255,255,255,.06);color:#e0e7ff}
+  .nav-item.active{background:var(--primary);color:#fff;box-shadow:0 4px 12px rgba(79,70,229,.4)}
+  .nav-item .nav-badge{margin-left:auto;background:var(--danger);color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:20px}
+  .sidebar-bottom{margin-top:auto;padding:12px;border-top:1px solid rgba(255,255,255,.08)}
+  .user-pill{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;cursor:pointer}
+  .user-pill:hover{background:rgba(255,255,255,.06)}
+  .user-avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#4f46e5,#8b5cf6);display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:700}
+  .user-info .user-name{color:#e0e7ff;font-size:13px;font-weight:500}
+  .user-info .user-role{color:#6366f1;font-size:11px}
+
+  /* main */
+  .main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+  .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;height:60px;min-height:60px;display:flex;align-items:center;gap:16px}
+  .topbar-store{display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:8px;border:1px solid var(--border);cursor:pointer;font-size:13.5px;font-weight:500;color:var(--text-secondary)}
+  .store-dot{width:8px;height:8px;border-radius:50%;background:var(--success)}
+  .topbar-tabs{display:flex;gap:4px;margin-left:12px}
+  .tab-btn{padding:8px 18px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s;border:none;background:transparent;color:var(--text-secondary)}
+  .tab-btn.active{background:var(--primary-light);color:var(--primary)}
+  .tab-btn:hover:not(.active){background:var(--bg);color:var(--text-primary)}
+  .topbar-right{margin-left:auto;display:flex;gap:12px;align-items:center}
+  .icon-btn{width:36px;height:36px;border-radius:8px;background:var(--bg);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;color:var(--text-secondary);transition:all .2s}
+  .icon-btn:hover{border-color:var(--primary);color:var(--primary);background:var(--primary-light)}
+  .page{flex:1;overflow-y:auto;padding:28px}
+
+  .page-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:28px}
+  .page-title{font-size:26px;font-weight:800;letter-spacing:-.5px}
+  .page-subtitle{color:var(--text-secondary);font-size:14px;margin-top:4px}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:9px 18px;border-radius:8px;font-size:13.5px;font-weight:600;cursor:pointer;transition:all .2s;border:none}
+  .btn-primary{background:linear-gradient(135deg,var(--primary),#6366f1);color:#fff;box-shadow:0 4px 12px rgba(79,70,229,.3)}
+  .btn-primary:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(79,70,229,.4)}
+  .btn-outline{background:var(--surface);color:var(--text-secondary);border:1px solid var(--border)}
+  .btn-outline:hover{border-color:var(--primary);color:var(--primary);background:var(--primary-light)}
+  .btn-success{background:linear-gradient(135deg,#10b981,#059669);color:#fff;box-shadow:0 4px 12px rgba(16,185,129,.3)}
+  .btn-danger{background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff}
+  .btn-sm{padding:6px 12px;font-size:12.5px}
+
+  /* Feature tabs */
+  .feature-tabs{display:flex;gap:0;margin-bottom:28px;border-bottom:2px solid var(--border);overflow-x:auto}
+  .ftab{padding:12px 24px;font-size:13.5px;font-weight:600;cursor:pointer;transition:all .2s;color:var(--text-secondary);border-bottom:3px solid transparent;margin-bottom:-2px;white-space:nowrap}
+  .ftab.active{color:var(--primary);border-bottom-color:var(--primary)}
+  .ftab:hover:not(.active){color:var(--text-primary)}
+  .fpanel{display:none;animation:fadeIn .3s ease}
+  .fpanel.active{display:block}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+  /* Cards */
+  .card{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:22px}
+  .card-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px}
+  .card-title{font-size:15px;font-weight:700}
+  .card-subtitle{font-size:12px;color:var(--text-muted);margin-top:2px}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px}
+  .grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-bottom:20px}
+  .chart-wrapper{height:220px;position:relative}
+
+  /* Petty cash */
+  .balance-hero{background:linear-gradient(135deg,var(--primary),#7c3aed);border-radius:14px;padding:28px;margin-bottom:20px;color:#fff;position:relative;overflow:hidden}
+  .balance-hero::before{content:'💵';position:absolute;right:20px;top:50%;transform:translateY(-50%);font-size:80px;opacity:.15}
+  .balance-hero .label{font-size:13px;font-weight:500;opacity:.8;margin-bottom:6px}
+  .balance-hero .amount{font-size:42px;font-weight:800;letter-spacing:-1px;margin-bottom:4px}
+  .balance-hero .sub{font-size:13px;opacity:.7}
+  .balance-hero .meta{display:flex;gap:20px;margin-top:20px}
+  .balance-hero .meta-item{background:rgba(255,255,255,.15);border-radius:10px;padding:10px 18px}
+  .balance-hero .meta-item .ml{font-size:11px;opacity:.8;margin-bottom:3px}
+  .balance-hero .meta-item .mv{font-size:16px;font-weight:700}
+  .ledger-row{display:flex;align-items:center;gap:14px;padding:13px 16px;border-radius:10px;margin-bottom:8px;transition:all .2s;cursor:default}
+  .ledger-row:hover{background:var(--bg)}
+  .ledger-icon{width:38px;height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px;min-width:38px}
+  .ledger-icon.debit{background:var(--danger-light)}
+  .ledger-icon.credit{background:var(--success-light)}
+  .ledger-icon.topup{background:var(--primary-light)}
+  .ledger-desc{flex:1}
+  .ledger-desc .ldesc{font-size:13.5px;font-weight:600}
+  .ledger-desc .lmeta{font-size:11.5px;color:var(--text-muted)}
+  .ledger-amount{font-size:15px;font-weight:700}
+  .ledger-amount.debit{color:var(--danger)}
+  .ledger-amount.credit{color:var(--success)}
+  .ledger-balance{font-size:12px;color:var(--text-muted);font-weight:500;min-width:80px;text-align:right}
+
+  /* Utility tracker */
+  .util-card{background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:20px;transition:all .3s}
+  .util-card:hover{box-shadow:var(--shadow-lg);transform:translateY(-2px)}
+  .util-header{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+  .util-icon{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px}
+  .util-title{font-size:15px;font-weight:700}
+  .util-sub{font-size:12px;color:var(--text-muted)}
+  .util-reading{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+  .util-stat{background:var(--bg);border-radius:9px;padding:12px}
+  .util-stat .us-label{font-size:11px;color:var(--text-muted);font-weight:500;margin-bottom:4px}
+  .util-stat .us-value{font-size:18px;font-weight:800}
+  .util-stat .us-unit{font-size:11px;color:var(--text-muted);font-weight:500;margin-top:2px}
+  .util-trend{font-size:12px;font-weight:600;display:flex;align-items:center;gap:4px}
+  .util-trend.up{color:var(--danger)}.util-trend.down{color:var(--success)}.util-trend.same{color:var(--warning)}
+
+  /* Staff claims */
+  .claim-row{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:12px;border:1px solid var(--border);margin-bottom:10px;transition:all .2s}
+  .claim-row:hover{box-shadow:var(--shadow-lg);transform:translateX(2px)}
+  .claim-avatar{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:#fff;background:linear-gradient(135deg,#4f46e5,#8b5cf6)}
+  .claim-info .claim-name{font-size:13.5px;font-weight:700}
+  .claim-info .claim-meta{font-size:12px;color:var(--text-muted)}
+  .claim-amount-col{margin-left:auto;text-align:right}
+  .claim-amount-col .ca{font-size:15px;font-weight:700}
+  .claim-amount-col .cd{font-size:11.5px;color:var(--text-muted)}
+  .status-badge{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase}
+  .sb-pending{background:var(--warning-light);color:var(--warning)}
+  .sb-approved{background:var(--success-light);color:var(--success)}
+  .sb-rejected{background:var(--danger-light);color:var(--danger)}
+  .sb-reimbursed{background:var(--primary-light);color:var(--primary)}
+  .claim-actions{display:flex;gap:6px;margin-left:12px}
+  .action-btn{width:30px;height:30px;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:none;font-size:13px;transition:all .2s}
+  .action-approve{background:var(--success-light);color:var(--success)}.action-approve:hover{background:var(--success);color:#fff}
+  .action-reject{background:var(--danger-light);color:var(--danger)}.action-reject:hover{background:var(--danger);color:#fff}
+  .action-edit{background:var(--primary-light);color:var(--primary)}.action-edit:hover{background:var(--primary);color:#fff}
+
+  /* P&L */
+  .pnl-band{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+  .pnl-hero{border-radius:14px;padding:24px;color:#fff;position:relative;overflow:hidden}
+  .pnl-hero.revenue{background:linear-gradient(135deg,#10b981,#059669)}
+  .pnl-hero.expense{background:linear-gradient(135deg,#ef4444,#dc2626)}
+  .pnl-hero .ph-icon{position:absolute;right:16px;top:50%;transform:translateY(-50%);font-size:64px;opacity:.2}
+  .pnl-hero .ph-label{font-size:13px;opacity:.85;margin-bottom:6px}
+  .pnl-hero .ph-value{font-size:36px;font-weight:800;letter-spacing:-1px}
+  .pnl-hero .ph-sub{font-size:12.5px;opacity:.75;margin-top:4px}
+  .pnl-profit{background:linear-gradient(135deg,#0f172a,#1e1b4b);border-radius:14px;padding:24px;color:#fff;text-align:center;margin-bottom:20px;position:relative;overflow:hidden}
+  .pnl-profit::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 70% 50%,rgba(79,70,229,.4),transparent)}
+  .pnl-profit .net-label{font-size:14px;font-weight:500;opacity:.7;margin-bottom:8px}
+  .pnl-profit .net-value{font-size:52px;font-weight:800;letter-spacing:-2px;color:#a5f3fc}
+  .pnl-profit .net-sub{font-size:13px;opacity:.6;margin-top:6px}
+  .pnl-margin{display:inline-flex;align-items:center;gap:6px;background:rgba(16,185,129,.2);border:1px solid rgba(16,185,129,.3);padding:6px 16px;border-radius:20px;font-size:14px;font-weight:700;color:#6ee7b7;margin-top:12px}
+
+  /* Category mgmt */
+  .cat-chip{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;margin:4px;cursor:pointer;border:1.5px solid transparent;transition:all .2s}
+  .cat-chip:hover{transform:translateY(-1px);box-shadow:0 4px 10px rgba(0,0,0,.08)}
+  .cat-chip .cc-dot{width:8px;height:8px;border-radius:50%}
+  .cat-chip .cc-del{margin-left:4px;font-size:11px;opacity:.5;transition:opacity .2s}
+  .cat-chip:hover .cc-del{opacity:1;color:var(--danger)}
+
+  /* Modal */
+  .modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,.5);display:flex;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(4px);opacity:0;pointer-events:none;transition:opacity .25s}
+  .modal-overlay.open{opacity:1;pointer-events:all}
+  .modal{background:var(--surface);border-radius:16px;padding:28px;width:520px;max-width:95vw;box-shadow:var(--shadow-xl);transform:translateY(20px) scale(.97);transition:transform .3s cubic-bezier(.34,1.56,.64,1);max-height:90vh;overflow-y:auto}
+  .modal-overlay.open .modal{transform:translateY(0) scale(1)}
+  .modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}
+  .modal-title{font-size:18px;font-weight:800}
+  .modal-close{width:32px;height:32px;border-radius:8px;background:var(--bg);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;color:var(--text-secondary);transition:all .2s}
+  .modal-close:hover{background:var(--danger-light);color:var(--danger);border-color:var(--danger)}
+  .form-group{margin-bottom:16px}
+  .form-label{font-size:12.5px;font-weight:600;color:var(--text-secondary);margin-bottom:6px;display:block}
+  .form-input,.form-select,.form-textarea{width:100%;padding:10px 14px;border-radius:9px;border:1.5px solid var(--border);background:var(--bg);font-size:13.5px;font-family:inherit;color:var(--text-primary);transition:border-color .2s,box-shadow .2s}
+  .form-input:focus,.form-select:focus,.form-textarea:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(79,70,229,.1)}
+  .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .modal-footer{display:flex;gap:10px;justify-content:flex-end;margin-top:24px;padding-top:20px;border-top:1px solid var(--border)}
+  .upload-area{border:2px dashed var(--border);border-radius:10px;padding:20px;text-align:center;cursor:pointer;transition:all .2s;background:var(--bg)}
+  .upload-area:hover{border-color:var(--primary);background:var(--primary-light)}
+
+  /* toast */
+  .toast-container{position:fixed;bottom:28px;right:28px;z-index:2000;display:flex;flex-direction:column;gap:10px}
+  .toast{display:flex;align-items:center;gap:12px;padding:14px 18px;border-radius:12px;background:#1e293b;color:#f8fafc;font-size:13.5px;font-weight:500;min-width:280px;box-shadow:var(--shadow-xl);animation:slideIn .35s cubic-bezier(.34,1.56,.64,1)}
+  @keyframes slideIn{from{transform:translateX(120%);opacity:0}to{transform:translateX(0);opacity:1}}
+  .toast-icon{font-size:18px}
+  .toast-close{margin-left:auto;cursor:pointer;opacity:.5}
+  .toast-close:hover{opacity:1}
+
+  /* table */
+  table{width:100%;border-collapse:collapse}
+  thead tr{border-bottom:2px solid var(--border)}
+  th{padding:10px 14px;text-align:left;font-size:11.5px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px}
+  tbody tr{border-bottom:1px solid var(--border);transition:background .15s}
+  tbody tr:hover{background:rgba(79,70,229,.03)}
+  tbody tr:last-child{border-bottom:none}
+  td{padding:12px 14px;font-size:13.5px}
+
+  ::-webkit-scrollbar{width:6px;height:6px}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:3px}
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<nav class="sidebar">
+  <div class="sidebar-logo"><h2>Stockiva</h2><span>Retail Management</span></div>
+  <div class="sidebar-org"><div class="org-icon">LF</div><span class="org-name">Luxury Fashion</span><span style="margin-left:auto;color:#6366f1;font-size:10px;">▾</span></div>
+  <div class="sidebar-section"><div class="sidebar-section-label">Main</div></div>
+  <a class="nav-item" href="#">⊞ Dashboard</a>
+  <a class="nav-item" href="#">📦 Products</a>
+  <a class="nav-item" href="#">📊 Stock</a>
+  <a class="nav-item" href="#">🏭 Suppliers</a>
+  <a class="nav-item" href="#">🛒 Purchase Orders</a>
+  <div class="sidebar-section"><div class="sidebar-section-label">Finance</div></div>
+  <a class="nav-item active" href="#">💳 Expenses <span class="nav-badge">3</span></a>
+  <a class="nav-item" href="#">🔔 Alerts</a>
+  <a class="nav-item" href="#">💰 Billing</a>
+  <div class="sidebar-section"><div class="sidebar-section-label">Reports</div></div>
+  <a class="nav-item" href="#">📈 Reports</a>
+  <a class="nav-item" href="#">⚙️ Settings</a>
+  <a class="nav-item" href="#">👥 Team</a>
+  <div class="sidebar-bottom"><div class="user-pill"><div class="user-avatar">TA</div><div class="user-info"><div class="user-name">Test Account</div><div class="user-role">Owner</div></div></div></div>
+</nav>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-store"><span class="store-dot"></span><span>Store: <strong>Rare Thread</strong></span><span style="color:#94a3b8;font-size:11px;margin-left:4px;">▾</span></div>
+    <div class="topbar-tabs">
+      <button class="tab-btn" onclick="showToast('Opening Transactions…','📋');setTimeout(()=>window.location='expense-tracker-v1-dashboard.html',600)">📋 Transactions</button>
+      <button class="tab-btn" onclick="showToast('Opening Analytics…','📊');setTimeout(()=>window.location='expense-tracker-v2-analytics.html',600)">📊 Analytics</button>
+      <button class="tab-btn active">🔬 Advanced</button>
+    </div>
+    <div class="topbar-right">
+      <div class="icon-btn" onclick="showToast('Exporting…','⬇️')">⬇️</div>
+      <div class="icon-btn">🔔</div>
+    </div>
+  </div>
+
+  <div class="page">
+
+    <div class="page-header">
+      <div>
+        <div class="page-title">Advanced Features</div>
+        <div class="page-subtitle">Petty Cash · Utility Tracking · Staff Claims · P&L · Category Management</div>
+      </div>
+    </div>
+
+    <!-- Feature tabs -->
+    <div class="feature-tabs">
+      <div class="ftab active" onclick="switchFTab(this,'petty')">💵 Petty Cash Ledger</div>
+      <div class="ftab" onclick="switchFTab(this,'utility')">⚡ Utility Tracking</div>
+      <div class="ftab" onclick="switchFTab(this,'claims')">🧾 Staff Claims</div>
+      <div class="ftab" onclick="switchFTab(this,'pnl')">📊 P &amp; L View</div>
+      <div class="ftab" onclick="switchFTab(this,'categories')">🏷 Category Manager</div>
+    </div>
+
+    <!-- ══ PETTY CASH LEDGER ══ -->
+    <div class="fpanel active" id="fp-petty">
+      <div class="balance-hero">
+        <div class="label">💵 Petty Cash Balance — Rare Thread</div>
+        <div class="amount">₹3,250</div>
+        <div class="sub">Updated 13 Apr 2026 · Managed by Test Account</div>
+        <div class="meta">
+          <div class="meta-item"><div class="ml">Opening Balance</div><div class="mv">₹5,000</div></div>
+          <div class="meta-item"><div class="ml">Total Spent</div><div class="mv">₹1,750</div></div>
+          <div class="meta-item"><div class="ml">Replenishments</div><div class="mv">₹0</div></div>
+          <div class="meta-item"><div class="ml">Reconcile Due</div><div class="mv">18 Apr 2026</div></div>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <div><div class="card-title">📒 Petty Cash Transactions</div><div class="card-subtitle">This week · Apr 7–13</div></div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-outline btn-sm" onclick="openModal('topupModal')">＋ Top Up</button>
+              <button class="btn btn-primary btn-sm" onclick="openModal('pettyCashAddModal')">＋ Debit</button>
+            </div>
+          </div>
+          <div>
+            <div class="ledger-row">
+              <div class="ledger-icon topup">💰</div>
+              <div class="ledger-desc"><div class="ldesc">Opening Balance Set</div><div class="lmeta">07 Apr 2026 · By Test Account</div></div>
+              <div class="ledger-amount credit">+₹5,000</div>
+              <div class="ledger-balance">Bal: ₹5,000</div>
+            </div>
+            <div class="ledger-row">
+              <div class="ledger-icon debit">☕</div>
+              <div class="ledger-desc"><div class="ldesc">Tea & Pantry</div><div class="lmeta">09 Apr 2026 · Daily chai vendor</div></div>
+              <div class="ledger-amount debit">−₹350</div>
+              <div class="ledger-balance">Bal: ₹4,650</div>
+            </div>
+            <div class="ledger-row">
+              <div class="ledger-icon debit">📎</div>
+              <div class="ledger-desc"><div class="ldesc">Stationery — pens, stapler</div><div class="lmeta">10 Apr 2026 · Office supplies</div></div>
+              <div class="ledger-amount debit">−₹280</div>
+              <div class="ledger-balance">Bal: ₹4,370</div>
+            </div>
+            <div class="ledger-row">
+              <div class="ledger-icon debit">🚚</div>
+              <div class="ledger-desc"><div class="ldesc">Courier / Delivery charges</div><div class="lmeta">11 Apr 2026 · Flash Express pickup</div></div>
+              <div class="ledger-amount debit">−₹120</div>
+              <div class="ledger-balance">Bal: ₹4,250</div>
+            </div>
+            <div class="ledger-row">
+              <div class="ledger-icon debit">🛠</div>
+              <div class="ledger-desc"><div class="ldesc">Minor Repair — drawer lock</div><div class="lmeta">12 Apr 2026 · Carpenter visit</div></div>
+              <div class="ledger-amount debit">−₹1,000</div>
+              <div class="ledger-balance">Bal: ₹3,250</div>
+            </div>
+          </div>
+          <div style="margin-top:14px;padding:12px 16px;background:var(--warning-light);border-radius:9px;border:1px solid #fde68a;display:flex;align-items:center;justify-content:space-between;">
+            <span style="font-size:13px;color:#92400e;">⚠️ Weekly reconciliation due in <strong>5 days</strong>.</span>
+            <button class="btn btn-outline btn-sm" style="border-color:#fde68a;" onclick="showToast('Reconciliation report generated','📋')">Reconcile</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div><div class="card-title">📊 Petty Cash Trend</div><div class="card-subtitle">Weekly balance flow</div></div></div>
+          <div class="chart-wrapper"><canvas id="pettyCashChart"></canvas></div>
+          <div style="margin-top:16px;background:var(--bg);border-radius:9px;padding:14px;">
+            <div style="font-size:12.5px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;">SPENDING BY CATEGORY</div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <div style="display:flex;align-items:center;gap:10px;"><span style="width:8px;height:8px;border-radius:50%;background:#4f46e5;display:inline-block;"></span><span style="font-size:13px;flex:1;">Minor Repairs</span><span style="font-size:13px;font-weight:700;">₹1,000</span></div>
+              <div style="display:flex;align-items:center;gap:10px;"><span style="width:8px;height:8px;border-radius:50%;background:#f59e0b;display:inline-block;"></span><span style="font-size:13px;flex:1;">Tea / Pantry</span><span style="font-size:13px;font-weight:700;">₹350</span></div>
+              <div style="display:flex;align-items:center;gap:10px;"><span style="width:8px;height:8px;border-radius:50%;background:#10b981;display:inline-block;"></span><span style="font-size:13px;flex:1;">Stationery</span><span style="font-size:13px;font-weight:700;">₹280</span></div>
+              <div style="display:flex;align-items:center;gap:10px;"><span style="width:8px;height:8px;border-radius:50%;background:#06b6d4;display:inline-block;"></span><span style="font-size:13px;flex:1;">Courier</span><span style="font-size:13px;font-weight:700;">₹120</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ UTILITY TRACKING ══ -->
+    <div class="fpanel" id="fp-utility">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-bottom:20px;">
+        <!-- Electricity -->
+        <div class="util-card">
+          <div class="util-header">
+            <div class="util-icon" style="background:#fffbeb;">⚡</div>
+            <div><div class="util-title">Electricity</div><div class="util-sub">MSEDCL · Apr 2026</div></div>
+          </div>
+          <div class="util-reading">
+            <div class="util-stat"><div class="us-label">BILL AMOUNT</div><div class="us-value" style="color:#d97706;">₹5,100</div><div class="us-unit">Invoice #EL-0423</div></div>
+            <div class="util-stat"><div class="us-label">UNITS CONSUMED</div><div class="us-value">428</div><div class="us-unit">kWh this month</div></div>
+          </div>
+          <div style="border-top:1px solid var(--border);padding-top:12px;display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <div style="font-size:11px;color:var(--text-muted);">Cost per unit</div>
+              <div style="font-size:16px;font-weight:700;">₹11.92/kWh</div>
+            </div>
+            <span class="util-trend down">↓ 36% vs avg</span>
+          </div>
+          <div style="margin-top:12px;height:56px;"><canvas id="elecSparkline"></canvas></div>
+        </div>
+        <!-- Water -->
+        <div class="util-card">
+          <div class="util-header">
+            <div class="util-icon" style="background:#ecfeff;">💧</div>
+            <div><div class="util-title">Water</div><div class="util-sub">NMMC · Apr 2026</div></div>
+          </div>
+          <div class="util-reading">
+            <div class="util-stat"><div class="us-label">BILL AMOUNT</div><div class="us-value" style="color:#0891b2;">₹1,000</div><div class="us-unit">Invoice #W-0411</div></div>
+            <div class="util-stat"><div class="us-label">KILO-LITRES</div><div class="us-value">12.5</div><div class="us-unit">kL this month</div></div>
+          </div>
+          <div style="border-top:1px solid var(--border);padding-top:12px;display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <div style="font-size:11px;color:var(--text-muted);">Cost per kL</div>
+              <div style="font-size:16px;font-weight:700;">₹80/kL</div>
+            </div>
+            <span class="util-trend same">→ Same as avg</span>
+          </div>
+          <div style="margin-top:12px;height:56px;"><canvas id="waterSparkline"></canvas></div>
+        </div>
+        <!-- Internet -->
+        <div class="util-card" style="border:2px dashed var(--border);">
+          <div class="util-header">
+            <div class="util-icon" style="background:#ecfeff;">🌐</div>
+            <div><div class="util-title">Internet / Broadband</div><div class="util-sub" style="color:var(--danger);">Not recorded · Apr 2026</div></div>
+          </div>
+          <div style="text-align:center;padding:20px 0;">
+            <div style="font-size:36px;margin-bottom:8px;">🚨</div>
+            <div style="font-size:13.5px;font-weight:600;color:var(--danger);">Missing entry detected</div>
+            <div style="font-size:12px;color:var(--text-muted);margin:6px 0 16px;">Recorded ₹1,200/month for last 3 months</div>
+            <button class="btn btn-primary btn-sm" onclick="showToast('Opening Add Expense for Internet…','🌐')">Add Internet Bill</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div><div class="card-title">📈 Utility Consumption Trend</div><div class="card-subtitle">Monthly consumption units + cost (last 6 months)</div></div></div>
+        <div class="chart-wrapper"><canvas id="utilityTrendChart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- ══ STAFF CLAIMS ══ -->
+    <div class="fpanel" id="fp-claims">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;">
+        <div class="card"><div style="font-size:11.5px;color:var(--text-muted);font-weight:600;margin-bottom:6px;">PENDING CLAIMS</div><div style="font-size:28px;font-weight:800;color:var(--warning);">4</div><div style="font-size:12px;color:var(--text-secondary);">Awaiting approval</div></div>
+        <div class="card"><div style="font-size:11.5px;color:var(--text-muted);font-weight:600;margin-bottom:6px;">TOTAL CLAIMED</div><div style="font-size:28px;font-weight:800;">₹8,640</div><div style="font-size:12px;color:var(--text-secondary);">Apr 2026</div></div>
+        <div class="card"><div style="font-size:11.5px;color:var(--text-muted);font-weight:600;margin-bottom:6px;">APPROVED</div><div style="font-size:28px;font-weight:800;color:var(--success);">₹3,200</div><div style="font-size:12px;color:var(--text-secondary);">Ready to reimburse</div></div>
+        <div class="card"><div style="font-size:11.5px;color:var(--text-muted);font-weight:600;margin-bottom:6px;">REIMBURSED</div><div style="font-size:28px;font-weight:800;color:var(--primary);">₹1,800</div><div style="font-size:12px;color:var(--text-secondary);">Paid out this month</div></div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div><div class="card-title">🧾 Staff Expense Claims</div><div class="card-subtitle">Travel · Meals · Mobile · Miscellaneous</div></div>
+          <button class="btn btn-primary btn-sm" onclick="openModal('claimModal')">＋ Submit Claim</button>
+        </div>
+        <div>
+          <div class="claim-row">
+            <div class="claim-avatar" style="background:linear-gradient(135deg,#10b981,#059669);">RS</div>
+            <div class="claim-info"><div class="claim-name">Riya Sharma</div><div class="claim-meta">Sales Associate · Travel to warehouse · 11 Apr</div></div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:4px;"><span style="background:#fff7ed;color:#ea580c;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;">🚌 Travel</span></div>
+            <div class="claim-amount-col"><div class="ca">₹320</div><div class="cd">Receipt attached</div></div>
+            <span class="status-badge sb-pending">⏳ Pending</span>
+            <div class="claim-actions">
+              <button class="action-btn action-approve" onclick="showToast('Claim approved!','✅')">✓</button>
+              <button class="action-btn action-reject" onclick="showToast('Claim rejected','❌')">✗</button>
+            </div>
+          </div>
+          <div class="claim-row">
+            <div class="claim-avatar" style="background:linear-gradient(135deg,#f59e0b,#d97706);">AK</div>
+            <div class="claim-info"><div class="claim-name">Arjun Kumar</div><div class="claim-meta">Store Manager · Team lunch · 10 Apr</div></div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:4px;"><span style="background:#f0fdf4;color:#16a34a;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;">🍽 Meals</span></div>
+            <div class="claim-amount-col"><div class="ca">₹1,800</div><div class="cd">Receipt attached</div></div>
+            <span class="status-badge sb-pending">⏳ Pending</span>
+            <div class="claim-actions">
+              <button class="action-btn action-approve" onclick="showToast('Claim approved!','✅')">✓</button>
+              <button class="action-btn action-reject" onclick="showToast('Claim rejected','❌')">✗</button>
+            </div>
+          </div>
+          <div class="claim-row">
+            <div class="claim-avatar" style="background:linear-gradient(135deg,#8b5cf6,#7c3aed);">PD</div>
+            <div class="claim-info"><div class="claim-name">Priya Desai</div><div class="claim-meta">Cashier · Mobile recharge · 08 Apr</div></div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:4px;"><span style="background:#f5f3ff;color:#7c3aed;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;">📱 Mobile</span></div>
+            <div class="claim-amount-col"><div class="ca">₹1,080</div><div class="cd">No receipt</div></div>
+            <span class="status-badge sb-pending" style="animation:none;">⏳ Pending</span>
+            <div class="claim-actions">
+              <button class="action-btn action-approve" onclick="showToast('Approved — note: no receipt','⚠️')">✓</button>
+              <button class="action-btn action-reject" onclick="showToast('Rejected — receipt required','❌')">✗</button>
+            </div>
+          </div>
+          <div class="claim-row" style="background:var(--success-light);">
+            <div class="claim-avatar" style="background:linear-gradient(135deg,#06b6d4,#0891b2);">SK</div>
+            <div class="claim-info"><div class="claim-name">Sameer Khan</div><div class="claim-meta">Delivery staff · Fuel reimbursement · 07 Apr</div></div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:4px;"><span style="background:#fff7ed;color:#ea580c;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;">⛽ Fuel</span></div>
+            <div class="claim-amount-col"><div class="ca">₹3,200</div><div class="cd">Receipt attached</div></div>
+            <span class="status-badge sb-approved">✓ Approved</span>
+            <div class="claim-actions">
+              <button class="btn btn-success btn-sm" onclick="showToast('Marked as reimbursed!','💰')">Pay Now</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ P&L VIEW ══ -->
+    <div class="fpanel" id="fp-pnl">
+      <div class="pnl-band">
+        <div class="pnl-hero revenue"><div class="ph-icon">💰</div><div class="ph-label">Total Revenue (Sales)</div><div class="ph-value">₹3,24,000</div><div class="ph-sub">Apr 2026 · Rare Thread</div></div>
+        <div class="pnl-hero expense"><div class="ph-icon">💸</div><div class="ph-label">Total Expenses</div><div class="ph-value">₹46,100</div><div class="ph-sub">Store + Staff + Petty Cash</div></div>
+      </div>
+      <div class="pnl-profit">
+        <div class="net-label">NET PROFIT — APR 2026</div>
+        <div class="net-value">₹2,77,900</div>
+        <div class="net-sub">Revenue minus all store operating expenses</div>
+        <div class="pnl-margin">✓ 85.8% Profit Margin</div>
+      </div>
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header"><div><div class="card-title">📊 Revenue vs Expenses (Monthly)</div></div></div>
+          <div class="chart-wrapper"><canvas id="pnlChart"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div><div class="card-title">📋 P&L Breakdown</div><div class="card-subtitle">Apr 2026</div></div><button class="btn btn-outline btn-sm" onclick="showToast('Downloading P&L report…','📄')">Export</button></div>
+          <table>
+            <thead><tr><th>Line Item</th><th>Amount</th><th>% of Revenue</th></tr></thead>
+            <tbody>
+              <tr style="background:var(--success-light);"><td><strong>Gross Revenue</strong></td><td><strong style="color:var(--success);">₹3,24,000</strong></td><td><strong>100%</strong></td></tr>
+              <tr><td style="color:var(--text-muted);padding-left:24px;">↳ Rent</td><td>₹40,000</td><td style="color:var(--danger);">12.3%</td></tr>
+              <tr><td style="color:var(--text-muted);padding-left:24px;">↳ Electricity</td><td>₹5,100</td><td style="color:var(--text-secondary);">1.6%</td></tr>
+              <tr><td style="color:var(--text-muted);padding-left:24px;">↳ Water</td><td>₹1,000</td><td style="color:var(--text-secondary);">0.3%</td></tr>
+              <tr><td style="color:var(--text-muted);padding-left:24px;">↳ Petty Cash</td><td>₹1,750</td><td style="color:var(--text-secondary);">0.5%</td></tr>
+              <tr style="border-top:2px solid var(--border);"><td><strong>Total Expenses</strong></td><td><strong style="color:var(--danger);">₹46,100</strong></td><td><strong style="color:var(--danger);">14.2%</strong></td></tr>
+              <tr style="background:var(--primary-light);"><td><strong>Net Profit</strong></td><td><strong style="color:var(--primary);">₹2,77,900</strong></td><td><strong style="color:var(--primary);">85.8%</strong></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ CATEGORY MANAGER ══ -->
+    <div class="fpanel" id="fp-categories">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header"><div><div class="card-title">🏷 Manage Categories</div><div class="card-subtitle">Org-wide · all stores share these</div></div><button class="btn btn-primary btn-sm" onclick="openModal('addCatModal')">＋ Add Category</button></div>
+          <div style="margin-bottom:8px;font-size:12.5px;font-weight:600;color:var(--text-muted);">DEFAULT CATEGORIES</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:18px;">
+            <div class="cat-chip" style="background:#eff6ff;color:#2563eb;border-color:#bfdbfe;"><span class="cc-dot" style="background:#2563eb;"></span>🏠 Rent<span class="cc-del" onclick="showToast('Cannot delete default category','⚠️')">✕</span></div>
+            <div class="cat-chip" style="background:#fffbeb;color:#d97706;border-color:#fde68a;"><span class="cc-dot" style="background:#d97706;"></span>⚡ Electricity<span class="cc-del" onclick="showToast('Cannot delete default category','⚠️')">✕</span></div>
+            <div class="cat-chip" style="background:#ecfeff;color:#0891b2;border-color:#a5f3fc;"><span class="cc-dot" style="background:#0891b2;"></span>💧 Water<span class="cc-del" onclick="showToast('Cannot delete default category','⚠️')">✕</span></div>
+            <div class="cat-chip" style="background:#f0fdf4;color:#16a34a;border-color:#a7f3d0;"><span class="cc-dot" style="background:#16a34a;"></span>👥 Employee Salary<span class="cc-del" onclick="showToast('Cannot delete default category','⚠️')">✕</span></div>
+            <div class="cat-chip" style="background:#ecfeff;color:#0891b2;border-color:#a5f3fc;"><span class="cc-dot" style="background:#06b6d4;"></span>🧹 Cleaning<span class="cc-del" onclick="showToast('Cannot delete default category','⚠️')">✕</span></div>
+            <div class="cat-chip" style="background:#faf5ff;color:#7c3aed;border-color:#ddd6fe;"><span class="cc-dot" style="background:#7c3aed;"></span>📎 Stationery<span class="cc-del" onclick="showToast('Cannot delete default category','⚠️')">✕</span></div>
+          </div>
+          <div style="margin-bottom:8px;font-size:12.5px;font-weight:600;color:var(--text-muted);">CUSTOM CATEGORIES</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;">
+            <div class="cat-chip" style="background:#ecfeff;color:#0891b2;border-color:#a5f3fc;"><span class="cc-dot" style="background:#06b6d4;"></span>🌐 Internet/Broadband<span class="cc-del" onclick="deleteCategory(this)">✕</span></div>
+            <div class="cat-chip" style="background:#fff7ed;color:#ea580c;border-color:#fed7aa;"><span class="cc-dot" style="background:#ea580c;"></span>🔒 Security/CCTV<span class="cc-del" onclick="deleteCategory(this)">✕</span></div>
+            <div class="cat-chip" style="background:#fdf4ff;color:#a21caf;border-color:#f0abfc;"><span class="cc-dot" style="background:#a21caf;"></span>📦 Packaging<span class="cc-del" onclick="deleteCategory(this)">✕</span></div>
+            <div class="cat-chip" style="background:#f0fdf4;color:#15803d;border-color:#a7f3d0;"><span class="cc-dot" style="background:#15803d;"></span>🔧 Store Maintenance<span class="cc-del" onclick="deleteCategory(this)">✕</span></div>
+            <div class="cat-chip" style="background:#faf5ff;color:#6d28d9;border-color:#ddd6fe;"><span class="cc-dot" style="background:#6d28d9;"></span>💻 POS/Software<span class="cc-del" onclick="deleteCategory(this)">✕</span></div>
+            <div class="cat-chip" style="background:#f0f9ff;color:#0369a1;border-color:#bae6fd;"><span class="cc-dot" style="background:#0369a1;"></span>🛡 Insurance<span class="cc-del" onclick="deleteCategory(this)">✕</span></div>
+            <div class="cat-chip" style="background:#fffbeb;color:#92400e;border-color:#fef08a;"><span class="cc-dot" style="background:#92400e;"></span>🏦 Bank Charges<span class="cc-del" onclick="deleteCategory(this)">✕</span></div>
+            <div class="cat-chip" style="background:#fdf2f8;color:#9d174d;border-color:#fbcfe8;"><span class="cc-dot" style="background:#9d174d;"></span>⚖️ Professional Fees<span class="cc-del" onclick="deleteCategory(this)">✕</span></div>
+            <div class="cat-chip" style="background:#fefce8;color:#713f12;border-color:#fef08a;"><span class="cc-dot" style="background:#a16207;"></span>☕ Tea/Pantry<span class="cc-del" onclick="deleteCategory(this)">✕</span></div>
+            <div class="cat-chip" style="background:#f8fafc;color:#475569;border-color:#e2e8f0;"><span class="cc-dot" style="background:#64748b;"></span>🎯 Miscellaneous<span class="cc-del" onclick="deleteCategory(this)">✕</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div><div class="card-title">📊 Category Usage Stats</div><div class="card-subtitle">How often each is used · Apr 2026</div></div></div>
+          <div class="chart-wrapper"><canvas id="catUsageChart"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /page -->
+</div><!-- /main -->
+
+<!-- ══ MODALS ══ -->
+
+<!-- Petty cash add -->
+<div class="modal-overlay" id="pettyCashAddModal">
+  <div class="modal" style="width:440px;">
+    <div class="modal-header"><div class="modal-title">💵 Record Petty Cash Expense</div><div class="modal-close" onclick="closeModal('pettyCashAddModal')">✕</div></div>
+    <div class="form-group"><label class="form-label">Category</label>
+      <select class="form-select"><option>☕ Tea/Pantry</option><option>📎 Stationery</option><option>🚚 Courier</option><option>🔧 Minor Repair</option><option>🎯 Miscellaneous</option></select>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Amount</label><input type="number" class="form-input" placeholder="₹ 0.00"/></div>
+      <div class="form-group"><label class="form-label">Date</label><input type="date" class="form-input" value="2026-04-13"/></div>
+    </div>
+    <div class="form-group"><label class="form-label">Description</label><input type="text" class="form-input" placeholder="e.g. Daily chai vendor, stationery for counter…"/></div>
+    <div class="form-group"><label class="form-label">Receipt (optional)</label><div class="upload-area" onclick="showToast('File picker opens','📎')"><div style="font-size:24px;margin-bottom:4px;">📎</div><p style="font-size:12.5px;color:var(--text-secondary);">Click to attach receipt</p></div></div>
+    <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('pettyCashAddModal')">Cancel</button><button class="btn btn-primary" onclick="showToast('Petty cash entry recorded!','✅');closeModal('pettyCashAddModal')">Record</button></div>
+  </div>
+</div>
+
+<!-- Top up petty cash -->
+<div class="modal-overlay" id="topupModal">
+  <div class="modal" style="width:400px;">
+    <div class="modal-header"><div class="modal-title">💰 Top Up Petty Cash</div><div class="modal-close" onclick="closeModal('topupModal')">✕</div></div>
+    <div class="form-group"><label class="form-label">Top-up Amount</label><input type="number" class="form-input" placeholder="₹ 0.00" value="5000"/></div>
+    <div class="form-group"><label class="form-label">Payment Source</label><select class="form-select"><option>Bank Account (HDFC)</option><option>Owner Cash</option><option>POS Float</option></select></div>
+    <div class="form-group"><label class="form-label">Date</label><input type="date" class="form-input" value="2026-04-13"/></div>
+    <div class="form-group"><label class="form-label">Note</label><input type="text" class="form-input" placeholder="e.g. Weekly replenishment…"/></div>
+    <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('topupModal')">Cancel</button><button class="btn btn-success" onclick="showToast('Petty cash topped up! New balance: ₹8,250','💰');closeModal('topupModal')">Top Up</button></div>
+  </div>
+</div>
+
+<!-- Submit claim -->
+<div class="modal-overlay" id="claimModal">
+  <div class="modal" style="width:480px;">
+    <div class="modal-header"><div class="modal-title">🧾 Submit Expense Claim</div><div class="modal-close" onclick="closeModal('claimModal')">✕</div></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Expense Type</label><select class="form-select"><option>🚌 Travel</option><option>🍽 Meals</option><option>📱 Mobile/Internet</option><option>⛽ Fuel</option><option>🛒 Office Supplies</option><option>🎯 Other</option></select></div>
+      <div class="form-group"><label class="form-label">Amount</label><input type="number" class="form-input" placeholder="₹ 0.00"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Date of Expense</label><input type="date" class="form-input" value="2026-04-13"/></div>
+      <div class="form-group"><label class="form-label">Payment By</label><select class="form-select"><option>My Own Money</option><option>Company Card</option><option>Petty Cash</option></select></div>
+    </div>
+    <div class="form-group"><label class="form-label">Description</label><textarea class="form-textarea" placeholder="Describe the business purpose of this expense…"></textarea></div>
+    <div class="form-group"><label class="form-label">Receipt</label><div class="upload-area" onclick="showToast('File picker opens','📎')"><div style="font-size:24px;margin-bottom:4px;">📎</div><p style="font-size:12.5px;color:var(--text-secondary);"><strong>Upload receipt</strong> — required for amounts above ₹500</p></div></div>
+    <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('claimModal')">Cancel</button><button class="btn btn-primary" onclick="showToast('Claim submitted for approval!','🧾');closeModal('claimModal')">Submit Claim</button></div>
+  </div>
+</div>
+
+<!-- Add category -->
+<div class="modal-overlay" id="addCatModal">
+  <div class="modal" style="width:400px;">
+    <div class="modal-header"><div class="modal-title">🏷 Add Category</div><div class="modal-close" onclick="closeModal('addCatModal')">✕</div></div>
+    <div class="form-group"><label class="form-label">Category Name</label><input type="text" class="form-input" placeholder="e.g. Security, Packaging…"/></div>
+    <div class="form-group"><label class="form-label">Color</label>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;">
+        <div id="cc-blue" onclick="selectColor('blue')" style="width:28px;height:28px;border-radius:6px;background:#2563eb;cursor:pointer;border:3px solid #2563eb;box-shadow:0 0 0 2px #bfdbfe;"></div>
+        <div onclick="selectColor('gold')" style="width:28px;height:28px;border-radius:6px;background:#d97706;cursor:pointer;border:2px solid transparent;"></div>
+        <div onclick="selectColor('green')" style="width:28px;height:28px;border-radius:6px;background:#16a34a;cursor:pointer;border:2px solid transparent;"></div>
+        <div onclick="selectColor('cyan')" style="width:28px;height:28px;border-radius:6px;background:#0891b2;cursor:pointer;border:2px solid transparent;"></div>
+        <div onclick="selectColor('purple')" style="width:28px;height:28px;border-radius:6px;background:#7c3aed;cursor:pointer;border:2px solid transparent;"></div>
+        <div onclick="selectColor('red')" style="width:28px;height:28px;border-radius:6px;background:#dc2626;cursor:pointer;border:2px solid transparent;"></div>
+        <div onclick="selectColor('orange')" style="width:28px;height:28px;border-radius:6px;background:#ea580c;cursor:pointer;border:2px solid transparent;"></div>
+        <div onclick="selectColor('pink')" style="width:28px;height:28px;border-radius:6px;background:#db2777;cursor:pointer;border:2px solid transparent;"></div>
+        <div onclick="selectColor('teal')" style="width:28px;height:28px;border-radius:6px;background:#0d9488;cursor:pointer;border:2px solid transparent;"></div>
+        <div onclick="selectColor('grey')" style="width:28px;height:28px;border-radius:6px;background:#64748b;cursor:pointer;border:2px solid transparent;"></div>
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('addCatModal')">Cancel</button><button class="btn btn-primary" onclick="showToast('Category added!','🏷');closeModal('addCatModal')">Add Category</button></div>
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+// Feature tab switching
+function switchFTab(el, id) {
+  document.querySelectorAll('.ftab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.fpanel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('fp-'+id).classList.add('active');
+}
+
+// Modal helpers
+function openModal(id){ document.getElementById(id).classList.add('open'); }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.modal-overlay').forEach(el=>{
+  el.addEventListener('click', e=>{ if(e.target===el) el.classList.remove('open'); });
+});
+
+function deleteCategory(el){ if(confirm('Delete this category? Existing expenses will keep their category name.')) { el.closest('.cat-chip').remove(); showToast('Category deleted','🗑'); } }
+function selectColor(c){ showToast('Color selected: '+c,'🎨'); }
+
+// Toast
+function showToast(msg,icon='✅'){
+  const c=document.getElementById('toastContainer');
+  const t=document.createElement('div');
+  t.className='toast';
+  t.innerHTML=`<span class="toast-icon">${icon}</span><span>${msg}</span><span class="toast-close" onclick="this.parentElement.remove()">✕</span>`;
+  c.appendChild(t);
+  setTimeout(()=>t.remove(),4000);
+}
+
+// Charts
+const pctx = document.getElementById('pettyCashChart').getContext('2d');
+new Chart(pctx, {
+  type:'bar',
+  data:{labels:['07 Apr','08 Apr','09 Apr','10 Apr','11 Apr','12 Apr','13 Apr'],datasets:[{label:'Balance',data:[5000,5000,4650,4370,4250,3250,3250],backgroundColor:'rgba(79,70,229,.15)',borderColor:'#4f46e5',borderWidth:1.5,borderRadius:4,fill:true,type:'line',tension:.4}]},
+  options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{font:{size:10},color:'#94a3b8'}},y:{grid:{color:'#f1f5f9'},ticks:{font:{size:10},color:'#94a3b8',callback:v=>v>=1000?'₹'+(v/1000)+'k':'₹'+v}}}}
+});
+
+// Electricity sparkline
+const ectx = document.getElementById('elecSparkline').getContext('2d');
+new Chart(ectx, {
+  type:'line',
+  data:{labels:['Nov','Dec','Jan','Feb','Mar','Apr'],datasets:[{data:[8200,7900,9100,8200,9100,5100],borderColor:'#f59e0b',backgroundColor:'rgba(245,158,11,.1)',borderWidth:2,tension:.4,pointRadius:2,fill:true}]},
+  options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{enabled:false}},scales:{x:{display:false},y:{display:false}}}
+});
+
+// Water sparkline
+const wctx = document.getElementById('waterSparkline').getContext('2d');
+new Chart(wctx, {
+  type:'line',
+  data:{labels:['Nov','Dec','Jan','Feb','Mar','Apr'],datasets:[{data:[1100,900,1050,1100,800,1000],borderColor:'#06b6d4',backgroundColor:'rgba(6,182,212,.1)',borderWidth:2,tension:.4,pointRadius:2,fill:true}]},
+  options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{enabled:false}},scales:{x:{display:false},y:{display:false}}}
+});
+
+// Utility trend
+const utx = document.getElementById('utilityTrendChart').getContext('2d');
+new Chart(utx, {
+  type:'bar',
+  data:{labels:['Nov','Dec','Jan','Feb','Mar','Apr'],datasets:[
+    {label:'Electricity (₹)',data:[8200,7900,9100,8200,9100,5100],backgroundColor:'rgba(245,158,11,.8)',borderRadius:4},
+    {label:'Water (₹)',data:[1100,900,1050,1100,800,1000],backgroundColor:'rgba(6,182,212,.8)',borderRadius:4},
+    {label:'Internet (₹)',data:[1200,1200,1200,1200,0,0],backgroundColor:'rgba(79,70,229,.8)',borderRadius:4},
+  ]},
+  options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:11},padding:12,usePointStyle:true}}},scales:{x:{grid:{display:false},ticks:{font:{size:11},color:'#94a3b8'}},y:{grid:{color:'#f1f5f9'},ticks:{font:{size:11},color:'#94a3b8',callback:v=>v>=1000?'₹'+(v/1000)+'k':'₹'+v}}}}
+});
+
+// P&L chart
+const plctx = document.getElementById('pnlChart').getContext('2d');
+new Chart(plctx, {
+  type:'bar',
+  data:{labels:['Jan','Feb','Mar','Apr'],datasets:[
+    {label:'Revenue',data:[280000,310000,295000,324000],backgroundColor:'rgba(16,185,129,.7)',borderRadius:4,order:2},
+    {label:'Expenses',data:[0,0,0,46100],backgroundColor:'rgba(239,68,68,.7)',borderRadius:4,order:2},
+    {label:'Net Profit',data:[null,null,null,277900],type:'line',borderColor:'#4f46e5',backgroundColor:'transparent',borderWidth:2.5,pointRadius:6,pointBackgroundColor:'#4f46e5',order:1},
+  ]},
+  options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:11},padding:12,usePointStyle:true}}},scales:{x:{grid:{display:false},ticks:{font:{size:11},color:'#94a3b8'}},y:{grid:{color:'#f1f5f9'},ticks:{font:{size:11},color:'#94a3b8',callback:v=>v>=100000?'₹'+(v/100000).toFixed(1)+'L':v>=1000?'₹'+(v/1000)+'k':'₹'+v}}}}
+});
+
+// Category usage chart
+const cuctx = document.getElementById('catUsageChart').getContext('2d');
+new Chart(cuctx, {
+  type:'bar',
+  data:{labels:['Rent','Electricity','Water','Salary','Internet','Security','POS/SW','Insurance','Bank Chg','Prof Fees','Tea'],datasets:[{data:[1,1,1,0,0,0,0,0,0,0,0],backgroundColor:['#4f46e5','#f59e0b','#06b6d4','#10b981','#8b5cf6','#f97316','#a21caf','#0369a1','#92400e','#9d174d','#a16207'],borderRadius:4}]},
+  options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{grid:{color:'#f1f5f9'},ticks:{font:{size:11},color:'#94a3b8',stepSize:1}},y:{grid:{display:false},ticks:{font:{size:11},color:'#64748b'}}}}
+});
+</script>
+</body>
+</html>

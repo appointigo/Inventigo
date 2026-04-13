@@ -27,8 +27,8 @@ export const POST = async (request: NextRequest): Promise<NextResponse> => {
       body,
       request,
       onBeforeGenerateToken: async () => ({
-        allowedContentTypes: ["image/jpeg", "image/png", "image/webp", "image/gif"],
-        maximumSizeInBytes: 5 * 1024 * 1024, // 5 MB
+        allowedContentTypes: ["image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf"],
+        maximumSizeInBytes: 10 * 1024 * 1024, // 10 MB
       }),
       onUploadCompleted: async () => {
         // No-op: the client stores the URL in the form field after upload
