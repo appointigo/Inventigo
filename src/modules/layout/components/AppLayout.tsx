@@ -257,8 +257,13 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
             theme="dark"
             mode="inline"
             selectedKeys={[pathname]}
-            items={menuItems}
-            onClick={({ key }) => router.push(key)}
+            openKeys={siderOpenKeys}
+          onOpenChange={setSiderOpenKeys}
+          items={menuItems}
+            onClick={({ key }) => {
+            // Don't navigate for group parent items
+            if (!key.startsWith("__group__")) router.push(key);
+          }}
             style={{ borderRight: 0 }}
           />
         </div>

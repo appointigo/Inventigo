@@ -80,9 +80,12 @@ const ExpenseForm = ({
         });
         setReceiptUrl(initialValues.receiptUrl ?? undefined);
         setIsRecurring(initialValues.isRecurring);
-      } 
-      else {
+      } else {
         form.resetFields();
+        form.setFieldsValue({ storeId, date: dayjs() });
+        setReceiptUrl(undefined);
+        setIsRecurring(false);
+        setGstModalOpen(false);
         form.setFieldsValue({ storeId, date: dayjs() });
         setReceiptUrl(undefined);
         setIsRecurring(false);
@@ -441,5 +444,6 @@ const ExpenseForm = ({
     </Modal>
   );
 }
+
 
 export default ExpenseForm;
