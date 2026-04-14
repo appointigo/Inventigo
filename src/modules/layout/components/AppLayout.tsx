@@ -196,7 +196,16 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
         collapsible
         collapsed={collapsed}
         width={220}
-        style={{ background: "#001529", position: "relative", overflow: "hidden" }}
+        style={{
+          background: "#001529",
+          position: "relative",
+          display: "flex",
+          flexDirection: "column",
+          minHeight: 0,
+          height: "100vh",
+          overflowY: "auto",
+          WebkitOverflowScrolling: "touch",
+        }}
         breakpoint="lg"
         onBreakpoint={(broken) => setCollapsed(broken)}
       >
@@ -243,19 +252,16 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
         )}
 
         
-        <Menu
-          theme="dark"
-          mode="inline"
-          selectedKeys={[pathname]}
-          openKeys={siderOpenKeys}
-          onOpenChange={setSiderOpenKeys}
-          items={menuItems}
-          onClick={({ key }) => {
-            // Don't navigate for group parent items
-            if (!key.startsWith("__group__")) router.push(key);
-          }}
-          style={{ borderRight: 0 }}
-        />
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", paddingBottom: 56 }}>
+          <Menu
+            theme="dark"
+            mode="inline"
+            selectedKeys={[pathname]}
+            items={menuItems}
+            onClick={({ key }) => router.push(key)}
+            style={{ borderRight: 0 }}
+          />
+        </div>
         <Tooltip title={collapsed ? "Expand" : "Collapse"} placement="right" destroyOnHidden>
           <Flex
             align="center"

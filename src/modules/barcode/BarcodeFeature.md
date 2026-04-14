@@ -50,7 +50,7 @@ Product created with SKU → "NK-DFT-001"
 BarcodeGenerator renders SKU as CODE-128 SVG
         ↓
 LabelPrinter opens a printable A4 page
-(62mm × 30mm label: name + barcode + price)
+(62mm × 30mm label: name + barcode)
         ↓
 Print → cut → attach label to product
 ```
@@ -183,7 +183,7 @@ The `LabelPrinter` component opens a new browser window with print-ready HTML. I
 | Barcode display on scan result | ✅ Done | `BarcodeGenerator` on scan result card |
 | Barcode on product detail page | ✅ Done | `ProductDetail.tsx` renders barcode + LabelPrinter |
 | Barcode label generation (CODE-128) | ✅ Done | `BarcodeGenerator.tsx` — react-barcode |
-| Print labels (multi-copy, A4 layout, with price) | ✅ Done | `LabelPrinter.tsx` — opens print window, JsBarcode CDN |
+| Print labels (multi-copy, A4 layout, no price) | ✅ Done | `LabelPrinter.tsx` — opens print window, JsBarcode CDN |
 | Scan → navigate to stock adjustment | ✅ Done | Quick Actions on scan result |
 | Inline stock-in from scan | ✅ Done | Receive Stock" card on scan result with size + qty + submit |
 | Billing: scan to add line item | ✅ Done | "Quick Sale" card on scan result + "Go to Billing" navigation |

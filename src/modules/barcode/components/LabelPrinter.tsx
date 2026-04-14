@@ -133,11 +133,7 @@ export default function LabelPrinter({ productName, price, variants }: LabelPrin
               border-radius: 3px;
               margin-bottom: 1mm;
             }
-            .label .price {
-              font-size: 9pt;
-              font-weight: bold;
-              margin-top: 1mm;
-            }
+            /* price removed from printed labels by request */
             .label svg, .label canvas, .label img {
               max-width: 55mm;
               height: 14mm;
@@ -153,7 +149,6 @@ export default function LabelPrinter({ productName, price, variants }: LabelPrin
               <div class="name">${productName.replace(/</g, "&lt;")}</div>
               <div class="size-badge">Size: ${v.sizeLabel}</div>
               <svg class="barcode-svg"></svg>
-              <div class="price">&#8377;${price.toLocaleString("en-IN")}</div>
             </div>`
             )
             .join("")}
