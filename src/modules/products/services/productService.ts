@@ -1,40 +1,13 @@
 import { Prisma } from "@prisma/client";
-import { createHash } from "crypto";
 import { prisma } from "@/lib/db";
 import type { Product, ProductFormValues, ProductListFilters, BulkProductValidated, BulkUploadResult } from "../types";
 import { imageService } from "@/shared/services/imageService";
 import { normalizeNameKey, normalizeSku } from "@/shared/utils/normalization";
+import { buildVariantSku, sanitizeScannedBarcode } from "@/shared/services/barcodeService";
 
 /** Normalizes a size label to the suffix used in variantSku, e.g. "UK 6" → "UK6" */
 const normalizeSizeLabel = (label: string) =>
   label.trim().toUpperCase().replace(/\s+/g, "");
-
-/**
- * Derives a deterministic EAN-13 barcode for a product variant using
- * product SKU + size label as the input key. Returns a 13-digit string.
- *
- * Reasoning: stockEntry.variantSku historically stored human-readable
- * variant SKUs (e.g. "NK-TS-862-S"). New requirement: variant-wise
- * barcodes should be real barcodes (EAN-13/UPC-A). We generate a
- * deterministic 12-digit payload from a SHA-256 hash of the key,
- * compute the EAN-13 check digit, and return the full 13-digit code.
- */
-const computeEan13CheckDigit = (digits12: string): string => {
-  const digits = digits12.split("").map((d) => Number(d) || 0);
-  const sum = digits.reduce((acc, d, i) => acc + d * (i % 2 === 0 ? 1 : 3), 0);
-  const check = (10 - (sum % 10)) % 10;
-  return String(check);
-};
-
-const buildVariantSku = (productSku: string, sizeLabel: string) => {
-  const key = `${productSku}|${normalizeSizeLabel(sizeLabel)}`;
-  const hash = createHash("sha256").update(key).digest();
-  // Use the first 8 bytes of the hash as a big integer, then reduce to 12 digits
-  const headHex = hash.slice(0, 8).toString("hex");
-  const num = BigInt(`0x${headHex}`) % (BigInt(10) ** BigInt(12));
-  const payload = num.toString().padStart(12, "0");
-  return payload + computeEan13CheckDigit(payload);
-};
 
 const buildInclude = (storeId?: string) => ({
   category: { select: { name: true } },
@@ -117,23 +90,27 @@ export const productService = {
   },
 
   async getByBarcode(orgId: string, barcode: string): Promise<Product | null> {
-    // Tier 1: match product SKU or external barcode
+    if (!barcode || !barcode.trim()) return null;
+
+    const cleanBarcode = barcode.trim().toUpperCase();
+
+    // Tier 1: match product SKU or external barcode (case-insensitive)
     const bySkuOrBarcode = await prisma.product.findFirst({
       where: {
         orgId,
         OR: [
-          { sku: { equals: barcode, mode: "insensitive" } },
-          { externalBarcode: { equals: barcode, mode: "insensitive" } },
+          { sku: { equals: cleanBarcode, mode: "insensitive" } },
+          { externalBarcode: { equals: cleanBarcode, mode: "insensitive" } },
         ],
       },
       include: buildInclude(),
     });
     if (bySkuOrBarcode) return toDto(bySkuOrBarcode);
 
-    // Tier 2: match a size-level variant SKU (e.g. NK-TS-862-S)
+    // Tier 2: match a size-level variant SKU (EAN-13 or variant barcode)
     const stockEntry = await prisma.stockEntry.findFirst({
       where: {
-        variantSku: { equals: barcode, mode: "insensitive" },
+        variantSku: { equals: cleanBarcode, mode: "insensitive" },
         product: { orgId },
       },
       select: { productId: true },

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Table, Tag, Input, Select, Badge, Flex, Empty } from "antd";
+import { Table, Tag, Input, Select, Badge, Flex, Empty, App } from "antd";
 import { SearchOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { StockLevelRow } from "../types";
@@ -9,6 +9,7 @@ import dynamic from "next/dynamic";
 import { CameraOutlined } from "@ant-design/icons";
 import { useState } from "react";
 import { CameraScanBtn } from "@/modules/billing/components/BillingView.styled";
+import { sanitizeScannedBarcode } from "@/shared/services/barcodeService";
 
 const CameraBarcodeScannerModal = dynamic(
   () => import("@/modules/barcode/components/CameraBarcodeScannerModal"),
@@ -150,8 +151,15 @@ const StockTable = ({ stockLevels, loading, search, onSearchChange, statusFilter
 
   const [cameraScanOpen, setCameraScanOpen] = useState(false);
 
+  const { message } = App.useApp();
+
   const handleCameraScan = (decodedText: string) => {
-    onSearchChange(decodedText);
+    const sanitized = sanitizeScannedBarcode(decodedText);
+    if (!sanitized) {
+      message.error("Invalid barcode format. Please try scanning again.");
+      return;
+    }
+    onSearchChange(sanitized);
     setCameraScanOpen(false);
   };
 
