@@ -602,6 +602,14 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
                         placeholder={`Select ${field.name}`}
                         options={(field.options ?? []).map((o) => ({ label: o, value: o }))}
                         allowClear={!field.required}
+                        showSearch={true}
+                        optionFilterProp="label"
+                        filterOption={(input, option) =>
+                          (option?.label ?? "")
+                            .toString()
+                            .toLowerCase()
+                            .includes(input.toLowerCase())
+                        }
                         optionRender={isColorField ? (opt) => {
                           // Color swatch for color dropdown
                           const colorHex = COLOR_PALETTE.find((c) => c.name.toLowerCase() === String(opt.value).toLowerCase())?.hex;
@@ -683,7 +691,7 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
                 Leave quantity at 0 for sizes you don&apos;t stock.
               </p>
               <Form.List name="sizes">
-                {(fields, { remove }) => (
+                {(fields, { remove, add }) => (
                   <>
                     {/* Column headers */}
                     <Row gutter={16} style={{ marginBottom: 8 }}>
@@ -738,6 +746,24 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
                         </Row>
                       );
                     })}
+                    {/* Add Size button */}
+                    <Button
+                      type="dashed"
+                      block
+                      onClick={() => {
+                        // Find the next size that's not already added
+                        const currentSizeIds = new Set(
+                          (form.getFieldValue("sizes") ?? []).map((s: { sizeId: string }) => s.sizeId)
+                        );
+                        const availableSize = selectedCategory.sizes.find((s) => !currentSizeIds.has(s.id));
+                        if (availableSize) {
+                          add({ sizeId: availableSize.id, quantity: 0, reorderLevel: 5 });
+                        }
+                      }}
+                      style={{ marginTop: 12, marginBottom: 12 }}
+                    >
+                      + Add Size
+                    </Button>
                     {/* Totals row */}
                     <Divider style={{ margin: "12px 0" }} />
                     <Row gutter={16}>
