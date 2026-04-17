@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { Flex, Spin } from "antd";
+import { useEffect, useRef, memo } from "react";
+import JsBarcode from "jsbarcode";
 
 interface BarcodeGeneratorProps {
   value: string;
@@ -13,115 +13,113 @@ interface BarcodeGeneratorProps {
 }
 
 /**
- * Barcode Generator using bwip-js (RFC 3548 compliant)
- * Generates standard EAN-13, UPC-A, or CODE-128 barcodes
- * Supports variant SKUs and external barcodes
+ * Barcode Generator Component
+ * Renders EAN-13, UPC-A, or CODE-128 barcodes using jsbarcode library
+ * Optimized for client-side performance and production use
+ *
+ * @param value - Barcode value (numeric for EAN-13/UPC-A, alphanumeric for CODE-128)
+ * @param format - Barcode format (default: ean13)
+ * @param width - SVG width in pixels (default: 200)
+ * @param height - SVG height in pixels (default: 100)
+ * @param displayValue - Show barcode text below image (default: true)
+ * @param fontSize - Font size for displayed text (default: 14)
  */
-const BarcodeGenerator = ({
-  value,
-  format = "ean13",
-  width = 200,
-  height = 100,
-  displayValue = true,
-  fontSize = 14,
-}: BarcodeGeneratorProps) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const loadedRef = useRef(false);
+const BarcodeGenerator = memo(
+  ({
+    value,
+    format = "ean13",
+    width = 200,
+    height = 100,
+    displayValue = true,
+    fontSize = 14,
+  }: BarcodeGeneratorProps) => {
+    const svgRef = useRef<SVGSVGElement>(null);
+    const errorRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    let mounted = true;
-
-    const renderBarcode = async () => {
-      try {
-        // Dynamically import bwip-js (only on client)
-        // @ts-ignore - bwip-js doesn't have type declarations
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const bwipjs: any = await import("bwip-js");
-
-        if (!mounted || !containerRef.current) return;
-
-        // Validate value before rendering
-        if (!value || value.trim().length === 0) {
-          containerRef.current.innerHTML = "<span style='color: #d1d5db; font-size: 12px;'>No barcode value</span>";
-          return;
+    useEffect(() => {
+      // Guard: no ref or no value
+      if (!svgRef.current || !value?.trim()) {
+        if (errorRef.current) {
+          errorRef.current.style.display = "none";
         }
+        if (svgRef.current) {
+          svgRef.current.innerHTML = "";
+        }
+        return;
+      }
 
-        // Create canvas for barcode rendering
-        const canvas = document.createElement("canvas");
-        canvas.style.display = "none";
+      try {
+        // Map format to jsbarcode format string
+        const formatMap: Record<string, "EAN13" | "UPC" | "CODE128"> = {
+          ean13: "EAN13",
+          upca: "UPC",
+          code128: "CODE128",
+        };
 
-        // Determine barcode ID based on format
-        const bcid = format === "upca" ? "upca" : format === "code128" ? "code128" : "ean13";
+        const barcodeFormat = formatMap[format] || "EAN13";
 
-        // Render barcode to canvas
-        await bwipjs.toCanvas(canvas, {
-          bcid,
-          text: value.trim(),
-          scale: 2,
-          height: 10,
-          includetext: displayValue,
-          textxoffset: 0,
+        // Render barcode to SVG
+        JsBarcode(svgRef.current, value.trim(), {
+          format: barcodeFormat,
+          width: 2,
+          height: Math.max(height * 0.5, 30),
+          displayValue,
+          fontSize: Math.max(fontSize, 10),
+          margin: 5,
+          lineColor: "#000000",
         });
 
-        // Convert canvas to image
-        const img = document.createElement("img");
-        img.src = canvas.toDataURL("image/png");
-        img.style.maxWidth = `${width}px`;
-        img.style.maxHeight = `${height}px`;
-        img.style.display = "block";
-        img.style.margin = "0 auto";
-        img.alt = `Barcode: ${value}`;
-
-        // Render SVG/HTML representation for accessibility
-        const wrapper = document.createElement("div");
-        wrapper.style.textAlign = "center";
-        wrapper.appendChild(img);
-
-        if (displayValue) {
-          const label = document.createElement("div");
-          label.textContent = value;
-          label.style.fontSize = `${fontSize}px`;
-          label.style.fontFamily = "'SF Mono', monospace";
-          label.style.marginTop = "8px";
-          label.style.fontWeight = "500";
-          label.style.color = "#1f2937";
-          wrapper.appendChild(label);
+        // Hide error message on success
+        if (errorRef.current) {
+          errorRef.current.style.display = "none";
         }
-
-        containerRef.current.innerHTML = "";
-        containerRef.current.appendChild(wrapper);
-        loadedRef.current = true;
       } catch (error) {
-        if (mounted && containerRef.current) {
-          console.error("[BarcodeGenerator] Failed to render:", error);
-          containerRef.current.innerHTML = `
-            <div style="
-              padding: 12px;
-              background: #fee2e2;
-              border: 1px solid #fca5a5;
-              border-radius: 4px;
-              font-size: 12px;
-              color: #7f1d1d;
-            ">
-              Failed to generate barcode: ${error instanceof Error ? error.message : "Unknown error"}
-            </div>
-          `;
+        // Show error message
+        const errorMessage =
+          error instanceof Error ? error.message : "Invalid barcode format";
+
+        if (errorRef.current) {
+          errorRef.current.textContent = `Failed: ${errorMessage}`;
+          errorRef.current.style.display = "block";
         }
+
+        // Clear SVG on error
+        if (svgRef.current) {
+          svgRef.current.innerHTML = "";
+        }
+
+        console.error(`[BarcodeGenerator] ${format}:`, errorMessage);
       }
-    };
+    }, [value, format, height, displayValue, fontSize]);
 
-    renderBarcode();
+    return (
+      <div style={{ textAlign: "center" }}>
+        <svg
+          ref={svgRef}
+          style={{
+            maxWidth: `${width}px`,
+            maxHeight: `${height}px`,
+            display: "inline-block",
+          }}
+        />
+        <div
+          ref={errorRef}
+          style={{
+            padding: "8px",
+            background: "#fee2e2",
+            border: "1px solid #fca5a5",
+            borderRadius: "4px",
+            fontSize: "12px",
+            color: "#7f1d1d",
+            display: "none",
+            marginTop: "4px",
+          }}
+        />
+      </div>
+    );
+  }
+);
 
-    return () => {
-      mounted = false;
-    };
-  }, [value, format, width, height, displayValue, fontSize]);
-
-  return (
-    <Flex justify="center" align="center" ref={containerRef} style={{ minHeight: `${Math.max(height + 40, 120)}px` }}>
-      <Spin size="small" description="Generating barcode..." />
-    </Flex>
-  );
-}
+BarcodeGenerator.displayName = "BarcodeGenerator";
 
 export default BarcodeGenerator;

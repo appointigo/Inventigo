@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { Modal, Button, Typography, Table, App } from "antd";
 import { PrinterOutlined, DownloadOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
@@ -15,25 +15,30 @@ const { Text } = Typography;
 export interface LabelVariant {
   variantSku: string;
   sizeLabel: string;
+  ean13?: string; // Optional: EAN-13 barcode for the variant
 }
 
 interface LabelPrinterProps {
   productName: string;
-  price: number;
   variants: LabelVariant[];
 }
 
-export default function LabelPrinter({ productName, price, variants }: LabelPrinterProps) {
+export default function LabelPrinter({ productName, variants }: LabelPrinterProps) {
   const { message } = App.useApp();
   const [open, setOpen] = useState(false);
   const [copiesMap, setCopiesMap] = useState<Record<string, number>>({});
 
-  // Initialise copies to 1 for each variant whenever the modal opens or variants change
-  useEffect(() => {
-    setCopiesMap(
-      variants.reduce<Record<string, number>>((acc, v) => ({ ...acc, [v.variantSku]: 1 }), {})
-    );
-  }, [variants]);
+  // Compute initial copiesMap based on variants
+  const initialCopiesMap = useMemo(
+    () => variants.reduce<Record<string, number>>((acc, v) => ({ ...acc, [v.variantSku]: 1 }), {}),
+    [variants]
+  );
+
+  // Update copiesMap when modal opens or variants change
+  const handleModalOpen = useCallback(() => {
+    setCopiesMap(initialCopiesMap);
+    setOpen(true);
+  }, [initialCopiesMap]);
 
   const totalLabels = variants.reduce((sum, v) => sum + (copiesMap[v.variantSku] ?? 1), 0);
 
@@ -86,6 +91,7 @@ export default function LabelPrinter({ productName, price, variants }: LabelPrin
       Array.from({ length: copiesMap[v.variantSku] ?? 1 }, (_, i) => ({
         ...v,
         uid: `${v.variantSku}-${i}`,
+        barcodeValue: v.ean13 || v.variantSku, // Use EAN-13 if available
       }))
     );
 
@@ -145,7 +151,7 @@ export default function LabelPrinter({ productName, price, variants }: LabelPrin
           ${labels
             .map(
               (v) => `
-            <div class="label" data-sku="${v.variantSku}">
+            <div class="label" data-barcode="${v.barcodeValue}">
               <div class="name">${productName.replace(/</g, "&lt;")}</div>
               <div class="size-badge">Size: ${v.sizeLabel}</div>
               <svg class="barcode-svg"></svg>
@@ -156,12 +162,20 @@ export default function LabelPrinter({ productName, price, variants }: LabelPrin
           <script>
             window.onload = function() {
               document.querySelectorAll('.label').forEach(function(label) {
-                var sku = label.getAttribute('data-sku');
+                var barcodeValue = label.getAttribute('data-barcode');
                 var svg = label.querySelector('.barcode-svg');
-                JsBarcode(svg, sku, {
-                  format: "CODE128", width: 1.2, height: 35,
-                  displayValue: true, fontSize: 8, margin: 2
-                });
+                try {
+                  JsBarcode(svg, barcodeValue, {
+                    format: "EAN13", width: 2, height: 40,
+                    displayValue: true, fontSize: 8, margin: 2
+                  });
+                } catch(e) {
+                  // Fallback if EAN-13 fails
+                  JsBarcode(svg, barcodeValue, {
+                    format: "CODE128", width: 1.2, height: 35,
+                    displayValue: true, fontSize: 8, margin: 2
+                  });
+                }
               });
               setTimeout(function() { window.print(); }, 400);
             };
@@ -183,14 +197,18 @@ export default function LabelPrinter({ productName, price, variants }: LabelPrin
     {
       title: "Variant SKU / Barcode",
       dataIndex: "variantSku",
-      render: (sku: string) => (
-        <div>
-          <div id={`lp-barcode-${sku}`} style={{ lineHeight: 0 }}>
-            <BarcodeGenerator value={sku} height={36} width={1.1} fontSize={10} />
+      render: (sku: string, record: LabelVariant) => {
+        // Use EAN-13 if available, otherwise use variantSku
+        const barcodeValue = record.ean13 || sku;
+        return (
+          <div>
+            <div id={`lp-barcode-${sku}`} style={{ lineHeight: 0 }}>
+              <BarcodeGenerator value={barcodeValue} height={36} width={150} fontSize={10} />
+            </div>
+            <Text type="secondary" style={{ fontSize: 11 }}>{barcodeValue}</Text>
           </div>
-          <Text type="secondary" style={{ fontSize: 11 }}>{sku}</Text>
-        </div>
-      ),
+        );
+      },
     },
     {
       title: "Copies",
@@ -221,7 +239,7 @@ export default function LabelPrinter({ productName, price, variants }: LabelPrin
 
   return (
     <>
-      <Button icon={<PrinterOutlined />} onClick={() => setOpen(true)}>
+      <Button icon={<PrinterOutlined />} onClick={handleModalOpen}>
         Print Labels
       </Button>
       <Modal

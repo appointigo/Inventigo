@@ -6,6 +6,7 @@ import type { ColumnsType } from "antd/es/table";
 import type { Product, ProductStockSize } from "../types";
 import BarcodeGenerator from "@/modules/barcode/components/BarcodeGenerator";
 import LabelPrinter from "@/modules/barcode/components/LabelPrinter";
+import { buildVariantSku } from "@/shared/services/barcodeService";
 
 interface ProductDetailProps {
   product: Product;
@@ -13,11 +14,18 @@ interface ProductDetailProps {
   onBack: () => void;
 }
 
-export default function ProductDetail({ product, onEdit, onBack }: ProductDetailProps) {
-  const variants = product.stock.map((s) => ({
-    variantSku: s.variantSku ?? `${product.sku}-${s.sizeLabel.trim().toUpperCase().replace(/\s+/g, "")}`,
-    sizeLabel: s.sizeLabel,
-  }));
+const { Item } = Descriptions;
+
+const ProductDetail = ({ product, onEdit, onBack }: ProductDetailProps) => {
+  const variants = product.stock.map((s) => {
+    // Generate deterministic EAN-13 for variant
+    const ean13 = buildVariantSku(product.sku, s.sizeLabel);
+    return {
+      variantSku: s.variantSku ?? ean13,
+      sizeLabel: s.sizeLabel,
+      ean13,
+    };
+  });
 
   const stockColumns: ColumnsType<ProductStockSize> = [
     { title: "Size", dataIndex: "sizeLabel", width: 80 },
@@ -32,11 +40,12 @@ export default function ProductDetail({ product, onEdit, onBack }: ProductDetail
       dataIndex: "variantSku",
       key: "barcode",
       width: 180,
-      render: (sku: string | null, record) => {
-        const code = sku ?? `${product.sku}-${record.sizeLabel.trim().toUpperCase().replace(/\s+/g, "")}`;
+      render: (_, record: ProductStockSize) => {
+        // Generate EAN-13 from product SKU + size label
+        const ean13 = buildVariantSku(product.sku, record.sizeLabel);
         return (
           <div style={{ lineHeight: 0 }}>
-            <BarcodeGenerator value={code} height={32} width={1.0} fontSize={9} />
+            <BarcodeGenerator value={ean13} height={32} width={150} fontSize={9} />
           </div>
         );
       },
@@ -79,7 +88,6 @@ export default function ProductDetail({ product, onEdit, onBack }: ProductDetail
         <Space>
           <LabelPrinter
             productName={product.name}
-            price={product.basePrice}
             variants={variants}
           />
           <Button icon={<EditOutlined />} onClick={onEdit}>
@@ -92,12 +100,13 @@ export default function ProductDetail({ product, onEdit, onBack }: ProductDetail
       <Card size="small" title="Barcodes by Size">
         <Row gutter={[16, 16]}>
           {product.stock.map((s) => {
-            const code = s.variantSku ?? `${product.sku}-${s.sizeLabel.trim().toUpperCase().replace(/\s+/g, "")}`;
+            // Generate deterministic EAN-13 for each variant
+            const ean13 = buildVariantSku(product.sku, s.sizeLabel);
             return (
               <Col key={s.sizeId} xs={24} sm={12} md={8} style={{ textAlign: "center" }}>
                 <Tag color="blue" style={{ marginBottom: 6, fontSize: 13 }}>{s.sizeLabel}</Tag>
                 <div style={{ display: "inline-block" }}>
-                  <BarcodeGenerator value={code} height={42} width={1.1} fontSize={10} />
+                  <BarcodeGenerator value={ean13} height={42} width={150} fontSize={10} />
                 </div>
               </Col>
             );
@@ -112,42 +121,44 @@ export default function ProductDetail({ product, onEdit, onBack }: ProductDetail
           bordered
           size="small"
         >
-          <Descriptions.Item label="SKU">{product.sku}</Descriptions.Item>
-          <Descriptions.Item label="External Barcode">
+          <Item label="SKU">{product.sku}</Item>
+          <Item label="External Barcode">
             {product.externalBarcode ?? <Typography.Text type="secondary">—</Typography.Text>}
-          </Descriptions.Item>
-          <Descriptions.Item label="Status">
+          </Item>
+          <Item label="Status">
             <Tag color={product.isActive ? "green" : "default"}>
               {product.isActive ? "Active" : "Inactive"}
             </Tag>
-          </Descriptions.Item>
-          <Descriptions.Item label="Category">
+          </Item>
+          <Item label="Category">
             <Tag>{product.categoryName}</Tag>
-          </Descriptions.Item>
-          <Descriptions.Item label="Brand">{product.brandName}</Descriptions.Item>
-          <Descriptions.Item label="Selling Price">
+          </Item>
+          <Item label="Brand">{product.brandName}</Item>
+          <Item label="Selling Price">
             ₹{product.basePrice.toLocaleString("en-IN")}
-          </Descriptions.Item>
-          <Descriptions.Item label="Cost Price">
+          </Item>
+          <Item label="Cost Price">
             ₹{product.costPrice.toLocaleString("en-IN")}
-          </Descriptions.Item>
-          <Descriptions.Item label="Margin">
+          </Item>
+          <Item label="Margin">
             ₹{(product.basePrice - product.costPrice).toLocaleString("en-IN")}{" "}
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               ({((product.basePrice - product.costPrice) / product.basePrice * 100).toFixed(1)}%)
             </Typography.Text>
-          </Descriptions.Item>
-          <Descriptions.Item label="Total Stock">
+          </Item>
+          <Item label="Total Stock">
             <Badge
               color={product.totalStock === 0 ? "red" : product.totalStock <= 10 ? "orange" : "green"}
               text={product.totalStock}
             />
-          </Descriptions.Item>
-          {Object.entries(product.attributes).map(([key, value]) => (
-            <Descriptions.Item key={key} label={key.charAt(0).toUpperCase() + key.slice(1)}>
-              {String(value)}
-            </Descriptions.Item>
-          ))}
+          </Item>
+          {
+            Object.entries(product.attributes).map(([key, value]) => (
+              <Item key={key} label={key.charAt(0).toUpperCase() + key.slice(1)}>
+                {String(value)}
+              </Item>
+            ))
+          }
         </Descriptions>
       </Card>
 
@@ -163,3 +174,5 @@ export default function ProductDetail({ product, onEdit, onBack }: ProductDetail
     </Space>
   );
 }
+
+export default ProductDetail;

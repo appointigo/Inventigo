@@ -3,52 +3,25 @@
 import { useCallback, useEffect, useId, useRef } from "react";
 import dynamic from "next/dynamic";
 import { Modal, Spin } from "antd";
-import {
-  BulbOutlined,
-  CameraOutlined,
-  CheckCircleFilled,
-  CloseCircleFilled,
-  LoadingOutlined,
-  ReloadOutlined,
-  SyncOutlined,
-} from "@ant-design/icons";
+import { BulbOutlined, CameraOutlined, CheckCircleFilled, CloseCircleFilled, LoadingOutlined, ReloadOutlined, SyncOutlined } from "@ant-design/icons";
 import { useCameraScanner } from "@/modules/barcode/hooks/useCameraScanner";
-import {
-  ScannerWrapper,
-  ScannerRegion,
-  ScanLineOverlay,
-  StatusBanner,
-  LiveDot,
-  TorchBtn,
-  ScanTip,
-  StartCameraBtn,
-  IdleSplash,
-  IdleSplashIcon,
-  IdleSplashText,
-  RetryRow,
-  RetryBtn,
-  PermissionHint,
-} from "./CameraBarcodeScannerModal.styled";
+import { ScannerWrapper, ScannerRegion, ScanLineOverlay, StatusBanner, LiveDot, TorchBtn, ScanTip, StartCameraBtn, IdleSplash, IdleSplashIcon, IdleSplashText, RetryRow, RetryBtn, PermissionHint } from "./CameraBarcodeScannerModal.styled";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
 interface CameraBarcodeScannerModalProps {
   open: boolean;
   onScan: (decodedText: string) => void;
   onClose: () => void;
 }
 
+type ScannerInnerProps = {
+  elementId: string;
+  onScan: (decodedText: string) => void;
+  onClose: () => void;
+};
 // ─── Inner scanner — rendered only on client, never SSR ──────────────────────
 
-function ScannerInner({
-  elementId,
-  onScan,
-  onClose,
-}: {
-  elementId: string;
-  onScan: (text: string) => void;
-  onClose: () => void;
-}) {
+const ScannerInner = ({ elementId, onScan, onClose }: ScannerInnerProps) => {
   const { isSupported, state, isScanning, torchOn, torchAvailable, error, startScan, stopScan, toggleTorch } =
     useCameraScanner();
 
@@ -65,6 +38,7 @@ function ScannerInner({
 
   const doStartScan = useCallback(() => {
     userStartedRef.current = true;
+
     startScan(elementId, (text) => {
       onScan(text);
       // Auto-close after a short delay so the user sees the success state
@@ -225,11 +199,7 @@ const ScannerInnerDynamic = dynamic(() => Promise.resolve(ScannerInner), {
 
 // ─── Public component ─────────────────────────────────────────────────────────
 
-export default function CameraBarcodeScannerModal({
-  open,
-  onScan,
-  onClose,
-}: CameraBarcodeScannerModalProps) {
+const CameraBarcodeScannerModal = ({ open, onScan, onClose }: CameraBarcodeScannerModalProps) => {
   // Stable unique DOM id for html5-qrcode to mount the video element into.
   // Using useId ensures no collision even when multiple instances are rendered.
   const rawId = useId();
@@ -251,13 +221,17 @@ export default function CameraBarcodeScannerModal({
     >
       {/* Only render the scanner when the modal is open — prevents a stopped
           scanner from trying to run in a hidden, detached DOM node */}
-      {open && (
-        <ScannerInnerDynamic
-          elementId={elementId}
-          onScan={onScan}
-          onClose={onClose}
-        />
-      )}
+      {
+        open && (
+          <ScannerInnerDynamic
+            elementId={elementId}
+            onScan={onScan}
+            onClose={onClose}
+          />
+        )
+      }
     </Modal>
   );
 }
+
+export default CameraBarcodeScannerModal;
