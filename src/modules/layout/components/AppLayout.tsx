@@ -252,14 +252,16 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
         )}
 
         
-        <Menu
-          theme="dark"
-          mode="inline"
-          selectedKeys={[pathname]}
-          items={menuItems}
-          onClick={({ key }) => router.push(key)}
-          style={{ borderRight: 0 }}
-        />
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", paddingBottom: 56 }}>
+          <Menu
+            theme="dark"
+            mode="inline"
+            selectedKeys={[pathname]}
+            items={menuItems}
+            onClick={({ key }) => router.push(key)}
+            style={{ borderRight: 0 }}
+          />
+        </div>
         <Tooltip title={collapsed ? "Expand" : "Collapse"} placement="right" destroyOnHidden>
           <Flex
             align="center"

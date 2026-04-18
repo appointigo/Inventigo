@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { createHash } from "crypto";
 import { prisma } from "@/lib/db";
 import type { Product, ProductFormValues, ProductListFilters, BulkProductValidated, BulkUploadResult } from "../types";
 import { imageService } from "@/shared/services/imageService";
