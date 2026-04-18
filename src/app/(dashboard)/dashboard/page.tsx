@@ -85,19 +85,19 @@ const WelcomeGuide = ({ userName }: { userName?: string | null }) => {
 
       <Space wrap>
         <Button
+          size="large"
+          icon={<AppstoreAddOutlined />}
+          onClick={() => router.push("/dashboard/brands")}
+        >
+          Add Brand
+        </Button>
+        <Button
           type="primary"
           size="large"
           icon={<TagsOutlined />}
           onClick={() => router.push("/dashboard/categories")}
         >
           Add Category
-        </Button>
-        <Button
-          size="large"
-          icon={<AppstoreAddOutlined />}
-          onClick={() => router.push("/dashboard/brands")}
-        >
-          Add Brand
         </Button>
         <Button
           size="large"

@@ -2,15 +2,9 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { Layout, Menu, Dropdown, Avatar, Space, Spin, Typography, theme, Flex, Tooltip, Tag } from "antd";
-import {
-  LogoutOutlined,
-  UserOutlined,
-  MenuFoldOutlined,
-  MenuUnfoldOutlined,
-  AppstoreOutlined,
-} from "@ant-design/icons";
+import { LogoutOutlined, UserOutlined, MenuFoldOutlined, MenuUnfoldOutlined, AppstoreOutlined } from "@ant-design/icons";
 import { useAuth } from "@/modules/auth/hooks/useAuth";
-import { getMenuForRole } from "@/modules/layout/constants";
+import { getMenuForRole, type MenuItem } from "@/modules/layout/constants";
 import { Role } from "@prisma/client";
 import StoreSelector from "@/modules/settings/components/StoreSelector";
 import { type ReactNode, useState, useEffect, useRef } from "react";
@@ -31,7 +25,7 @@ const DEV_USER = {
   orgName: null,
 };
 
-export default function AppLayout({ children }: { children: ReactNode }) {
+const AppLayout = ({ children }: { children: ReactNode }) => {
   const pathname = usePathname();
   const router = useRouter();
   const { user, isLoading, logout } = useAuth();
@@ -60,6 +54,20 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   // In dev mode without DB, use a mock admin user so the layout renders
   const isDev = process.env.NODE_ENV === "development";
   const currentUser = user ?? (isDev ? DEV_USER : null);
+
+  // Auto-open the Expenses sub-menu when on a child expenses route (must be before early returns)
+  const EXPENSES_GROUP_KEY = "__group__/dashboard/expenses";
+  const [siderOpenKeys, setSiderOpenKeys] = useState<string[]>(() =>
+    pathname.startsWith("/dashboard/expenses/") ? [EXPENSES_GROUP_KEY] : []
+  );
+
+  useEffect(() => {
+    if (pathname.startsWith("/dashboard/expenses/")) {
+      setSiderOpenKeys((prev) =>
+        prev.includes(EXPENSES_GROUP_KEY) ? prev : [...prev, EXPENSES_GROUP_KEY]
+      );
+    }
+  }, [pathname]);
 
   // SUPER_ADMIN should never land in the regular dashboard
   useEffect(() => {
@@ -94,11 +102,17 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   const role = currentUser?.role ?? ("ADMIN" as Role);
   const canSwitchStores = role === Role.OWNER || role === Role.ADMIN;
-  const menuItems = getMenuForRole(role).map((item) => ({
-    key: item.path,
+
+  // Recursively map MenuItem → Ant Design menu item format
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mapMenuItem = (item: MenuItem): any => ({
+    key: item.children?.length ? `__group__${item.path}` : item.path,
     icon: <item.icon />,
     label: item.name,
-  }));
+    ...(item.children?.length ? { children: item.children.map(mapMenuItem) } : {}),
+  });
+  
+  const menuItems = getMenuForRole(role).map(mapMenuItem);
 
   if (isMobile) {
     return (
@@ -356,3 +370,5 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     </MobileWorkspaceProvider>
   );
 }
+
+export default AppLayout;

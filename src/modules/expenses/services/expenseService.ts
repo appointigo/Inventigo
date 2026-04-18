@@ -1,13 +1,5 @@
 import { prisma } from "@/lib/db";
-import type {
-  ExpenseFormValues,
-  StoreExpense,
-  ExpenseListFilters,
-  ExpenseSummary,
-  ExpenseCategoryTotals,
-  ExpenseMonthSummary,
-  ExpenseCategory,
-} from "../types";
+import type { ExpenseFormValues, StoreExpense, ExpenseListFilters, ExpenseSummary, ExpenseCategoryTotals, ExpenseMonthSummary, ExpenseCategory } from "../types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const toDto = (e: any): StoreExpense => ({
@@ -19,6 +11,15 @@ const toDto = (e: any): StoreExpense => ({
   amount: Number(e.amount),
   date: e.date instanceof Date ? e.date.toISOString().split("T")[0] : e.date,
   note: e.note ?? null,
+  paymentMode: e.paymentMode ?? null,
+  receiptUrl: e.receiptUrl ?? null,
+  status: e.status ?? "APPROVED",
+  isRecurring: e.isRecurring ?? false,
+  recurrenceFreq: e.recurrenceFreq ?? null,
+  vendorGstin: e.vendorGstin ?? null,
+  gstRate: e.gstRate != null ? Number(e.gstRate) : null,
+  gstAmount: e.gstAmount != null ? Number(e.gstAmount) : null,
+  isItcEligible: e.isItcEligible ?? false,
   createdBy: e.createdBy,
   createdByName: e.user.name,
   createdAt: e.createdAt.toISOString(),
@@ -30,7 +31,7 @@ const expenseInclude = {
   user: { select: { name: true } },
 } as const;
 
-function monthRange(year: number, month: number): { gte: Date; lt: Date } {
+const monthRange = (year: number, month: number): { gte: Date; lt: Date } => {
   const start = new Date(Date.UTC(year, month - 1, 1));
   const end = new Date(Date.UTC(year, month, 1));
   return { gte: start, lt: end };
@@ -74,6 +75,15 @@ export const expenseService = {
         amount: values.amount,
         date: new Date(values.date),
         note: values.note ?? null,
+        paymentMode: values.paymentMode ?? null,
+        receiptUrl: values.receiptUrl ?? null,
+        status: "APPROVED",
+        isRecurring: values.isRecurring ?? false,
+        recurrenceFreq: values.recurrenceFreq ?? null,
+        vendorGstin: values.vendorGstin ?? null,
+        gstRate: values.gstRate ?? null,
+        gstAmount: values.gstAmount ?? null,
+        isItcEligible: values.isItcEligible ?? false,
         createdBy: userId,
       },
       include: expenseInclude,
@@ -92,10 +102,18 @@ export const expenseService = {
     const row = await prisma.storeExpense.update({
       where: { id },
       data: {
-        ...(values.category !== undefined && { category: values.category }),
-        ...(values.amount !== undefined && { amount: values.amount }),
-        ...(values.date !== undefined && { date: new Date(values.date) }),
-        ...(values.note !== undefined && { note: values.note ?? null }),
+        ...(values.category    !== undefined && { category: values.category }),
+        ...(values.amount      !== undefined && { amount: values.amount }),
+        ...(values.date        !== undefined && { date: new Date(values.date) }),
+        ...(values.note        !== undefined && { note: values.note ?? null }),
+        ...(values.paymentMode !== undefined && { paymentMode: values.paymentMode ?? null }),
+        ...(values.receiptUrl  !== undefined && { receiptUrl: values.receiptUrl ?? null }),
+        ...(values.isRecurring    !== undefined && { isRecurring: values.isRecurring }),
+        ...(values.recurrenceFreq !== undefined && { recurrenceFreq: values.recurrenceFreq ?? null }),
+        ...(values.vendorGstin    !== undefined && { vendorGstin: values.vendorGstin ?? null }),
+        ...(values.gstRate        !== undefined && { gstRate: values.gstRate ?? null }),
+        ...(values.gstAmount      !== undefined && { gstAmount: values.gstAmount ?? null }),
+        ...(values.isItcEligible  !== undefined && { isItcEligible: values.isItcEligible }),
       },
       include: expenseInclude,
     });
@@ -131,10 +149,8 @@ export const expenseService = {
       const d = row.date instanceof Date ? row.date : new Date(row.date);
       const monthKey = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 
-      // category totals
       byCategory[cat] = (byCategory[cat] ?? 0) + amt;
 
-      // monthly totals
       if (!monthMap.has(monthKey)) {
         monthMap.set(monthKey, { total: 0, categories: {} });
       }
@@ -152,3 +168,4 @@ export const expenseService = {
     return { year, storeId, grandTotal, byCategory, byMonth };
   },
 };
+

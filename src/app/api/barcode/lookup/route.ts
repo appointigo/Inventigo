@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { productService } from "@/modules/products/services/productService";
 import { requireOrgAuth } from "@/lib/auth.middleware";
+import { sanitizeScannedBarcode } from "@/shared/services/barcodeService";
 import type { BarcodeLookupResult } from "@/modules/barcode/types";
 
 export const GET = async (request: NextRequest) => {
@@ -13,21 +14,30 @@ export const GET = async (request: NextRequest) => {
   }
 
   try {
-    const sku = request.nextUrl.searchParams.get("sku");
+    const rawSku = request.nextUrl.searchParams.get("sku");
 
-    if (!sku || !sku.trim()) {
+    if (!rawSku) {
       return NextResponse.json({ error: "sku query parameter is required" }, { status: 400 });
     }
 
-    const product = await productService.getByBarcode(user.orgId, sku.trim());
+    // ─── Sanitize Input ──────────────────────────────────────────────────────
+    // Trim whitespace, remove scanner artifacts, validate format
+    const sku = sanitizeScannedBarcode(rawSku);
+    if (!sku) {
+      return NextResponse.json({ error: "Invalid barcode format" }, { status: 400 });
+    }
+
+    // ─── Tier 1: Try product SKU or external barcode (case-insensitive) ────
+    let product = await productService.getByBarcode(user.orgId, sku);
 
     if (!product) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
 
-    const scanned = sku.trim().toLowerCase();
+    // ─── Extract matched variant (if scanning a size-specific barcode) ──────
+    const scannedUpper = sku.toUpperCase();
     const matchedVariant = product.stock.find(
-      (s) => s.variantSku?.toLowerCase() === scanned
+      (s) => s.variantSku?.toUpperCase() === scannedUpper
     )?.sizeLabel ?? null;
 
     const result: BarcodeLookupResult = {
@@ -52,7 +62,8 @@ export const GET = async (request: NextRequest) => {
 
     return NextResponse.json(result);
   } 
-  catch {
+  catch (error) {
+    console.error("[barcode/lookup] Error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
-}
+};

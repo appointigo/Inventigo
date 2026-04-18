@@ -12,10 +12,7 @@ interface ExpenseCategoryPieChartProps {
 
 const COLORS = ["#1677ff", "#52c41a", "#faad14", "#ff4d4f", "#722ed1", "#13c2c2"];
 
-export default function ExpenseCategoryPieChart({
-  byCategory,
-  loading,
-}: ExpenseCategoryPieChartProps) {
+const ExpenseCategoryPieChart = ({ byCategory, loading }: ExpenseCategoryPieChartProps) => {
   const data = (Object.entries(byCategory) as [ExpenseCategory, number][])
     .filter(([, val]) => val > 0)
     .map(([key, value]) => ({ name: key, value }));
@@ -50,3 +47,5 @@ export default function ExpenseCategoryPieChart({
     </Card>
   );
 }
+
+export default ExpenseCategoryPieChart;

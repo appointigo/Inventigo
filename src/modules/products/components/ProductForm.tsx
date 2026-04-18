@@ -1,10 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import {
-  Form, Input, InputNumber, Select, Switch, Button, Steps, Space, Divider,
-  Card, Empty, Tooltip, Upload, Image, message, Flex, Row, Col, Alert, Typography,
-} from "antd";
+import { Form, Input, InputNumber, Select, Switch, Button, Steps, Space, Divider, Card, Empty, Tooltip, Upload, Image, message, Flex, Row, Col, Alert, Typography } from "antd";
 import { ReloadOutlined, UploadOutlined, DeleteOutlined, CameraOutlined } from "@ant-design/icons";
 import dynamic from "next/dynamic";
 import { upload } from "@vercel/blob/client";
@@ -40,20 +37,7 @@ const abbrevName = (name: string): string => {
 const generateSku = (brandName: string, categoryName: string): string =>
   `${abbrevName(brandName)}-${abbrevName(categoryName)}-${Math.floor(Math.random() * 900) + 100}`;
 
-// ─── Barcode Helpers ──────────────────────────────────────────────────────────
-
-/** Generates a valid EAN-13 barcode string with correct check digit */
-const generateEAN13 = (): string => {
-  const digits: number[] = [Math.floor(Math.random() * 9) + 1];
-  for (let i = 1; i < 12; i++) digits.push(Math.floor(Math.random() * 10));
-  const checksum = digits.reduce((sum, d, i) => sum + d * (i % 2 === 0 ? 1 : 3), 0);
-  digits.push((10 - (checksum % 10)) % 10);
-  
-  return digits.join("");
-};
-
 // ─── ProductForm ──────────────────────────────────────────────────────────────
-
 interface ProductFormProps {
   initialValues?: Product | null;
   categories: Category[];
@@ -63,14 +47,7 @@ interface ProductFormProps {
   loading?: boolean;
 }
 
-const ProductForm = ({
-  initialValues,
-  categories,
-  brands,
-  onSubmit,
-  onCancel,
-  loading,
-}: ProductFormProps) => {
+const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, loading }: ProductFormProps) => {
   const [form] = Form.useForm();
   const [step, setStep] = useState(0);
   const [skuTouched, setSkuTouched] = useState(false);
@@ -106,27 +83,25 @@ const ProductForm = ({
   const isOverAllocated = remainingQty !== null && remainingQty < 0;
 
   // Pricing signals
-  const profitAmount =
-    basePrice !== undefined && costPrice !== undefined ? basePrice - costPrice : null;
-  const profitMargin =
-    basePrice && basePrice > 0 && costPrice !== undefined
-      ? ((basePrice - costPrice) / basePrice) * 100
-      : null;
-  const isPricingWarning =
-    basePrice !== undefined && costPrice !== undefined && costPrice > basePrice;
+  const profitAmount = basePrice !== undefined && costPrice !== undefined ? basePrice - costPrice : null;
+  const profitMargin = basePrice && basePrice > 0 && costPrice !== undefined
+    ? ((basePrice - costPrice) / basePrice) * 100
+    : null;
+  const isPricingWarning = basePrice !== undefined && costPrice !== undefined && costPrice > basePrice;
 
-  const marginColor =
-    profitMargin === null ? "#8c8c8c"
-      : profitMargin < 0 ? "#cf1322"
-      : profitMargin < 20 ? "#d48806"
-      : "#389e0d";
+  const marginColor = profitMargin === null ? "#8c8c8c"
+    : profitMargin < 0 ? "#cf1322"
+    : profitMargin < 20 ? "#d48806"
+    : "#389e0d";
 
   // Auto-generate SKU when brand + category are both selected (new product only)
   useEffect(() => {
     if (isEdit || skuTouched) return;
     if (!selectedBrandId || !selectedCategoryId) return;
+
     const brand = brands.find((b) => b.id === selectedBrandId);
     const category = categories.find((c) => c.id === selectedCategoryId);
+
     if (brand && category) form.setFieldValue("sku", generateSku(brand.name, category.name));
   }, [selectedBrandId, selectedCategoryId, isEdit, skuTouched, brands, categories, form]);
 
@@ -155,7 +130,8 @@ const ProductForm = ({
           reorderLevel: s.reorderLevel,
         })),
       });
-    } else {
+    } 
+    else {
       form.resetFields();
       setSkuTouched(false);
     }
@@ -164,9 +140,9 @@ const ProductForm = ({
   // Sync size rows when category changes (new product only)
   useEffect(() => {
     if (!selectedCategory || isEdit) return;
+
     const categoryIds = new Set(selectedCategory.sizes.map((s) => s.id));
-    const current: { sizeId: string; quantity: number; reorderLevel?: number }[] =
-      form.getFieldValue("sizes") ?? [];
+    const current: { sizeId: string; quantity: number; reorderLevel?: number }[] = form.getFieldValue("sizes") ?? [];
     const kept = current.filter((s) => categoryIds.has(s.sizeId));
     const presentIds = new Set(kept.map((s) => s.sizeId));
     const newEntries = selectedCategory.sizes
@@ -185,11 +161,13 @@ const ProductForm = ({
       });
       form.setFieldValue("imageUrl", blob.url);
       options.onSuccess?.(blob);
-    } catch (err) {
+    } 
+    catch (err) {
       console.error(err);
       options.onError?.(err as Error);
       message.error("Image upload failed. Please try again.");
-    } finally {
+    } 
+    finally {
       setImageUploading(false);
     }
   };
@@ -216,7 +194,11 @@ const ProductForm = ({
           }
         }
         // 404 = not found = OK (no duplicate)
-      } finally {
+      } 
+      catch (err) {
+        console.error("validateBarcode error: ", err);
+      }
+      finally {
         setBarcodeChecking(false);
       }
     },
@@ -229,7 +211,8 @@ const ProductForm = ({
         await form.validateFields(["name", "sku", "categoryId", "brandId", "basePrice", "costPrice"]);
       }
       setStep(step + 1);
-    } catch {
+    } 
+    catch {
       // inline validation shown by Ant Design
     }
   };
@@ -284,7 +267,9 @@ const ProductForm = ({
         sizes,
         attributes,
       };
-    } catch {
+    } 
+    catch (error) {
+      console.error("Error building submit values: ", error);
       return null;
     }
   };
@@ -590,12 +575,14 @@ const ProductForm = ({
         <div style={{ display: step === 1 ? "block" : "none" }}>
           {!selectedCategory ? (
             <Empty description="Select a category first to see attribute fields" />
-          ) : selectedCategory.attributeSchema.fields.length === 0 ? (
+          ) 
+          : selectedCategory.attributeSchema.fields.length === 0 ? (
             <Empty
               image={Empty.PRESENTED_IMAGE_SIMPLE}
               description="This category has no attribute fields"
             />
-          ) : (
+          ) 
+          : (
             <Card size="small" title={`${selectedCategory.name} Attributes`}>
               {selectedCategory.attributeSchema.fields.map((field) => {
                 const isColorField = field.name.trim().toLowerCase() === "color" && field.type === "select";
@@ -615,6 +602,14 @@ const ProductForm = ({
                         placeholder={`Select ${field.name}`}
                         options={(field.options ?? []).map((o) => ({ label: o, value: o }))}
                         allowClear={!field.required}
+                        showSearch={true}
+                        optionFilterProp="label"
+                        filterOption={(input, option) =>
+                          (option?.label ?? "")
+                            .toString()
+                            .toLowerCase()
+                            .includes(input.toLowerCase())
+                        }
                         optionRender={isColorField ? (opt) => {
                           // Color swatch for color dropdown
                           const colorHex = COLOR_PALETTE.find((c) => c.name.toLowerCase() === String(opt.value).toLowerCase())?.hex;
@@ -696,7 +691,7 @@ const ProductForm = ({
                 Leave quantity at 0 for sizes you don&apos;t stock.
               </p>
               <Form.List name="sizes">
-                {(fields, { remove }) => (
+                {(fields, { remove, add }) => (
                   <>
                     {/* Column headers */}
                     <Row gutter={16} style={{ marginBottom: 8 }}>
@@ -751,6 +746,24 @@ const ProductForm = ({
                         </Row>
                       );
                     })}
+                    {/* Add Size button */}
+                    <Button
+                      type="dashed"
+                      block
+                      onClick={() => {
+                        // Find the next size that's not already added
+                        const currentSizeIds = new Set(
+                          (form.getFieldValue("sizes") ?? []).map((s: { sizeId: string }) => s.sizeId)
+                        );
+                        const availableSize = selectedCategory.sizes.find((s) => !currentSizeIds.has(s.id));
+                        if (availableSize) {
+                          add({ sizeId: availableSize.id, quantity: 0, reorderLevel: 5 });
+                        }
+                      }}
+                      style={{ marginTop: 12, marginBottom: 12 }}
+                    >
+                      + Add Size
+                    </Button>
                     {/* Totals row */}
                     <Divider style={{ margin: "12px 0" }} />
                     <Row gutter={16}>

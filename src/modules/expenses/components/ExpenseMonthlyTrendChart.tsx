@@ -1,15 +1,7 @@
 "use client";
 
 import { Card, Empty } from "antd";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import type { ExpenseMonthSummary } from "../types";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
 
@@ -19,15 +11,12 @@ interface ExpenseMonthlyTrendChartProps {
 }
 
 // Format "2026-03" → "Mar"
-function formatMonth(monthKey: string): string {
+const formatMonth = (monthKey: string): string => {
   const [year, month] = monthKey.split("-").map(Number);
   return new Date(Date.UTC(year, month - 1, 1)).toLocaleString("en-IN", { month: "short" });
 }
 
-export default function ExpenseMonthlyTrendChart({
-  data,
-  loading,
-}: ExpenseMonthlyTrendChartProps) {
+const ExpenseMonthlyTrendChart = ({ data, loading }: ExpenseMonthlyTrendChartProps) => {
   const chartData = data.map((d) => ({
     month: formatMonth(d.month),
     total: d.total,
@@ -58,3 +47,5 @@ export default function ExpenseMonthlyTrendChart({
     </Card>
   );
 }
+
+export default ExpenseMonthlyTrendChart;

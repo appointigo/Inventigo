@@ -8,7 +8,7 @@ interface BarcodeScannerProps {
   onError?: (error: string) => void;
 }
 
-export default function BarcodeScanner({ onScan, onError }: BarcodeScannerProps) {
+const BarcodeScanner = ({ onScan, onError }: BarcodeScannerProps) => {
   const scannerRef = useRef<unknown>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const scannedRef = useRef(false);
@@ -91,3 +91,5 @@ export default function BarcodeScanner({ onScan, onError }: BarcodeScannerProps)
     </>
   );
 }
+
+export default BarcodeScanner;

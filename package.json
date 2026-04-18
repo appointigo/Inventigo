@@ -23,6 +23,7 @@
     "@zxing/library": "^0.21.3",
     "antd": "^6.3.3",
     "bcryptjs": "^3.0.3",
+    "bwip-js": "^4.9.2",
     "dayjs": "^1.11.20",
     "dotenv": "^17.3.1",
     "exceljs": "^4.4.0",

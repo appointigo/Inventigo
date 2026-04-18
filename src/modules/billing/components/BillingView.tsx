@@ -6,6 +6,7 @@ import { App, Input, Select, Spin } from "antd";
 import { SearchOutlined, CheckOutlined, CloseOutlined, TagOutlined, LockOutlined, CameraOutlined } from "@ant-design/icons";
 import { useProducts } from "@/modules/products/hooks/useProducts";
 import { useCart } from "@/modules/billing/hooks/useBilling";
+import { sanitizeScannedBarcode } from "@/shared/services/barcodeService";
 import InvoicePreview from "./InvoicePreview";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
 import type { VariantRow, CreateSaleInput, Sale, PaymentMethodType } from "@/modules/billing/types";
@@ -238,11 +239,17 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
   const pendingCameraScanRef = useRef<string | null>(null);
 
   // Called when barcode is scanned via camera
+  // Sanitizes the scanned barcode to remove noise and validate format
   const handleCameraScan = useCallback((decodedText: string) => {
-    pendingCameraScanRef.current = decodedText;
-    setSearch(decodedText);
+    const sanitized = sanitizeScannedBarcode(decodedText);
+    if (!sanitized) {
+      message.error("Invalid barcode format. Please try scanning again.");
+      return;
+    }
+    pendingCameraScanRef.current = sanitized;
+    setSearch(sanitized);
     setCameraScanOpen(false);
-  }, []);
+  }, [message]);
 
   // After a camera scan the search query changes → useProducts fetches data →
   // variantRows re-derives. Once it settles, try an exact-match auto-add.
@@ -250,9 +257,9 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
     const pending = pendingCameraScanRef.current;
     if (!pending || productsLoading) return;
 
-    const s = pending.toLowerCase().trim();
+    const s = pending.toUpperCase();
     const exactMatches = variantRows.filter(
-      (r) => r.variantSku?.toLowerCase() === s || r.externalBarcode?.toLowerCase() === s
+      (r) => r.variantSku?.toUpperCase() === s || r.externalBarcode?.toUpperCase() === s
     );
     if (exactMatches.length === 1) {
       pendingCameraScanRef.current = null;
@@ -264,11 +271,11 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
 
   // Called when user presses Enter in the scan input (barcode scanner sends Enter)
   const handleScanEnter = useCallback(() => {
-    const s = search.trim().toLowerCase();
+    const s = search.trim().toUpperCase();
     if (!s || productsLoading) return;
     
     const exact = variantRows.find(
-      (r) => r.variantSku?.toLowerCase() === s || r.externalBarcode?.toLowerCase() === s
+      (r) => r.variantSku?.toUpperCase() === s || r.externalBarcode?.toUpperCase() === s
     );
     if (exact) {
       handleAddToCart(exact);

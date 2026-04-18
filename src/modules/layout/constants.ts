@@ -1,4 +1,4 @@
-import { DashboardOutlined, ShoppingOutlined, AppstoreOutlined, TagsOutlined, InboxOutlined, FileTextOutlined, ScanOutlined, BarChartOutlined, SettingOutlined, ShopOutlined, AlertOutlined, DollarOutlined, TeamOutlined, AccountBookOutlined, CalendarOutlined } from "@ant-design/icons";
+import { DashboardOutlined, ShoppingOutlined, AppstoreOutlined, TagsOutlined, InboxOutlined, FileTextOutlined, ScanOutlined, BarChartOutlined, SettingOutlined, ShopOutlined, AlertOutlined, DollarOutlined, TeamOutlined, AccountBookOutlined, CalendarOutlined, UnorderedListOutlined, LineChartOutlined, PercentageOutlined, ExperimentOutlined } from "@ant-design/icons";
 import { Role } from "@prisma/client";
 
 export type MenuItem = {
@@ -21,15 +21,15 @@ export const MENU_ITEMS: MenuItem[] = [
     roles: ALL_ROLES,
   },
   {
-    path: "/dashboard/categories",
-    name: "Categories",
-    icon: AppstoreOutlined,
-    roles: ADMIN_MANAGER,
-  },
-  {
     path: "/dashboard/brands",
     name: "Brands",
     icon: TagsOutlined,
+    roles: ADMIN_MANAGER,
+  },
+  {
+    path: "/dashboard/categories",
+    name: "Categories",
+    icon: AppstoreOutlined,
     roles: ADMIN_MANAGER,
   },
   {
@@ -61,6 +61,32 @@ export const MENU_ITEMS: MenuItem[] = [
     name: "Expenses",
     icon: AccountBookOutlined,
     roles: ADMIN_MANAGER,
+    children: [
+      {
+        path: "/dashboard/expenses",
+        name: "Transactions",
+        icon: UnorderedListOutlined,
+        roles: ADMIN_MANAGER,
+      },
+      {
+        path: "/dashboard/expenses/analytics",
+        name: "Analytics",
+        icon: LineChartOutlined,
+        roles: ADMIN_MANAGER,
+      },
+      {
+        path: "/dashboard/expenses/gst",
+        name: "GST / ITC",
+        icon: PercentageOutlined,
+        roles: ADMIN_MANAGER,
+      },
+      {
+        path: "/dashboard/expenses/advanced",
+        name: "Advanced",
+        icon: ExperimentOutlined,
+        roles: ADMIN_MANAGER,
+      },
+    ],
   },
   {
     path: "/dashboard/alerts",

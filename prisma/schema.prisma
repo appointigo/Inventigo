@@ -109,6 +109,7 @@ model Organization {
   featureFlags           FeatureFlag[]
   storeExpenses          StoreExpense[]
   expenseCategoryOptions ExpenseCategoryOption[]
+  expenseBudgets         ExpenseBudget[]
   attendances            StaffAttendance[]
   leaveRequests          LeaveRequest[]
   leaveBalances          LeaveBalance[]
@@ -141,6 +142,7 @@ model Store {
   categories     Category[]
   brands         Brand[]
   storeExpenses  StoreExpense[]
+  expenseBudgets ExpenseBudget[]
   invitations    Invitation[]
   attendances    StaffAttendance[]
   leaveRequests  LeaveRequest[]
@@ -548,12 +550,21 @@ model StoreExpense {
   orgId     String
   storeId   String
   category  String
-  amount    Decimal  @db.Decimal(10, 2)
-  date      DateTime        @db.Date
-  note      String?
-  createdBy String
-  createdAt DateTime        @default(now())
-  updatedAt DateTime        @updatedAt
+  amount         Decimal  @db.Decimal(10, 2)
+  date           DateTime @db.Date
+  note           String?
+  paymentMode    String?  // CASH | UPI | BANK_TRANSFER | CHEQUE | CREDIT_CARD | PETTY_CASH
+  receiptUrl     String?
+  status         String   @default("APPROVED") // PENDING | APPROVED | REJECTED
+  isRecurring    Boolean  @default(false)
+  recurrenceFreq String?  // MONTHLY | QUARTERLY | ANNUALLY
+  vendorGstin    String?
+  gstRate        Decimal? @db.Decimal(5, 2)
+  gstAmount      Decimal? @db.Decimal(10, 2)
+  isItcEligible  Boolean  @default(false)
+  createdBy      String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   org   Organization @relation(fields: [orgId], references: [id])
   store Store        @relation(fields: [storeId], references: [id])
@@ -562,7 +573,30 @@ model StoreExpense {
   @@index([orgId])
   @@index([storeId])
   @@index([date])
+  @@index([status])
   @@map("store_expenses")
+}
+
+// ─── EXPENSE BUDGET ──────────────────────────────────────────────────────────────
+
+model ExpenseBudget {
+  id        String   @id @default(uuid())
+  orgId     String
+  storeId   String
+  category  String
+  month     Int      // 1-12
+  year      Int
+  amount    Decimal  @db.Decimal(10, 2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org   Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  store Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, category, month, year])
+  @@index([orgId])
+  @@index([storeId])
+  @@map("expense_budgets")
 }
 
 // ─── EMAIL VERIFICATION ──────────────────────────────────────────────────────────
