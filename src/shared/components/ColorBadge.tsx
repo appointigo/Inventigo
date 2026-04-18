@@ -4,8 +4,9 @@
  * Automatically calculates best text color (black/white) for given background
  */
 
-import React from "react";
+import React, { useMemo } from "react";
 import { getColorHex } from "@/shared/theme/colorService";
+import { getContrastingTextColor, hexToRgba } from "@/shared/theme/colorUtils";
 
 interface ColorBadgeProps {
   /** Color hex value or name */
@@ -33,28 +34,6 @@ interface ColorBadgeProps {
   title?: string;
 }
 
-/**
- * Helper: Determine if text should be white or black based on background brightness
- * Uses relative luminance calculation (simplified)
- */
-const getContrastColor = (hexColor: string): string => {
-  const hex = hexColor.replace("#", "");
-
-  // Parse RGB
-  const r = parseInt(hex.substring(0, 2), 16) / 255;
-  const g = parseInt(hex.substring(2, 4), 16) / 255;
-  const b = parseInt(hex.substring(4, 6), 16) / 255;
-
-  // Calculate relative luminance
-  const luminance =
-    0.299 * r +
-    0.587 * g +
-    0.114 * b;
-
-  // Return white text for dark backgrounds, black for light backgrounds
-  return luminance > 0.5 ? "#000000" : "#FFFFFF";
-}
-
 export const ColorBadge = React.forwardRef<HTMLDivElement, ColorBadgeProps>(
   (
     {
@@ -70,8 +49,11 @@ export const ColorBadge = React.forwardRef<HTMLDivElement, ColorBadgeProps>(
     ref
   ) => {
     // Get hex color (handles color names)
-    const hexColor = getColorHex(color, "#999999");
-    const textColor = getContrastColor(hexColor);
+    const hexColor = useMemo(() => getColorHex(color, "#999999"), [color]);
+    const textColor = useMemo(
+      () => getContrastingTextColor(hexColor),
+      [hexColor]
+    );
 
     // Size mappings
     const sizeClasses = {
@@ -81,35 +63,39 @@ export const ColorBadge = React.forwardRef<HTMLDivElement, ColorBadgeProps>(
     };
 
     // Variant styles
-    const variantStyles = {
-      solid: {
-        backgroundColor: hexColor,
-        color: textColor,
-        border: "none",
-      },
-      outline: {
-        backgroundColor: "transparent",
-        color: hexColor,
-        border: `2px solid ${hexColor}`,
-      },
-      soft: {
-        backgroundColor: `${hexColor}20`, // 20% opacity
-        color: hexColor,
-        border: "none",
-      },
-    };
+    const variantStyles = useMemo(
+      () => ({
+        solid: {
+          backgroundColor: hexColor,
+          color: textColor,
+          border: "none" as const,
+        },
+        outline: {
+          backgroundColor: "transparent",
+          color: hexColor,
+          border: `2px solid ${hexColor}`,
+        },
+        soft: {
+          backgroundColor: hexToRgba(hexColor, 0.15), // 15% opacity
+          color: hexColor,
+          border: "none" as const,
+        },
+      }),
+      [hexColor, textColor]
+    );
 
     return (
       <div
         ref={ref}
-        className={`inline-flex items-center justify-center rounded-full font-medium transition-opacity ${
+        className={`inline-flex items-center justify-center rounded-full font-medium transition-all duration-200 ${
           sizeClasses[size]
-        } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"} ${className}`}
+        } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:shadow-md"} ${className}`}
         style={variantStyles[variant]}
         onClick={!disabled ? onClick : undefined}
         title={title}
         role="badge"
         aria-disabled={disabled}
+        tabIndex={disabled ? -1 : 0}
       >
         {children}
       </div>

@@ -49,6 +49,8 @@ export interface ColorVariations {
 export interface SemanticColorToken {
   light: string; // Hex for light theme
   dark: string;  // Hex for dark theme
+  lightText?: string; // Optional text color for light theme
+  darkText?: string;  // Optional text color for dark theme
 }
 
 /**
@@ -60,3 +62,29 @@ export interface NTCResult {
   exactMatch: boolean;    // Is exact match in palette
   distance: number;       // Distance from closest color (0-1000)
 }
+
+/**
+ * Color extraction result from image or palette
+ */
+export interface ExtractedColor {
+  hex: string;            // Hex color code
+  name: string;           // Extracted color name
+  semantic?: string;      // Semantic meaning if available
+  confidence?: number;    // Confidence score (0-1)
+}
+
+/**
+ * WCAG accessibility level
+ */
+export type WCAGLevel = "AA" | "AAA";
+
+/**
+ * Color harmony types
+ */
+export type HarmonyType =
+  | "complementary"
+  | "triadic"
+  | "analogous"
+  | "split-complementary"
+  | "tetradic"
+  | "monochromatic";

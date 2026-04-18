@@ -4,8 +4,13 @@
  * Automatically generates hover/active states based on base color
  */
 
-import React from "react";
+import React, { useMemo, useState, useCallback } from "react";
 import { getColorHex } from "@/shared/theme/colorService";
+import {
+  getContrastingTextColor,
+  lightenColor,
+  darkenColor,
+} from "@/shared/theme/colorUtils";
 
 interface ColoredButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -28,59 +33,6 @@ interface ColoredButtonProps
   loadingIndicator?: React.ReactNode;
 }
 
-/**
- * Helper: Determine if text should be white or black based on background brightness
- */
-const getContrastColor = (hexColor: string): string => {
-  const hex = hexColor.replace("#", "");
-
-  const r = parseInt(hex.substring(0, 2), 16) / 255;
-  const g = parseInt(hex.substring(2, 4), 16) / 255;
-  const b = parseInt(hex.substring(4, 6), 16) / 255;
-
-  const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
-
-  return luminance > 0.5 ? "#000000" : "#FFFFFF";
-}
-
-/**
- * Helper: Lighten color by mixing with white
- */
-const lightenColor = (hex: string, percent: number = 20): string => {
-  const hexClean = hex.replace("#", "");
-  const r = parseInt(hexClean.substring(0, 2), 16);
-  const g = parseInt(hexClean.substring(2, 4), 16);
-  const b = parseInt(hexClean.substring(4, 6), 16);
-
-  const lighter = (channel: number) =>
-    Math.round(channel + (255 - channel) * (percent / 100));
-
-  const newR = lighter(r).toString(16).padStart(2, "0");
-  const newG = lighter(g).toString(16).padStart(2, "0");
-  const newB = lighter(b).toString(16).padStart(2, "0");
-
-  return `#${newR}${newG}${newB}`;
-}
-
-/**
- * Helper: Darken color by mixing with black
- */
-const darkenColor = (hex: string, percent: number = 20): string => {
-  const hexClean = hex.replace("#", "");
-  const r = parseInt(hexClean.substring(0, 2), 16);
-  const g = parseInt(hexClean.substring(2, 4), 16);
-  const b = parseInt(hexClean.substring(4, 6), 16);
-
-  const darker = (channel: number) =>
-    Math.round(channel - channel * (percent / 100));
-
-  const newR = darker(r).toString(16).padStart(2, "0");
-  const newG = darker(g).toString(16).padStart(2, "0");
-  const newB = darker(b).toString(16).padStart(2, "0");
-
-  return `#${newR}${newG}${newB}`;
-}
-
 export const ColoredButton = React.forwardRef<
   HTMLButtonElement,
   ColoredButtonProps
@@ -100,11 +52,17 @@ export const ColoredButton = React.forwardRef<
     },
     ref
   ) => {
-    // Get hex color (handles color names)
-    const hexColor = getColorHex(colorHex, "#3B82F6");
-    const textColor = getContrastColor(hexColor);
-    const hoverColor = lightenColor(hexColor, 15);
-    const activeColor = darkenColor(hexColor, 15);
+    const [isHovering, setIsHovering] = useState(false);
+    const [isPressed, setIsPressed] = useState(false);
+
+    // Memoize color calculations
+    const hexColor = useMemo(() => getColorHex(colorHex, "#3B82F6"), [colorHex]);
+    const textColor = useMemo(
+      () => getContrastingTextColor(hexColor),
+      [hexColor]
+    );
+    const hoverColor = useMemo(() => lightenColor(hexColor, 12), [hexColor]);
+    const activeColor = useMemo(() => darkenColor(hexColor, 12), [hexColor]);
 
     // Size mappings
     const sizeClasses = {
@@ -113,88 +71,84 @@ export const ColoredButton = React.forwardRef<
       lg: "px-6 py-3 text-lg",
     };
 
-    // Base button style
-    const baseStyle: React.CSSProperties = {
-      borderRadius: "6px",
-      fontWeight: 500,
-      transition: "all 0.2s ease",
-      cursor: disabled ? "not-allowed" : "pointer",
-      opacity: disabled ? 0.6 : 1,
-      ...style,
-    };
+    // Memoize styles
+    const computedStyle = useMemo((): React.CSSProperties => {
+      const baseStyle: React.CSSProperties = {
+        borderRadius: "6px",
+        fontWeight: 500,
+        transition: "all 0.2s ease-out",
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.6 : 1,
+        ...style,
+      };
 
-    // Variant styles
-    const variantStyle: React.CSSProperties =
-      variant === "solid"
-        ? {
-            backgroundColor: hexColor,
-            color: textColor,
-            border: "none",
-          }
-        : variant === "outline"
+      const variantStyle: React.CSSProperties =
+        variant === "solid"
           ? {
-              backgroundColor: "transparent",
-              color: hexColor,
-              border: `2px solid ${hexColor}`,
-            }
-          : {
-              backgroundColor: "transparent",
-              color: hexColor,
+              backgroundColor: isPressed
+                ? activeColor
+                : isHovering
+                  ? hoverColor
+                  : hexColor,
+              color: textColor,
               border: "none",
-            };
+            }
+          : variant === "outline"
+            ? {
+                backgroundColor: "transparent",
+                color: hexColor,
+                borderColor: isPressed
+                  ? activeColor
+                  : isHovering
+                    ? hoverColor
+                    : hexColor,
+                border: `2px solid`,
+              }
+            : {
+                backgroundColor: isHovering ? "rgba(0,0,0,0.05)" : "transparent",
+                color: hexColor,
+                border: "none",
+              };
+
+      return { ...baseStyle, ...variantStyle };
+    }, [variant, isHovering, isPressed, hexColor, textColor, hoverColor, activeColor, disabled, style]);
+
+    const handleMouseEnter = useCallback(() => {
+      if (!disabled && !isLoading) setIsHovering(true);
+    }, [disabled, isLoading]);
+
+    const handleMouseLeave = useCallback(() => {
+      setIsHovering(false);
+      setIsPressed(false);
+    }, []);
+
+    const handleMouseDown = useCallback(() => {
+      if (!disabled && !isLoading) setIsPressed(true);
+    }, [disabled, isLoading]);
+
+    const handleMouseUp = useCallback(() => {
+      setIsPressed(false);
+    }, []);
 
     return (
       <button
         ref={ref}
         className={`${sizeClasses[size]} font-medium rounded transition-all ${className}`}
-        style={{
-          ...baseStyle,
-          ...variantStyle,
-        }}
+        style={computedStyle}
         disabled={disabled || isLoading}
-        onMouseEnter={(e) => {
-          if (!disabled && !isLoading) {
-            const target = e.currentTarget;
-            if (variant === "solid") {
-              target.style.backgroundColor = hoverColor;
-            } else if (variant === "outline") {
-              target.style.borderColor = hoverColor;
-              target.style.color = hoverColor;
-            } else {
-              target.style.opacity = "0.8";
-            }
-          }
-        }}
-        onMouseLeave={(e) => {
-          if (!disabled && !isLoading) {
-            const target = e.currentTarget;
-            if (variant === "solid") {
-              target.style.backgroundColor = hexColor;
-            } else if (variant === "outline") {
-              target.style.borderColor = hexColor;
-              target.style.color = hexColor;
-            } else {
-              target.style.opacity = "1";
-            }
-          }
-        }}
-        onMouseDown={(e) => {
-          if (!disabled && !isLoading) {
-            const target = e.currentTarget;
-            if (variant === "solid") {
-              target.style.backgroundColor = activeColor;
-            } else if (variant === "outline") {
-              target.style.borderColor = activeColor;
-              target.style.color = activeColor;
-            }
-          }
-        }}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        onMouseDown={handleMouseDown}
+        onMouseUp={handleMouseUp}
         {...props}
       >
         {isLoading ? (
           <span className="inline-flex items-center gap-2">
             {loadingIndicator || (
-              <span className="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+              <span
+                className="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"
+                aria-hidden="true"
+              />
             )}
             {children}
           </span>
