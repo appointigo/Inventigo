@@ -1,18 +1,9 @@
 import { Prisma } from "@prisma/client";
-import { createHash } from "crypto";
 import { prisma } from "@/lib/db";
 import type { Product, ProductFormValues, ProductListFilters, BulkProductValidated, BulkUploadResult } from "../types";
 import { imageService } from "@/shared/services/imageService";
 import { normalizeNameKey, normalizeSku } from "@/shared/utils/normalization";
-import { buildVariantSku, sanitizeScannedBarcode } from "@/shared/services/barcodeService";
-
-/** Normalizes a size label to the suffix used in variantSku, e.g. "UK 6" → "UK6" */
-const normalizeSizeLabel = (label: string) =>
-  label.trim().toUpperCase().replace(/\s+/g, "");
-
-/** Derives a variant SKU from the product SKU and size label */
-const buildVariantSku = (productSku: string, sizeLabel: string) =>
-  `${productSku}-${normalizeSizeLabel(sizeLabel)}`;
+import { buildVariantSku, normalizeSizeLabel, sanitizeScannedBarcode } from "@/shared/services/barcodeService";
 
 const buildInclude = (storeId?: string) => ({
   category: { select: { name: true } },
