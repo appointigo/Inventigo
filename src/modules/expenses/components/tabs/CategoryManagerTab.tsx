@@ -4,7 +4,8 @@ import { PlusOutlined, TagOutlined } from "@ant-design/icons";
 import type { StoreExpense } from "../../types";
 import type { ExpenseCategoryOption } from "../../services/expenseCategoryService";
 import { TipCard } from "../ExpenseAdvancedTab.styled";
-import { COLOR_PALETTE } from "@/modules/categories/components/AttributeSchemaBuilder";
+import { getAccentColorOptions } from "@/shared/theme/colorService";
+import { themeConfig } from "@/shared/theme/themeConfig";
 
 interface CategoryManagerTabProps {
   categories: ExpenseCategoryOption[];
@@ -18,6 +19,13 @@ const CategoryManagerTab = ({ categories, expenses, onAddCategory, onDeleteCateg
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [form] = Form.useForm();
   const [selectedColor, setSelectedColor] = useState("blue");
+
+  // Get color palette options for UI
+  const colorPalette = useMemo(() => getAccentColorOptions(), []);
+  const colorMap = useMemo(
+    () => Object.fromEntries(colorPalette.map((c) => [c.key, c])),
+    [colorPalette]
+  );
 
   // Calculate category usage
   const categoryUsage = useMemo(() => {
@@ -76,7 +84,7 @@ const CategoryManagerTab = ({ categories, expenses, onAddCategory, onDeleteCateg
                 </Button>
               )
             }
-            style={{ background: "#f9fafb" }}
+            style={{ background: themeConfig.colors.background }}
           >
             {/* All Categories */}
             <div style={{ marginBottom: 8, fontSize: 12.5, fontWeight: 600, color: "#94a3b8" }}>
@@ -86,7 +94,7 @@ const CategoryManagerTab = ({ categories, expenses, onAddCategory, onDeleteCateg
               {categories.length > 0 ? (
                 categories.map((cat) => {
                   const colorHex =
-                    COLOR_PALETTE.find((c) => c.key === cat.colorKey)?.hex || "#1890ff";
+                    colorMap[cat.colorKey]?.hex || themeConfig.colors.accents.blue;
 
                   return (
                     <Tag
@@ -130,8 +138,9 @@ const CategoryManagerTab = ({ categories, expenses, onAddCategory, onDeleteCateg
                     width: "60%",
                     render: (text: string, record: any) => {
                       const category = categories.find((c) => c.id === record.key);
+                      const colorKey = category?.colorKey ?? "blue";
                       const colorHex =
-                        COLOR_PALETTE.find((c) => c.key === category?.colorKey)?.hex || "#1890ff";
+                        colorMap[colorKey]?.hex || themeConfig.colors.accents.blue;
                       return (
                         <Flex align="center" gap={8}>
                           <div
@@ -198,7 +207,7 @@ const CategoryManagerTab = ({ categories, expenses, onAddCategory, onDeleteCateg
 
           <Form.Item label="Select Color">
             <Flex gap={8} wrap>
-              {COLOR_PALETTE.map((color) => (
+              {colorPalette.map((color) => (
                 <Tag
                   key={color.key}
                   color={color.hex}

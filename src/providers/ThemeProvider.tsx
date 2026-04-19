@@ -4,6 +4,7 @@ import { ConfigProvider, App, theme as antTheme } from "antd";
 import { ThemeProvider as EmotionThemeProvider } from "@emotion/react";
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
 import { lightTheme, darkTheme } from "@/shared/theme/tokens";
+import { themeConfig as colorTheme } from "@/shared/theme/themeConfig";
 
 export type ThemeMode = "light" | "dark" | "system";
 
@@ -19,17 +20,22 @@ export const ThemeModeContext = createContext<ThemeModeContextType>({
 
 const STORAGE_KEY = "stockiva-theme";
 
+/**
+ * Base tokens for Ant Design theme
+ * All color values are centrally defined in themeConfig (colors.ts)
+ * This ensures single source of truth across entire application
+ */
 const baseTokens = {
-  colorPrimary: "#1677ff",
-  colorSuccess: "#52c41a",
-  colorWarning: "#faad14",
-  colorError: "#ff4d4f",
-  colorInfo: "#1677ff",
+  colorPrimary: colorTheme.colors.primary,      // "#1677FF"
+  colorSuccess: colorTheme.colors.success,      // "#52C41A"
+  colorWarning: colorTheme.colors.warning,      // "#FA8C16"
+  colorError: colorTheme.colors.error,          // "#EF4444"
+  colorInfo: colorTheme.colors.info,            // "#13C2C2"
   fontFamily:
     "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
   fontSize: 14,
   borderRadius: 6,
-};
+} as const;
 
 export const ThemeProvider = ({ children }: { children: ReactNode }) => {
   const [mode, setModeState] = useState<ThemeMode>("light");
@@ -65,18 +71,23 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
     document.documentElement.setAttribute("data-theme", isDark ? "dark" : "light");
   }, [isDark]);
 
-  // Use slate-palette dark colours that pair well with Emotion's hardcoded values
+  /**
+   * Ant Design theme configuration
+   * Uses centralized themeConfig colors for both light and dark modes
+   * Ensures single source of truth for all theme colors
+   */
   const themeConfig = {
     token: {
       ...baseTokens,
-      colorBgContainer: isDark ? "#1e293b" : "#ffffff",
-      colorBgLayout:    isDark ? "#0f172a" : "#f5f5f5",
-      colorBgElevated:  isDark ? "#1e293b" : "#ffffff",
-      colorBorder:      isDark ? "#334155" : "#d9d9d9",
-      colorBorderSecondary: isDark ? "#1e293b" : "#f0f0f0",
-      colorText:        isDark ? "#f1f5f9" : "#0f172a",
-      colorTextSecondary: isDark ? "#94a3b8" : "#64748b",
-      colorTextTertiary:  isDark ? "#64748b" : "#9ca3af",
+      // Use centralized theme colors based on mode
+      colorBgContainer: isDark ? colorTheme.dark.bgContainer : colorTheme.light.bgContainer,
+      colorBgLayout: isDark ? colorTheme.dark.bgLayout : colorTheme.light.bgLayout,
+      colorBgElevated: isDark ? colorTheme.dark.bgElevated : colorTheme.light.bgElevated,
+      colorBorder: isDark ? colorTheme.dark.border : colorTheme.light.border,
+      colorBorderSecondary: isDark ? colorTheme.dark.borderSecondary : colorTheme.light.borderSecondary,
+      colorText: isDark ? colorTheme.dark.text : colorTheme.light.text,
+      colorTextSecondary: isDark ? colorTheme.dark.textSecondary : colorTheme.light.textSecondary,
+      colorTextTertiary: isDark ? colorTheme.dark.textTertiary : colorTheme.light.textTertiary,
     },
     algorithm: isDark ? antTheme.darkAlgorithm : antTheme.defaultAlgorithm,
   };

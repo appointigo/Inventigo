@@ -4,25 +4,16 @@ import { Button, Input, Select, Switch, Space, Card, Empty, Tag, Flex } from "an
 import { PlusOutlined, DeleteOutlined, HolderOutlined } from "@ant-design/icons";
 import type { AttributeField } from "../types";
 import { useAttributeColors } from "../hooks/useAttributeColors";
+import { getAccentColorOptions } from "@/shared/theme/colorService";
+import { themeConfig } from "@/shared/theme/themeConfig";
 
 interface AttributeSchemaBuilderProps {
   value?: AttributeField[];
   onChange?: (fields: AttributeField[]) => void;
 }
 
-export const COLOR_PALETTE = [
-  { key: "blue", name: "blue", hex: "#1890ff", tag: "blue" },
-  { key: "gold", name: "gold", hex: "#faad14", tag: "gold" },
-  { key: "green", name: "green", hex: "#52c41a", tag: "green" },
-  { key: "cyan", name: "cyan", hex: "#13c2c2", tag: "cyan" },
-  { key: "purple", name: "purple", hex: "#722ed1", tag: "purple" },
-  { key: "red", name: "red", hex: "#f5222d", tag: "red" },
-  { key: "orange", name: "orange", hex: "#fa8c16", tag: "orange" },
-  { key: "magenta", name: "magenta", hex: "#eb2f96", tag: "magenta" },
-  { key: "volcano", name: "volcano", hex: "#fa541c", tag: "volcano" },
-  { key: "lime", name: "lime", hex: "#a6e32d", tag: "lime" },
-  { key: "geekblue", name: "geekblue", hex: "#2f54eb", tag: "geekblue" },
-];
+// Re-export for backward compatibility (used in ProductForm, etc.)
+export const COLOR_PALETTE = getAccentColorOptions();
 
 const FIELD_TYPES = [
   { label: "Text", value: "text" },

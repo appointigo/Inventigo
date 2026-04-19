@@ -466,3 +466,70 @@ export const getColorHex = (nameOrKey: string, fallback = "#999999"): string => 
 export const getColorName = (hex: string): string | null => {
   return findColorNameByHex(hex);
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// DROPDOWN & SELECTION OPTIONS (Component Integration)
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * Get color options for product/variant color dropdown
+ * Includes all product-specific colors organized by type
+ * Used in ProductForm for T-shirt color selection, etc.
+ *
+ * @returns Array of color options with key, name, hex, and value
+ *
+ * @example
+ * const options = getProductColorOptions();
+ * // [
+ * //   { key: "red", name: "Red", hex: "#E53E3E", value: "red" },
+ * //   { key: "blue", name: "Blue", hex: "#4299E1", value: "blue" },
+ * //   ...
+ * // ]
+ */
+export const getProductColorOptions = () => {
+  return [
+    { key: "red", name: "Red", hex: COLOR_PALETTE.product_red.hex, value: "red" },
+    { key: "darkRed", name: "Dark Red", hex: COLOR_PALETTE.red_600.hex, value: "darkRed" },
+    { key: "blue", name: "Blue", hex: COLOR_PALETTE.product_blue.hex, value: "blue" },
+    { key: "darkBlue", name: "Dark Blue", hex: COLOR_PALETTE.blue_600.hex, value: "darkBlue" },
+    { key: "black", name: "Black", hex: COLOR_PALETTE.product_black.hex, value: "black" },
+    { key: "white", name: "White", hex: COLOR_PALETTE.product_white_off.hex, value: "white" },
+    { key: "navy", name: "Navy", hex: COLOR_PALETTE.product_navy.hex, value: "navy" },
+    { key: "green", name: "Green", hex: COLOR_PALETTE.product_green.hex, value: "green" },
+    { key: "gray", name: "Gray", hex: COLOR_PALETTE.product_gray.hex, value: "gray" },
+    { key: "brown", name: "Brown", hex: COLOR_PALETTE.product_brown.hex, value: "brown" },
+    { key: "pink", name: "Pink", hex: COLOR_PALETTE.product_pink.hex, value: "pink" },
+    { key: "orange", name: "Orange", hex: COLOR_PALETTE.product_orange.hex, value: "orange" },
+  ] as const;
+}
+
+/**
+ * Get accent/category color options for category management
+ * Maps to Ant Design tag colors for consistency
+ * Used in CategoryManagerTab for category color selection
+ *
+ * @returns Array of accent color options
+ *
+ * @example
+ * const accents = getAccentColorOptions();
+ * // [
+ * //   { key: "blue", name: "Blue", hex: "#1677FF", tag: "blue", value: "blue" },
+ * //   { key: "gold", name: "Gold", hex: "#FFD700", tag: "gold", value: "gold" },
+ * //   ...
+ * // ]
+ */
+export const getAccentColorOptions = () => {
+  return [
+    { key: "blue", name: "Blue", hex: COLOR_PALETTE.blue_50.hex, tag: "blue", value: "blue" },
+    { key: "gold", name: "Gold", hex: COLOR_PALETTE.gold_50.hex, tag: "gold", value: "gold" },
+    { key: "green", name: "Green", hex: COLOR_PALETTE.green_50.hex, tag: "green", value: "green" },
+    { key: "cyan", name: "Cyan", hex: COLOR_PALETTE.cyan_50.hex, tag: "cyan", value: "cyan" },
+    { key: "purple", name: "Purple", hex: COLOR_PALETTE.purple_50.hex, tag: "purple", value: "purple" },
+    { key: "red", name: "Red", hex: COLOR_PALETTE.red_50.hex, tag: "red", value: "red" },
+    { key: "orange", name: "Orange", hex: COLOR_PALETTE.orange_50.hex, tag: "orange", value: "orange" },
+    { key: "magenta", name: "Magenta", hex: COLOR_PALETTE.magenta_50.hex, tag: "magenta", value: "magenta" },
+    { key: "volcano", name: "Volcano", hex: COLOR_PALETTE.orange_600.hex, tag: "volcano", value: "volcano" },
+    { key: "lime", name: "Lime", hex: COLOR_PALETTE.lime.hex, tag: "lime", value: "lime" },
+    { key: "geekblue", name: "Geek Blue", hex: COLOR_PALETTE.indigo_50.hex, tag: "geekblue", value: "geekblue" },
+  ] as const;
+}

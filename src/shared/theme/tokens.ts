@@ -1,24 +1,25 @@
 import type { Theme } from "@emotion/react";
+import { themeConfig } from "./themeConfig";
 
 // ─── Light Theme ──────────────────────────────────────────────────────────────
 
 export const lightTheme: Theme = {
   isDark: false,
   bg: {
-    layout:  "#f0f4f8",
-    surface: "#ffffff",
-    subtle:  "#f8fafc",
-    muted:   "#f3f4f6",
+    layout: themeConfig.light.bgLayout,
+    surface: themeConfig.light.bgContainer,
+    subtle: themeConfig.light.bgSubtle,
+    muted: themeConfig.light.bgSubtle,
   },
   text: {
-    primary:   "#111827",
-    secondary: "#374151",
-    muted:     "#6b7280",
-    faint:     "#9ca3af",
+    primary: themeConfig.light.text,
+    secondary: themeConfig.light.textSecondary,
+    muted: themeConfig.light.textMuted,
+    faint: themeConfig.light.textTertiary,
   },
   border: {
-    primary: "#e5e7eb",
-    subtle:  "#f3f4f6",
+    primary: themeConfig.light.border,
+    subtle: themeConfig.light.borderSecondary,
   },
 };
 
@@ -27,19 +28,19 @@ export const lightTheme: Theme = {
 export const darkTheme: Theme = {
   isDark: true,
   bg: {
-    layout:  "#0f172a",
-    surface: "#1e293b",
-    subtle:  "#243447",
-    muted:   "#334155",
+    layout: themeConfig.dark.bgLayout,
+    surface: themeConfig.dark.bgContainer,
+    subtle: themeConfig.dark.bgSubtle,
+    muted: themeConfig.dark.bgSubtle,
   },
   text: {
-    primary:   "#f1f5f9",
-    secondary: "#cbd5e1",
-    muted:     "#94a3b8",
-    faint:     "#64748b",
+    primary: themeConfig.dark.text,
+    secondary: themeConfig.dark.textSecondary,
+    muted: themeConfig.dark.textMuted,
+    faint: themeConfig.dark.textTertiary,
   },
   border: {
-    primary: "#334155",
-    subtle:  "#1e293b",
+    primary: themeConfig.dark.border,
+    subtle: themeConfig.dark.borderSecondary,
   },
 };

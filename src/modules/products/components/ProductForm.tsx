@@ -10,12 +10,13 @@ import type { Product, ProductFormValues } from "../types";
 import type { Category } from "@/modules/categories/types";
 import type { Brand } from "@/modules/brands/types";
 import { useSuppliers } from "@/modules/suppliers/hooks/useSuppliers";
+import { getProductColorOptions, getColorHexByName } from "@/shared/theme/colorService";
+import { themeConfig } from "@/shared/theme/themeConfig";
 
 const CameraBarcodeScannerModal = dynamic(
   () => import("@/modules/barcode/components/CameraBarcodeScannerModal"),
   { ssr: false }
 );
-import { COLOR_PALETTE } from "@/modules/categories/components/AttributeSchemaBuilder";
 
 const { Text } = Typography;
 
@@ -612,7 +613,9 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
                         }
                         optionRender={isColorField ? (opt) => {
                           // Color swatch for color dropdown
-                          const colorHex = COLOR_PALETTE.find((c) => c.name.toLowerCase() === String(opt.value).toLowerCase())?.hex;
+                          // Look up color by name in ENTIRE palette (not limited list)
+                          // This supports all colors defined in categories/attributes
+                          const colorHex = getColorHexByName(String(opt.value)) ?? themeConfig.colors.border;
                           return (
                             <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
                               <span style={{
@@ -620,8 +623,8 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
                                 width: 14,
                                 height: 14,
                                 borderRadius: "50%",
-                                background: colorHex ?? "#ccc",
-                                border: "1px solid rgba(0,0,0,0.15)",
+                                background: colorHex,
+                                border: `1px solid ${themeConfig.colors.borderLight}`,
                                 flexShrink: 0,
                                 verticalAlign: "middle",
                               }} />
