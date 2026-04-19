@@ -3,6 +3,7 @@
 import { Button, Input, Select, Switch, Space, Card, Empty, Tag, Flex } from "antd";
 import { PlusOutlined, DeleteOutlined, HolderOutlined } from "@ant-design/icons";
 import type { AttributeField } from "../types";
+import { useAttributeColors } from "../hooks/useAttributeColors";
 
 interface AttributeSchemaBuilderProps {
   value?: AttributeField[];
@@ -15,43 +16,10 @@ const FIELD_TYPES = [
   { label: "Number", value: "number" },
 ] as const;
 
-export const COLOR_PALETTE = [
-  { name: "Red", hex: "#E53E3E" },
-  { name: "Coral", hex: "#FF6B6B" },
-  { name: "Orange", hex: "#F6863A" },
-  { name: "Amber", hex: "#F59E0B" },
-  { name: "Yellow", hex: "#F6E05E" },
-  { name: "Lime", hex: "#84CC16" },
-  { name: "Green", hex: "#48BB78" },
-  { name: "Teal", hex: "#38B2AC" },
-  { name: "Cyan", hex: "#4FD1C5" },
-  { name: "Sky Blue", hex: "#63B3ED" },
-  { name: "Blue", hex: "#4299E1" },
-  { name: "Navy", hex: "#2A4A7F" },
-  { name: "Indigo", hex: "#5A67D8" },
-  { name: "Violet", hex: "#805AD5" },
-  { name: "Purple", hex: "#9F7AEA" },
-  { name: "Pink", hex: "#F687B3" },
-  { name: "Rose", hex: "#FC8181" },
-  { name: "Maroon", hex: "#742A2A" },
-  { name: "Brown", hex: "#92400E" },
-  { name: "Tan", hex: "#D2B48C" },
-  { name: "Beige", hex: "#F5F5DC" },
-  { name: "Cream", hex: "#FFFDD0" },
-  { name: "Olive", hex: "#808000" },
-  { name: "Gold", hex: "#FFD700" },
-  { name: "Silver", hex: "#C0C0C0" },
-  { name: "White", hex: "#FFFFFF" },
-  { name: "Light Grey", hex: "#E2E8F0" },
-  { name: "Grey", hex: "#718096" },
-  { name: "Dark Grey", hex: "#4A5568" },
-  { name: "Black", hex: "#1A202C" },
-];
-
-const colorHex = (name: string) =>
-  COLOR_PALETTE.find((c) => c.name.toLowerCase() === name.toLowerCase())?.hex;
-
 const AttributeSchemaBuilder = ({ value: fields = [], onChange }: AttributeSchemaBuilderProps) => {
+  // Get colors from service (memoized, no re-renders on prop changes)
+  const { colors, getHex } = useAttributeColors();
+
   const updateField = (index: number, patch: Partial<AttributeField>) => {
     const updated = fields.map((f, i) => (i === index ? { ...f, ...patch } : f));
     onChange?.(updated);
@@ -111,7 +79,7 @@ const AttributeSchemaBuilder = ({ value: fields = [], onChange }: AttributeSchem
                     onChange={(opts) => {
                       // If Select All is chosen, select all colors
                       if (opts.includes("__ALL__")) {
-                        updateField(index, { options: COLOR_PALETTE.map((c) => c.name) });
+                        updateField(index, { options: colors.map((c) => c.name) });
                       } else {
                         updateField(index, { options: opts });
                       }
@@ -121,7 +89,7 @@ const AttributeSchemaBuilder = ({ value: fields = [], onChange }: AttributeSchem
                       if (opt.value === "__ALL__") {
                         return <b>Select All</b>;
                       }
-                      const hex = colorHex(String(opt.value));
+                      const hex = getHex(String(opt.value));
                       return (
                         <Space size={6}>
                           <span
@@ -142,7 +110,7 @@ const AttributeSchemaBuilder = ({ value: fields = [], onChange }: AttributeSchem
                     }}
                     tagRender={(props) => {
                       if (props.value === "__ALL__") return <></>;
-                      const hex = colorHex(String(props.value));
+                      const hex = getHex(String(props.value));
 
                       return (
                         <Tag
@@ -166,7 +134,7 @@ const AttributeSchemaBuilder = ({ value: fields = [], onChange }: AttributeSchem
 
                     options={[
                       { label: "Select All", value: "__ALL__" },
-                      ...COLOR_PALETTE.map((c) => ({ label: c.name, value: c.name })),
+                      ...colors.map((c) => ({ label: c.name, value: c.name })),
                     ]}
                     maxTagCount={3}
                     maxTagPlaceholder={(omittedValues) => {
