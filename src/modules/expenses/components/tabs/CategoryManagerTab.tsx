@@ -4,6 +4,7 @@ import { PlusOutlined, TagOutlined } from "@ant-design/icons";
 import type { StoreExpense } from "../../types";
 import type { ExpenseCategoryOption } from "../../services/expenseCategoryService";
 import { TipCard } from "../ExpenseAdvancedTab.styled";
+import { COLOR_PALETTE } from "@/modules/categories/components/AttributeSchemaBuilder";
 
 interface CategoryManagerTabProps {
   categories: ExpenseCategoryOption[];
@@ -12,20 +13,6 @@ interface CategoryManagerTabProps {
   onDeleteCategory: (id: string) => Promise<boolean>;
   canModify: boolean;
 }
-
-const COLOR_PALETTE = [
-  { key: "blue", hex: "#1890ff", tag: "blue" },
-  { key: "gold", hex: "#faad14", tag: "gold" },
-  { key: "green", hex: "#52c41a", tag: "green" },
-  { key: "cyan", hex: "#13c2c2", tag: "cyan" },
-  { key: "purple", hex: "#722ed1", tag: "purple" },
-  { key: "red", hex: "#f5222d", tag: "red" },
-  { key: "orange", hex: "#fa8c16", tag: "orange" },
-  { key: "magenta", hex: "#eb2f96", tag: "magenta" },
-  { key: "volcano", hex: "#fa541c", tag: "volcano" },
-  { key: "lime", hex: "#a6e32d", tag: "lime" },
-  { key: "geekblue", hex: "#2f54eb", tag: "geekblue" },
-];
 
 const CategoryManagerTab = ({ categories, expenses, onAddCategory, onDeleteCategory, canModify }: CategoryManagerTabProps) => {
   const [addModalOpen, setAddModalOpen] = useState(false);
