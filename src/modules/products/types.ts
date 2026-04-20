@@ -13,7 +13,7 @@ export type BulkProductRow = {
   external_barcode: string;      // optional
   image_url: string;             // optional
   attributes: string;            // "color:Blue;material:Cotton" — optional
-  [key: string]: string;
+  [key: string]: string | undefined;
 };
 
 /** Validated and coerced row ready to send to the server. */
