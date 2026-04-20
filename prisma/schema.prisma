@@ -269,6 +269,7 @@ model Product {
   brandId          String
   basePrice        Decimal  @db.Decimal(10, 2)
   costPrice        Decimal  @db.Decimal(10, 2)
+  mrp              Decimal? @db.Decimal(10, 2)
   attributes       Json     @default("{}")
   imageUrl         String?
   isActive         Boolean  @default(true)

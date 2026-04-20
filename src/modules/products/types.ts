@@ -7,6 +7,7 @@ export type BulkProductRow = {
   sku: string;                   // optional — blank triggers auto-generation
   name: string;
   base_price: string;
+  mrp?: string;
   cost_price: string;
   sizes_and_quantities: string;  // "S:10,M:20,L:15" — optional
   external_barcode: string;      // optional
@@ -22,6 +23,7 @@ export type BulkProductValidated = {
   sku: string;                        // may be empty string (server auto-generates)
   name: string;
   basePrice: number;
+  mrp?: number;
   costPrice: number;
   sizesAndQuantities: Record<string, number>; // { S: 10, M: 20 }
   externalBarcode: string | null;
@@ -56,6 +58,7 @@ export type ProductFormValues = {
   categoryId: string;
   brandId: string;
   basePrice: number;
+  mrp: number;
   costPrice: number;
   attributes: Record<string, unknown>;
   imageUrl?: string;
@@ -90,6 +93,7 @@ export type Product = {
   brandId: string;
   brandName: string;
   basePrice: number;
+  mrp: number | null;
   costPrice: number;
   attributes: Record<string, unknown>;
   imageUrl: string | null;

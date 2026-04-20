@@ -121,6 +121,7 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
         isActive: initialValues.isActive,
         imageUrl: initialValues.imageUrl ?? undefined,
         unit: (attrs.unit as string) ?? undefined,
+        mrp: (initialValues as any).mrp ?? undefined,
         supplierId: (attrs.supplierId as string) ?? undefined,
         attributes: Object.fromEntries(
           Object.entries(attrs).filter(([k]) => k !== "unit" && k !== "supplierId")
@@ -135,6 +136,7 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
     else {
       form.resetFields();
       setSkuTouched(false);
+      form.setFieldValue("unit", "pcs");
     }
   }, [initialValues, form]);
 
@@ -209,7 +211,7 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
   const handleNext = async () => {
     try {
       if (step === 0) {
-        await form.validateFields(["name", "sku", "categoryId", "brandId", "basePrice", "costPrice"]);
+        await form.validateFields(["name", "sku", "categoryId", "brandId", "basePrice", "mrp", "costPrice"]);
       }
       setStep(step + 1);
     } 
@@ -222,7 +224,7 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
   const buildSubmitValues = async (isDraft = false): Promise<ProductFormValues | null> => {
     try {
       const fieldsToValidate = isDraft
-        ? ["name", "sku", "categoryId", "brandId", "basePrice", "costPrice"]
+        ? ["name", "sku", "categoryId", "brandId", "basePrice", "mrp", "costPrice"]
         : undefined;
       const values = await form.validateFields(fieldsToValidate);
 
@@ -262,6 +264,7 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
         categoryId: values.categoryId as string,
         brandId: values.brandId as string,
         basePrice: values.basePrice as number,
+        mrp: values.mrp as number,
         costPrice: values.costPrice as number,
         imageUrl: values.imageUrl as string | undefined,
         isActive: isDraft ? false : (values.isActive as boolean),
@@ -298,7 +301,7 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
       <Form
         form={form}
         layout="vertical"
-        initialValues={{ isActive: true, attributes: {}, sizes: [] }}
+        initialValues={{ isActive: true, attributes: {}, sizes: [], unit: "pcs" }}
       >
         {/* ═══════════ STEP 1: Basic Info ═══════════ */}
         <div style={{ display: step === 0 ? "block" : "none" }}>
@@ -408,6 +411,15 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
               name="basePrice"
               label="Selling Price (₹)"
               rules={[{ required: true, message: "Price is required" }]}
+              style={{ flex: 1 }}
+            >
+              <InputNumber min={0} style={{ width: "100%" }} placeholder="1499" prefix="₹" />
+            </Form.Item>
+
+            <Form.Item
+              name="mrp"
+              label="MRP (₹)"
+              rules={[{ required: true, message: "MRP is required" }]}
               style={{ flex: 1 }}
             >
               <InputNumber min={0} style={{ width: "100%" }} placeholder="1499" prefix="₹" />
