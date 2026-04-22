@@ -1,7 +1,7 @@
 "use client";
 
 import { Table, Button, Space, Tag, Input, Select, Popconfirm, Tooltip, Badge, Flex, Empty } from "antd";
-import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, EyeOutlined, UploadOutlined } from "@ant-design/icons";
+import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, EyeOutlined, UploadOutlined, CopyOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { Product } from "../types";
 import type { Category } from "@/modules/categories/types";
@@ -21,6 +21,8 @@ interface ProductTableProps {
   onAdd: () => void;
   onView: (product: Product) => void;
   onEdit: (product: Product) => void;
+  onDuplicate: (product: Product) => void;
+  duplicateLoadingId?: string | null;
   onDelete: (id: string) => Promise<void>;
   onBulkUpload?: () => void;
 }
@@ -39,6 +41,8 @@ const ProductTable = ({
   onAdd,
   onView,
   onEdit,
+  onDuplicate,
+  duplicateLoadingId,
   onDelete,
   onBulkUpload,
 }: ProductTableProps) => {
@@ -96,7 +100,7 @@ const ProductTable = ({
     {
       title: "Actions",
       key: "actions",
-      width: 140,
+      width: 180,
       align: "center",
       render: (_, record) => (
         <Space>
@@ -105,6 +109,15 @@ const ProductTable = ({
           </Tooltip>
           <Tooltip title="Edit" destroyOnHidden>
             <Button type="text" icon={<EditOutlined />} onClick={() => onEdit(record)} />
+          </Tooltip>
+          <Tooltip title="Duplicate" destroyOnHidden>
+            <Button
+              type="text"
+              icon={<CopyOutlined />}
+              onClick={() => onDuplicate(record)}
+              loading={duplicateLoadingId === record.id}
+              disabled={!!duplicateLoadingId && duplicateLoadingId !== record.id}
+            />
           </Tooltip>
           <Popconfirm
             title="Delete product"

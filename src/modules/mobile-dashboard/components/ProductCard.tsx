@@ -13,9 +13,13 @@ function resolveStockMeta(totalStock: number) {
 export function ProductCard({
   product,
   onAdd,
+  onDuplicate,
+  duplicateLoading,
 }: {
   product: Product;
   onAdd?: (product: Product) => void;
+  onDuplicate?: (product: Product) => void;
+  duplicateLoading?: boolean;
 }) {
   const stockMeta = resolveStockMeta(product.totalStock);
 
@@ -33,7 +37,10 @@ export function ProductCard({
             <Typography.Text type="secondary">{product.totalStock} pcs</Typography.Text>
           </div>
         </div>
-        {onAdd ? <Button type="primary" onClick={() => onAdd(product)}>Add</Button> : null}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {onDuplicate ? <Button onClick={() => onDuplicate(product)} loading={duplicateLoading}>Duplicate</Button> : null}
+          {onAdd ? <Button type="primary" onClick={() => onAdd(product)} disabled={!!duplicateLoading}>Add</Button> : null}
+        </div>
       </div>
     </Card>
   );

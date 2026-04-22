@@ -42,21 +42,23 @@ const generateSku = (brandName: string, categoryName: string): string =>
 // ─── ProductForm ──────────────────────────────────────────────────────────────
 interface ProductFormProps {
   initialValues?: Product | null;
+  duplicateValues?: ProductFormValues | null;
   categories: Category[];
   brands: Brand[];
   onSubmit: (values: ProductFormValues) => Promise<void>;
   onCancel: () => void;
   loading?: boolean;
+  isEditMode?: boolean;
 }
 
-const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, loading }: ProductFormProps) => {
+const ProductForm = ({ initialValues, duplicateValues, categories, brands, onSubmit, onCancel, loading, isEditMode }: ProductFormProps) => {
   const [form] = Form.useForm();
   const [step, setStep] = useState(0);
   const [skuTouched, setSkuTouched] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
   const [barcodeChecking, setBarcodeChecking] = useState(false);
   const [cameraScanOpen, setCameraScanOpen] = useState(false);
-  const isEdit = !!initialValues;
+  const isEdit = isEditMode ?? !!initialValues;
 
   const { suppliers } = useSuppliers();
 
@@ -110,7 +112,7 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
     if (brand && category) form.setFieldValue("sku", generateSku(brand.name, category.name));
   }, [selectedBrandId, selectedCategoryId, isEdit, skuTouched, brands, categories, form]);
 
-  // Populate form when editing
+  // Populate form for edit/duplicate/create flows.
   useEffect(() => {
     if (initialValues) {
       const attrs = (initialValues.attributes ?? {}) as Record<string, unknown>;
@@ -136,12 +138,43 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
           reorderLevel: s.reorderLevel,
         })),
       });
-    } 
-    else {
+      return;
+    }
+
+    if (duplicateValues) {
+      const attrs = (duplicateValues.attributes ?? {}) as Record<string, unknown>;
+      form.setFieldsValue({
+        name: duplicateValues.name,
+        sku: duplicateValues.sku,
+        externalBarcode: duplicateValues.externalBarcode ?? undefined,
+        categoryId: duplicateValues.categoryId,
+        brandId: duplicateValues.brandId,
+        mrp: duplicateValues.mrp,
+        basePrice: duplicateValues.basePrice,
+        costPrice: duplicateValues.costPrice,
+        isActive: duplicateValues.isActive,
+        imageUrl: duplicateValues.imageUrl ?? undefined,
+        unit: (attrs.unit as string) ?? "pcs",
+        supplierId: (attrs.supplierId as string) ?? undefined,
+        attributes: Object.fromEntries(
+          Object.entries(attrs).filter(([k]) => k !== "unit" && k !== "supplierId")
+        ),
+        sizes: (duplicateValues.sizes ?? []).map((s) => ({
+          sizeId: s.sizeId,
+          quantity: s.quantity,
+          reorderLevel: s.reorderLevel,
+        })),
+      });
+      setSkuTouched(false);
+      setStep(0);
+      return;
+    }
+
+    {
       form.resetFields();
       setSkuTouched(false);
     }
-  }, [initialValues, form]);
+  }, [initialValues, duplicateValues, form]);
 
   // Sync size rows when category changes (new product only)
   useEffect(() => {
