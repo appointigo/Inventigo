@@ -10,6 +10,7 @@ import type { Product, ProductFormValues } from "../types";
 import type { Category } from "@/modules/categories/types";
 import type { Brand } from "@/modules/brands/types";
 import { useSuppliers } from "@/modules/suppliers/hooks/useSuppliers";
+import { calculateMarkup } from "../utils/calculateMarkup";
 import { getProductColorOptions, getColorHexByName } from "@/shared/theme/colorService";
 import { themeConfig } from "@/shared/theme/themeConfig";
 
@@ -85,15 +86,17 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
   const isOverAllocated = remainingQty !== null && remainingQty < 0;
 
   // Pricing signals
-  const profitAmount = basePrice !== undefined && costPrice !== undefined ? basePrice - costPrice : null;
-  const profitMargin = basePrice && basePrice > 0 && costPrice !== undefined
-    ? ((basePrice - costPrice) / basePrice) * 100
-    : null;
+  const markupData =
+    basePrice !== undefined && costPrice !== undefined
+      ? calculateMarkup(basePrice, costPrice)
+      : null;
+  const profitAmount = markupData?.profit ?? null;
+  const markupPercent = markupData?.markupPercent ?? null;
   const isPricingWarning = basePrice !== undefined && costPrice !== undefined && costPrice > basePrice;
 
-  const marginColor = profitMargin === null ? "#8c8c8c"
-    : profitMargin < 0 ? "#cf1322"
-    : profitMargin < 20 ? "#d48806"
+  const marginColor = markupPercent === null ? "#8c8c8c"
+    : markupPercent < 0 ? "#cf1322"
+    : markupPercent < 20 ? "#d48806"
     : "#389e0d";
 
   // Auto-generate SKU when brand + category are both selected (new product only)
@@ -455,24 +458,24 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
                   style={{ marginBottom: 8 }}
                 />
               )}
-              {profitMargin !== null && (
+              {markupPercent !== null && (
                 <div
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
                     gap: 8,
                     padding: "4px 12px",
-                    background: profitMargin < 0 ? "#fff2f0" : profitMargin < 20 ? "#fffbe6" : "#f6ffed",
-                    border: `1px solid ${profitMargin < 0 ? "#ffccc7" : profitMargin < 20 ? "#ffe58f" : "#b7eb8f"}`,
+                    background: markupPercent < 0 ? "#fff2f0" : markupPercent < 20 ? "#fffbe6" : "#f6ffed",
+                    border: `1px solid ${markupPercent < 0 ? "#ffccc7" : markupPercent < 20 ? "#ffe58f" : "#b7eb8f"}`,
                     borderRadius: 6,
                     fontSize: 13,
                   }}
                 >
                   <span style={{ color: marginColor, fontWeight: 600 }}>
-                    Profit Margin: {profitMargin.toFixed(1)}%
+                    Markup: {markupPercent.toFixed(2)}%
                   </span>
                   <Text type="secondary" style={{ fontSize: 12 }}>
-                    (₹{profitAmount?.toFixed(0)} / unit)
+                    (₹{profitAmount?.toFixed(2)} / unit)
                   </Text>
                 </div>
               )}
