@@ -65,6 +65,7 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
   const selectedBrandId = Form.useWatch<string | undefined>("brandId", form);
   const watchedSizes = Form.useWatch<{ sizeId: string; quantity: number }[] | undefined>("sizes", form);
   const watchedAttrQty = Form.useWatch<number | null | undefined>(["attributes", "quantity"], form);
+  const mrp = Form.useWatch<number | undefined>("mrp", form);
   const basePrice = Form.useWatch<number | undefined>("basePrice", form);
   const costPrice = Form.useWatch<number | undefined>("costPrice", form);
 
@@ -116,11 +117,12 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
         externalBarcode: initialValues.externalBarcode ?? undefined,
         categoryId: initialValues.categoryId,
         brandId: initialValues.brandId,
+        mrp: initialValues.mrp,
         basePrice: initialValues.basePrice,
         costPrice: initialValues.costPrice,
         isActive: initialValues.isActive,
         imageUrl: initialValues.imageUrl ?? undefined,
-        unit: (attrs.unit as string) ?? undefined,
+        unit: (attrs.unit as string) ?? "pcs",
         supplierId: (attrs.supplierId as string) ?? undefined,
         attributes: Object.fromEntries(
           Object.entries(attrs).filter(([k]) => k !== "unit" && k !== "supplierId")
@@ -209,7 +211,7 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
   const handleNext = async () => {
     try {
       if (step === 0) {
-        await form.validateFields(["name", "sku", "categoryId", "brandId", "basePrice", "costPrice"]);
+        await form.validateFields(["name", "sku", "categoryId", "brandId", "mrp", "basePrice", "costPrice"]);
       }
       setStep(step + 1);
     } 
@@ -222,7 +224,7 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
   const buildSubmitValues = async (isDraft = false): Promise<ProductFormValues | null> => {
     try {
       const fieldsToValidate = isDraft
-        ? ["name", "sku", "categoryId", "brandId", "basePrice", "costPrice"]
+        ? ["name", "sku", "categoryId", "brandId", "mrp", "basePrice", "costPrice"]
         : undefined;
       const values = await form.validateFields(fieldsToValidate);
 
@@ -261,6 +263,7 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
         externalBarcode: values.externalBarcode as string | undefined,
         categoryId: values.categoryId as string,
         brandId: values.brandId as string,
+        mrp: values.mrp as number,
         basePrice: values.basePrice as number,
         costPrice: values.costPrice as number,
         imageUrl: values.imageUrl as string | undefined,
@@ -298,7 +301,7 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
       <Form
         form={form}
         layout="vertical"
-        initialValues={{ isActive: true, attributes: {}, sizes: [] }}
+        initialValues={{ isActive: true, unit: "pcs", attributes: {}, sizes: [] }}
       >
         {/* ═══════════ STEP 1: Basic Info ═══════════ */}
         <div style={{ display: step === 0 ? "block" : "none" }}>
@@ -405,6 +408,15 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
           {/* 5. Pricing */}
           <Space size={16} style={{ width: "100%", display: "flex" }}>
             <Form.Item
+              name="mrp"
+              label="MRP (₹)"
+              rules={[{ required: true, message: "MRP is required" }]}
+              style={{ flex: 1 }}
+            >
+              <InputNumber min={0} style={{ width: "100%" }} placeholder="1599" prefix="₹" />
+            </Form.Item>
+
+            <Form.Item
               name="basePrice"
               label="Selling Price (₹)"
               rules={[{ required: true, message: "Price is required" }]}
@@ -422,6 +434,15 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
               <InputNumber min={0} style={{ width: "100%" }} placeholder="900" prefix="₹" />
             </Form.Item>
           </Space>
+
+          {mrp !== undefined && basePrice !== undefined && basePrice > mrp && (
+            <Alert
+              type="warning"
+              showIcon
+              message="Selling price is higher than MRP. Please review pricing."
+              style={{ marginTop: -8, marginBottom: 8 }}
+            />
+          )}
 
           {/* Profit margin display + pricing warning */}
           {(basePrice !== undefined || costPrice !== undefined) && (

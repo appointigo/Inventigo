@@ -134,6 +134,9 @@ const ProductDetail = ({ product, onEdit, onBack }: ProductDetailProps) => {
             <Tag>{product.categoryName}</Tag>
           </Item>
           <Item label="Brand">{product.brandName}</Item>
+          <Item label="MRP">
+            ₹{product.mrp.toLocaleString("en-IN")}
+          </Item>
           <Item label="Selling Price">
             ₹{product.basePrice.toLocaleString("en-IN")}
           </Item>

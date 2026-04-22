@@ -44,6 +44,15 @@ export const POST = async (request: Request) => {
     if (!body.name || !body.sku || !body.categoryId || !body.brandId) {
       return NextResponse.json({ error: "name, sku, categoryId, and brandId are required" }, { status: 400 });
     }
+    if (typeof body.mrp !== "number" || body.mrp <= 0) {
+      return NextResponse.json({ error: "mrp must be a positive number" }, { status: 400 });
+    }
+    if (typeof body.basePrice !== "number" || body.basePrice <= 0) {
+      return NextResponse.json({ error: "basePrice must be a positive number" }, { status: 400 });
+    }
+    if (typeof body.costPrice !== "number" || body.costPrice <= 0) {
+      return NextResponse.json({ error: "costPrice must be a positive number" }, { status: 400 });
+    }
     const product = await productService.create(user.orgId, body);
     return NextResponse.json(product, { status: 201 });
   } catch (err) {

@@ -267,6 +267,7 @@ model Product {
   externalBarcode  String?
   categoryId       String
   brandId          String
+  mrp              Decimal  @db.Decimal(10, 2)
   basePrice        Decimal  @db.Decimal(10, 2)
   costPrice        Decimal  @db.Decimal(10, 2)
   attributes       Json     @default("{}")
