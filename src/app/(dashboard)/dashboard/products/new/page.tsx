@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Typography, Card, App } from "antd";
 import ProductForm from "@/modules/products/components/ProductForm";
+import { consumeDuplicateDraft } from "@/modules/products/utils/duplicateProduct";
 import { useCategories } from "@/modules/categories/hooks/useCategories";
 import { useBrands } from "@/modules/brands/hooks/useBrands";
 import { useStore } from "@/providers/StoreProvider";
@@ -12,10 +13,27 @@ import type { ProductFormValues } from "@/modules/products/types";
 export default function NewProductPage() {
   const { message } = App.useApp();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { storeId } = useStore();
+  const isDuplicateFlow = searchParams.get("duplicate") === "1";
   const { categories } = useCategories();
   const { brands } = useBrands();
   const [saving, setSaving] = useState(false);
+  const [duplicateDraft, setDuplicateDraft] = useState<ProductFormValues | null>(null);
+  const duplicateToastShownRef = useRef(false);
+
+  useEffect(() => {
+    if (!isDuplicateFlow || duplicateToastShownRef.current) return;
+
+    const draft = consumeDuplicateDraft();
+    if (draft) {
+      setDuplicateDraft(draft);
+      message.success("Product duplicated successfully");
+    } else {
+      message.error("Unable to load product for duplication");
+    }
+    duplicateToastShownRef.current = true;
+  }, [isDuplicateFlow, message]);
 
   const handleSubmit = async (values: ProductFormValues) => {
     setSaving(true);
@@ -44,11 +62,13 @@ export default function NewProductPage() {
       </Typography.Title>
       <Card>
         <ProductForm
+          duplicateValues={duplicateDraft}
           categories={categories}
           brands={brands}
           onSubmit={handleSubmit}
           onCancel={() => router.push("/dashboard/products")}
           loading={saving}
+          isEditMode={false}
         />
       </Card>
     </div>

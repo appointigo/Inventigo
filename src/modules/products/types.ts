@@ -55,6 +55,7 @@ export type ProductFormValues = {
   externalBarcode?: string;
   categoryId: string;
   brandId: string;
+  mrp: number;
   basePrice: number;
   costPrice: number;
   attributes: Record<string, unknown>;
@@ -89,6 +90,7 @@ export type Product = {
   categoryName: string;
   brandId: string;
   brandName: string;
+  mrp: number;
   basePrice: number;
   costPrice: number;
   attributes: Record<string, unknown>;

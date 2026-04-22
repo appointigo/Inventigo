@@ -10,6 +10,7 @@ import type { Product, ProductFormValues } from "../types";
 import type { Category } from "@/modules/categories/types";
 import type { Brand } from "@/modules/brands/types";
 import { useSuppliers } from "@/modules/suppliers/hooks/useSuppliers";
+import { calculateMarkup } from "../utils/calculateMarkup";
 import { getProductColorOptions, getColorHexByName } from "@/shared/theme/colorService";
 import { themeConfig } from "@/shared/theme/themeConfig";
 
@@ -41,21 +42,23 @@ const generateSku = (brandName: string, categoryName: string): string =>
 // ─── ProductForm ──────────────────────────────────────────────────────────────
 interface ProductFormProps {
   initialValues?: Product | null;
+  duplicateValues?: ProductFormValues | null;
   categories: Category[];
   brands: Brand[];
   onSubmit: (values: ProductFormValues) => Promise<void>;
   onCancel: () => void;
   loading?: boolean;
+  isEditMode?: boolean;
 }
 
-const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, loading }: ProductFormProps) => {
+const ProductForm = ({ initialValues, duplicateValues, categories, brands, onSubmit, onCancel, loading, isEditMode }: ProductFormProps) => {
   const [form] = Form.useForm();
   const [step, setStep] = useState(0);
   const [skuTouched, setSkuTouched] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
   const [barcodeChecking, setBarcodeChecking] = useState(false);
   const [cameraScanOpen, setCameraScanOpen] = useState(false);
-  const isEdit = !!initialValues;
+  const isEdit = isEditMode ?? !!initialValues;
 
   const { suppliers } = useSuppliers();
 
@@ -65,6 +68,7 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
   const selectedBrandId = Form.useWatch<string | undefined>("brandId", form);
   const watchedSizes = Form.useWatch<{ sizeId: string; quantity: number }[] | undefined>("sizes", form);
   const watchedAttrQty = Form.useWatch<number | null | undefined>(["attributes", "quantity"], form);
+  const mrp = Form.useWatch<number | undefined>("mrp", form);
   const basePrice = Form.useWatch<number | undefined>("basePrice", form);
   const costPrice = Form.useWatch<number | undefined>("costPrice", form);
 
@@ -84,15 +88,17 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
   const isOverAllocated = remainingQty !== null && remainingQty < 0;
 
   // Pricing signals
-  const profitAmount = basePrice !== undefined && costPrice !== undefined ? basePrice - costPrice : null;
-  const profitMargin = basePrice && basePrice > 0 && costPrice !== undefined
-    ? ((basePrice - costPrice) / basePrice) * 100
-    : null;
+  const markupData =
+    basePrice !== undefined && costPrice !== undefined
+      ? calculateMarkup(basePrice, costPrice)
+      : null;
+  const profitAmount = markupData?.profit ?? null;
+  const markupPercent = markupData?.markupPercent ?? null;
   const isPricingWarning = basePrice !== undefined && costPrice !== undefined && costPrice > basePrice;
 
-  const marginColor = profitMargin === null ? "#8c8c8c"
-    : profitMargin < 0 ? "#cf1322"
-    : profitMargin < 20 ? "#d48806"
+  const marginColor = markupPercent === null ? "#8c8c8c"
+    : markupPercent < 0 ? "#cf1322"
+    : markupPercent < 20 ? "#d48806"
     : "#389e0d";
 
   // Auto-generate SKU when brand + category are both selected (new product only)
@@ -106,7 +112,7 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
     if (brand && category) form.setFieldValue("sku", generateSku(brand.name, category.name));
   }, [selectedBrandId, selectedCategoryId, isEdit, skuTouched, brands, categories, form]);
 
-  // Populate form when editing
+  // Populate form for edit/duplicate/create flows.
   useEffect(() => {
     if (initialValues) {
       const attrs = (initialValues.attributes ?? {}) as Record<string, unknown>;
@@ -116,11 +122,12 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
         externalBarcode: initialValues.externalBarcode ?? undefined,
         categoryId: initialValues.categoryId,
         brandId: initialValues.brandId,
+        mrp: initialValues.mrp,
         basePrice: initialValues.basePrice,
         costPrice: initialValues.costPrice,
         isActive: initialValues.isActive,
         imageUrl: initialValues.imageUrl ?? undefined,
-        unit: (attrs.unit as string) ?? undefined,
+        unit: (attrs.unit as string) ?? "pcs",
         supplierId: (attrs.supplierId as string) ?? undefined,
         attributes: Object.fromEntries(
           Object.entries(attrs).filter(([k]) => k !== "unit" && k !== "supplierId")
@@ -131,12 +138,43 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
           reorderLevel: s.reorderLevel,
         })),
       });
-    } 
-    else {
+      return;
+    }
+
+    if (duplicateValues) {
+      const attrs = (duplicateValues.attributes ?? {}) as Record<string, unknown>;
+      form.setFieldsValue({
+        name: duplicateValues.name,
+        sku: duplicateValues.sku,
+        externalBarcode: duplicateValues.externalBarcode ?? undefined,
+        categoryId: duplicateValues.categoryId,
+        brandId: duplicateValues.brandId,
+        mrp: duplicateValues.mrp,
+        basePrice: duplicateValues.basePrice,
+        costPrice: duplicateValues.costPrice,
+        isActive: duplicateValues.isActive,
+        imageUrl: duplicateValues.imageUrl ?? undefined,
+        unit: (attrs.unit as string) ?? "pcs",
+        supplierId: (attrs.supplierId as string) ?? undefined,
+        attributes: Object.fromEntries(
+          Object.entries(attrs).filter(([k]) => k !== "unit" && k !== "supplierId")
+        ),
+        sizes: (duplicateValues.sizes ?? []).map((s) => ({
+          sizeId: s.sizeId,
+          quantity: s.quantity,
+          reorderLevel: s.reorderLevel,
+        })),
+      });
+      setSkuTouched(false);
+      setStep(0);
+      return;
+    }
+
+    {
       form.resetFields();
       setSkuTouched(false);
     }
-  }, [initialValues, form]);
+  }, [initialValues, duplicateValues, form]);
 
   // Sync size rows when category changes (new product only)
   useEffect(() => {
@@ -209,7 +247,7 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
   const handleNext = async () => {
     try {
       if (step === 0) {
-        await form.validateFields(["name", "sku", "categoryId", "brandId", "basePrice", "costPrice"]);
+        await form.validateFields(["name", "sku", "categoryId", "brandId", "mrp", "basePrice", "costPrice"]);
       }
       setStep(step + 1);
     } 
@@ -222,7 +260,7 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
   const buildSubmitValues = async (isDraft = false): Promise<ProductFormValues | null> => {
     try {
       const fieldsToValidate = isDraft
-        ? ["name", "sku", "categoryId", "brandId", "basePrice", "costPrice"]
+        ? ["name", "sku", "categoryId", "brandId", "mrp", "basePrice", "costPrice"]
         : undefined;
       const values = await form.validateFields(fieldsToValidate);
 
@@ -261,6 +299,7 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
         externalBarcode: values.externalBarcode as string | undefined,
         categoryId: values.categoryId as string,
         brandId: values.brandId as string,
+        mrp: values.mrp as number,
         basePrice: values.basePrice as number,
         costPrice: values.costPrice as number,
         imageUrl: values.imageUrl as string | undefined,
@@ -298,7 +337,7 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
       <Form
         form={form}
         layout="vertical"
-        initialValues={{ isActive: true, attributes: {}, sizes: [] }}
+        initialValues={{ isActive: true, unit: "pcs", attributes: {}, sizes: [] }}
       >
         {/* ═══════════ STEP 1: Basic Info ═══════════ */}
         <div style={{ display: step === 0 ? "block" : "none" }}>
@@ -405,6 +444,15 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
           {/* 5. Pricing */}
           <Space size={16} style={{ width: "100%", display: "flex" }}>
             <Form.Item
+              name="mrp"
+              label="MRP (₹)"
+              rules={[{ required: true, message: "MRP is required" }]}
+              style={{ flex: 1 }}
+            >
+              <InputNumber min={0} style={{ width: "100%" }} placeholder="1599" prefix="₹" />
+            </Form.Item>
+
+            <Form.Item
               name="basePrice"
               label="Selling Price (₹)"
               rules={[{ required: true, message: "Price is required" }]}
@@ -423,6 +471,15 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
             </Form.Item>
           </Space>
 
+          {mrp !== undefined && basePrice !== undefined && basePrice > mrp && (
+            <Alert
+              type="warning"
+              showIcon
+              message="Selling price is higher than MRP. Please review pricing."
+              style={{ marginTop: -8, marginBottom: 8 }}
+            />
+          )}
+
           {/* Profit margin display + pricing warning */}
           {(basePrice !== undefined || costPrice !== undefined) && (
             <div style={{ marginTop: -8, marginBottom: 16 }}>
@@ -434,24 +491,24 @@ const ProductForm = ({ initialValues, categories, brands, onSubmit, onCancel, lo
                   style={{ marginBottom: 8 }}
                 />
               )}
-              {profitMargin !== null && (
+              {markupPercent !== null && (
                 <div
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
                     gap: 8,
                     padding: "4px 12px",
-                    background: profitMargin < 0 ? "#fff2f0" : profitMargin < 20 ? "#fffbe6" : "#f6ffed",
-                    border: `1px solid ${profitMargin < 0 ? "#ffccc7" : profitMargin < 20 ? "#ffe58f" : "#b7eb8f"}`,
+                    background: markupPercent < 0 ? "#fff2f0" : markupPercent < 20 ? "#fffbe6" : "#f6ffed",
+                    border: `1px solid ${markupPercent < 0 ? "#ffccc7" : markupPercent < 20 ? "#ffe58f" : "#b7eb8f"}`,
                     borderRadius: 6,
                     fontSize: 13,
                   }}
                 >
                   <span style={{ color: marginColor, fontWeight: 600 }}>
-                    Profit Margin: {profitMargin.toFixed(1)}%
+                    Markup: {markupPercent.toFixed(2)}%
                   </span>
                   <Text type="secondary" style={{ fontSize: 12 }}>
-                    (₹{profitAmount?.toFixed(0)} / unit)
+                    (₹{profitAmount?.toFixed(2)} / unit)
                   </Text>
                 </div>
               )}

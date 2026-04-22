@@ -1,10 +1,13 @@
 "use client";
 
-import { Empty, Select, Skeleton } from "antd";
+import { useState } from "react";
+import { App, Empty, Select, Skeleton } from "antd";
 import { useRouter } from "next/navigation";
 import { useBrands } from "@/modules/brands/hooks/useBrands";
 import { useCategories } from "@/modules/categories/hooks/useCategories";
 import { useProducts } from "@/modules/products/hooks/useProducts";
+import type { Product } from "@/modules/products/types";
+import { mapProductToDuplicateDraft, saveDuplicateDraft } from "@/modules/products/utils/duplicateProduct";
 import { useStore } from "@/providers/StoreProvider";
 import { FilterDrawer } from "../components/FilterDrawer";
 import { FloatingActionButton } from "../components/FloatingActionButton";
@@ -14,8 +17,10 @@ import { SearchBar } from "../components/SearchBar";
 import { useMobileWorkspace } from "../context/MobileWorkspaceContext";
 
 export default function ProductsPage() {
+  const { message } = App.useApp();
   const router = useRouter();
   const { storeId } = useStore();
+  const [duplicateLoadingId, setDuplicateLoadingId] = useState<string | null>(null);
   const { productFilters, setProductFilters, isProductFilterOpen, openProductFilter, closeProductFilter, resetProductFilters } = useMobileWorkspace();
   const { categories } = useCategories(storeId ?? undefined);
   const { brands } = useBrands(storeId ?? undefined);
@@ -25,6 +30,19 @@ export default function ProductsPage() {
     categoryId: productFilters.categoryId,
     brandId: productFilters.brandId,
   });
+
+  const handleDuplicate = async (product: Product) => {
+    setDuplicateLoadingId(product.id);
+    try {
+      // No need to fetch again - product data is already available from the list
+      saveDuplicateDraft(mapProductToDuplicateDraft(product));
+      router.push("/dashboard/products/new?duplicate=1");
+    } catch {
+      message.error("Failed to prepare product for duplication");
+    } finally {
+      setDuplicateLoadingId(null);
+    }
+  };
 
   return (
     <>
@@ -40,7 +58,12 @@ export default function ProductsPage() {
         ) : (
           <div style={{ display: "grid", gap: 12 }}>
             {products.map((product) => (
-              <ProductCard key={product.id} product={product} />
+              <ProductCard
+                key={product.id}
+                product={product}
+                onDuplicate={handleDuplicate}
+                duplicateLoading={duplicateLoadingId === product.id}
+              />
             ))}
           </div>
         )}

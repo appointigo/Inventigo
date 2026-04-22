@@ -4,6 +4,7 @@ import { Descriptions, Table, Tag, Badge, Card, Space, Button, Typography, Flex,
 import { EditOutlined, ArrowLeftOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { Product, ProductStockSize } from "../types";
+import { calculateMarkup } from "../utils/calculateMarkup";
 import BarcodeGenerator from "@/modules/barcode/components/BarcodeGenerator";
 import LabelPrinter from "@/modules/barcode/components/LabelPrinter";
 import { buildVariantSku } from "@/shared/services/barcodeService";
@@ -17,6 +18,8 @@ interface ProductDetailProps {
 const { Item } = Descriptions;
 
 const ProductDetail = ({ product, onEdit, onBack }: ProductDetailProps) => {
+  const { profit, markupPercent } = calculateMarkup(product.basePrice, product.costPrice);
+
   const variants = product.stock.map((s) => {
     // Generate deterministic EAN-13 for variant
     const ean13 = buildVariantSku(product.sku, s.sizeLabel);
@@ -134,16 +137,19 @@ const ProductDetail = ({ product, onEdit, onBack }: ProductDetailProps) => {
             <Tag>{product.categoryName}</Tag>
           </Item>
           <Item label="Brand">{product.brandName}</Item>
+          <Item label="MRP">
+            ₹{product.mrp.toLocaleString("en-IN")}
+          </Item>
           <Item label="Selling Price">
             ₹{product.basePrice.toLocaleString("en-IN")}
           </Item>
           <Item label="Cost Price">
             ₹{product.costPrice.toLocaleString("en-IN")}
           </Item>
-          <Item label="Margin">
-            ₹{(product.basePrice - product.costPrice).toLocaleString("en-IN")}{" "}
+          <Item label="Markup (%)">
+            ₹{profit.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{" "}
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              ({((product.basePrice - product.costPrice) / product.basePrice * 100).toFixed(1)}%)
+              ({markupPercent.toFixed(2)}%)
             </Typography.Text>
           </Item>
           <Item label="Total Stock">
