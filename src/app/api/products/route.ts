@@ -13,14 +13,25 @@ export const GET = async (request: Request) =>  {
 
   try {
     const { searchParams } = new URL(request.url);
+    const pageParam = Number(searchParams.get("page") ?? "");
+    const pageSizeParam = Number(searchParams.get("pageSize") ?? "");
+    const hasPagination = Number.isFinite(pageParam) || Number.isFinite(pageSizeParam);
+
     const filters = {
       storeId: searchParams.get("storeId") || undefined,
       categoryId: searchParams.get("categoryId") || undefined,
       brandId: searchParams.get("brandId") || undefined,
       search: searchParams.get("search") || undefined,
       isActive: searchParams.has("isActive") ? searchParams.get("isActive") === "true" : undefined,
+      ...(Number.isFinite(pageParam) ? { page: pageParam } : {}),
+      ...(Number.isFinite(pageSizeParam) ? { pageSize: pageSizeParam } : {}),
     };
-    console.log("[products GET] filters:", filters);
+
+    if (hasPagination) {
+      const result = await productService.listPaginated(user.orgId, filters);
+      return NextResponse.json(result);
+    }
+
     const products = await productService.list(user.orgId, filters);
     return NextResponse.json(products);
   } 

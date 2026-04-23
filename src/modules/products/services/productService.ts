@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { createHash } from "crypto";
 import { prisma } from "@/lib/db";
-import type { Product, ProductFormValues, ProductListFilters, BulkProductValidated, BulkUploadResult } from "../types";
+import type { Product, ProductFormValues, ProductListFilters, BulkProductValidated, BulkUploadResult, PaginatedProductsResponse } from "../types";
 import { imageService } from "@/shared/services/imageService";
 import { normalizeNameKey, normalizeSku } from "@/shared/utils/normalization";
 import { buildVariantSku, normalizeSizeLabel, sanitizeScannedBarcode } from "@/shared/services/barcodeService";
@@ -14,6 +14,27 @@ const buildInclude = (storeId?: string) => ({
     include: { size: { select: { label: true } } },
   },
 });
+
+const buildProductWhere = (orgId: string, filters?: ProductListFilters) => {
+  const where: Record<string, unknown> = { orgId };
+
+  if (filters?.categoryId) where.categoryId = filters.categoryId;
+  if (filters?.brandId) where.brandId = filters.brandId;
+  if (filters?.isActive !== undefined) where.isActive = filters.isActive;
+  if (filters?.search) {
+    where.OR = [
+      { name: { contains: filters.search, mode: "insensitive" } },
+      { sku: { contains: filters.search, mode: "insensitive" } },
+      { externalBarcode: { contains: filters.search, mode: "insensitive" } },
+      { stockEntries: { some: { variantSku: { contains: filters.search, mode: "insensitive" } } } },
+    ];
+  }
+  if (filters?.storeId) {
+    where.stockEntries = { some: { storeId: filters.storeId } };
+  }
+
+  return where;
+};
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const toDto = (p: any): Product => {
@@ -50,26 +71,36 @@ const toDto = (p: any): Product => {
 
 export const productService = {
   async list(orgId: string, filters?: ProductListFilters): Promise<Product[]> {
-    const where: Record<string, unknown> = { orgId };
-    if (filters?.categoryId) where.categoryId = filters.categoryId;
-    if (filters?.brandId) where.brandId = filters.brandId;
-    if (filters?.isActive !== undefined) where.isActive = filters.isActive;
-    if (filters?.search) {
-      where.OR = [
-        { name: { contains: filters.search, mode: "insensitive" } },
-        { sku: { contains: filters.search, mode: "insensitive" } },
-        { externalBarcode: { contains: filters.search, mode: "insensitive" } },
-        { stockEntries: { some: { variantSku: { contains: filters.search, mode: "insensitive" } } } },
-      ];
-    }
-    // When a storeId is given, only return products that have stock in that store
-    if (filters?.storeId) {
-      where.stockEntries = { some: { storeId: filters.storeId } };
-    }
+    const where = buildProductWhere(orgId, filters);
     const include = buildInclude(filters?.storeId);
     const products = await prisma.product.findMany({ where, include, orderBy: { name: "asc" } });
 
     return products.map(toDto);
+  },
+
+  async listPaginated(orgId: string, filters?: ProductListFilters): Promise<PaginatedProductsResponse> {
+    const page = Math.max(1, Number(filters?.page ?? 1));
+    const pageSize = Math.min(100, Math.max(1, Number(filters?.pageSize ?? 10)));
+    const where = buildProductWhere(orgId, filters);
+    const include = buildInclude(filters?.storeId);
+
+    const [products, total] = await prisma.$transaction([
+      prisma.product.findMany({
+        where,
+        include,
+        orderBy: { name: "asc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      prisma.product.count({ where }),
+    ]);
+
+    return {
+      items: products.map(toDto),
+      total,
+      page,
+      pageSize,
+    };
   },
 
   async getById(orgId: string, id: string, storeId?: string): Promise<Product | null> {
