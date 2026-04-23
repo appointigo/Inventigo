@@ -71,6 +71,15 @@ export type ProductListFilters = {
   brandId?: string;
   search?: string;
   isActive?: boolean;
+  page?: number;
+  pageSize?: number;
+};
+
+export type PaginatedProductsResponse = {
+  items: Product[];
+  total: number;
+  page: number;
+  pageSize: number;
 };
 
 export type ProductStockSize = {

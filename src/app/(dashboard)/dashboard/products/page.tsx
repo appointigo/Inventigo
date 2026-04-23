@@ -26,12 +26,16 @@ export default function ProductsPage() {
   const [brandFilter, setBrandFilter] = useState<string | undefined>();
   const [bulkDrawerOpen, setBulkDrawerOpen] = useState(false);
   const [duplicateLoadingId, setDuplicateLoadingId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
-  const { products, loading, refresh } = useProducts({
+  const { products, loading, total, refresh } = useProducts({
     storeId: storeId ?? undefined,
     search: search || undefined,
     categoryId: categoryFilter,
     brandId: brandFilter,
+    page,
+    pageSize,
   });
   const { categories } = useCategories();
   const { brands } = useBrands();
@@ -84,12 +88,28 @@ export default function ProductsPage() {
         categories={categories}
         brands={brands}
         loading={loading}
+        total={total}
+        page={page}
+        pageSize={pageSize}
+        onPaginationChange={(nextPage, nextPageSize) => {
+          setPage(nextPage);
+          setPageSize(nextPageSize);
+        }}
         search={search}
-        onSearchChange={setSearch}
+        onSearchChange={(value) => {
+          setPage(1);
+          setSearch(value);
+        }}
         categoryFilter={categoryFilter}
-        onCategoryChange={setCategoryFilter}
+        onCategoryChange={(value) => {
+          setPage(1);
+          setCategoryFilter(value);
+        }}
         brandFilter={brandFilter}
-        onBrandChange={setBrandFilter}
+        onBrandChange={(value) => {
+          setPage(1);
+          setBrandFilter(value);
+        }}
         onAdd={() => router.push("/dashboard/products/new")}
         onView={(p) => router.push(`/dashboard/products/${p.id}`)}
         onEdit={(p) => router.push(`/dashboard/products/${p.id}/edit`)}

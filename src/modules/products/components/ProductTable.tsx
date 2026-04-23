@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Table, Button, Space, Tag, Input, InputNumber, Select, Popconfirm, Tooltip, Badge, Flex, Empty, Modal } from "antd";
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, EyeOutlined, UploadOutlined, CopyOutlined, PrinterOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
@@ -15,6 +15,10 @@ interface ProductTableProps {
   categories: Category[];
   brands: Brand[];
   loading: boolean;
+  total: number;
+  page: number;
+  pageSize: number;
+  onPaginationChange: (page: number, pageSize: number) => void;
   search: string;
   onSearchChange: (value: string) => void;
   categoryFilter: string | undefined;
@@ -35,6 +39,10 @@ const ProductTable = ({
   categories,
   brands,
   loading,
+  total,
+  page,
+  pageSize,
+  onPaginationChange,
   search,
   onSearchChange,
   categoryFilter,
@@ -52,6 +60,11 @@ const ProductTable = ({
   const [barcodePrintOpen, setBarcodePrintOpen] = useState(false);
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const [copiesMap, setCopiesMap] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    const pageIds = new Set(products.map((product) => product.id));
+    setSelectedProductIds((prev) => prev.filter((id) => pageIds.has(id)));
+  }, [products]);
 
   const selectedProducts = useMemo(
     () => products.filter((product) => selectedProductIds.includes(product.id)),
@@ -405,10 +418,16 @@ const ProductTable = ({
         rowSelection={{
           selectedRowKeys: selectedProductIds,
           onChange: (selectedRowKeys) => setSelectedProductIds(selectedRowKeys.map(String)),
-          preserveSelectedRowKeys: true,
         }}
         loading={loading}
-        pagination={{ pageSize: 10, showSizeChanger: true, showTotal: (t) => `${t} products` }}
+        pagination={{
+          current: page,
+          pageSize,
+          total,
+          showSizeChanger: true,
+          onChange: onPaginationChange,
+          showTotal: (t) => `${t} products`,
+        }}
         locale={{
           emptyText: !loading && products.length === 0 && !search && !categoryFilter && !brandFilter ? (
             <Empty

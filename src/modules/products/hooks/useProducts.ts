@@ -1,11 +1,14 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import type { Product, ProductListFilters } from "../types";
+import type { Product, ProductListFilters, PaginatedProductsResponse } from "../types";
 
 export function useProducts(filters?: ProductListFilters) {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(filters?.page ?? 1);
+  const [pageSize, setPageSize] = useState(filters?.pageSize ?? 10);
 
   const fetchProducts = useCallback(async () => {
     setLoading(true);
@@ -16,9 +19,24 @@ export function useProducts(filters?: ProductListFilters) {
       if (filters?.brandId) params.set("brandId", filters.brandId);
       if (filters?.search) params.set("search", filters.search);
       if (filters?.isActive !== undefined) params.set("isActive", String(filters.isActive));
+      if (filters?.page !== undefined) params.set("page", String(filters.page));
+      if (filters?.pageSize !== undefined) params.set("pageSize", String(filters.pageSize));
       const qs = params.toString();
       const res = await fetch(`/api/products${qs ? `?${qs}` : ""}`);
-      if (res.ok) setProducts(await res.json());
+      if (res.ok) {
+        const data = (await res.json()) as Product[] | PaginatedProductsResponse;
+        if (Array.isArray(data)) {
+          setProducts(data);
+          setTotal(data.length);
+          setPage(filters?.page ?? 1);
+          setPageSize(filters?.pageSize ?? Math.max(data.length, 1));
+        } else {
+          setProducts(data.items);
+          setTotal(data.total);
+          setPage(data.page);
+          setPageSize(data.pageSize);
+        }
+      }
     } 
     catch (error) {
       console.error("Failed to fetch products:", error);
@@ -26,13 +44,13 @@ export function useProducts(filters?: ProductListFilters) {
     finally {
       setLoading(false);
     }
-  }, [filters?.storeId, filters?.categoryId, filters?.brandId, filters?.search, filters?.isActive]);
+  }, [filters?.storeId, filters?.categoryId, filters?.brandId, filters?.search, filters?.isActive, filters?.page, filters?.pageSize]);
 
   useEffect(() => {
     fetchProducts();
   }, [fetchProducts]);
 
-  return { products, loading, refresh: fetchProducts };
+  return { products, loading, total, page, pageSize, refresh: fetchProducts };
 }
 
 export function useProduct(id: string | null, storeId?: string) {
