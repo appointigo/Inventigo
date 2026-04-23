@@ -18,6 +18,7 @@ import TopBrandsChart from "@/modules/dashboard/components/TopBrandsChart";
 import RecentMovementsWidget from "@/modules/dashboard/components/RecentMovementsWidget";
 import LowStockAlertsList from "@/modules/alerts/components/LowStockAlertsList";
 import SalesKPIWidget from "@/modules/billing/components/SalesKPIWidget";
+import RevenueTrendChart from "@/modules/dashboard/components/RevenueTrendChart";
 import { useDashboard } from "@/modules/dashboard/hooks/useDashboard";
 import { useLowStockAlerts } from "@/modules/alerts/hooks/useAlerts";
 import { useStore } from "@/providers/StoreProvider";
@@ -184,6 +185,9 @@ const DashboardPage = () => {
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={12}>
           <SalesKPIWidget />
+        </Col>
+        <Col xs={24} lg={12}>
+          <RevenueTrendChart data={data?.revenueTrend ?? null} loading={loading} />
         </Col>
       </Row>
     </div>

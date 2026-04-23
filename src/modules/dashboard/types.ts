@@ -8,11 +8,23 @@ export type DashboardKPIs = {
 export type StockByCategory = {
   category: string;
   totalQuantity: number;
+  totalValue: number;
 };
 
 export type TopBrand = {
   brand: string;
   stockValue: number;
+};
+
+export type RevenueTrendPoint = {
+  label: string;
+  total: number;
+};
+
+export type RevenueTrend = {
+  day: RevenueTrendPoint[];
+  month: RevenueTrendPoint[];
+  year: RevenueTrendPoint[];
 };
 
 export type RecentMovement = {
@@ -31,5 +43,6 @@ export type DashboardData = {
   kpis: DashboardKPIs;
   stockByCategory: StockByCategory[];
   topBrands: TopBrand[];
+  revenueTrend: RevenueTrend;
   recentMovements: RecentMovement[];
 };
