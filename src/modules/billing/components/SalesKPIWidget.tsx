@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Card, Row, Col, Statistic, Skeleton } from "antd";
-import { DollarOutlined, ShoppingOutlined } from "@ant-design/icons";
+import { WalletOutlined, ShoppingOutlined } from "@ant-design/icons";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
 
 type SalesKPIs = {
@@ -57,7 +57,7 @@ export default function SalesKPIWidget() {
           <Statistic
             title="Today's Revenue"
             value={formatCurrency(data.todayRevenue)}
-            prefix={<DollarOutlined />}
+            prefix={<WalletOutlined />}
             styles={{ content: { color: "#52c41a" } }}
           />
         </Col>
@@ -72,7 +72,7 @@ export default function SalesKPIWidget() {
           <Statistic
             title="Total Revenue"
             value={formatCurrency(data.totalRevenue)}
-            prefix={<DollarOutlined />}
+            prefix={<WalletOutlined />}
           />
         </Col>
       </Row>

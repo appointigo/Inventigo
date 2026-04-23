@@ -3,7 +3,7 @@
 import { Row, Col, Card, Statistic, Skeleton } from "antd";
 import {
   ShoppingOutlined,
-  DollarOutlined,
+  WalletOutlined,
   WarningOutlined,
   FileTextOutlined,
 } from "@ant-design/icons";
@@ -41,7 +41,7 @@ export default function KPICards({ kpis, loading }: KPICardsProps) {
       title: "Total Stock Value",
       value: kpis.totalStockValue,
       formatter: (val: number) => formatCurrency(val),
-      icon: <DollarOutlined />,
+      icon: <WalletOutlined />,
       color: "#52c41a",
     },
     {
