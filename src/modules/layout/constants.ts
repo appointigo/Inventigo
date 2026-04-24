@@ -1,4 +1,4 @@
-import { DashboardOutlined, ShoppingOutlined, AppstoreOutlined, TagsOutlined, InboxOutlined, FileTextOutlined, ScanOutlined, BarChartOutlined, SettingOutlined, ShopOutlined, AlertOutlined, DollarOutlined, TeamOutlined, AccountBookOutlined, CalendarOutlined, UnorderedListOutlined, LineChartOutlined, PercentageOutlined, ExperimentOutlined } from "@ant-design/icons";
+import { DashboardOutlined, ShoppingOutlined, AppstoreOutlined, TagsOutlined, InboxOutlined, FileTextOutlined, ScanOutlined, BarChartOutlined, SettingOutlined, ShopOutlined, AlertOutlined, DollarOutlined, TeamOutlined, AccountBookOutlined, CalendarOutlined, UnorderedListOutlined, LineChartOutlined, PercentageOutlined, ExperimentOutlined, UserOutlined } from "@ant-design/icons";
 import { Role } from "@prisma/client";
 
 export type MenuItem = {
@@ -98,6 +98,12 @@ export const MENU_ITEMS: MenuItem[] = [
     path: "/dashboard/billing",
     name: "Billing",
     icon: DollarOutlined,
+    roles: ALL_ROLES,
+  },
+  {
+    path: "/dashboard/customers",
+    name: "Customers",
+    icon: UserOutlined,
     roles: ALL_ROLES,
   },
   {
