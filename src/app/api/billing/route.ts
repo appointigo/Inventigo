@@ -45,9 +45,11 @@ export const POST = async (request: NextRequest) => {
     const body = await request.json();
     const sale = await billingService.createSale(user.orgId!, user.storeId, user.id, body);
     return NextResponse.json(sale, { status: 201 });
-  } 
-  catch {
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+  catch (error) {
+    const message = error instanceof Error ? error.message : "Internal server error";
+    const status = /required|invalid|insufficient|not found|inactive|expired|limit/i.test(message) ? 400 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }
 

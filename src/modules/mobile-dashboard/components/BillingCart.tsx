@@ -21,6 +21,12 @@ export function BillingCart({
   onPaymentMethodChange,
   customerName,
   onCustomerNameChange,
+  customerPhone,
+  onCustomerPhoneChange,
+  customerEmail,
+  onCustomerEmailChange,
+  customerStats,
+  customerLoading,
   onQuantityChange,
   onRemove,
   onCheckout,
@@ -36,6 +42,12 @@ export function BillingCart({
   onPaymentMethodChange: (value: PaymentMethodType) => void;
   customerName: string;
   onCustomerNameChange: (value: string) => void;
+  customerPhone: string;
+  onCustomerPhoneChange: (value: string) => void;
+  customerEmail: string;
+  onCustomerEmailChange: (value: string) => void;
+  customerStats?: { totalVisits: number; totalSpend: number; lastPurchaseDate: string | null } | null;
+  customerLoading?: boolean;
   onQuantityChange: (productId: string, sizeId: string, quantity: number) => void;
   onRemove: (productId: string, sizeId: string) => void;
   onCheckout: () => void;
@@ -72,6 +84,37 @@ export function BillingCart({
         )}
 
         <Input value={customerName} onChange={(event) => onCustomerNameChange(event.target.value)} placeholder="Customer name" size="large" />
+        <Input value={customerPhone} onChange={(event) => onCustomerPhoneChange(event.target.value.replace(/\D/g, "").slice(0, 10))} placeholder="Customer mobile" size="large" />
+        <Input value={customerEmail} onChange={(event) => onCustomerEmailChange(event.target.value)} placeholder="Customer email (optional)" size="large" />
+
+        {(customerLoading || customerStats) ? (
+          <div style={{ border: "1px solid #e5e7eb", borderRadius: 16, padding: 14, background: "#f8fafc" }}>
+            <Typography.Text strong style={{ display: "block", marginBottom: 8 }}>Customer Stats</Typography.Text>
+            {customerLoading ? (
+              <Typography.Text type="secondary">Loading customer details...</Typography.Text>
+            ) : (
+              <div style={{ display: "grid", gap: 6 }}>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <Typography.Text type="secondary">Total visits</Typography.Text>
+                  <Typography.Text>{customerStats?.totalVisits ?? 0}</Typography.Text>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <Typography.Text type="secondary">Total spend</Typography.Text>
+                  <Typography.Text>Rs {(customerStats?.totalSpend ?? 0).toFixed(2)}</Typography.Text>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <Typography.Text type="secondary">Last purchase</Typography.Text>
+                  <Typography.Text>
+                    {customerStats?.lastPurchaseDate
+                      ? new Date(customerStats.lastPurchaseDate).toLocaleDateString("en-IN")
+                      : "-"}
+                  </Typography.Text>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : null}
+
         <Select value={paymentMethod} onChange={onPaymentMethodChange} options={PAYMENT_OPTIONS} size="large" />
         <Input type="number" min={0} value={taxPct} onChange={(event) => onTaxChange(Number(event.target.value || 0))} placeholder="Tax %" size="large" />
 

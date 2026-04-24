@@ -43,6 +43,7 @@ export type SaleFilters = {
 export type Sale = {
   id: string;
   invoiceNumber: string;
+  customerId: string | null;
   customerName: string | null;
   customerPhone: string | null;
   customerEmail: string | null;

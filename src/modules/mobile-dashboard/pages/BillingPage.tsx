@@ -28,6 +28,12 @@ export default function BillingPage() {
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [cameraScanOpen, setCameraScanOpen] = useState(false);
   const [cameraSupported, setCameraSupported] = useState(false);
+  const [customerLoading, setCustomerLoading] = useState(false);
+  const [customerStats, setCustomerStats] = useState<{
+    totalVisits: number;
+    totalSpend: number;
+    lastPurchaseDate: string | null;
+  } | null>(null);
   const pendingCameraScanRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -113,6 +119,11 @@ export default function BillingPage() {
   }, [addVariantToCart, loading, moduleSearch.billing, setModuleSearch, variantRows]);
 
   const handleCheckout = async () => {
+    if (!cart.customerPhone || cart.customerPhone.length < 10) {
+      message.error("Enter customer mobile number to continue");
+      return;
+    }
+
     setCheckoutLoading(true);
     try {
       await createSale(cart.toCreateInput());
@@ -125,6 +136,86 @@ export default function BillingPage() {
       setCheckoutLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (cart.customerPhone.length !== 10) {
+      setCustomerStats(null);
+      setCustomerLoading(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setCustomerLoading(true);
+
+      try {
+        const customerRes = await fetch("/api/customer/get-or-create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mobile: cart.customerPhone,
+            name: cart.customerName || undefined,
+            email: cart.customerEmail || undefined,
+          }),
+        });
+
+        if (!customerRes.ok) {
+          const payload = await customerRes.json().catch(() => ({ error: "Failed to fetch customer" }));
+
+          // For new numbers, allow user to type name first without noisy errors.
+          if (
+            customerRes.status === 400
+            && typeof payload?.error === "string"
+            && payload.error.toLowerCase().includes("name")
+          ) {
+            setCustomerStats(null);
+            return;
+          }
+
+          throw new Error(payload?.error || "Failed to fetch customer");
+        }
+
+        const customer = await customerRes.json() as {
+          name: string;
+          mobile: string;
+          email: string | null;
+        };
+
+        if (customer.name && customer.name !== cart.customerName) {
+          cart.setCustomerName(customer.name);
+        }
+        if (customer.email && customer.email !== cart.customerEmail) {
+          cart.setCustomerEmail(customer.email);
+        }
+
+        const statsRes = await fetch(`/api/customers/${encodeURIComponent(customer.mobile)}/stats`);
+        if (!statsRes.ok) {
+          setCustomerStats({ totalVisits: 0, totalSpend: 0, lastPurchaseDate: null });
+          return;
+        }
+
+        const stats = await statsRes.json() as {
+          totalVisits: number;
+          totalSpend: number;
+          lastPurchaseDate: string | null;
+        };
+        setCustomerStats(stats);
+      } catch (error) {
+        setCustomerStats(null);
+        message.error(error instanceof Error ? error.message : "Failed to fetch customer details");
+      } finally {
+        setCustomerLoading(false);
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [
+    cart.customerPhone,
+    cart.customerName,
+    cart.customerEmail,
+    cart.setCustomerName,
+    cart.setCustomerEmail,
+    message,
+  ]);
 
   return (
     <>
@@ -224,6 +315,12 @@ export default function BillingPage() {
         onPaymentMethodChange={cart.setPaymentMethod}
         customerName={cart.customerName}
         onCustomerNameChange={cart.setCustomerName}
+        customerPhone={cart.customerPhone}
+        onCustomerPhoneChange={cart.setCustomerPhone}
+        customerEmail={cart.customerEmail}
+        onCustomerEmailChange={cart.setCustomerEmail}
+        customerStats={customerStats}
+        customerLoading={customerLoading}
         onQuantityChange={cart.updateQuantity}
         onRemove={cart.removeItem}
         onCheckout={() => void handleCheckout()}

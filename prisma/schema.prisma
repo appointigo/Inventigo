@@ -1,7 +1,3 @@
-// Stockiva — Retail Inventory Management System
-// Multi-tenant schema: Organization is the tenant boundary.
-// Every org has its own stores, categories, brands, products, suppliers.
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,14 +6,675 @@ datasource db {
   provider = "postgresql"
 }
 
-// ─── ENUMS ──────────────────────────────────────────────────────────────────────
+model Organization {
+  id                     String                  @id @default(uuid())
+  name                   String
+  slug                   String                  @unique
+  logoUrl                String?
+  plan                   OrgPlan                 @default(FREE)
+  isActive               Boolean                 @default(true)
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  alertConfigs           AlertConfig[]
+  brands                 Brand[]
+  categories             Category[]
+  customers              Customer[]
+  expenseBudgets         ExpenseBudget[]
+  expenseCategoryOptions ExpenseCategoryOption[]
+  featureFlags           FeatureFlag[]
+  invitations            Invitation[]
+  leaveBalances          LeaveBalance[]
+  leaveRequests          LeaveRequest[]
+  products               Product[]
+  promoCodes             PromoCode[]
+  attendances            StaffAttendance[]
+  storeExpenses          StoreExpense[]
+  leavePolicies          StoreLeavePolicy[]
+  stores                 Store[]
+  suppliers              Supplier[]
+  users                  User[]
+  weeklyOffs             WeeklyOff[]
+
+  @@map("organizations")
+}
+
+model Store {
+  id             String             @id @default(uuid())
+  orgId          String
+  name           String
+  code           String
+  address        String?
+  phone          String?
+  isActive       Boolean            @default(true)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  alertConfigs   AlertConfig[]
+  brands         Brand[]
+  categories     Category[]
+  expenseBudgets ExpenseBudget[]
+  invitations    Invitation[]
+  leaveRequests  LeaveRequest[]
+  purchaseOrders PurchaseOrder[]
+  sales          Sale[]
+  attendances    StaffAttendance[]
+  stockEntries   StockEntry[]
+  stockMovements StockMovement[]
+  storeExpenses  StoreExpense[]
+  leavePolicies  StoreLeavePolicy[]
+  org            Organization       @relation(fields: [orgId], references: [id])
+  users          User[]
+  weeklyOffs     WeeklyOff[]
+
+  @@unique([code, orgId])
+  @@index([orgId])
+  @@map("stores")
+}
+
+model User {
+  id              String            @id @default(uuid())
+  orgId           String?
+  name            String
+  email           String            @unique
+  passwordHash    String
+  role            Role              @default(STAFF)
+  storeId         String?
+  isActive        Boolean           @default(true)
+  emailVerified   Boolean           @default(false)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  createdColors   Color[]
+  sentInvitations Invitation[]      @relation("SentInvitations")
+  leaveBalances   LeaveBalance[]
+  reviewedLeaves  LeaveRequest[]    @relation("LeaveReviewer")
+  leaveRequests   LeaveRequest[]    @relation("LeaveRequester")
+  purchaseOrders  PurchaseOrder[]
+  sales           Sale[]
+  attendances     StaffAttendance[]
+  stockMovements  StockMovement[]
+  storeExpenses   StoreExpense[]
+  org             Organization?     @relation(fields: [orgId], references: [id])
+  store           Store?            @relation(fields: [storeId], references: [id])
+
+  @@index([orgId])
+  @@map("users")
+}
+
+model Invitation {
+  id        String           @id @default(uuid())
+  orgId     String
+  storeId   String?
+  email     String
+  role      Role
+  invitedBy String
+  status    InvitationStatus @default(PENDING)
+  token     String           @unique
+  expiresAt DateTime
+  createdAt DateTime         @default(now())
+  inviter   User             @relation("SentInvitations", fields: [invitedBy], references: [id])
+  org       Organization     @relation(fields: [orgId], references: [id])
+  store     Store?           @relation(fields: [storeId], references: [id])
+
+  @@index([orgId])
+  @@index([storeId])
+  @@index([email])
+  @@map("invitations")
+}
+
+model Color {
+  id        String          @id
+  name      String          @unique
+  hex       String          @unique
+  category  String
+  semantic  String?
+  source    ColorSourceType
+  aliases   String[]
+  createdBy String
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  creator   User            @relation(fields: [createdBy], references: [id])
+
+  @@index([category])
+  @@index([semantic])
+  @@index([createdBy])
+  @@map("colors")
+}
+
+model Category {
+  id              String        @id @default(uuid())
+  orgId           String
+  storeId         String?
+  name            String
+  slug            String
+  description     String?
+  attributeSchema Json          @default("{}")
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  alertConfigs    AlertConfig[]
+  org             Organization  @relation(fields: [orgId], references: [id])
+  store           Store?        @relation(fields: [storeId], references: [id])
+  products        Product[]
+  sizes           Size[]
+
+  @@unique([name, orgId])
+  @@unique([slug, orgId])
+  @@index([orgId])
+  @@index([storeId])
+  @@map("categories")
+}
+
+model Brand {
+  id        String       @id @default(uuid())
+  orgId     String
+  storeId   String?
+  name      String
+  logoUrl   String?
+  isActive  Boolean      @default(true)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  org       Organization @relation(fields: [orgId], references: [id])
+  store     Store?       @relation(fields: [storeId], references: [id])
+  products  Product[]
+
+  @@unique([name, orgId])
+  @@index([orgId])
+  @@index([storeId])
+  @@map("brands")
+}
+
+model Product {
+  id                 String              @id @default(uuid())
+  orgId              String
+  name               String
+  sku                String
+  externalBarcode    String?
+  categoryId         String
+  brandId            String
+  basePrice          Decimal             @db.Decimal(10, 2)
+  costPrice          Decimal             @db.Decimal(10, 2)
+  attributes         Json                @default("{}")
+  imageUrl           String?
+  isActive           Boolean             @default(true)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  mrp                Decimal             @db.Decimal(10, 2)
+  brand              Brand               @relation(fields: [brandId], references: [id])
+  category           Category            @relation(fields: [categoryId], references: [id])
+  org                Organization        @relation(fields: [orgId], references: [id])
+  purchaseOrderItems PurchaseOrderItem[]
+  saleItems          SaleItem[]
+  stockEntries       StockEntry[]
+  stockMovements     StockMovement[]
+
+  @@unique([sku, orgId])
+  @@index([orgId])
+  @@index([categoryId])
+  @@index([brandId])
+  @@index([sku])
+  @@map("products")
+}
+
+model Size {
+  id                 String              @id @default(uuid())
+  label              String
+  sortOrder          Int                 @default(0)
+  categoryId         String
+  createdAt          DateTime            @default(now())
+  purchaseOrderItems PurchaseOrderItem[]
+  saleItems          SaleItem[]
+  category           Category            @relation(fields: [categoryId], references: [id])
+  stockEntries       StockEntry[]
+  stockMovements     StockMovement[]
+
+  @@unique([label, categoryId])
+  @@index([categoryId])
+  @@map("sizes")
+}
+
+model StockEntry {
+  id              String    @id @default(uuid())
+  productId       String
+  sizeId          String
+  storeId         String
+  variantSku      String?
+  quantity        Int       @default(0)
+  reorderLevel    Int       @default(5)
+  reorderQuantity Int       @default(10)
+  lastRestockedAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  product         Product   @relation(fields: [productId], references: [id])
+  size            Size      @relation(fields: [sizeId], references: [id])
+  store           Store     @relation(fields: [storeId], references: [id])
+
+  @@unique([productId, sizeId, storeId])
+  @@index([storeId])
+  @@index([productId])
+  @@map("stock_entries")
+}
+
+model StockMovement {
+  id            String            @id @default(uuid())
+  productId     String
+  sizeId        String
+  storeId       String
+  type          StockMovementType
+  quantity      Int
+  reason        String?
+  referenceType ReferenceType?
+  referenceId   String?
+  createdBy     String
+  createdAt     DateTime          @default(now())
+  user          User              @relation(fields: [createdBy], references: [id])
+  product       Product           @relation(fields: [productId], references: [id])
+  size          Size              @relation(fields: [sizeId], references: [id])
+  store         Store             @relation(fields: [storeId], references: [id])
+
+  @@index([productId])
+  @@index([storeId])
+  @@index([createdAt])
+  @@index([referenceType, referenceId])
+  @@map("stock_movements")
+}
+
+model Supplier {
+  id             String          @id @default(uuid())
+  orgId          String
+  name           String
+  contactPerson  String?
+  email          String?
+  phone          String?
+  address        String?
+  isActive       Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  purchaseOrders PurchaseOrder[]
+  org            Organization    @relation(fields: [orgId], references: [id])
+
+  @@index([orgId])
+  @@map("suppliers")
+}
+
+model PurchaseOrder {
+  id          String              @id @default(uuid())
+  storeId     String
+  supplierId  String
+  status      PurchaseOrderStatus @default(DRAFT)
+  totalAmount Decimal             @default(0) @db.Decimal(10, 2)
+  notes       String?
+  orderedAt   DateTime?
+  receivedAt  DateTime?
+  createdBy   String
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  items       PurchaseOrderItem[]
+  user        User                @relation(fields: [createdBy], references: [id])
+  store       Store               @relation(fields: [storeId], references: [id])
+  supplier    Supplier            @relation(fields: [supplierId], references: [id])
+
+  @@index([storeId])
+  @@index([supplierId])
+  @@index([status])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id              String        @id @default(uuid())
+  purchaseOrderId String
+  productId       String
+  sizeId          String
+  quantity        Int
+  unitCost        Decimal       @db.Decimal(10, 2)
+  createdAt       DateTime      @default(now())
+  product         Product       @relation(fields: [productId], references: [id])
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  size            Size          @relation(fields: [sizeId], references: [id])
+
+  @@map("purchase_order_items")
+}
+
+model Sale {
+  id             String        @id @default(uuid())
+  storeId        String
+  invoiceNumber  String        @unique
+  customerName   String?
+  customerPhone  String?
+  customerEmail  String?
+  subtotal       Decimal       @db.Decimal(10, 2)
+  discountAmount Decimal       @default(0) @db.Decimal(10, 2)
+  taxAmount      Decimal       @default(0) @db.Decimal(10, 2)
+  total          Decimal       @db.Decimal(10, 2)
+  paymentMethod  PaymentMethod @default(CASH)
+  status         SaleStatus    @default(COMPLETED)
+  createdBy      String
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  promoCodeId    String?
+  customerId     String?
+  items          SaleItem[]
+  user           User          @relation(fields: [createdBy], references: [id])
+  customer       Customer?     @relation(fields: [customerId], references: [id])
+  promoCode      PromoCode?    @relation(fields: [promoCodeId], references: [id])
+  store          Store         @relation(fields: [storeId], references: [id])
+
+  @@index([storeId])
+  @@index([customerId])
+  @@index([createdAt])
+  @@index([status])
+  @@index([promoCodeId])
+  @@map("sales")
+}
+
+model SaleItem {
+  id        String   @id @default(uuid())
+  saleId    String
+  productId String
+  sizeId    String
+  quantity  Int
+  unitPrice Decimal  @db.Decimal(10, 2)
+  total     Decimal  @db.Decimal(10, 2)
+  createdAt DateTime @default(now())
+  product   Product  @relation(fields: [productId], references: [id])
+  sale      Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  size      Size     @relation(fields: [sizeId], references: [id])
+
+  @@map("sale_items")
+}
+
+model Customer {
+  id        String       @id @default(uuid())
+  orgId     String
+  name      String?
+  mobile    String
+  email     String?
+  dateOfBirth DateTime?
+  notes     String?
+  lastVisitAt DateTime?
+  totalSpent Float      @default(0)
+  totalVisits Int       @default(0)
+  tags      String[]    @default([])
+  metadata  Json?
+  createdAt DateTime     @default(now())
+  org       Organization @relation(fields: [orgId], references: [id])
+  sales     Sale[]
+
+  @@unique([orgId, mobile])
+  @@index([orgId])
+  @@index([mobile])
+  @@map("customers")
+}
+
+model AlertConfig {
+  id          String       @id @default(uuid())
+  orgId       String
+  storeId     String?
+  productId   String?
+  categoryId  String?
+  threshold   Int          @default(5)
+  notifyEmail Boolean      @default(true)
+  notifySMS   Boolean      @default(false)
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  category    Category?    @relation(fields: [categoryId], references: [id])
+  org         Organization @relation(fields: [orgId], references: [id])
+  store       Store?       @relation(fields: [storeId], references: [id])
+
+  @@index([orgId])
+  @@map("alert_configs")
+}
+
+model PromoCode {
+  id          String       @id @default(uuid())
+  orgId       String
+  code        String
+  label       String
+  desc        String       @default("")
+  discountPct Decimal      @db.Decimal(5, 2)
+  isActive    Boolean      @default(true)
+  maxUses     Int?
+  usageCount  Int          @default(0)
+  expiresAt   DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  sales       Sale[]
+
+  @@unique([code, orgId])
+  @@index([orgId])
+  @@map("promo_codes")
+}
+
+model ExpenseCategoryOption {
+  id        String       @id @default(uuid())
+  orgId     String
+  name      String
+  colorKey  String       @default("default")
+  createdAt DateTime     @default(now())
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, name])
+  @@index([orgId])
+  @@map("expense_category_options")
+}
+
+model StoreExpense {
+  id             String       @id @default(uuid())
+  orgId          String
+  storeId        String
+  category       String
+  amount         Decimal      @db.Decimal(10, 2)
+  date           DateTime     @db.Date
+  note           String?
+  paymentMode    String?
+  receiptUrl     String?
+  status         String       @default("APPROVED")
+  isRecurring    Boolean      @default(false)
+  recurrenceFreq String?
+  vendorGstin    String?
+  gstRate        Decimal?     @db.Decimal(5, 2)
+  gstAmount      Decimal?     @db.Decimal(10, 2)
+  isItcEligible  Boolean      @default(false)
+  createdBy      String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  user           User         @relation(fields: [createdBy], references: [id])
+  org            Organization @relation(fields: [orgId], references: [id])
+  store          Store        @relation(fields: [storeId], references: [id])
+
+  @@index([orgId])
+  @@index([storeId])
+  @@index([date])
+  @@index([status])
+  @@map("store_expenses")
+}
+
+model ExpenseBudget {
+  id        String       @id @default(uuid())
+  orgId     String
+  storeId   String
+  category  String
+  month     Int
+  year      Int
+  amount    Decimal      @db.Decimal(10, 2)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  store     Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, category, month, year])
+  @@index([orgId])
+  @@index([storeId])
+  @@map("expense_budgets")
+}
+
+model EmailVerification {
+  id        String   @id @default(uuid())
+  email     String
+  code      String
+  expiresAt DateTime
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([email])
+  @@map("email_verifications")
+}
+
+model StaffAttendance {
+  id             String           @id @default(uuid())
+  orgId          String
+  storeId        String
+  userId         String
+  date           DateTime         @db.Date
+  status         AttendanceStatus @default(PRESENT)
+  checkInAt      DateTime?
+  checkOutAt     DateTime?
+  totalMinutes   Int?
+  note           String?
+  source         String           @default("SYSTEM")
+  overrideReason String?
+  overriddenBy   String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  org            Organization     @relation(fields: [orgId], references: [id])
+  store          Store            @relation(fields: [storeId], references: [id])
+  user           User             @relation(fields: [userId], references: [id])
+
+  @@unique([userId, date])
+  @@index([orgId, storeId, date])
+  @@index([userId, date])
+  @@map("staff_attendances")
+}
+
+model LeaveRequest {
+  id              String       @id @default(uuid())
+  orgId           String
+  storeId         String
+  userId          String
+  leaveType       LeaveType
+  startDate       DateTime     @db.Date
+  endDate         DateTime     @db.Date
+  reason          String
+  status          LeaveStatus  @default(PENDING)
+  reviewerComment String?
+  reviewedBy      String?
+  decidedAt       DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  org             Organization @relation(fields: [orgId], references: [id])
+  reviewer        User?        @relation("LeaveReviewer", fields: [reviewedBy], references: [id])
+  store           Store        @relation(fields: [storeId], references: [id])
+  user            User         @relation("LeaveRequester", fields: [userId], references: [id])
+
+  @@index([orgId, storeId, status])
+  @@index([userId, startDate, endDate])
+  @@map("leave_requests")
+}
+
+model WeeklyOff {
+  id         String       @id @default(uuid())
+  orgId      String
+  storeId    String
+  dayOfWeek  Int
+  isOptional Boolean      @default(false)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  org        Organization @relation(fields: [orgId], references: [id])
+  store      Store        @relation(fields: [storeId], references: [id])
+
+  @@unique([storeId, dayOfWeek])
+  @@index([orgId, storeId])
+  @@map("weekly_offs")
+}
+
+model StoreLeavePolicy {
+  id        String       @id @default(uuid())
+  orgId     String
+  storeId   String
+  leaveType LeaveType
+  allocated Int          @default(0)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  org       Organization @relation(fields: [orgId], references: [id])
+  store     Store        @relation(fields: [storeId], references: [id])
+
+  @@unique([storeId, leaveType])
+  @@index([orgId, storeId])
+  @@map("store_leave_policies")
+}
+
+model LeaveBalance {
+  id           String       @id @default(uuid())
+  orgId        String
+  userId       String
+  leaveType    LeaveType
+  year         Int
+  allocated    Int          @default(0)
+  used         Int          @default(0)
+  carryForward Int          @default(0)
+  updatedAt    DateTime     @updatedAt
+  org          Organization @relation(fields: [orgId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
+
+  @@unique([userId, leaveType, year])
+  @@index([orgId, userId])
+  @@map("leave_balances")
+}
+
+model AdminAuditLog {
+  id          String   @id @default(uuid())
+  action      String
+  targetType  String
+  targetId    String
+  targetName  String?
+  performedBy String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  @@index([action])
+  @@index([createdAt])
+  @@map("admin_audit_logs")
+}
+
+model FeatureFlag {
+  id          String        @id @default(uuid())
+  orgId       String?
+  key         String
+  value       Boolean       @default(false)
+  scope       String        @default("GLOBAL")
+  description String        @default("")
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  org         Organization? @relation(fields: [orgId], references: [id])
+
+  @@unique([orgId, key])
+  @@index([key])
+  @@map("feature_flags")
+}
+
+model Announcement {
+  id          String    @id @default(uuid())
+  title       String
+  body        String
+  severity    String    @default("INFO")
+  targetPlan  String?
+  activeFrom  DateTime  @default(now())
+  activeUntil DateTime?
+  isActive    Boolean   @default(true)
+  createdBy   String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([isActive])
+  @@index([createdAt])
+  @@map("announcements")
+}
 
 enum Role {
-  SUPER_ADMIN // Platform admin — no org, sees everything
-  OWNER       // Org owner — creates org, manages billing, one per org
-  ADMIN       // Org admin — manages stores, invites users (not OWNER)
-  MANAGER     // Manages products/suppliers/POs within one store
-  STAFF       // Stock adjustments, view-only on most things
+  SUPER_ADMIN
+  OWNER
+  ADMIN
+  MANAGER
+  STAFF
 }
 
 enum OrgPlan {
@@ -83,695 +740,8 @@ enum LeaveStatus {
   REJECTED
 }
 
-// ExpenseCategory enum removed — categories are now dynamic per org (ExpenseCategoryOption)
-
-// ─── ORGANIZATION ────────────────────────────────────────────────────────────────
-
-model Organization {
-  id        String   @id @default(uuid())
-  name      String
-  slug      String   @unique
-  logoUrl   String?
-  plan      OrgPlan  @default(FREE)
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  users        User[]
-  stores       Store[]
-  categories   Category[]
-  brands       Brand[]
-  products     Product[]
-  suppliers    Supplier[]
-  invitations  Invitation[]
-  alertConfigs AlertConfig[]
-  promoCodes             PromoCode[]
-  featureFlags           FeatureFlag[]
-  storeExpenses          StoreExpense[]
-  expenseCategoryOptions ExpenseCategoryOption[]
-  expenseBudgets         ExpenseBudget[]
-  attendances            StaffAttendance[]
-  leaveRequests          LeaveRequest[]
-  leaveBalances          LeaveBalance[]
-  weeklyOffs             WeeklyOff[]
-  leavePolicies          StoreLeavePolicy[]
-
-  @@map("organizations")
-}
-
-// ─── STORE ──────────────────────────────────────────────────────────────────────
-
-model Store {
-  id        String   @id @default(uuid())
-  orgId     String
-  name      String
-  code      String
-  address   String?
-  phone     String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  org            Organization    @relation(fields: [orgId], references: [id])
-  users          User[]
-  stockEntries   StockEntry[]
-  stockMovements StockMovement[]
-  purchaseOrders PurchaseOrder[]
-  sales          Sale[]
-  alertConfigs   AlertConfig[]
-  categories     Category[]
-  brands         Brand[]
-  storeExpenses  StoreExpense[]
-  expenseBudgets ExpenseBudget[]
-  invitations    Invitation[]
-  attendances    StaffAttendance[]
-  leaveRequests  LeaveRequest[]
-  weeklyOffs     WeeklyOff[]
-  leavePolicies  StoreLeavePolicy[]
-
-  @@unique([code, orgId])
-  @@index([orgId])
-  @@map("stores")
-}
-
-// ─── USER ───────────────────────────────────────────────────────────────────────
-
-model User {
-  id           String   @id @default(uuid())
-  orgId        String?
-  name         String
-  email        String   @unique
-  passwordHash String
-  role         Role     @default(STAFF)
-  storeId      String?
-  isActive      Boolean  @default(true)
-  emailVerified Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  org             Organization?  @relation(fields: [orgId], references: [id])
-  store           Store?         @relation(fields: [storeId], references: [id])
-  stockMovements  StockMovement[]
-  purchaseOrders  PurchaseOrder[]
-  sales           Sale[]
-  sentInvitations Invitation[]   @relation("SentInvitations")
-  storeExpenses   StoreExpense[]
-  attendances     StaffAttendance[]
-  leaveRequests   LeaveRequest[]  @relation("LeaveRequester")
-  reviewedLeaves  LeaveRequest[]  @relation("LeaveReviewer")
-  leaveBalances   LeaveBalance[]
-
-  @@index([orgId])
-  @@map("users")
-}
-
-// ─── INVITATION ──────────────────────────────────────────────────────────────────
-
-model Invitation {
-  id        String           @id @default(uuid())
-  orgId     String
-  storeId   String?
-  email     String
-  role      Role
-  invitedBy String
-  status    InvitationStatus @default(PENDING)
-  token     String           @unique
-  expiresAt DateTime
-  createdAt DateTime         @default(now())
-
-  org     Organization @relation(fields: [orgId], references: [id])
-  store   Store?       @relation(fields: [storeId], references: [id])
-  inviter User         @relation("SentInvitations", fields: [invitedBy], references: [id])
-
-  @@index([orgId])
-  @@index([storeId])
-  @@index([email])
-  @@map("invitations")
-}
-
-// ─── CATEGORY ───────────────────────────────────────────────────────────────────
-
-model Category {
-  id              String   @id @default(uuid())
-  orgId           String
-  storeId         String?
-  name            String
-  slug            String
-  description     String?
-  attributeSchema Json     @default("{}")
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  org          Organization  @relation(fields: [orgId], references: [id])
-  store        Store?        @relation(fields: [storeId], references: [id])
-  products     Product[]
-  sizes        Size[]
-  alertConfigs AlertConfig[]
-
-  @@unique([name, orgId])
-  @@unique([slug, orgId])
-  @@index([orgId])
-  @@index([storeId])
-  @@map("categories")
-}
-
-// ─── BRAND ──────────────────────────────────────────────────────────────────────
-
-model Brand {
-  id        String   @id @default(uuid())
-  orgId     String
-  storeId   String?
-  name      String
-  logoUrl   String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  org      Organization @relation(fields: [orgId], references: [id])
-  store    Store?       @relation(fields: [storeId], references: [id])
-  products Product[]
-
-  @@unique([name, orgId])
-  @@index([orgId])
-  @@index([storeId])
-  @@map("brands")
-}
-
-// ─── PRODUCT ────────────────────────────────────────────────────────────────────
-
-model Product {
-  id               String   @id @default(uuid())
-  orgId            String
-  name             String
-  sku              String
-  externalBarcode  String?
-  categoryId       String
-  brandId          String
-  mrp              Decimal  @db.Decimal(10, 2)
-  basePrice        Decimal  @db.Decimal(10, 2)
-  costPrice        Decimal  @db.Decimal(10, 2)
-  attributes       Json     @default("{}")
-  imageUrl         String?
-  isActive         Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  org                Organization        @relation(fields: [orgId], references: [id])
-  category           Category            @relation(fields: [categoryId], references: [id])
-  brand              Brand               @relation(fields: [brandId], references: [id])
-  stockEntries       StockEntry[]
-  stockMovements     StockMovement[]
-  purchaseOrderItems PurchaseOrderItem[]
-  saleItems          SaleItem[]
-
-  @@unique([sku, orgId])
-  @@index([orgId])
-  @@index([categoryId])
-  @@index([brandId])
-  @@index([sku])
-  @@map("products")
-}
-
-// ─── SIZE ───────────────────────────────────────────────────────────────────────
-
-model Size {
-  id         String   @id @default(uuid())
-  label      String
-  sortOrder  Int      @default(0)
-  categoryId String
-  createdAt  DateTime @default(now())
-
-  category           Category            @relation(fields: [categoryId], references: [id])
-  stockEntries       StockEntry[]
-  stockMovements     StockMovement[]
-  purchaseOrderItems PurchaseOrderItem[]
-  saleItems          SaleItem[]
-
-  @@unique([label, categoryId])
-  @@index([categoryId])
-  @@map("sizes")
-}
-
-// ─── STOCK ENTRY ────────────────────────────────────────────────────────────────
-
-model StockEntry {
-  id              String    @id @default(uuid())
-  productId       String
-  sizeId          String
-  storeId         String
-  variantSku      String?   // auto-generated: {productSku}-{SIZELABEL}, e.g. NK-TS-862-S
-  quantity        Int       @default(0)
-  reorderLevel    Int       @default(5)
-  reorderQuantity Int       @default(10)
-  lastRestockedAt DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  product Product @relation(fields: [productId], references: [id])
-  size    Size    @relation(fields: [sizeId], references: [id])
-  store   Store   @relation(fields: [storeId], references: [id])
-
-  @@unique([productId, sizeId, storeId])
-  @@index([storeId])
-  @@index([productId])
-  @@map("stock_entries")
-}
-
-// ─── STOCK MOVEMENT (Audit Log) ─────────────────────────────────────────────────
-
-model StockMovement {
-  id            String            @id @default(uuid())
-  productId     String
-  sizeId        String
-  storeId       String
-  type          StockMovementType
-  quantity      Int
-  reason        String?
-  referenceType ReferenceType?
-  referenceId   String?
-  createdBy     String
-  createdAt     DateTime          @default(now())
-
-  product Product @relation(fields: [productId], references: [id])
-  size    Size    @relation(fields: [sizeId], references: [id])
-  store   Store   @relation(fields: [storeId], references: [id])
-  user    User    @relation(fields: [createdBy], references: [id])
-
-  @@index([productId])
-  @@index([storeId])
-  @@index([createdAt])
-  @@index([referenceType, referenceId])
-  @@map("stock_movements")
-}
-
-// ─── SUPPLIER ───────────────────────────────────────────────────────────────────
-
-model Supplier {
-  id            String   @id @default(uuid())
-  orgId         String
-  name          String
-  contactPerson String?
-  email         String?
-  phone         String?
-  address       String?
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  org            Organization    @relation(fields: [orgId], references: [id])
-  purchaseOrders PurchaseOrder[]
-
-  @@index([orgId])
-  @@map("suppliers")
-}
-
-// ─── PURCHASE ORDER ─────────────────────────────────────────────────────────────
-
-model PurchaseOrder {
-  id          String              @id @default(uuid())
-  storeId     String
-  supplierId  String
-  status      PurchaseOrderStatus @default(DRAFT)
-  totalAmount Decimal             @default(0) @db.Decimal(10, 2)
-  notes       String?
-  orderedAt   DateTime?
-  receivedAt  DateTime?
-  createdBy   String
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
-
-  store    Store               @relation(fields: [storeId], references: [id])
-  supplier Supplier            @relation(fields: [supplierId], references: [id])
-  user     User                @relation(fields: [createdBy], references: [id])
-  items    PurchaseOrderItem[]
-
-  @@index([storeId])
-  @@index([supplierId])
-  @@index([status])
-  @@map("purchase_orders")
-}
-
-// ─── PURCHASE ORDER ITEM ────────────────────────────────────────────────────────
-
-model PurchaseOrderItem {
-  id              String  @id @default(uuid())
-  purchaseOrderId String
-  productId       String
-  sizeId          String
-  quantity        Int
-  unitCost        Decimal @db.Decimal(10, 2)
-  createdAt       DateTime @default(now())
-
-  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
-  product       Product       @relation(fields: [productId], references: [id])
-  size          Size          @relation(fields: [sizeId], references: [id])
-
-  @@map("purchase_order_items")
-}
-
-// ─── SALE (Billing-ready — empty until Phase 8) ─────────────────────────────────
-
-model Sale {
-  id             String        @id @default(uuid())
-  storeId        String
-  invoiceNumber  String        @unique
-  customerName   String?
-  customerPhone  String?
-  customerEmail  String?
-  subtotal       Decimal       @db.Decimal(10, 2)
-  discountAmount Decimal       @default(0) @db.Decimal(10, 2)
-  taxAmount      Decimal       @default(0) @db.Decimal(10, 2)
-  total          Decimal       @db.Decimal(10, 2)
-  paymentMethod  PaymentMethod @default(CASH)
-  status         SaleStatus    @default(COMPLETED)
-  createdBy      String
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-
-  store     Store      @relation(fields: [storeId], references: [id])
-  user      User       @relation(fields: [createdBy], references: [id])
-  items     SaleItem[]
-  promoCode PromoCode? @relation(fields: [promoCodeId], references: [id], onDelete: SetNull)
-
-  promoCodeId String?
-
-  @@index([storeId])
-  @@index([createdAt])
-  @@index([status])
-  @@index([promoCodeId])
-  @@map("sales")
-}
-
-// ─── SALE ITEM (Billing-ready — empty until Phase 8) ────────────────────────────
-
-model SaleItem {
-  id        String  @id @default(uuid())
-  saleId    String
-  productId String
-  sizeId    String
-  quantity  Int
-  unitPrice Decimal @db.Decimal(10, 2)
-  total     Decimal @db.Decimal(10, 2)
-  createdAt DateTime @default(now())
-
-  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  product Product @relation(fields: [productId], references: [id])
-  size    Size    @relation(fields: [sizeId], references: [id])
-
-  @@map("sale_items")
-}
-
-// ─── ALERT CONFIG ───────────────────────────────────────────────────────────────
-
-model AlertConfig {
-  id          String   @id @default(uuid())
-  orgId       String
-  storeId     String?
-  productId   String?
-  categoryId  String?
-  threshold   Int      @default(5)
-  notifyEmail Boolean  @default(true)
-  notifySMS   Boolean  @default(false)
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  org      Organization @relation(fields: [orgId], references: [id])
-  store    Store?       @relation(fields: [storeId], references: [id])
-  category Category?    @relation(fields: [categoryId], references: [id])
-
-  @@index([orgId])
-  @@map("alert_configs")
-}
-
-// ─── PROMO CODE ─────────────────────────────────────────────────────────────────
-
-model PromoCode {
-  id          String    @id @default(uuid())
-  orgId       String
-  code        String
-  label       String
-  desc        String    @default("")
-  discountPct Decimal   @db.Decimal(5, 2)
-  isActive    Boolean   @default(true)
-  maxUses     Int?
-  usageCount  Int       @default(0)
-  expiresAt   DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  org   Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  sales Sale[]
-
-  @@unique([code, orgId])
-  @@index([orgId])
-  @@map("promo_codes")
-}
-
-// ─── EXPENSE CATEGORIES & STORE EXPENSES ────────────────────────────────────
-
-model ExpenseCategoryOption {
-  id        String   @id @default(uuid())
-  orgId     String
-  name      String
-  colorKey  String   @default("default")
-  createdAt DateTime @default(now())
-
-  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-
-  @@unique([orgId, name])
-  @@index([orgId])
-  @@map("expense_category_options")
-}
-
-// ─── STORE EXPENSE ────────────────────────────────────────────────────────────
-
-model StoreExpense {
-  id        String   @id @default(uuid())
-  orgId     String
-  storeId   String
-  category  String
-  amount         Decimal  @db.Decimal(10, 2)
-  date           DateTime @db.Date
-  note           String?
-  paymentMode    String?  // CASH | UPI | BANK_TRANSFER | CHEQUE | CREDIT_CARD | PETTY_CASH
-  receiptUrl     String?
-  status         String   @default("APPROVED") // PENDING | APPROVED | REJECTED
-  isRecurring    Boolean  @default(false)
-  recurrenceFreq String?  // MONTHLY | QUARTERLY | ANNUALLY
-  vendorGstin    String?
-  gstRate        Decimal? @db.Decimal(5, 2)
-  gstAmount      Decimal? @db.Decimal(10, 2)
-  isItcEligible  Boolean  @default(false)
-  createdBy      String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  org   Organization @relation(fields: [orgId], references: [id])
-  store Store        @relation(fields: [storeId], references: [id])
-  user  User         @relation(fields: [createdBy], references: [id])
-
-  @@index([orgId])
-  @@index([storeId])
-  @@index([date])
-  @@index([status])
-  @@map("store_expenses")
-}
-
-// ─── EXPENSE BUDGET ──────────────────────────────────────────────────────────────
-
-model ExpenseBudget {
-  id        String   @id @default(uuid())
-  orgId     String
-  storeId   String
-  category  String
-  month     Int      // 1-12
-  year      Int
-  amount    Decimal  @db.Decimal(10, 2)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  org   Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  store Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
-
-  @@unique([storeId, category, month, year])
-  @@index([orgId])
-  @@index([storeId])
-  @@map("expense_budgets")
-}
-
-// ─── EMAIL VERIFICATION ──────────────────────────────────────────────────────────
-
-model EmailVerification {
-  id        String   @id @default(uuid())
-  email     String
-  code      String
-  expiresAt DateTime
-  attempts  Int      @default(0)
-  createdAt DateTime @default(now())
-
-  @@index([email])
-  @@map("email_verifications")
-}
-
-model StaffAttendance {
-  id             String           @id @default(uuid())
-  orgId          String
-  storeId        String
-  userId         String
-  date           DateTime         @db.Date
-  status         AttendanceStatus @default(PRESENT)
-  checkInAt      DateTime?
-  checkOutAt     DateTime?
-  totalMinutes   Int?
-  note           String?
-  source         String           @default("SYSTEM")
-  overrideReason String?
-  overriddenBy   String?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-
-  org   Organization @relation(fields: [orgId], references: [id])
-  store Store        @relation(fields: [storeId], references: [id])
-  user  User         @relation(fields: [userId], references: [id])
-
-  @@unique([userId, date])
-  @@index([orgId, storeId, date])
-  @@index([userId, date])
-  @@map("staff_attendances")
-}
-
-model LeaveRequest {
-  id              String      @id @default(uuid())
-  orgId           String
-  storeId         String
-  userId          String
-  leaveType       LeaveType
-  startDate       DateTime    @db.Date
-  endDate         DateTime    @db.Date
-  reason          String
-  status          LeaveStatus @default(PENDING)
-  reviewerComment String?
-  reviewedBy      String?
-  decidedAt       DateTime?
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-
-  org      Organization @relation(fields: [orgId], references: [id])
-  store    Store        @relation(fields: [storeId], references: [id])
-  user     User         @relation("LeaveRequester", fields: [userId], references: [id])
-  reviewer User?        @relation("LeaveReviewer", fields: [reviewedBy], references: [id])
-
-  @@index([orgId, storeId, status])
-  @@index([userId, startDate, endDate])
-  @@map("leave_requests")
-}
-
-model WeeklyOff {
-  id         String   @id @default(uuid())
-  orgId      String
-  storeId    String
-  dayOfWeek  Int
-  isOptional Boolean  @default(false)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  org   Organization @relation(fields: [orgId], references: [id])
-  store Store        @relation(fields: [storeId], references: [id])
-
-  @@unique([storeId, dayOfWeek])
-  @@index([orgId, storeId])
-  @@map("weekly_offs")
-}
-
-model StoreLeavePolicy {
-  id        String    @id @default(uuid())
-  orgId     String
-  storeId   String
-  leaveType LeaveType
-  allocated Int       @default(0)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-
-  org   Organization @relation(fields: [orgId], references: [id])
-  store Store        @relation(fields: [storeId], references: [id])
-
-  @@unique([storeId, leaveType])
-  @@index([orgId, storeId])
-  @@map("store_leave_policies")
-}
-
-model LeaveBalance {
-  id           String    @id @default(uuid())
-  orgId        String
-  userId       String
-  leaveType    LeaveType
-  year         Int
-  allocated    Int       @default(0)
-  used         Int       @default(0)
-  carryForward Int       @default(0)
-  updatedAt    DateTime  @updatedAt
-
-  org  Organization @relation(fields: [orgId], references: [id])
-  user User         @relation(fields: [userId], references: [id])
-
-  @@unique([userId, leaveType, year])
-  @@index([orgId, userId])
-  @@map("leave_balances")
-}
-
-// ─── ADMIN AUDIT LOG ─────────────────────────────────────────────────────────
-
-model AdminAuditLog {
-  id          String   @id @default(uuid())
-  action      String   // "ORG_CREATED" | "ORG_SUSPENDED" | "PLAN_CHANGED" | "USER_DEACTIVATED" | "ADMIN_LOGIN" | "PLAN_EDITED"
-  targetType  String   // "Organization" | "User" | "PlanDefinition"
-  targetId    String
-  targetName  String?  // Human-readable name of the target
-  performedBy String   // super admin user id
-  metadata    Json?    // e.g. { oldPlan: "FREE", newPlan: "PRO" }
-  createdAt   DateTime @default(now())
-
-  @@index([action])
-  @@index([createdAt])
-  @@map("admin_audit_logs")
-}
-
-// ─── FEATURE FLAG ────────────────────────────────────────────────────────────
-
-model FeatureFlag {
-  id        String   @id @default(uuid())
-  orgId     String?  // null = global default
-  key       String   // e.g. "promoCodesEnabled"
-  value     Boolean  @default(false)
-  scope     String   @default("GLOBAL") // "GLOBAL" | "PER_ORG"
-  description String @default("")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  org Organization? @relation(fields: [orgId], references: [id])
-
-  @@unique([orgId, key])
-  @@index([key])
-  @@map("feature_flags")
-}
-
-// ─── ANNOUNCEMENT ────────────────────────────────────────────────────────────
-
-model Announcement {
-  id          String    @id @default(uuid())
-  title       String
-  body        String
-  severity    String    @default("INFO") // "INFO" | "WARNING" | "CRITICAL"
-  targetPlan  String?   // null = all plans
-  activeFrom  DateTime  @default(now())
-  activeUntil DateTime?
-  isActive    Boolean   @default(true)
-  createdBy   String    // super admin user id
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  @@index([isActive])
-  @@index([createdAt])
-  @@map("announcements")
+enum ColorSourceType {
+  PREDEFINED
+  USER_CREATED
+  AUTO_GENERATED
 }

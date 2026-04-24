@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/db";
+import { Prisma } from "@prisma/client";
 import type { CreateSaleInput, Sale, SaleItem, SaleFilters, SaleSummary } from "../types";
+import { customerService } from "@/modules/customers/services/customerService";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -8,19 +10,49 @@ import type { CreateSaleInput, Sale, SaleItem, SaleFilters, SaleSummary } from "
 const generateInvoiceNumber = async (storeId: string): Promise<string> => {
   const today = new Date();
   const dateStr = today.toISOString().slice(0, 10).replace(/-/g, "");
+  const storeToken = storeId.replace(/-/g, "").slice(0, 6).toUpperCase();
+  const prefix = `INV-${dateStr}-${storeToken}-`;
   const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const endOfDay = new Date(startOfDay.getTime() + 86400000);
-  const count = await prisma.sale.count({
-    where: { storeId, createdAt: { gte: startOfDay, lt: endOfDay } },
+  const latest = await prisma.sale.findFirst({
+    where: {
+      storeId,
+      createdAt: { gte: startOfDay, lt: endOfDay },
+      invoiceNumber: { startsWith: prefix },
+    },
+    orderBy: { createdAt: "desc" },
+    select: { invoiceNumber: true },
   });
+  const latestSeq = Number(latest?.invoiceNumber.split("-").at(-1) ?? "0");
+  const nextSeq = Number.isFinite(latestSeq) ? latestSeq + 1 : 1;
 
-  return `INV-${dateStr}-${String(count + 1).padStart(4, "0")}`;
+  return `${prefix}${String(nextSeq).padStart(4, "0")}`;
+};
+
+const isInvoiceNumberConflict = (error: unknown): boolean => {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+    return false;
+  }
+
+  if (error.code !== "P2002") {
+    return false;
+  }
+
+  const target = error.meta?.target;
+  if (!target) {
+    return false;
+  }
+
+  return Array.isArray(target)
+    ? target.includes("invoiceNumber")
+    : String(target).includes("invoiceNumber");
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const toSaleDto = (s: any): Sale => ({
   id: s.id,
   invoiceNumber: s.invoiceNumber,
+  customerId: s.customerId ?? null,
   customerName: s.customerName ?? null,
   customerPhone: s.customerPhone ?? null,
   customerEmail: s.customerEmail ?? null,
@@ -65,7 +97,18 @@ export const billingService = {
     userId: string,
     input: CreateSaleInput
   ): Promise<Sale> {
+    if (!input.customerPhone?.trim()) {
+      throw new Error("Customer mobile number is required");
+    }
+
     const subtotal = input.items.reduce((sum, it) => sum + it.unitPrice * it.quantity, 0);
+
+    const customer = await customerService.getOrCreateCustomer(
+      orgId,
+      input.customerPhone,
+      input.customerName,
+      input.customerEmail
+    );
 
     // Server-side promo validation — never trust client discountAmount when a promo is applied
     let discountAmount = input.discountAmount;
@@ -95,81 +138,103 @@ export const billingService = {
     }
 
     const total = subtotal - discountAmount + input.taxAmount;
-    const invoiceNumber = await generateInvoiceNumber(storeId);
 
-    const sale = await prisma.$transaction(async (tx) => {
-      const created = await tx.sale.create({
-        data: {
-          storeId,
-          invoiceNumber,
-          customerName: input.customerName ?? null,
-          customerPhone: input.customerPhone ?? null,
-          customerEmail: input.customerEmail ?? null,
-          subtotal,
-          discountAmount,
-          taxAmount: input.taxAmount,
-          total,
-          paymentMethod: input.paymentMethod,
-          status: "COMPLETED",
-          createdBy: userId,
-          promoCodeId: resolvedPromoCodeId,
-          items: {
-            create: input.items.map((it) => ({
-              productId: it.productId,
-              sizeId: it.sizeId,
-              quantity: it.quantity,
-              unitPrice: it.unitPrice,
-              total: it.unitPrice * it.quantity,
-            })),
-          },
-        },
-        include: saleInclude,
-      });
+    for (let attempt = 1; attempt <= 5; attempt += 1) {
+      const invoiceNumber = await generateInvoiceNumber(storeId);
 
-      // Atomically increment promo usageCount
-      if (resolvedPromoCodeId) {
-        await tx.promoCode.update({
-          where: { id: resolvedPromoCodeId },
-          data: { usageCount: { increment: 1 } },
+      try {
+        const sale = await prisma.$transaction(async (tx) => {
+          const created = await tx.sale.create({
+            data: {
+              storeId,
+              invoiceNumber,
+              customerId: customer.id,
+              customerName: customer.name,
+              customerPhone: customer.mobile,
+              customerEmail: customer.email,
+              subtotal,
+              discountAmount,
+              taxAmount: input.taxAmount,
+              total,
+              paymentMethod: input.paymentMethod,
+              status: "COMPLETED",
+              createdBy: userId,
+              promoCodeId: resolvedPromoCodeId,
+              items: {
+                create: input.items.map((it) => ({
+                  productId: it.productId,
+                  sizeId: it.sizeId,
+                  quantity: it.quantity,
+                  unitPrice: it.unitPrice,
+                  total: it.unitPrice * it.quantity,
+                })),
+              },
+            },
+            include: saleInclude,
+          });
+
+          // Atomically increment promo usageCount
+          if (resolvedPromoCodeId) {
+            await tx.promoCode.update({
+              where: { id: resolvedPromoCodeId },
+              data: { usageCount: { increment: 1 } },
+            });
+          }
+
+          // Decrement stock for each sold item (with availability check + audit records)
+          for (const it of input.items) {
+            const entry = await tx.stockEntry.findUnique({
+              where: { productId_sizeId_storeId: { productId: it.productId, sizeId: it.sizeId, storeId } },
+            });
+
+            if (!entry || entry.quantity < it.quantity) {
+              throw new Error(
+                `Insufficient stock: only ${entry?.quantity ?? 0} available for size ${it.sizeId}`
+              );
+            }
+
+            await tx.stockEntry.update({
+              where: { productId_sizeId_storeId: { productId: it.productId, sizeId: it.sizeId, storeId } },
+              data: { quantity: { decrement: it.quantity } },
+            });
+
+            await tx.stockMovement.create({
+              data: {
+                productId: it.productId,
+                sizeId: it.sizeId,
+                storeId,
+                type: "SALE",
+                quantity: it.quantity,
+                reason: `Sale ${invoiceNumber}`,
+                referenceType: "SALE",
+                referenceId: created.id,
+                createdBy: userId,
+              },
+            });
+          }
+
+          await tx.customer.update({
+            where: { id: customer.id },
+            data: {
+              lastVisitAt: new Date(),
+              totalSpent: { increment: total },
+              totalVisits: { increment: 1 },
+            },
+          });
+
+          return created;
         });
-      }
 
-      // Decrement stock for each sold item (with availability check + audit records)
-      for (const it of input.items) {
-        const entry = await tx.stockEntry.findUnique({
-          where: { productId_sizeId_storeId: { productId: it.productId, sizeId: it.sizeId, storeId } },
-        });
-
-        if (!entry || entry.quantity < it.quantity) {
-          throw new Error(
-            `Insufficient stock: only ${entry?.quantity ?? 0} available for size ${it.sizeId}`
-          );
+        return toSaleDto(sale);
+      } catch (error) {
+        if (attempt < 5 && isInvoiceNumberConflict(error)) {
+          continue;
         }
-
-        await tx.stockEntry.update({
-          where: { productId_sizeId_storeId: { productId: it.productId, sizeId: it.sizeId, storeId } },
-          data: { quantity: { decrement: it.quantity } },
-        });
-
-        await tx.stockMovement.create({
-          data: {
-            productId: it.productId,
-            sizeId: it.sizeId,
-            storeId,
-            type: "SALE",
-            quantity: it.quantity,
-            reason: `Sale ${invoiceNumber}`,
-            referenceType: "SALE",
-            referenceId: created.id,
-            createdBy: userId,
-          },
-        });
+        throw error;
       }
+    }
 
-      return created;
-    });
-
-    return toSaleDto(sale);
+    throw new Error("Could not generate a unique invoice number. Please retry.");
   },
 
   async getSaleById(orgId: string, id: string): Promise<Sale | null> {
@@ -250,6 +315,44 @@ export const billingService = {
             referenceType: "SALE",
             referenceId: saleId,
             createdBy: existing.createdBy,
+          },
+        });
+      }
+
+      if (existing.customerId) {
+        const spend = await tx.sale.aggregate({
+          where: {
+            customerId: existing.customerId,
+            status: "COMPLETED",
+            store: { orgId },
+          },
+          _sum: { total: true },
+        });
+
+        const visits = await tx.sale.count({
+          where: {
+            customerId: existing.customerId,
+            status: "COMPLETED",
+            store: { orgId },
+          },
+        });
+
+        const latestCompletedSale = await tx.sale.findFirst({
+          where: {
+            customerId: existing.customerId,
+            status: "COMPLETED",
+            store: { orgId },
+          },
+          orderBy: { createdAt: "desc" },
+          select: { createdAt: true },
+        });
+
+        await tx.customer.update({
+          where: { id: existing.customerId },
+          data: {
+            totalSpent: Number(spend._sum.total ?? 0),
+            totalVisits: visits,
+            lastVisitAt: latestCompletedSale?.createdAt ?? null,
           },
         });
       }
