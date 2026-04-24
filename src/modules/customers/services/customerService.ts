@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { Prisma } from "@prisma/client";
 import type {
   CustomerListType,
   CustomerDetailDto,
@@ -50,10 +51,10 @@ const normalizeDateOfBirth = (
 
 const normalizeMetadata = (
   metadata: Record<string, unknown> | null | undefined
-): Record<string, unknown> | null | undefined => {
+): Prisma.InputJsonValue | undefined => {
   if (metadata === undefined) return undefined;
-  if (metadata === null) return null;
-  return metadata;
+  if (metadata === null) return undefined;
+  return metadata as Prisma.InputJsonValue;
 };
 
 const toMetadataObject = (value: unknown): Record<string, unknown> | null => {
