@@ -35,6 +35,7 @@ import { useSales } from "@/modules/billing/hooks/useBilling";
 import { formatDateTime } from "@/shared/utils/formatDate";
 import CategorySizeHeatmap from "@/modules/dashboard/components/CategorySizeHeatmap";
 import DashboardTabs, { type DashboardTab } from "@/modules/dashboard/components/DashboardTabs";
+import ProfitMarginSection from "@/modules/dashboard/components/ProfitMarginSection";
 
 const MobileDashboardPage = dynamic(() => import("@/modules/mobile-dashboard/pages/DashboardPage"));
 
@@ -46,6 +47,13 @@ const BRAND_COLORS = ["#378ADD", "#15A085", "#E67E22", "#5B4DB7", "#D94E8F", "#6
 
 type RevenueView = "day" | "month" | "year";
 type SalesBreakdownView = "daily" | "weekly" | "monthly";
+
+type SalesBreakdownRow = {
+  period: string;
+  total_revenue: number;
+  total_discount: number;
+  net_profit: number;
+};
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(value);
@@ -160,7 +168,9 @@ const DashboardPage = () => {
   const { sales } = useSales();
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
   const [revenueView, setRevenueView] = useState<RevenueView>("day");
-  const [salesBreakdownView, setSalesBreakdownView] = useState<SalesBreakdownView>("monthly");
+  const [salesBreakdownView, setSalesBreakdownView] = useState<SalesBreakdownView>("daily");
+  const [salesBreakdownData, setSalesBreakdownData] = useState<Array<{ label: string; totalRevenue: number; discountGiven: number; netProfit: number }>>([]);
+  const [salesBreakdownLoading, setSalesBreakdownLoading] = useState(false);
   const [contentVisible, setContentVisible] = useState(true);
 
   const today = dayjs().format("YYYY-MM-DD");
@@ -225,43 +235,53 @@ const DashboardPage = () => {
   }, [data?.recentMovements, data?.stockByCategory, lowStockItems]);
 
   const revenueData = data?.revenueTrend?.[revenueView] ?? [];
-  const salesBreakdownData = useMemo(() => {
-    const totals = new Map<string, number>();
-    for (const sale of sales) {
-      const date = dayjs(sale.createdAt);
-      let key = "";
-      if (salesBreakdownView === "daily") {
-        key = date.format("YYYY-MM-DD");
-      } else if (salesBreakdownView === "weekly") {
-        key = date.startOf("week").format("YYYY-MM-DD");
-      } else {
-        key = date.startOf("month").format("YYYY-MM");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSalesBreakdown = async () => {
+      setSalesBreakdownLoading(true);
+      try {
+        const group = salesBreakdownView === "daily" ? "day" : salesBreakdownView === "weekly" ? "week" : "month";
+        const res = await fetch(`/api/reports/sales-breakdown-v2?group=${group}`);
+        const rows = res.ok ? (await res.json() as SalesBreakdownRow[]) : [];
+
+        if (cancelled) return;
+
+        const mapped = (Array.isArray(rows) ? rows : []).map((row) => {
+          const date = dayjs(row.period);
+          const label = salesBreakdownView === "daily"
+            ? (date.isValid() ? date.format("DD MMM") : String(row.period))
+            : salesBreakdownView === "weekly"
+              ? (date.isValid() ? `Wk ${date.format("DD MMM")}` : String(row.period))
+              : (date.isValid() ? date.format("MMM YY") : String(row.period));
+
+          return {
+            label,
+            totalRevenue: Number(row.total_revenue ?? 0),
+            discountGiven: Number(row.total_discount ?? 0),
+            netProfit: Number(row.net_profit ?? 0),
+          };
+        });
+
+        setSalesBreakdownData(mapped);
+      } catch {
+        if (!cancelled) {
+          setSalesBreakdownData([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setSalesBreakdownLoading(false);
+        }
       }
-      totals.set(key, (totals.get(key) ?? 0) + sale.total);
-    }
+    };
 
-    if (salesBreakdownView === "daily") {
-      return Array.from({ length: 14 }, (_, index) => {
-        const date = dayjs().subtract(13 - index, "day");
-        const key = date.format("YYYY-MM-DD");
-        return { label: date.format("DD MMM"), total: totals.get(key) ?? 0 };
-      });
-    }
+    loadSalesBreakdown();
 
-    if (salesBreakdownView === "weekly") {
-      return Array.from({ length: 8 }, (_, index) => {
-        const date = dayjs().subtract(7 - index, "week").startOf("week");
-        const key = date.format("YYYY-MM-DD");
-        return { label: `Week ${index + 1}`, total: totals.get(key) ?? 0 };
-      });
-    }
-
-    return Array.from({ length: 6 }, (_, index) => {
-      const date = dayjs().subtract(5 - index, "month").startOf("month");
-      const key = date.format("YYYY-MM");
-      return { label: date.format("MMM YY"), total: totals.get(key) ?? 0 };
-    });
-  }, [sales, salesBreakdownView]);
+    return () => {
+      cancelled = true;
+    };
+  }, [salesBreakdownView]);
 
   const dayOfWeekPatternData = useMemo(() => {
     const dayOrder = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -547,15 +567,41 @@ const DashboardPage = () => {
                 ))}
               </div>
             </div>
-            <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={salesBreakdownData} margin={{ top: 8, right: 12, left: 0, bottom: 8 }}>
-                <CartesianGrid stroke="#e5e7eb" strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} tickFormatter={(value) => formatCurrencyCompactK(Number(value))} />
-                <Tooltip formatter={(value) => formatCurrency(Number(value ?? 0))} contentStyle={{ borderRadius: 8, border: "0.5px solid #e5e7eb" }} />
-                <Bar dataKey="total" fill="#378ADD" radius={[4, 4, 0, 0]} barSize={26} />
-              </BarChart>
-            </ResponsiveContainer>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8, fontSize: 11, color: "#4b5563", flexWrap: "wrap" }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: "#378ADD", display: "inline-block" }} />Total Revenue</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: "#d4a332", display: "inline-block" }} />Discount given</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: "#4caf8a", display: "inline-block" }} />Net Profit</span>
+            </div>
+            {salesBreakdownLoading ? (
+              <Skeleton active paragraph={{ rows: 4 }} title={false} />
+            ) : salesBreakdownData.length === 0 ? (
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No sales breakdown data" />
+            ) : (
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={salesBreakdownData} margin={{ top: 8, right: 12, left: 0, bottom: 8 }}>
+                  <CartesianGrid stroke="#e5e7eb" strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} tickFormatter={(value) => formatCurrencyCompactK(Number(value))} />
+                  <Tooltip
+                    content={({ active, payload, label }) => {
+                      if (!active || !payload || payload.length === 0) return null;
+                      const row = payload[0]?.payload as { totalRevenue: number; discountGiven: number; netProfit: number };
+                      return (
+                        <div style={{ background: "#ffffff", border: "0.5px solid #e5e7eb", borderRadius: 8, padding: "8px 10px" }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: "#111827", marginBottom: 4 }}>{String(label ?? "")}</div>
+                          <div style={{ fontSize: 12, color: "#378ADD" }}>Total Revenue : {formatCurrency(Number(row.totalRevenue ?? 0))}</div>
+                          <div style={{ fontSize: 12, color: "#d4a332" }}>Discount given : {formatCurrency(Number(row.discountGiven ?? 0))}</div>
+                          <div style={{ fontSize: 12, color: "#4caf8a" }}>Net Profit : {formatCurrency(Number(row.netProfit ?? 0))}</div>
+                        </div>
+                      );
+                    }}
+                  />
+                  <Bar dataKey="totalRevenue" fill="#378ADD" radius={[4, 4, 0, 0]} barSize={14} />
+                  <Bar dataKey="discountGiven" fill="#d4a332" radius={[4, 4, 0, 0]} barSize={14} />
+                  <Bar dataKey="netProfit" fill="#4caf8a" radius={[4, 4, 0, 0]} barSize={14} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </section>
 
           <section style={{ background: "#ffffff", border: CARD_BORDER, borderRadius: CARD_RADIUS, padding: 12 }}>
@@ -570,6 +616,11 @@ const DashboardPage = () => {
               </BarChart>
             </ResponsiveContainer>
           </section>
+
+          <ProfitMarginSection
+            formatCurrency={formatCurrency}
+            formatCurrencyCompactK={formatCurrencyCompactK}
+          />
 
           <section style={{ background: "#ffffff", border: CARD_BORDER, borderRadius: CARD_RADIUS, padding: 12, overflowX: "auto" }}>
             <div style={{ marginBottom: 10, fontSize: 13, fontWeight: 500, color: "#111827" }}>Recent stock movements</div>
