@@ -35,7 +35,7 @@ const buildRangePoints = (
 };
 
 export const dashboardService = {
-  async getData(orgId: string, storeId: string | null): Promise<DashboardData> {
+  async getData(orgId: string, storeId: string | null, startDate?: Date, endDate?: Date): Promise<DashboardData> {
     // Resolve storeId — fall back to first store in the org if not set
     let resolvedStoreId = storeId;
     if (!resolvedStoreId) {
@@ -49,7 +49,13 @@ export const dashboardService = {
           ? stockService.getStockLevels({ storeId: resolvedStoreId, page: 1, pageSize: 1000 })
           : Promise.resolve({ items: [], total: 0 }),
         resolvedStoreId
-          ? stockService.getMovementHistory({ storeId: resolvedStoreId, page: 1, pageSize: 10 })
+          ? stockService.getMovementHistory({
+              storeId: resolvedStoreId,
+              startDate,
+              endDate,
+              page: 1,
+              pageSize: startDate || endDate ? 1000 : 10,
+            })
           : Promise.resolve({ items: [], total: 0 }),
         prisma.product.findMany({
           where: { orgId },
@@ -150,6 +156,7 @@ export const dashboardService = {
       id: m.id,
       productName: m.productName,
       sku: m.sku,
+      categoryName: m.categoryName,
       sizeLabel: m.sizeLabel,
       type: m.type,
       quantity: m.quantity,

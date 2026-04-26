@@ -176,7 +176,7 @@ export const stockService = {
       prisma.stockMovement.findMany({
         where,
         include: {
-          product: { select: { name: true, sku: true } },
+          product: { select: { name: true, sku: true, category: { select: { name: true } } } },
           size: { select: { label: true } },
           user: { select: { name: true } },
         },
@@ -192,6 +192,7 @@ export const stockService = {
         id: m.id,
         productName: m.product.name,
         sku: m.product.sku,
+        categoryName: m.product.category.name,
         sizeLabel: m.size.label,
         type: m.type,
         quantity: m.quantity,

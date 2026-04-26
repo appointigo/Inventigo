@@ -31,6 +31,7 @@ export type RecentMovement = {
   id: string;
   productName: string;
   sku: string;
+  categoryName: string;
   sizeLabel: string;
   type: string;
   quantity: number;
