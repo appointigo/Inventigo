@@ -194,7 +194,6 @@ const DashboardPage = () => {
   const topBrands = useMemo(() => {
     return [...(data?.topBrands ?? [])]
       .sort((a, b) => b.stockValue - a.stockValue)
-      .slice(0, 10);
   }, [data?.topBrands]);
 
   const categorySizeHeatmapData = useMemo(() => {
@@ -429,7 +428,6 @@ const DashboardPage = () => {
           <section style={{ background: "#ffffff", border: CARD_BORDER, borderRadius: CARD_RADIUS, padding: 12 }}>
             <div style={{ marginBottom: 8 }}>
               <div style={{ fontSize: 13, fontWeight: 500, color: "#111827" }}>Stock value by brand</div>
-              <div style={{ fontSize: 11, color: "#6b7280" }}>Sorted by value - top 10 shown</div>
             </div>
             {chartLoading ? (
               <Skeleton active paragraph={{ rows: 5 }} title={false} />

@@ -381,6 +381,8 @@ const ProductTable = ({
             value={categoryFilter}
             onChange={onCategoryChange}
             allowClear
+            showSearch
+            optionFilterProp="label"
             style={{ width: 160 }}
             options={categories.map((c) => ({ label: c.name, value: c.id }))}
           />
@@ -389,6 +391,8 @@ const ProductTable = ({
             value={brandFilter}
             onChange={onBrandChange}
             allowClear
+            showSearch
+            optionFilterProp="label"
             style={{ width: 140 }}
             options={brands.map((b) => ({ label: b.name, value: b.id }))}
           />
