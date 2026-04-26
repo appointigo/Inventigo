@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef, type KeyboardEvent } from "react";
 import dynamic from "next/dynamic";
 import { App, Input, Select, Spin } from "antd";
 import { SearchOutlined, CheckOutlined, CloseOutlined, TagOutlined, LockOutlined, CameraOutlined } from "@ant-design/icons";
@@ -111,6 +111,15 @@ interface BillingViewProps {
   defaultTaxPct?: number;
 }
 
+type CustomerSuggestion = {
+  id: string;
+  name: string | null;
+  mobile: string;
+  email: string | null;
+};
+
+type SuggestField = "name" | "phone";
+
 const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
   const { message } = App.useApp();
 
@@ -140,6 +149,18 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
   const [promoInput, setPromoInput] = useState("");
   const [appliedPromo, setAppliedPromo] = useState<PromoCode | null>(null);
   const [promoError, setPromoError] = useState("");
+
+  // ─── Customer autocomplete state ──────────────────────────────────────────
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [activeSuggestField, setActiveSuggestField] = useState<SuggestField | null>(null);
+  const [suggestions, setSuggestions] = useState<CustomerSuggestion[]>([]);
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const cacheRef = useRef<Map<string, CustomerSuggestion[]>>(new Map());
+  const recentRef = useRef<CustomerSuggestion[]>([]);
+  const nameSuggestWrapRef = useRef<HTMLDivElement | null>(null);
+  const phoneSuggestWrapRef = useRef<HTMLDivElement | null>(null);
 
   // ─── Cart + products ───────────────────────────────────────────────────────
   const cart = useCart();
@@ -346,6 +367,187 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
     cart.setDiscountPct(offer.discountPct);
     cart.setPromoCodeId(offer.id);
   };
+
+  const cacheKeyFor = (field: SuggestField, term: string) => `${field}:${term.toLowerCase()}`;
+
+  const getRecentMatches = useCallback((field: SuggestField, term: string) => {
+    const source = recentRef.current;
+    if (field === "name") {
+      const lower = term.toLowerCase();
+      return source
+        .filter((c) => (c.name ?? "").toLowerCase().startsWith(lower))
+        .slice(0, 6);
+    }
+    return source
+      .filter((c) => c.mobile.startsWith(term))
+      .slice(0, 6);
+  }, []);
+
+  const searchCustomers = useCallback(async (field: SuggestField, term: string) => {
+    const key = cacheKeyFor(field, term);
+    const cached = cacheRef.current.get(key);
+    if (cached) {
+      setSuggestions(cached);
+      setSuggestOpen(cached.length > 0);
+      setHighlightedIndex(cached.length > 0 ? 0 : -1);
+      return;
+    }
+
+    const recentMatches = getRecentMatches(field, term);
+    if (recentMatches.length > 0) {
+      cacheRef.current.set(key, recentMatches);
+      setSuggestions(recentMatches);
+      setSuggestOpen(true);
+      setHighlightedIndex(0);
+      return;
+    }
+
+    setSuggestLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.set(field, term);
+      const res = await fetch(`/api/customers/search?${params.toString()}`);
+      const rows = res.ok ? (await res.json() as CustomerSuggestion[]) : [];
+      const items = Array.isArray(rows) ? rows : [];
+      cacheRef.current.set(key, items);
+      setSuggestions(items);
+      setSuggestOpen(items.length > 0);
+      setHighlightedIndex(items.length > 0 ? 0 : -1);
+    } catch {
+      setSuggestions([]);
+      setSuggestOpen(false);
+      setHighlightedIndex(-1);
+    } finally {
+      setSuggestLoading(false);
+    }
+  }, [getRecentMatches]);
+
+  const applySuggestion = useCallback((item: CustomerSuggestion) => {
+    setSelectedCustomerId(item.id);
+    cart.setCustomerName(item.name ?? "");
+    cart.setCustomerPhone(item.mobile ?? "");
+    cart.setCustomerEmail(item.email ?? "");
+    setSuggestOpen(false);
+    setHighlightedIndex(-1);
+  }, [cart]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const preload = async () => {
+      try {
+        const res = await fetch("/api/customers/search");
+        const rows = res.ok ? (await res.json() as CustomerSuggestion[]) : [];
+        if (cancelled) return;
+        const items = Array.isArray(rows) ? rows : [];
+        recentRef.current = items;
+
+        for (const customer of items) {
+          const name = (customer.name ?? "").toLowerCase();
+          for (let i = 2; i <= name.length; i += 1) {
+            const key = cacheKeyFor("name", name.slice(0, i));
+            const existing = cacheRef.current.get(key) ?? [];
+            if (!existing.some((row) => row.id === customer.id)) {
+              cacheRef.current.set(key, [...existing, customer].slice(0, 6));
+            }
+          }
+
+          const phone = customer.mobile;
+          for (let i = 3; i <= phone.length; i += 1) {
+            const key = cacheKeyFor("phone", phone.slice(0, i));
+            const existing = cacheRef.current.get(key) ?? [];
+            if (!existing.some((row) => row.id === customer.id)) {
+              cacheRef.current.set(key, [...existing, customer].slice(0, 6));
+            }
+          }
+        }
+      } catch {
+        // ignore preload failures; runtime search still works.
+      }
+    };
+
+    preload();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!activeSuggestField) return;
+
+    const term = activeSuggestField === "name"
+      ? cart.customerName.trim()
+      : cart.customerPhone.trim();
+    const minChars = activeSuggestField === "name" ? 2 : 3;
+
+    if (!term || term.length < minChars) {
+      setSuggestOpen(false);
+      setSuggestions([]);
+      setHighlightedIndex(-1);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      void searchCustomers(activeSuggestField, term);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [activeSuggestField, cart.customerName, cart.customerPhone, searchCustomers]);
+
+  useEffect(() => {
+    if (!suggestOpen) return;
+
+    const onDocMouseDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (activeSuggestField === "name") {
+        if (!nameSuggestWrapRef.current?.contains(target)) {
+          setSuggestOpen(false);
+          setHighlightedIndex(-1);
+        }
+        return;
+      }
+
+      if (activeSuggestField === "phone") {
+        if (!phoneSuggestWrapRef.current?.contains(target)) {
+          setSuggestOpen(false);
+          setHighlightedIndex(-1);
+        }
+      }
+    };
+
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
+  }, [activeSuggestField, suggestOpen]);
+
+  const handleSuggestionKeyDown = useCallback((event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Escape") {
+      setSuggestOpen(false);
+      setHighlightedIndex(-1);
+      return;
+    }
+
+    if (!suggestOpen || suggestions.length === 0) {
+      return;
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setHighlightedIndex((prev) => (prev + 1) % suggestions.length);
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setHighlightedIndex((prev) => (prev <= 0 ? suggestions.length - 1 : prev - 1));
+      return;
+    }
+
+    if (event.key === "Enter") {
+      if (highlightedIndex >= 0 && highlightedIndex < suggestions.length) {
+        event.preventDefault();
+        applySuggestion(suggestions[highlightedIndex]);
+      }
+    }
+  }, [applySuggestion, highlightedIndex, suggestOpen, suggestions]);
 
   // ─── Derived values ────────────────────────────────────────────────────────
   const discountAmount = Math.round((cart.subtotal * cart.discountPct) / 100);
@@ -562,39 +764,149 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
           <CheckoutSection>
             <CheckoutSectionLabel>Customer Details</CheckoutSectionLabel>
             <CustomerGrid>
+              <input type="hidden" value={selectedCustomerId ?? ""} readOnly />
               <CustomerField>
                 <FieldLabel>
                   Name <RequiredStar>*</RequiredStar>
                 </FieldLabel>
-                <Input
-                  placeholder="Full name"
-                  value={cart.customerName}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val === "" || /^[a-zA-Z\s]*$/.test(val)) cart.setCustomerName(val);
-                  }}
-                  status={
-                    cart.items.length > 0 && !cart.customerName.trim() ? "error" : ""
-                  }
-                  size="small"
-                />
+                <div ref={nameSuggestWrapRef} style={{ position: "relative" }}>
+                  <Input
+                    placeholder="Full name"
+                    value={cart.customerName}
+                    onFocus={() => setActiveSuggestField("name")}
+                    onKeyDown={handleSuggestionKeyDown}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === "" || /^[a-zA-Z\s]*$/.test(val)) {
+                        cart.setCustomerName(val);
+                        setSelectedCustomerId(null);
+                        setActiveSuggestField("name");
+                        if (!val.trim()) {
+                          setSuggestOpen(false);
+                          setSuggestions([]);
+                          setHighlightedIndex(-1);
+                        }
+                      }
+                    }}
+                    status={
+                      cart.items.length > 0 && !cart.customerName.trim() ? "error" : ""
+                    }
+                    size="small"
+                  />
+                  {activeSuggestField === "name" && suggestOpen && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: "100%",
+                        left: 0,
+                        right: 0,
+                        zIndex: 20,
+                        marginTop: 4,
+                        border: "1px solid #d9d9d9",
+                        borderRadius: 8,
+                        background: "#ffffff",
+                        boxShadow: "0 6px 16px 0 rgba(0,0,0,0.08), 0 3px 6px -4px rgba(0,0,0,0.12), 0 9px 28px 8px rgba(0,0,0,0.05)",
+                        maxHeight: 240,
+                        overflowY: "auto",
+                      }}
+                    >
+                      {suggestLoading ? (
+                        <div style={{ padding: 10, textAlign: "center" }}><Spin size="small" /></div>
+                      ) : (
+                        suggestions.map((item, index) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => applySuggestion(item)}
+                            style={{
+                              width: "100%",
+                              textAlign: "left",
+                              border: "none",
+                              background: highlightedIndex === index ? "#f5f5f5" : "#ffffff",
+                              padding: "8px 10px",
+                              cursor: "pointer",
+                            }}
+                          >
+                            <div style={{ fontSize: 12, color: "#111827", fontWeight: 500 }}>{item.name || "Unnamed customer"}</div>
+                            <div style={{ fontSize: 11, color: "#6b7280" }}>{item.mobile}</div>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
               </CustomerField>
               <CustomerField>
                 <FieldLabel>
                   Phone <RequiredStar>*</RequiredStar>
                 </FieldLabel>
-                <Input
-                  placeholder="10-digit no."
-                  value={cart.customerPhone}
-                  onChange={(e) =>
-                    cart.setCustomerPhone(e.target.value.replace(/\D/g, "").slice(0, 10))
-                  }
-                  maxLength={10}
-                  status={
-                    cart.items.length > 0 && cart.customerPhone.length < 10 ? "error" : ""
-                  }
-                  size="small"
-                />
+                <div ref={phoneSuggestWrapRef} style={{ position: "relative" }}>
+                  <Input
+                    placeholder="10-digit no."
+                    value={cart.customerPhone}
+                    onFocus={() => setActiveSuggestField("phone")}
+                    onKeyDown={handleSuggestionKeyDown}
+                    onChange={(e) => {
+                      const next = e.target.value.replace(/\D/g, "").slice(0, 10);
+                      cart.setCustomerPhone(next);
+                      setSelectedCustomerId(null);
+                      setActiveSuggestField("phone");
+                      if (!next) {
+                        setSuggestOpen(false);
+                        setSuggestions([]);
+                        setHighlightedIndex(-1);
+                      }
+                    }}
+                    maxLength={10}
+                    status={
+                      cart.items.length > 0 && cart.customerPhone.length < 10 ? "error" : ""
+                    }
+                    size="small"
+                  />
+                  {activeSuggestField === "phone" && suggestOpen && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: "100%",
+                        left: 0,
+                        right: 0,
+                        zIndex: 20,
+                        marginTop: 4,
+                        border: "1px solid #d9d9d9",
+                        borderRadius: 8,
+                        background: "#ffffff",
+                        boxShadow: "0 6px 16px 0 rgba(0,0,0,0.08), 0 3px 6px -4px rgba(0,0,0,0.12), 0 9px 28px 8px rgba(0,0,0,0.05)",
+                        maxHeight: 240,
+                        overflowY: "auto",
+                      }}
+                    >
+                      {suggestLoading ? (
+                        <div style={{ padding: 10, textAlign: "center" }}><Spin size="small" /></div>
+                      ) : (
+                        suggestions.map((item, index) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => applySuggestion(item)}
+                            style={{
+                              width: "100%",
+                              textAlign: "left",
+                              border: "none",
+                              background: highlightedIndex === index ? "#f5f5f5" : "#ffffff",
+                              padding: "8px 10px",
+                              cursor: "pointer",
+                            }}
+                          >
+                            <div style={{ fontSize: 12, color: "#111827", fontWeight: 500 }}>{item.mobile}</div>
+                            <div style={{ fontSize: 11, color: "#6b7280" }}>{item.name || "Unnamed customer"}</div>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
               </CustomerField>
               <CustomerFieldFull>
                 <FieldLabel>

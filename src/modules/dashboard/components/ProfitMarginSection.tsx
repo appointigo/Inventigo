@@ -26,62 +26,24 @@ type ProfitMarginPoint = {
 interface ProfitMarginSectionProps {
   formatCurrency: (value: number) => string;
   formatCurrencyCompactK: (value: number) => string;
+  period: "daily" | "weekly" | "monthly";
 }
 
-const CARD_BORDER = "0.5px solid #e5e7eb";
-const CARD_RADIUS = 12;
 const PRIMARY_BLUE = "#378ADD";
 
 type TooltipMode = "profit" | "discount";
 
-function PeriodSwitcher({
-  value,
-  onChange,
-}: {
-  value: PeriodGroup;
-  onChange: (value: PeriodGroup) => void;
-}) {
-  return (
-    <div style={{ display: "inline-flex", gap: 6 }}>
-      {([
-        { label: "Daily", value: "day" },
-        { label: "Weekly", value: "week" },
-        { label: "Monthly", value: "month" },
-      ] as const).map((option) => {
-        const active = value === option.value;
-        return (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => onChange(option.value)}
-            style={{
-              border: "none",
-              borderRadius: 8,
-              padding: "4px 10px",
-              fontSize: 11,
-              cursor: "pointer",
-              background: active ? PRIMARY_BLUE : "#f3f4f6",
-              color: active ? "#ffffff" : "#4b5563",
-            }}
-          >
-            {option.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 export default function ProfitMarginSection({
   formatCurrency,
   formatCurrencyCompactK,
+  period,
 }: ProfitMarginSectionProps) {
-  const [profitGroup, setProfitGroup] = useState<PeriodGroup>("day");
-  const [discountGroup, setDiscountGroup] = useState<PeriodGroup>("day");
   const [profitRows, setProfitRows] = useState<ProfitMarginPoint[]>([]);
   const [discountRows, setDiscountRows] = useState<ProfitMarginPoint[]>([]);
   const [profitLoading, setProfitLoading] = useState(true);
   const [discountLoading, setDiscountLoading] = useState(true);
+
+  const group: PeriodGroup = period === "daily" ? "day" : period === "weekly" ? "week" : "month";
 
   useEffect(() => {
     let cancelled = false;
@@ -89,7 +51,7 @@ export default function ProfitMarginSection({
     const run = async () => {
       setProfitLoading(true);
       try {
-        const res = await fetch(`/api/reports/profit-margin?group=${profitGroup}`);
+        const res = await fetch(`/api/reports/profit-margin?group=${group}`);
         const payload = res.ok ? ((await res.json()) as ProfitMarginPoint[]) : [];
         if (!cancelled) {
           setProfitRows(Array.isArray(payload) ? payload : []);
@@ -110,7 +72,7 @@ export default function ProfitMarginSection({
     return () => {
       cancelled = true;
     };
-  }, [profitGroup]);
+  }, [group]);
 
   useEffect(() => {
     let cancelled = false;
@@ -118,7 +80,7 @@ export default function ProfitMarginSection({
     const run = async () => {
       setDiscountLoading(true);
       try {
-        const res = await fetch(`/api/reports/profit-margin?group=${discountGroup}`);
+        const res = await fetch(`/api/reports/profit-margin?group=${group}`);
         const payload = res.ok ? ((await res.json()) as ProfitMarginPoint[]) : [];
         if (!cancelled) {
           setDiscountRows(Array.isArray(payload) ? payload : []);
@@ -139,7 +101,7 @@ export default function ProfitMarginSection({
     return () => {
       cancelled = true;
     };
-  }, [discountGroup]);
+  }, [group]);
 
   const profitChartData = useMemo(
     () => profitRows.map((row) => ({ ...row, gross_profit: Number(row.gross_profit) || 0, margin_pct: Number(row.margin_pct) || 0 })),
@@ -188,12 +150,9 @@ export default function ProfitMarginSection({
   };
 
   return (
-    <div style={{ display: "grid", gap: 16 }}>
-      <section style={{ background: "#ffffff", border: CARD_BORDER, borderRadius: CARD_RADIUS, padding: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, gap: 8, flexWrap: "wrap" }}>
-          <div style={{ fontSize: 13, fontWeight: 500, color: "#111827" }}>Profit margin breakdown</div>
-          <PeriodSwitcher value={profitGroup} onChange={setProfitGroup} />
-        </div>
+    <>
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 500, color: "#111827", marginBottom: 8 }}>Profit margin %</div>
 
         {profitLoading ? (
           <Skeleton active paragraph={{ rows: 4 }} title={false} />
@@ -210,13 +169,10 @@ export default function ProfitMarginSection({
             </BarChart>
           </ResponsiveContainer>
         )}
-      </section>
+      </div>
 
-      <section style={{ background: "#ffffff", border: CARD_BORDER, borderRadius: CARD_RADIUS, padding: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, gap: 8, flexWrap: "wrap" }}>
-          <div style={{ fontSize: 13, fontWeight: 500, color: "#111827" }}>Discount impact</div>
-          <PeriodSwitcher value={discountGroup} onChange={setDiscountGroup} />
-        </div>
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 500, color: "#111827", marginBottom: 8 }}>Discount Impact (₹)</div>
 
         {discountLoading ? (
           <Skeleton active paragraph={{ rows: 4 }} title={false} />
@@ -233,7 +189,7 @@ export default function ProfitMarginSection({
             </BarChart>
           </ResponsiveContainer>
         )}
-      </section>
-    </div>
+      </div>
+    </>
   );
 }
