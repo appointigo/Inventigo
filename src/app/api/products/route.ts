@@ -1,45 +1,95 @@
 import { NextResponse } from "next/server";
 import { productService } from "@/modules/products/services/productService";
 import { requireOrgAuth } from "@/lib/auth.middleware";
+import { prisma } from "@/lib/db";
 
-export const GET = async (request: Request) =>  {
+const KNOWN_FILTER_KEYS = new Set([
+  "search",
+  "categoryId",
+  "category",
+  "brandId",
+  "brand",
+  "page",
+  "pageSize",
+  "limit",
+  "storeId",
+  "isActive",
+]);
+
+const buildAttributeFilters = (searchParams: URLSearchParams) => {
+  const filters: Record<string, string | string[]> = {};
+
+  searchParams.forEach((value, key) => {
+    if (KNOWN_FILTER_KEYS.has(key)) return;
+
+    if (filters[key]) {
+      const existing = filters[key];
+      filters[key] = Array.isArray(existing) ? [...existing, value] : [existing, value];
+    } else {
+      filters[key] = value;
+    }
+  });
+
+  return filters;
+};
+
+export const GET = async (request: Request) => {
   let user;
-  try { 
-    user = await requireOrgAuth(); 
-  }
-  catch { 
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 }); 
+  try {
+    user = await requireOrgAuth();
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
     const { searchParams } = new URL(request.url);
-    const pageParam = Number(searchParams.get("page") ?? "");
-    const pageSizeParam = Number(searchParams.get("pageSize") ?? "");
-    const hasPagination = Number.isFinite(pageParam) || Number.isFinite(pageSizeParam);
+    const pageParam = searchParams.has("page") ? Number(searchParams.get("page")) : undefined;
+    const pageSizeParam = searchParams.has("pageSize")
+      ? Number(searchParams.get("pageSize"))
+      : searchParams.has("limit")
+      ? Number(searchParams.get("limit"))
+      : undefined;
 
+    const categoryId = searchParams.get("categoryId") || searchParams.get("category") || undefined;
+    const brandId = searchParams.get("brandId") || searchParams.get("brand") || undefined;
     const filters = {
       storeId: searchParams.get("storeId") || undefined,
-      categoryId: searchParams.get("categoryId") || undefined,
-      brandId: searchParams.get("brandId") || undefined,
+      categoryId,
+      brandId,
+      sizeId: searchParams.get("sizeId") || undefined,
       search: searchParams.get("search") || undefined,
       isActive: searchParams.has("isActive") ? searchParams.get("isActive") === "true" : undefined,
-      ...(Number.isFinite(pageParam) ? { page: pageParam } : {}),
-      ...(Number.isFinite(pageSizeParam) ? { pageSize: pageSizeParam } : {}),
+      ...(pageParam !== undefined ? { page: pageParam } : {}),
+      ...(pageSizeParam !== undefined ? { pageSize: pageSizeParam } : {}),
     };
 
-    if (hasPagination) {
-      const result = await productService.listPaginated(user.orgId, filters);
-      return NextResponse.json(result);
+    const attributeFilters = buildAttributeFilters(searchParams);
+    const hasPagination = Number.isFinite(pageParam) || Number.isFinite(pageSizeParam) || searchParams.has("page") || searchParams.has("pageSize") || searchParams.has("limit");
+
+    let categoryAttributeSchema = null;
+    if (categoryId) {
+      const category = await prisma.category.findUnique({
+        where: { id: categoryId },
+        select: { attributeSchema: true },
+      });
+      categoryAttributeSchema = (category?.attributeSchema as { fields: Array<{ name: string; type: string; options?: string[]; required: boolean }> }) ?? { fields: [] };
     }
 
-    const products = await productService.list(user.orgId, filters);
-    return NextResponse.json(products);
-  } 
-  catch (err) {
+    const result = await productService.listPaginatedWithAttributes(user.orgId, {
+      ...filters,
+      attributeFilters: Object.keys(attributeFilters).length ? attributeFilters : undefined,
+      categoryAttributeSchema: categoryAttributeSchema ?? undefined,
+    });
+
+    return NextResponse.json({
+      ...result,
+      categoryAttributeSchema,
+    });
+  } catch (err) {
     console.error("[products GET]", err);
     return NextResponse.json({ error: "Internal server error found" }, { status: 500 });
   }
-}
+};
 
 export const POST = async (request: Request) => {
   let user;

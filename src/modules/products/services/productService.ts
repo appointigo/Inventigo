@@ -15,6 +15,13 @@ const buildInclude = (storeId?: string) => ({
   },
 });
 
+type ProductAttributeFilterValue = string | number | boolean | Array<string | number | boolean>;
+
+type ProductQueryFilters = ProductListFilters & {
+  attributeFilters?: Record<string, ProductAttributeFilterValue>;
+  categoryAttributeSchema?: { fields: Array<{ name: string; type: string; options?: string[]; required: boolean }> };
+};
+
 const buildProductWhere = (orgId: string, filters?: ProductListFilters) => {
   const where: Record<string, unknown> = { orgId };
 
@@ -29,11 +36,74 @@ const buildProductWhere = (orgId: string, filters?: ProductListFilters) => {
       { stockEntries: { some: { variantSku: { contains: filters.search, mode: "insensitive" } } } },
     ];
   }
-  if (filters?.storeId) {
-    where.stockEntries = { some: { storeId: filters.storeId } };
+
+  if (filters?.storeId || filters?.sizeId) {
+    where.stockEntries = {
+      some: {
+        ...(filters?.storeId ? { storeId: filters.storeId } : {}),
+        ...(filters?.sizeId ? { sizeId: filters.sizeId } : {}),
+      },
+    };
   }
 
   return where;
+};
+
+const buildAttributeConditions = (
+  schema: ProductQueryFilters["categoryAttributeSchema"],
+  attributeFilters?: Record<string, ProductAttributeFilterValue>
+) => {
+  if (!schema?.fields?.length || !attributeFilters) return [];
+
+  return schema.fields.flatMap((field) => {
+    const rawValue = attributeFilters[field.name];
+    if (rawValue === undefined || rawValue === null || rawValue === "") {
+      return [];
+    }
+
+    const values = Array.isArray(rawValue)
+      ? rawValue
+      : String(rawValue).split(",").map((item) => item.trim()).filter(Boolean);
+
+    if (values.length === 0) {
+      return [];
+    }
+
+    const buildCondition = (value: string | number | boolean) => {
+      if (field.type === "boolean") {
+        if (value === "true" || value === true) {
+          return { attributes: { path: [field.name], equals: true } };
+        }
+        if (value === "false" || value === false) {
+          return { attributes: { path: [field.name], equals: false } };
+        }
+        return null;
+      }
+
+      if (field.type === "number") {
+        const numeric = Number(value);
+        return Number.isFinite(numeric)
+          ? { attributes: { path: [field.name], equals: numeric } }
+          : null;
+      }
+
+      if (field.type === "text") {
+        return { attributes: { path: [field.name], string_contains: String(value), mode: "insensitive" } };
+      }
+
+      return { attributes: { path: [field.name], equals: value } };
+    };
+
+    const conditions = values
+      .map((value) => buildCondition(value))
+      .filter((condition): condition is Record<string, unknown> => Boolean(condition));
+
+    if (conditions.length === 0) {
+      return [];
+    }
+
+    return conditions.length === 1 ? [conditions[0]] : [{ OR: conditions }];
+  });
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -83,6 +153,44 @@ export const productService = {
     const pageSize = Math.min(100, Math.max(1, Number(filters?.pageSize ?? 10)));
     const where = buildProductWhere(orgId, filters);
     const include = buildInclude(filters?.storeId);
+
+    const [products, total] = await prisma.$transaction([
+      prisma.product.findMany({
+        where,
+        include,
+        orderBy: { name: "asc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      prisma.product.count({ where }),
+    ]);
+
+    return {
+      items: products.map(toDto),
+      total,
+      page,
+      pageSize,
+    };
+  },
+
+  async listPaginatedWithAttributes(
+    orgId: string,
+    filters?: ProductQueryFilters
+  ): Promise<PaginatedProductsResponse> {
+    const page = Math.max(1, Number(filters?.page ?? 1));
+    const pageSize = Math.min(100, Math.max(1, Number(filters?.pageSize ?? 20)));
+    const where = buildProductWhere(orgId, filters);
+    const include = buildInclude(filters?.storeId);
+
+    if (filters?.categoryId && filters?.categoryAttributeSchema && filters?.attributeFilters) {
+      const attributeConditions = buildAttributeConditions(
+        filters.categoryAttributeSchema,
+        filters.attributeFilters
+      );
+      if (attributeConditions.length > 0) {
+        where.AND = [...(where.AND ?? []), ...attributeConditions];
+      }
+    }
 
     const [products, total] = await prisma.$transaction([
       prisma.product.findMany({
