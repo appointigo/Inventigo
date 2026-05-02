@@ -161,8 +161,8 @@ export default function ProductsPage() {
   );
 
   const handleAttributeChange = useCallback(
-    (name: string, value: string | string[] | undefined) => {
-      const normalizedValue = Array.isArray(value) ? value.join(",") : value;
+    (name: string, value: string | string[] | boolean | undefined) => {
+      const normalizedValue = Array.isArray(value) ? value.join(",") : String(value);
       updateQuery({ [name]: normalizedValue || undefined, page: "1" });
     },
     [updateQuery]

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { productService } from "@/modules/products/services/productService";
 import { requireOrgAuth } from "@/lib/auth.middleware";
 import { prisma } from "@/lib/db";
+import type { AttributeField } from "@/modules/categories/types";
 
 const KNOWN_FILTER_KEYS = new Set([
   "search",
@@ -72,7 +73,7 @@ export const GET = async (request: Request) => {
         where: { id: categoryId },
         select: { attributeSchema: true },
       });
-      categoryAttributeSchema = (category?.attributeSchema as { fields: Array<{ name: string; type: string; options?: string[]; required: boolean }> }) ?? { fields: [] };
+      categoryAttributeSchema = (category?.attributeSchema as { fields: AttributeField[] }) ?? { fields: [] };
     }
 
     const result = await productService.listPaginatedWithAttributes(user.orgId, {

@@ -33,8 +33,8 @@ interface ProductTableProps {
   onDelete: (id: string) => Promise<void>;
   onBulkUpload?: () => void;
   attributeSchema: Category["attributeSchema"] | null;
-  attributeFilters: Record<string, string | string[]>;
-  onAttributeChange: (name: string, value: string | string[] | undefined) => void;
+  attributeFilters: Record<string, string | string[] | boolean>;
+  onAttributeChange: (name: string, value: string | string[] | boolean | undefined) => void;
   onClearAttributeFilters: () => void;
   onClearAllFilters: () => void;
   currentCategory?: Category | undefined;
@@ -104,7 +104,7 @@ const ProductTable = ({
     : undefined;
 
   const activeAttributeFilters = useMemo(() => {
-    const active: Array<{ key: string; label: string; value: string | string[] }> = [];
+    const active: Array<{ key: string; label: string; value: string | string[] | boolean }> = [];
 
     if (sizeFilterValue !== undefined && sizeFilterValue !== null && sizeFilterValue !== "" && (!Array.isArray(sizeFilterValue) || sizeFilterValue.length > 0)) {
       active.push({ key: "sizeId", label: "Size", value: sizeFilterLabel ?? String(sizeFilterValue) });
@@ -594,7 +594,7 @@ const ProductTable = ({
                             onChange={(value) => onAttributeChange(field.name, value as string | undefined)}
                             options={selectOptions}
                           />
-                        ) : field.type === "multi-select" || field.type === "multiselect" ? (
+                        ) : field.type === "multi-select" ? (
                           <Select
                             mode="multiple"
                             allowClear

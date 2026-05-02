@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { createHash } from "crypto";
 import { prisma } from "@/lib/db";
 import type { Product, ProductFormValues, ProductListFilters, BulkProductValidated, BulkUploadResult, PaginatedProductsResponse } from "../types";
+import type { AttributeField } from "@/modules/categories/types";
 import { imageService } from "@/shared/services/imageService";
 import { normalizeNameKey, normalizeSku } from "@/shared/utils/normalization";
 import { buildVariantSku, normalizeSizeLabel, sanitizeScannedBarcode } from "@/shared/services/barcodeService";
@@ -19,7 +20,7 @@ type ProductAttributeFilterValue = string | number | boolean | Array<string | nu
 
 type ProductQueryFilters = ProductListFilters & {
   attributeFilters?: Record<string, ProductAttributeFilterValue>;
-  categoryAttributeSchema?: { fields: Array<{ name: string; type: string; options?: string[]; required: boolean }> };
+  categoryAttributeSchema?: { fields: AttributeField[] };
 };
 
 const buildProductWhere = (orgId: string, filters?: ProductListFilters) => {
@@ -55,10 +56,12 @@ const buildAttributeConditions = (
 ) => {
   if (!schema?.fields?.length || !attributeFilters) return [];
 
-  return schema.fields.flatMap((field) => {
+  const conditions: any[] = [];
+
+  schema.fields.forEach((field) => {
     const rawValue = attributeFilters[field.name];
     if (rawValue === undefined || rawValue === null || rawValue === "") {
-      return [];
+      return;
     }
 
     const values = Array.isArray(rawValue)
@@ -66,44 +69,36 @@ const buildAttributeConditions = (
       : String(rawValue).split(",").map((item) => item.trim()).filter(Boolean);
 
     if (values.length === 0) {
-      return [];
+      return;
     }
 
-    const buildCondition = (value: string | number | boolean) => {
+    const fieldConditions: any[] = [];
+
+    values.forEach((value) => {
       if (field.type === "boolean") {
         if (value === "true" || value === true) {
-          return { attributes: { path: [field.name], equals: true } };
+          fieldConditions.push({ attributes: { path: [field.name], equals: true } });
+        } else if (value === "false" || value === false) {
+          fieldConditions.push({ attributes: { path: [field.name], equals: false } });
         }
-        if (value === "false" || value === false) {
-          return { attributes: { path: [field.name], equals: false } };
-        }
-        return null;
-      }
-
-      if (field.type === "number") {
+      } else if (field.type === "number") {
         const numeric = Number(value);
-        return Number.isFinite(numeric)
-          ? { attributes: { path: [field.name], equals: numeric } }
-          : null;
+        if (Number.isFinite(numeric)) {
+          fieldConditions.push({ attributes: { path: [field.name], equals: numeric } });
+        }
+      } else if (field.type === "text") {
+        fieldConditions.push({ attributes: { path: [field.name], string_contains: String(value), mode: "insensitive" } });
+      } else {
+        fieldConditions.push({ attributes: { path: [field.name], equals: value } });
       }
+    });
 
-      if (field.type === "text") {
-        return { attributes: { path: [field.name], string_contains: String(value), mode: "insensitive" } };
-      }
-
-      return { attributes: { path: [field.name], equals: value } };
-    };
-
-    const conditions = values
-      .map((value) => buildCondition(value))
-      .filter((condition): condition is Record<string, unknown> => Boolean(condition));
-
-    if (conditions.length === 0) {
-      return [];
+    if (fieldConditions.length > 0) {
+      conditions.push(fieldConditions.length === 1 ? fieldConditions[0] : { OR: fieldConditions });
     }
-
-    return conditions.length === 1 ? [conditions[0]] : [{ OR: conditions }];
   });
+
+  return conditions;
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -188,7 +183,8 @@ export const productService = {
         filters.attributeFilters
       );
       if (attributeConditions.length > 0) {
-        where.AND = [...(where.AND ?? []), ...attributeConditions];
+        const existing = Array.isArray(where.AND) ? where.AND : [];
+        where.AND = [...existing, ...attributeConditions];
       }
     }
 

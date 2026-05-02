@@ -44,7 +44,7 @@ export type BulkUploadResult =
 
 export type AttributeField = {
   name: string;
-  type: "text" | "select" | "number";
+  type: "text" | "select" | "number" | "multi-select" | "boolean";
   options?: string[];
   required: boolean;
 };
