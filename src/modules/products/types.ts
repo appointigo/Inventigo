@@ -69,6 +69,7 @@ export type ProductListFilters = {
   storeId?: string;
   categoryId?: string;
   brandId?: string;
+  sizeId?: string;
   search?: string;
   isActive?: boolean;
   page?: number;

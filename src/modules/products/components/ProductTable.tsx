@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Table, Button, Space, Tag, Input, InputNumber, Select, Popconfirm, Tooltip, Badge, Flex, Empty, Modal } from "antd";
-import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, EyeOutlined, UploadOutlined, CopyOutlined, PrinterOutlined } from "@ant-design/icons";
+import { useEffect, useMemo, useState, useRef } from "react";
+import { Table, Button, Space, Tag, Input, InputNumber, Select, Popconfirm, Tooltip, Badge, Flex, Empty, Modal, Card, Switch } from "antd";
+import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, EyeOutlined, UploadOutlined, CopyOutlined, PrinterOutlined, CloseOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import BarcodeGenerator from "@/modules/barcode/components/BarcodeGenerator";
 import type { Product } from "../types";
@@ -32,6 +32,12 @@ interface ProductTableProps {
   duplicateLoadingId?: string | null;
   onDelete: (id: string) => Promise<void>;
   onBulkUpload?: () => void;
+  attributeSchema: Category["attributeSchema"] | null;
+  attributeFilters: Record<string, string | string[]>;
+  onAttributeChange: (name: string, value: string | string[] | undefined) => void;
+  onClearAttributeFilters: () => void;
+  onClearAllFilters: () => void;
+  currentCategory?: Category | undefined;
 }
 
 const ProductTable = ({
@@ -56,10 +62,75 @@ const ProductTable = ({
   duplicateLoadingId,
   onDelete,
   onBulkUpload,
+  attributeSchema,
+  attributeFilters,
+  onAttributeChange,
+  onClearAttributeFilters,
+  onClearAllFilters,
+  currentCategory,
 }: ProductTableProps) => {
   const [barcodePrintOpen, setBarcodePrintOpen] = useState(false);
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const [copiesMap, setCopiesMap] = useState<Record<string, number>>({});
+  const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
+  const moreFiltersRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (moreFiltersRef.current && !moreFiltersRef.current.contains(event.target as Node)) {
+        setMoreFiltersOpen(false);
+      }
+    };
+
+    if (moreFiltersOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [moreFiltersOpen]);
+
+  const sizeOptions = currentCategory?.sizes?.map((size) => ({ label: size.label, value: size.id })) ?? [];
+  const visibleAttributeFields = useMemo(() => attributeSchema?.fields?.slice(0, 3) ?? [], [attributeSchema]);
+  const hiddenAttributeFields = useMemo(() => attributeSchema?.fields?.slice(3) ?? [], [attributeSchema]);
+
+  const sizeFilterValue = attributeFilters.sizeId;
+  const sizeFilterLabel = typeof sizeFilterValue === "string"
+    ? currentCategory?.sizes?.find((size) => size.id === sizeFilterValue)?.label ?? sizeFilterValue
+    : Array.isArray(sizeFilterValue)
+    ? sizeFilterValue
+        .map((value) => currentCategory?.sizes?.find((size) => size.id === value)?.label ?? value)
+        .join(", ")
+    : undefined;
+
+  const activeAttributeFilters = useMemo(() => {
+    const active: Array<{ key: string; label: string; value: string | string[] }> = [];
+
+    if (sizeFilterValue !== undefined && sizeFilterValue !== null && sizeFilterValue !== "" && (!Array.isArray(sizeFilterValue) || sizeFilterValue.length > 0)) {
+      active.push({ key: "sizeId", label: "Size", value: sizeFilterLabel ?? String(sizeFilterValue) });
+    }
+
+    if (attributeSchema?.fields) {
+      attributeSchema.fields.forEach((field) => {
+        if (field.name === "sizeId") return;
+        const value = attributeFilters[field.name];
+        if (value !== undefined && value !== null && value !== "" && (!Array.isArray(value) || value.length > 0)) {
+          active.push({ key: field.name, label: field.name, value });
+        }
+      });
+    }
+    return active;
+  }, [attributeSchema, attributeFilters, sizeFilterLabel, sizeFilterValue]);
+
+  const hasActiveAttributeFilters = activeAttributeFilters.length > 0;
+  const hiddenActiveCount = useMemo(
+    () =>
+      hiddenAttributeFields.filter((field) => {
+        const value = attributeFilters[field.name];
+        return value !== undefined && value !== null && value !== "";
+      }).length,
+    [hiddenAttributeFields, attributeFilters]
+  );
 
   useEffect(() => {
     const pageIds = new Set(products.map((product) => product.id));
@@ -269,6 +340,13 @@ const ProductTable = ({
     },
   ];
 
+  const hasActiveFilters = Boolean(
+    search ||
+    categoryFilter ||
+    brandFilter ||
+    Object.keys(attributeFilters).length > 0
+  );
+
   const columns: ColumnsType<Product> = [
     {
       title: "Product",
@@ -396,6 +474,18 @@ const ProductTable = ({
             style={{ width: 140 }}
             options={brands.map((b) => ({ label: b.name, value: b.id }))}
           />
+          {categoryFilter && sizeOptions.length > 0 && (
+          <Select
+            placeholder="All Sizes"
+            value={attributeFilters.sizeId ?? undefined}
+            onChange={(value) => onAttributeChange("sizeId", value as string | undefined)}
+            optionFilterProp="label"
+            showSearch
+            allowClear
+            style={{ width: 140 }}
+            options={sizeOptions}
+          />
+        )}
         </Space>
         <Space>
           <Button
@@ -415,6 +505,154 @@ const ProductTable = ({
           </Button>
         </Space>
       </Flex>
+      <Flex gap={8} wrap style={{ marginBottom: 16 }}>
+        
+        {categoryFilter && visibleAttributeFields.length > 0 && (
+          <Flex gap={8} style={{ flexShrink: 0 }}>
+            {visibleAttributeFields.map((field) => {
+              const rawValue = attributeFilters[field.name];
+              const selectOptions = (field.options ?? []).map((option) => ({ label: option, value: option }));
+
+              return (
+                <div key={field.name} style={{ minWidth: 120, display: "flex", flexDirection: "column", gap: 4 }}>
+                  <div style={{ fontSize: 11, color: "#666", fontWeight: 500 }}>{field.name}</div>
+                  {field.type === "select" ? (
+                    <Select
+                      allowClear
+                      size="small"
+                      placeholder="All"
+                      value={Array.isArray(rawValue) ? String(rawValue[rawValue.length - 1]) : (rawValue ?? undefined)}
+                      onChange={(value) => onAttributeChange(field.name, value as string | undefined)}
+                      options={selectOptions}
+                      style={{ width: "100%" }}
+                    />
+                  ) : field.type === "number" ? (
+                    <InputNumber
+                      size="small"
+                      placeholder="All"
+                      value={rawValue !== undefined && rawValue !== null ? Number(rawValue) : undefined}
+                      onChange={(value) => onAttributeChange(field.name, value === null ? undefined : String(value))}
+                      style={{ width: "100%" }}
+                    />
+                  ) : (
+                    <Input
+                      size="small"
+                      placeholder="All"
+                      value={Array.isArray(rawValue) ? String(rawValue[rawValue.length - 1]) : (rawValue as string ?? "")}
+                      onChange={(e) => onAttributeChange(field.name, e.target.value || undefined)}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </Flex>
+        )}
+        {categoryFilter && hiddenAttributeFields.length > 0 && (
+          <div style={{ position: "relative", flexShrink: 0,display:"flex",flexDirection:"column-reverse" }} ref={moreFiltersRef}>
+            <Button onClick={() => setMoreFiltersOpen(!moreFiltersOpen)}>
+              + More filters
+              {hiddenActiveCount > 0 && (
+                <Badge count={hiddenActiveCount} style={{ backgroundColor: "#1677ff", marginLeft: 8 }} />
+              )}
+            </Button>
+            {moreFiltersOpen && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "100%",
+                  left: 0,
+                  marginTop: 8,
+                  background: "#fff",
+                  border: "0.5px solid #f0f0f0",
+                  borderRadius: 10,
+                  padding: 14,
+                  zIndex: 1000,
+                  minWidth: 400,
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+                }}
+              >
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
+                    gap: 12,
+                  }}
+                >
+                  {hiddenAttributeFields.map((field) => {
+                    const rawValue = attributeFilters[field.name];
+                    const selectOptions = (field.options ?? []).map((option) => ({ label: option, value: option }));
+
+                    return (
+                      <div key={field.name} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                        <div style={{ fontSize: 11, color: "#666", fontWeight: 500 }}>{field.name}</div>
+                        {field.type === "select" ? (
+                          <Select
+                            allowClear
+                            size="small"
+                            placeholder="All"
+                            value={Array.isArray(rawValue) ? String(rawValue[rawValue.length - 1]) : (rawValue ?? undefined)}
+                            onChange={(value) => onAttributeChange(field.name, value as string | undefined)}
+                            options={selectOptions}
+                          />
+                        ) : field.type === "multi-select" || field.type === "multiselect" ? (
+                          <Select
+                            mode="multiple"
+                            allowClear
+                            size="small"
+                            placeholder="All"
+                            value={Array.isArray(rawValue) ? rawValue : String(rawValue || "").split(",").map((item) => item.trim()).filter(Boolean)}
+                            onChange={(value) => onAttributeChange(field.name, value as string[])}
+                            options={selectOptions}
+                          />
+                        ) : field.type === "number" ? (
+                          <InputNumber
+                            size="small"
+                            placeholder="All"
+                            value={rawValue !== undefined && rawValue !== null ? Number(rawValue) : undefined}
+                            onChange={(value) => onAttributeChange(field.name, value === null ? undefined : String(value))}
+                          />
+                        ) : field.type === "boolean" ? (
+                          <Switch
+                            checked={rawValue === true || rawValue === "true"}
+                            onChange={(checked) => onAttributeChange(field.name, String(checked))}
+                          />
+                        ) : (
+                          <Input
+                            size="small"
+                            placeholder="All"
+                            value={Array.isArray(rawValue) ? String(rawValue[rawValue.length - 1]) : (rawValue as string ?? "")}
+                            onChange={(e) => onAttributeChange(field.name, e.target.value || undefined)}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </Flex>
+      
+      {hasActiveAttributeFilters && (
+        <Flex gap={8} wrap style={{ marginBottom: 16, alignItems: "center" }}>
+          <Flex gap={8} wrap style={{ flex: 1 }}>
+            {activeAttributeFilters.map(({ key, label, value }) => (
+              <Tag
+                key={key}
+                closable
+                onClose={() => onAttributeChange(key, undefined)}
+                style={{ marginRight: 0 }}
+              >
+                {label}: {Array.isArray(value) ? value.join(", ") : String(value)}
+              </Tag>
+            ))}
+          </Flex>
+          <Button type="link" danger style={{ fontSize: 12, padding: 0 }} onClick={onClearAllFilters}>
+            Clear filters
+          </Button>
+        </Flex>
+      )}
       <Table
         columns={columns}
         dataSource={products}
@@ -433,22 +671,37 @@ const ProductTable = ({
           showTotal: (t) => `${t} products`,
         }}
         locale={{
-          emptyText: !loading && products.length === 0 && !search && !categoryFilter && !brandFilter ? (
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description={
-                <span style={{ color: "#888" }}>
-                  {categories.length === 0
-                    ? "Add a category first, then come back to add products."
-                    : "No products yet. Start building your inventory."
-                  }
-                </span>
-              }
-            >
-              <Button type="primary" icon={<PlusOutlined />} onClick={onAdd} disabled={categories.length === 0}>
-                {categories.length === 0 ? "Add a category first" : "Add your first product"}
-              </Button>
-            </Empty>
+          emptyText: !loading && products.length === 0 ? (
+            hasActiveFilters ? (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={
+                  <span style={{ color: "#888" }}>
+                    No products found for these filters.
+                  </span>
+                }
+              >
+                <Button type="primary" onClick={onClearAllFilters}>
+                  Clear all filters
+                </Button>
+              </Empty>
+            ) : (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={
+                  <span style={{ color: "#888" }}>
+                    {categories.length === 0
+                      ? "Add a category first, then come back to add products."
+                      : "No products yet. Start building your inventory."
+                    }
+                  </span>
+                }
+              >
+                <Button type="primary" icon={<PlusOutlined />} onClick={onAdd} disabled={categories.length === 0}>
+                  {categories.length === 0 ? "Add a category first" : "Add your first product"}
+                </Button>
+              </Empty>
+            )
           ) : undefined,
         }}
       />
