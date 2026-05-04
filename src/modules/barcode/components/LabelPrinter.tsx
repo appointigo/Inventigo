@@ -113,7 +113,8 @@ export default function LabelPrinter({ productName, variants }: LabelPrinterProp
             .label {
               width: 62mm;
               height: 34mm;
-              border: 0.5px dashed #ccc;
+              outline: 1px solid black !important; /* For cutting guides */
+              border-radius: 5px;
               display: flex;
               flex-direction: column;
               align-items: center;

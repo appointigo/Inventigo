@@ -71,6 +71,7 @@ const ProductTable = ({
 }: ProductTableProps) => {
   const [barcodePrintOpen, setBarcodePrintOpen] = useState(false);
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
+  const productCacheRef = useRef<Record<string, Product>>({});
   const [copiesMap, setCopiesMap] = useState<Record<string, number>>({});
   const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
   const moreFiltersRef = useRef<HTMLDivElement>(null);
@@ -133,13 +134,15 @@ const ProductTable = ({
   );
 
   useEffect(() => {
-    const pageIds = new Set(products.map((product) => product.id));
-    setSelectedProductIds((prev) => prev.filter((id) => pageIds.has(id)));
+    if (products.length === 0) return;
+    products.forEach((product) => {
+      productCacheRef.current[product.id] = product;
+    });
   }, [products]);
 
   const selectedProducts = useMemo(
-    () => products.filter((product) => selectedProductIds.includes(product.id)),
-    [products, selectedProductIds]
+    () => selectedProductIds.map((id) => productCacheRef.current[id]).filter(Boolean),
+    [selectedProductIds]
   );
 
   const barcodeRows = useMemo(
@@ -174,6 +177,41 @@ const ProductTable = ({
       ...prev,
       [rowKey]: Math.max(0, Math.min(500, value ?? 0)),
     }));
+  };
+
+  const normalizeAttributeList = (value: unknown): string[] => {
+    if (Array.isArray(value)) {
+      return value.map((item) => String(item)).filter(Boolean);
+    }
+    if (typeof value === "string") {
+      return value.split(",").map((item) => item.trim()).filter(Boolean);
+    }
+    if (value === null || value === undefined) {
+      return [];
+    }
+    return [String(value)];
+  };
+
+  const renderTagList = (values: string[], maxVisible = 3) => {
+    if (values.length === 0) {
+      return <span style={{ color: "#999" }}>—</span>;
+    }
+
+    const visible = values.slice(0, maxVisible);
+    const hiddenCount = values.length - visible.length;
+
+    return (
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, maxWidth: 220 }}>
+        {visible.map((value) => (
+          <Tag key={value} style={{ marginInlineEnd: 0, maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {value}
+          </Tag>
+        ))}
+        {hiddenCount > 0 && (
+          <Tag style={{ marginInlineEnd: 0 }}>+{hiddenCount}</Tag>
+        )}
+      </div>
+    );
   };
 
   const escapeHtml = (value: string): string =>
@@ -216,7 +254,8 @@ const ProductTable = ({
             .label {
               width: 62mm;
               height: 34mm;
-              border: 0.5px dashed #ccc;
+              outline: 1px solid black !important;
+              border-radius: 5px;
               padding: 2mm;
               display: flex;
               flex-direction: column;
@@ -351,6 +390,8 @@ const ProductTable = ({
     {
       title: "Product",
       dataIndex: "name",
+      width: 240,
+      fixed: "left",
       sorter: (a, b) => a.name.localeCompare(b.name),
       render: (name: string, record) => (
         <div>
@@ -362,13 +403,35 @@ const ProductTable = ({
     {
       title: "Category",
       dataIndex: "categoryName",
+      width: 160,
       responsive: ["md"],
       render: (name: string) => <Tag>{name}</Tag>,
     },
     {
       title: "Brand",
       dataIndex: "brandName",
+      width: 140,
       responsive: ["md"],
+    },
+    {
+      title: "Size",
+      key: "sizes",
+      width: 220,
+      render: (_, record) => {
+        const sizes = Array.from(new Set(record.stock.map((item) => item.sizeLabel).filter(Boolean)));
+        return renderTagList(sizes);
+      },
+    },
+    {
+      title: "Color",
+      key: "colors",
+      width: 220,
+      render: (_, record) => {
+        const attributes = record.attributes ?? {};
+        const rawColors = (attributes as Record<string, unknown>).color ?? (attributes as Record<string, unknown>).colors;
+        const colors = normalizeAttributeList(rawColors);
+        return renderTagList(colors);
+      },
     },
     {
       title: "Price",
@@ -392,7 +455,7 @@ const ProductTable = ({
     {
       title: "Status",
       dataIndex: "isActive",
-      width: 90,
+      width: 110,
       align: "center",
       render: (active: boolean) => (
         <Tag color={active ? "green" : "default"}>{active ? "Active" : "Inactive"}</Tag>
@@ -403,6 +466,7 @@ const ProductTable = ({
       key: "actions",
       width: 180,
       align: "center",
+      fixed: "right",
       render: (_, record) => (
         <Space>
           <Tooltip title="View" destroyOnHidden>
@@ -659,9 +723,13 @@ const ProductTable = ({
         rowKey="id"
         rowSelection={{
           selectedRowKeys: selectedProductIds,
+          preserveSelectedRowKeys: true,
+          fixed: true,
+          columnWidth: 48,
           onChange: (selectedRowKeys) => setSelectedProductIds(selectedRowKeys.map(String)),
         }}
         loading={loading}
+        scroll={{ x: 1400 }}
         pagination={{
           current: page,
           pageSize,
