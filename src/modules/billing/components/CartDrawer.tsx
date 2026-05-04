@@ -126,6 +126,10 @@ const CartDrawer = ({
   const [promoInput, setPromoInput] = useState("");
   const [appliedPromo, setAppliedPromo] = useState<PromoOffer | null>(null);
   const [promoError, setPromoError] = useState("");
+  const [discountMode, setDiscountMode] = useState<"PERCENT" | "RUPEE">("PERCENT");
+  const [discountValue, setDiscountValue] = useState<number>(discountPct);
+
+  const clampNumber = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
   // Apply default tax pct from billing config on first open
   useEffect(() => {
@@ -134,7 +138,23 @@ const CartDrawer = ({
     }
   }, [open, defaultTaxPct]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const discountAmount = Math.round(subtotal * discountPct / 100);
+  useEffect(() => {
+    if (discountMode !== "RUPEE") return;
+    const max = Math.max(0, subtotal);
+    const clamped = clampNumber(discountValue, 0, max);
+    const normalized = max > 0 ? (clamped / max) * 100 : 0;
+    if (Math.abs(discountPct - normalized) > 0.01) {
+      onDiscountPctChange(normalized);
+    }
+  }, [discountMode, discountValue, subtotal, discountPct, onDiscountPctChange]);
+
+  const percentValue = clampNumber(discountPct, 0, 100);
+  const rupeeValue = clampNumber(discountValue, 0, Math.max(0, subtotal));
+  const discountAmount = Math.round(
+    discountMode === "RUPEE"
+      ? rupeeValue
+      : (subtotal * percentValue) / 100
+  );
   const taxAmount = Math.round(subtotal * taxPct / 100);
   const total = subtotal - discountAmount + taxAmount;
   const totalItems = items.reduce((s, i) => s + i.quantity, 0);
@@ -149,12 +169,16 @@ const CartDrawer = ({
     setAppliedPromo(offer);
     setPromoError("");
     setPromoInput("");
+    setDiscountMode("PERCENT");
+    setDiscountValue(offer.discountPct);
     onDiscountPctChange(offer.discountPct);
   };
 
   const handleClearPromo = () => {
     setAppliedPromo(null);
     setPromoError("");
+    setDiscountMode("PERCENT");
+    setDiscountValue(0);
     onDiscountPctChange(0);
   };
 
@@ -166,6 +190,8 @@ const CartDrawer = ({
     setAppliedPromo(offer);
     setPromoError("");
     setPromoInput("");
+    setDiscountMode("PERCENT");
+    setDiscountValue(offer.discountPct);
     onDiscountPctChange(offer.discountPct);
   };
 
@@ -389,25 +415,73 @@ const CartDrawer = ({
                 <Text>{formatCurrency(subtotal)}</Text>
               </SumRow>
               <SumRow>
-                <Text type="secondary">Discount</Text>
-                <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <Text type="secondary">Discount</Text>
+                  <div style={{ display: "inline-flex", border: "1px solid #e5e7eb", borderRadius: 8, overflow: "hidden" }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDiscountMode("PERCENT");
+                        setDiscountValue(discountPct);
+                      }}
+                      style={{
+                        padding: "2px 8px",
+                        border: "none",
+                        background: discountMode === "PERCENT" ? "#111827" : "transparent",
+                        color: discountMode === "PERCENT" ? "#fff" : "#6b7280",
+                        fontSize: 12,
+                        cursor: "pointer",
+                      }}
+                    >
+                      %
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const normalized = subtotal > 0 ? (discountAmount / subtotal) * 100 : 0;
+                        setDiscountMode("RUPEE");
+                        setDiscountValue(discountAmount);
+                        onDiscountPctChange(normalized);
+                        setAppliedPromo(null);
+                      }}
+                      style={{
+                        padding: "2px 8px",
+                        border: "none",
+                        background: discountMode === "RUPEE" ? "#111827" : "transparent",
+                        color: discountMode === "RUPEE" ? "#fff" : "#6b7280",
+                        fontSize: 12,
+                        cursor: "pointer",
+                      }}
+                    >
+                      ₹
+                    </button>
+                  </div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
                   <SumInput
                     min={0}
-                    max={100}
-                    value={discountPct}
+                    max={discountMode === "PERCENT" ? 100 : Math.max(0, subtotal)}
+                    value={discountMode === "PERCENT" ? percentValue : rupeeValue}
                     onChange={(val) => {
-                      onDiscountPctChange((val as number) ?? 0);
+                      const numeric = Number(val ?? 0);
+                      const max = discountMode === "PERCENT" ? 100 : Math.max(0, subtotal);
+                      const clamped = clampNumber(numeric, 0, max);
+                      setDiscountValue(clamped);
+                      if (discountMode === "PERCENT") {
+                        onDiscountPctChange(clamped);
+                      } else {
+                        const normalized = subtotal > 0 ? (clamped / subtotal) * 100 : 0;
+                        onDiscountPctChange(normalized);
+                      }
                       setAppliedPromo(null);
                     }}
                     size="small"
-                    suffix="%"
+                    suffix={discountMode === "PERCENT" ? "%" : "₹"}
                   />
-                  {discountAmount > 0 && (
-                    <Text type="secondary" style={{ fontSize: 11, whiteSpace: "nowrap" }}>
-                      = {formatCurrency(discountAmount)}
-                    </Text>
-                  )}
-                </span>
+                  <Text type="secondary" style={{ fontSize: 11, whiteSpace: "nowrap" }}>
+                    - {formatCurrency(discountAmount)}
+                  </Text>
+                </div>
               </SumRow>
               <SumRow>
                 <Text type="secondary">Tax (GST)</Text>

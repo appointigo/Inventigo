@@ -78,7 +78,7 @@ export function useSales(initialFilters?: SaleFilters) {
 export function useCart() {
   const [items, setItems] = useState<CartItem[]>([]);
   const [discountPct, setDiscountPct] = useState(0);
-  const [taxPct, setTaxPct] = useState(5);
+  const [taxPct, setTaxPct] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>("CASH");
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
@@ -118,7 +118,7 @@ export function useCart() {
   const clearCart = () => {
     setItems([]);
     setDiscountPct(0);
-    setTaxPct(5);
+    setTaxPct(0);
     setPaymentMethod("CASH");
     setCustomerName("");
     setCustomerPhone("");

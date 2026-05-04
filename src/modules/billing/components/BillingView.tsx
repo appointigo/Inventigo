@@ -149,6 +149,9 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
   const [promoInput, setPromoInput] = useState("");
   const [appliedPromo, setAppliedPromo] = useState<PromoCode | null>(null);
   const [promoError, setPromoError] = useState("");
+  const [discountMode, setDiscountMode] = useState<"PERCENT" | "RUPEE">("PERCENT");
+  const [discountValue, setDiscountValue] = useState<number>(0);
+  const clampNumber = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
   // ─── Customer autocomplete state ──────────────────────────────────────────
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
@@ -329,6 +332,16 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
     }
   };
 
+  useEffect(() => {
+    if (discountMode !== "RUPEE") return;
+    const max = Math.max(0, cart.subtotal);
+    const clamped = clampNumber(discountValue, 0, max);
+    const normalized = max > 0 ? (clamped / max) * 100 : 0;
+    if (Math.abs(cart.discountPct - normalized) > 0.01) {
+      cart.setDiscountPct(normalized);
+    }
+  }, [cart, discountMode, discountValue]);
+
   // ─── Promo handlers ────────────────────────────────────────────────────────
   const handleApplyPromo = () => {
     const code = promoInput.trim().toUpperCase();
@@ -341,6 +354,8 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
     setAppliedPromo(offer);
     setPromoError("");
     setPromoInput("");
+    setDiscountMode("PERCENT");
+    setDiscountValue(offer.discountPct);
     cart.setDiscountPct(offer.discountPct);
     cart.setPromoCodeId(offer.id);
   };
@@ -348,6 +363,8 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
   const handleClearPromo = () => {
     setAppliedPromo(null);
     setPromoError("");
+    setDiscountMode("PERCENT");
+    setDiscountValue(0);
     cart.setDiscountPct(0);
     cart.setPromoCodeId(null);
   };
@@ -364,6 +381,8 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
     setAppliedPromo(offer);
     setPromoError("");
     setPromoInput("");
+    setDiscountMode("PERCENT");
+    setDiscountValue(offer.discountPct);
     cart.setDiscountPct(offer.discountPct);
     cart.setPromoCodeId(offer.id);
   };
@@ -550,7 +569,13 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
   }, [applySuggestion, highlightedIndex, suggestOpen, suggestions]);
 
   // ─── Derived values ────────────────────────────────────────────────────────
-  const discountAmount = Math.round((cart.subtotal * cart.discountPct) / 100);
+  const percentValue = clampNumber(cart.discountPct, 0, 100);
+  const rupeeValue = clampNumber(discountValue, 0, Math.max(0, cart.subtotal));
+  const discountAmount = Math.round(
+    discountMode === "RUPEE"
+      ? rupeeValue
+      : (cart.subtotal * percentValue) / 100
+  );
   const taxAmount = Math.round((cart.subtotal * cart.taxPct) / 100);
   const total = cart.subtotal - discountAmount + taxAmount;
   const totalItems = cart.items.reduce((s, i) => s + i.quantity, 0);
@@ -1044,26 +1069,75 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
                 <span>{formatCurrency(cart.subtotal)}</span>
               </ASumRow>
               <ASumRow>
-                <span>Discount</span>
-                <ASumPctGroup>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span>Discount</span>
+                  <div style={{ display: "inline-flex", border: "1px solid #e5e7eb", borderRadius: 8, overflow: "hidden" }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDiscountMode("PERCENT");
+                        setDiscountValue(cart.discountPct);
+                      }}
+                      style={{
+                        padding: "2px 8px",
+                        border: "none",
+                        background: discountMode === "PERCENT" ? "#111827" : "transparent",
+                        color: discountMode === "PERCENT" ? "#fff" : "#6b7280",
+                        fontSize: 12,
+                        cursor: "pointer",
+                      }}
+                    >
+                      %
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const normalized = cart.subtotal > 0 ? (discountAmount / cart.subtotal) * 100 : 0;
+                        setDiscountMode("RUPEE");
+                        setDiscountValue(discountAmount);
+                        cart.setDiscountPct(normalized);
+                        setAppliedPromo(null);
+                        cart.setPromoCodeId(null);
+                      }}
+                      style={{
+                        padding: "2px 8px",
+                        border: "none",
+                        background: discountMode === "RUPEE" ? "#111827" : "transparent",
+                        color: discountMode === "RUPEE" ? "#fff" : "#6b7280",
+                        fontSize: 12,
+                        cursor: "pointer",
+                      }}
+                    >
+                      ₹
+                    </button>
+                  </div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
                   <ASumPctInput
                     min={0}
-                    max={100}
-                    value={cart.discountPct}
+                    max={discountMode === "PERCENT" ? 100 : Math.max(0, cart.subtotal)}
+                    value={discountMode === "PERCENT" ? percentValue : rupeeValue}
                     onChange={(val) => {
-                      cart.setDiscountPct((val as number) ?? 0);
+                      const numeric = Number(val ?? 0);
+                      const max = discountMode === "PERCENT" ? 100 : Math.max(0, cart.subtotal);
+                      const clamped = clampNumber(numeric, 0, max);
+                      setDiscountValue(clamped);
+                      if (discountMode === "PERCENT") {
+                        cart.setDiscountPct(clamped);
+                      } else {
+                        const normalized = cart.subtotal > 0 ? (clamped / cart.subtotal) * 100 : 0;
+                        cart.setDiscountPct(normalized);
+                      }
                       setAppliedPromo(null);
                       cart.setPromoCodeId(null);
                     }}
                     size="small"
-                    suffix="%"
+                    suffix={discountMode === "PERCENT" ? "%" : "₹"}
                   />
-                  {discountAmount > 0 && (
-                    <span style={{ fontSize: 11, color: "#9ca3af", whiteSpace: "nowrap" }}>
-                      = {formatCurrency(discountAmount)}
-                    </span>
-                  )}
-                </ASumPctGroup>
+                  <span style={{ fontSize: 11, color: "#9ca3af", whiteSpace: "nowrap" }}>
+                    - {formatCurrency(discountAmount)}
+                  </span>
+                </div>
               </ASumRow>
               <ASumRow>
                 <span>Tax (GST)</span>

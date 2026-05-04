@@ -4,7 +4,6 @@ import dynamic from "next/dynamic";
 import { useState } from "react";
 import { ScanOutlined, HistoryOutlined } from "@ant-design/icons";
 import { useSales } from "@/modules/billing/hooks/useBilling";
-import { useAppSettings } from "@/modules/settings/hooks/useAppSettings";
 import SalesHistory from "@/modules/billing/components/SalesHistory";
 import { useMobileViewport } from "@/modules/mobile-dashboard/hooks/useMobileViewport";
 import { BillingPageTabs, HistoryPane, PageWrapper, PageTitle } from "./billing.styled";
@@ -26,8 +25,7 @@ const BillingPage = () => {
     getSaleById,
   } = useSales();
 
-  const { settings } = useAppSettings();
-  const defaultTaxPct = settings?.billingConfig?.taxRate ?? 0;
+  const defaultTaxPct = 0;
 
   if (!isReady) {
     return null;
