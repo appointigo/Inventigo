@@ -27,6 +27,8 @@ const ProductDetail = ({ product, onEdit, onBack }: ProductDetailProps) => {
       variantSku: s.variantSku ?? ean13,
       sizeLabel: s.sizeLabel,
       ean13,
+      mrp: product.mrp,
+      sellPrice: product.basePrice,
     };
   });
 

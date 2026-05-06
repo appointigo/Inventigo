@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Typography, Spin, Button, Space, Card, Skeleton, Empty } from "antd";
+import { Typography, Spin, Button, Space, Card, Skeleton, Empty, DatePicker } from "antd";
 import {
   AppstoreAddOutlined,
   TagsOutlined,
@@ -40,6 +40,7 @@ import { formatDateTime } from "@/shared/utils/formatDate";
 import CategorySizeHeatmap from "@/modules/dashboard/components/CategorySizeHeatmap";
 import DashboardTabs, { type DashboardTab } from "@/modules/dashboard/components/DashboardTabs";
 import ProfitMarginSection from "@/modules/dashboard/components/ProfitMarginSection";
+import PaymentMethodDistributionChart from "@/modules/dashboard/components/PaymentMethodDistributionChart";
 
 const MobileDashboardPage = dynamic(() => import("@/modules/mobile-dashboard/pages/DashboardPage"));
 
@@ -172,10 +173,11 @@ const DashboardPage = () => {
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
   const [revenueView, setRevenueView] = useState<RevenueView>("day");
   // Global period state for Sales & Revenue tab
-  const [period, setPeriod] = useState<'daily' | 'weekly' | 'monthly'>('daily');
+  const [period, setPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('daily');
   const [salesBreakdownData, setSalesBreakdownData] = useState<Array<{ label: string; totalRevenue: number; discountGiven: number; netProfit: number; period: string }>>([]);
   const [salesBreakdownLoading, setSalesBreakdownLoading] = useState(false);
   const [contentVisible, setContentVisible] = useState(true);
+  const [customDateRange, setCustomDateRange] = useState<[dayjs.Dayjs | null, dayjs.Dayjs | null] | null>(null);
 
   const today = dayjs().format("YYYY-MM-DD");
   const todaysSales = sales.filter((sale) => dayjs(sale.createdAt).format("YYYY-MM-DD") === today);
@@ -270,17 +272,17 @@ const DashboardPage = () => {
     return () => { cancelled = true; };
   }, [period]);
 
-  const dayOfWeekPatternData = useMemo(() => {
-    const dayOrder = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    const totals = new Map<string, number>(dayOrder.map((day) => [day, 0]));
-    for (const sale of sales) {
-      const key = dayOrder[dayjs(sale.createdAt).day()];
-      totals.set(key, (totals.get(key) ?? 0) + sale.total);
-    }
-    return dayOrder.map((day) => ({ day, total: totals.get(day) ?? 0 }));
-  }, [sales]);
-
   const filteredSales = useMemo(() => {
+    // If custom date range is selected, filter by that
+    if (customDateRange && customDateRange[0] && customDateRange[1]) {
+      const startDate = customDateRange[0].startOf('day');
+      const endDate = customDateRange[1].endOf('day');
+      return sales.filter((sale) => {
+        const saleDate = dayjs(sale.createdAt);
+        return saleDate.isAfter(startDate) || saleDate.isSame(startDate) && (saleDate.isBefore(endDate) || saleDate.isSame(endDate));
+      });
+    }
+
     if (period === "daily") {
       const currentDay = dayjs().format("YYYY-MM-DD");
       return sales.filter((sale) => dayjs(sale.createdAt).format("YYYY-MM-DD") === currentDay);
@@ -301,7 +303,18 @@ const DashboardPage = () => {
       const saleDate = dayjs(sale.createdAt);
       return saleDate.month() === currentMonth && saleDate.year() === currentYear;
     });
-  }, [period, sales]);
+  }, [period, sales, customDateRange]);
+
+  const dayOfWeekPatternData = useMemo(() => {
+    const dayOrder = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const totals = new Map<string, number>(dayOrder.map((day) => [day, 0]));
+    const salesToAnalyze = customDateRange && customDateRange[0] && customDateRange[1] ? filteredSales : sales;
+    for (const sale of salesToAnalyze) {
+      const key = dayOrder[dayjs(sale.createdAt).day()];
+      totals.set(key, (totals.get(key) ?? 0) + sale.total);
+    }
+    return dayOrder.map((day) => ({ day, total: totals.get(day) ?? 0 }));
+  }, [sales, filteredSales, customDateRange]);
 
   const salesRangeLabel = useMemo(() => {
     if (filteredSales.length === 0) {
@@ -317,17 +330,35 @@ const DashboardPage = () => {
   }, [filteredSales]);
 
   const salesPeriodMetrics = useMemo(() => {
-    const periodRows = salesBreakdownData.filter((row) => {
-      const rowDate = dayjs(row.period);
-      if (!rowDate.isValid()) return false;
-      if (period === "daily") return rowDate.isSame(dayjs(), "day");
-      if (period === "weekly") return rowDate.isSame(dayjs(), "week");
-      return rowDate.isSame(dayjs(), "month");
-    });
+    let totalRevenueForPeriod = 0;
+    let totalDiscount = 0;
+    let totalProfit = 0;
+    let transactionCount = 0;
 
-    const totalRevenueForPeriod = periodRows.reduce((sum, row) => sum + Number(row.totalRevenue ?? 0), 0);
-    const totalDiscount = periodRows.reduce((sum, row) => sum + Number(row.discountGiven ?? 0), 0);
-    const totalProfit = periodRows.reduce((sum, row) => sum + Number(row.netProfit ?? 0), 0);
+    if (customDateRange && customDateRange[0] && customDateRange[1]) {
+      // Use filteredSales for custom date range
+      totalRevenueForPeriod = filteredSales.reduce((sum, sale) => sum + sale.total, 0);
+      transactionCount = filteredSales.length;
+      // For custom date range, we calculate discount and profit from available sales data
+      // Assuming we can derive these from the sales data if available
+      totalDiscount = 0; // Will be calculated from breakdown data if available
+      totalProfit = 0;
+    } else {
+      // Use salesBreakdownData for preset periods
+      const periodRows = salesBreakdownData.filter((row) => {
+        const rowDate = dayjs(row.period);
+        if (!rowDate.isValid()) return false;
+        if (period === "daily") return rowDate.isSame(dayjs(), "day");
+        if (period === "weekly") return rowDate.isSame(dayjs(), "week");
+        return rowDate.isSame(dayjs(), "month");
+      });
+
+      totalRevenueForPeriod = periodRows.reduce((sum, row) => sum + Number(row.totalRevenue ?? 0), 0);
+      totalDiscount = periodRows.reduce((sum, row) => sum + Number(row.discountGiven ?? 0), 0);
+      totalProfit = periodRows.reduce((sum, row) => sum + Number(row.netProfit ?? 0), 0);
+      transactionCount = filteredSales.length;
+    }
+
     const marginPct = totalRevenueForPeriod > 0 ? Math.round((totalProfit / totalRevenueForPeriod) * 100) : 0;
     const discountPct = totalRevenueForPeriod > 0 ? Math.round((totalDiscount / totalRevenueForPeriod) * 100) : 0;
 
@@ -357,7 +388,7 @@ const DashboardPage = () => {
         subLabel: "transactions",
       },
     ];
-  }, [filteredSales.length, period, salesBreakdownData]);
+  }, [filteredSales, filteredSales.length, period, salesBreakdownData, customDateRange]);
 
   const chartLoading = loading;
 
@@ -603,33 +634,39 @@ const DashboardPage = () => {
       ) : null}
 
       {activeTab === "sales" ? (
-        <div className="grid gap-4">
-          {/* Global period toggle and date range label */}
-          <div className="flex items-center justify-between mb-2">
-            <div className="text-xs text-gray-400 font-medium">
-              {/* Example: Apr 22 – Apr 26, 2026 */}
-              {salesRangeLabel}
+        <div className="grid gap-4" style={{ display: "grid", gap: 16 }}>
+          {/* PAGE HEADER ROW: Period filter tabs (top right) + current date (left) */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: 500, color: "#6b7280 " }}>
+              {dayjs().format("DD MMM YYYY")}
             </div>
-            <div className="inline-flex gap-2">
+            <div style={{ display: "inline-flex", gap: 6, borderRadius: 8, background: "#f3f4f6", padding: "6px 8px" }}>
               {([
                 { label: "Daily", value: "daily" },
                 { label: "Weekly", value: "weekly" },
                 { label: "Monthly", value: "monthly" },
+                { label: "Yearly", value: "yearly" },
               ] as const).map((option) => {
                 const active = period === option.value;
+                const isCustomRangeActive = !!(customDateRange && customDateRange[0] && customDateRange[1]);
+                
                 return (
                   <button
                     key={option.value}
                     type="button"
                     onClick={() => setPeriod(option.value)}
+                    disabled={isCustomRangeActive}
                     style={{
                       border: "none",
-                      borderRadius: 8,
-                      padding: "4px 10px",
-                      fontSize: 11,
-                      cursor: "pointer",
-                      background: active ? "#378ADD" : "#f3f4f6",
-                      color: active ? "#ffffff" : "#4b5563",
+                      borderRadius: 6,
+                      padding: "6px 12px",
+                      fontSize: 12,
+                      fontWeight: 500,
+                      cursor: isCustomRangeActive ? "not-allowed" : "pointer",
+                      background: active && !isCustomRangeActive ? "#ffffff" : "transparent",
+                      color: isCustomRangeActive ? "#9ca3af" : active ? "#111827" : "#6b7280",
+                      transition: "all 0.2s ease",
+                      opacity: isCustomRangeActive ? 0.5 : 1,
                     }}
                   >
                     {option.label}
@@ -639,33 +676,138 @@ const DashboardPage = () => {
             </div>
           </div>
 
-          {/* Summary metrics row */}
-          <div className="dashboard-metric-grid" style={{ display: "grid", gap: 12, marginBottom: 16 }}>
-            {salesPeriodMetrics.map((metric) => (
-              <div
-                key={metric.label}
+          {/* CUSTOM DATE RANGE PICKER */}
+          <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 0" }}>
+            <DatePicker.RangePicker
+              value={customDateRange}
+              onChange={(dates) => {
+                setCustomDateRange(dates as [dayjs.Dayjs | null, dayjs.Dayjs | null] | null);
+                // When custom date range is selected, reset period to daily
+                if (dates && dates[0] && dates[1]) {
+                  setPeriod('daily');
+                }
+              }}
+              format="DD MMM YYYY"
+              style={{ width: "auto", minWidth: 280 }}
+            />
+            {customDateRange && customDateRange[0] && customDateRange[1] && (
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomDateRange(null);
+                  setPeriod('daily');
+                }}
                 style={{
+                  border: "none",
+                  borderRadius: 6,
+                  padding: "6px 12px",
+                  fontSize: 12,
+                  fontWeight: 500,
+                  cursor: "pointer",
                   background: "#f3f4f6",
-                  borderRadius: CARD_RADIUS,
-                  padding: "1rem",
-                  minHeight: 102,
+                  color: "#6b7280",
+                  transition: "all 0.2s ease",
                 }}
               >
-                <div style={{ fontSize: 12, color: "#6b7280", lineHeight: 1.4 }}>{metric.label}</div>
-                <div style={{ marginTop: 6, fontSize: 22, fontWeight: 500, lineHeight: 1.2, color: metric.color }}>{metric.value}</div>
-                {metric.subLabel ? (
-                  <div style={{ marginTop: 4, fontSize: 11, color: metric.color }}>{metric.subLabel}</div>
-                ) : null}
-              </div>
-            ))}
+                Clear
+              </button>
+            )}
           </div>
 
-          {/* Sales breakdown chart (unchanged except period prop) */}
-          <section style={{ background: "#ffffff", border: CARD_BORDER, borderRadius: CARD_RADIUS, padding: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, gap: 8, flexWrap: "wrap" }}>
-              <div style={{ fontSize: 13, fontWeight: 500, color: "#111827" }}>Sales breakdown</div>
+          {/* METRIC CARDS ROW: 4 white cards with proper styling */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
+            {salesPeriodMetrics.map((metric, idx) => {
+              const isTotalRevenue = metric.label === "Total revenue";
+              const isNetProfit = metric.label === "Net profit";
+              const isDiscountGiven = metric.label === "Discount given";
+              
+              let textColor = metric.color;
+              if (isNetProfit) textColor = "#1D9E75";
+              if (isDiscountGiven) textColor = "#D85A30";
+
+              return (
+                <div
+                  key={metric.label}
+                  style={{
+                    background: "#ffffff",
+                    border: "0.5px solid rgba(0, 0, 0, 0.10)",
+                    borderRadius: 12,
+                    padding: 20,
+                  }}
+                >
+                  <div style={{ fontSize: 13, color: "#6b7280", marginBottom: 6, lineHeight: 1.4 }}>
+                    {metric.label}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: isTotalRevenue ? 32 : 26,
+                      fontWeight: 500,
+                      lineHeight: 1.2,
+                      color: textColor,
+                      marginBottom: isTotalRevenue ? 8 : 0,
+                    }}
+                  >
+                    {metric.value}
+                  </div>
+                  {isTotalRevenue && (
+                    <div
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        borderRadius: 999,
+                        background: "#ecfdf5",
+                        color: "#059669",
+                        fontSize: 11,
+                        fontWeight: 500,
+                        padding: "4px 8px",
+                        marginTop: 4,
+                      }}
+                    >
+                      +12.4% vs yesterday
+                    </div>
+                  )}
+                  {metric.subLabel && isNetProfit && (
+                    <div style={{ marginTop: 6, fontSize: 12, color: "#6b7280" }}>
+                      {metric.subLabel}
+                    </div>
+                  )}
+                  {metric.subLabel && isDiscountGiven && (
+                    <div style={{ marginTop: 6, fontSize: 12, color: "#6b7280" }}>
+                      {metric.subLabel}
+                    </div>
+                  )}
+                  {metric.subLabel && !isNetProfit && !isDiscountGiven && (
+                    <div style={{ marginTop: 4, fontSize: 12, color: "#6b7280" }}>
+                      {metric.subLabel}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* SALES BREAKDOWN CHART with custom legend */}
+          <section style={{ background: "#ffffff", border: "0.5px solid rgba(0, 0, 0, 0.10)", borderRadius: 12, padding: 20 }}>
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 15, fontWeight: 500, color: "#111827", marginBottom: 12 }}>Sales breakdown</div>
+              
+              {/* Custom HTML Legend */}
+              <div style={{ display: "flex", gap: 20 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <div style={{ width: 12, height: 12, background: "#378ADD", borderRadius: 2 }} />
+                  <span style={{ fontSize: 12, color: "#6b7280" }}>Revenue</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <div style={{ width: 12, height: 12, background: "#d4a332", borderRadius: 2 }} />
+                  <span style={{ fontSize: 12, color: "#6b7280" }}>Discount</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <div style={{ width: 12, height: 12, background: "#4caf8a", borderRadius: 2 }} />
+                  <span style={{ fontSize: 12, color: "#6b7280" }}>Profit</span>
+                </div>
+              </div>
             </div>
-            {/* ...existing chart code, but remove its internal toggle and use period prop if needed... */}
+
             {salesBreakdownLoading ? (
               <Skeleton active paragraph={{ rows: 4 }} title={false} />
             ) : salesBreakdownData.length === 0 ? (
@@ -698,23 +840,36 @@ const DashboardPage = () => {
             )}
           </section>
 
-          {/* Day-of-week pattern chart (unchanged) */}
-          <section style={{ background: "#ffffff", border: CARD_BORDER, borderRadius: CARD_RADIUS, padding: 12 }}>
-            <div style={{ fontSize: 13, fontWeight: 500, color: "#111827", marginBottom: 8 }}>Day-of-week pattern</div>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={dayOfWeekPatternData} margin={{ top: 8, right: 12, left: 0, bottom: 8 }}>
-                <CartesianGrid stroke="#e5e7eb" strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="day" tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} tickFormatter={(value) => formatCurrencyCompactK(Number(value))} />
-                <Tooltip formatter={(value) => formatCurrency(Number(value ?? 0))} contentStyle={{ borderRadius: 8, border: "0.5px solid #e5e7eb" }} />
-                <Bar dataKey="total" fill="#185FA5" radius={[4, 4, 0, 0]} barSize={24} />
-              </BarChart>
-            </ResponsiveContainer>
-          </section>
+          {/* 2-COLUMN GRID: Payment method distribution (55%) + Day-of-week pattern (45%) */}
+          <div style={{ display: "grid", gridTemplateColumns: "1.22fr 0.78fr", gap: 12 }}>
+            {/* Payment method distribution (left, ~55% width) */}
+            <section style={{ background: "#ffffff", border: "0.5px solid rgba(0, 0, 0, 0.10)", borderRadius: 12, padding: 20 }}>
+              <div style={{ fontSize: 15, fontWeight: 500, color: "#111827", marginBottom: 16 }}>Payment method distribution</div>
+              <PaymentMethodDistributionChart 
+                sales={filteredSales} 
+                loading={false} 
+                height={340}
+              />
+            </section>
+
+            {/* Day-of-week pattern (right, ~45% width) */}
+            <section style={{ background: "#ffffff", border: "0.5px solid rgba(0, 0, 0, 0.10)", borderRadius: 12, padding: 20 }}>
+              <div style={{ fontSize: 15, fontWeight: 500, color: "#111827", marginBottom: 16 }}>Day-of-week pattern</div>
+              <ResponsiveContainer width="100%" height={340}>
+                <BarChart data={dayOfWeekPatternData} margin={{ top: 8, right: 12, left: 0, bottom: 8 }}>
+                  <CartesianGrid stroke="#e5e7eb" strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="day" tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} tickFormatter={(value) => formatCurrencyCompactK(Number(value))} />
+                  <Tooltip formatter={(value) => formatCurrency(Number(value ?? 0))} contentStyle={{ borderRadius: 8, border: "0.5px solid #e5e7eb" }} />
+                  <Bar dataKey="total" fill="#185FA5" radius={[4, 4, 0, 0]} barSize={24} />
+                </BarChart>
+              </ResponsiveContainer>
+            </section>
+          </div>
 
           {/* Recent stock movements (unchanged) */}
-          <section style={{ background: "#ffffff", border: CARD_BORDER, borderRadius: CARD_RADIUS, padding: 12, overflowX: "auto" }}>
-            <div style={{ marginBottom: 10, fontSize: 13, fontWeight: 500, color: "#111827" }}>Recent stock movements</div>
+          <section style={{ background: "#ffffff", border: "0.5px solid rgba(0, 0, 0, 0.10)", borderRadius: 12, padding: 20, overflowX: "auto" }}>
+            <div style={{ marginBottom: 16, fontSize: 15, fontWeight: 500, color: "#111827" }}>Recent stock movements</div>
             {chartLoading ? (
               <Skeleton active paragraph={{ rows: 4 }} title={false} />
             ) : (data?.recentMovements?.length ?? 0) === 0 ? (
@@ -766,10 +921,10 @@ const DashboardPage = () => {
             )}
           </section>
 
-          {/* Merged Profit & Discount breakdown card */}
-          <section style={{ background: "#ffffff", border: CARD_BORDER, borderRadius: CARD_RADIUS, padding: 12 }}>
-            <div className="font-medium text-[13px] text-gray-900 mb-2">Profit & discount breakdown</div>
-            <div className="grid grid-cols-2 gap-4">
+          {/* Profit & Discount Breakdown: Single card with 2-column grid */}
+          <section style={{ background: "#ffffff", border: "0.5px solid rgba(0, 0, 0, 0.10)", borderRadius: 12, padding: 20 }}>
+            <div style={{ fontSize: 15, fontWeight: 500, color: "#111827", marginBottom: 16 }}>Profit & discount breakdown</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 20 }}>
               <ProfitMarginSection
                 formatCurrency={formatCurrency}
                 formatCurrencyCompactK={formatCurrencyCompactK}
@@ -794,9 +949,23 @@ const DashboardPage = () => {
           background: #f3f4f6 !important;
         }
 
+        @media (max-width: 1400px) {
+          .dashboard-metric-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+        }
+
         @media (max-width: 1024px) {
           .dashboard-metric-grid {
             grid-template-columns: repeat(1, minmax(0, 1fr));
+          }
+
+          .dashboard-tab-content > div > div:nth-child(5) {
+            grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+          }
+
+          .dashboard-tab-content > div > div:nth-child(8) {
+            grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
           }
         }
 

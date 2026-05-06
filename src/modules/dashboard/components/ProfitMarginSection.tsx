@@ -26,7 +26,7 @@ type ProfitMarginPoint = {
 interface ProfitMarginSectionProps {
   formatCurrency: (value: number) => string;
   formatCurrencyCompactK: (value: number) => string;
-  period: "daily" | "weekly" | "monthly";
+  period: "daily" | "weekly" | "monthly" | "yearly";
 }
 
 const PRIMARY_BLUE = "#378ADD";

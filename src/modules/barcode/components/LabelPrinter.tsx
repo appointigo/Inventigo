@@ -16,6 +16,8 @@ export interface LabelVariant {
   variantSku: string;
   sizeLabel: string;
   ean13?: string; // Optional: EAN-13 barcode for the variant
+  mrp?: number;
+  sellPrice?: number;
 }
 
 interface LabelPrinterProps {
@@ -102,48 +104,143 @@ export default function LabelPrinter({ productName, variants }: LabelPrinterProp
           <title>Barcode Labels — ${productName.replace(/</g, "&lt;")}</title>
           <style>
             @page { size: A4; margin: 10mm; }
-            * { margin: 0; padding: 0; box-sizing: border-box; }
+            * { box-sizing: border-box; }
             body {
+              margin: 0;
+              padding: 4mm;
               font-family: Arial, sans-serif;
               display: flex;
               flex-wrap: wrap;
-              gap: 4mm;
-              padding: 2mm;
+              gap: 3mm;
             }
             .label {
-              width: 62mm;
-              height: 34mm;
-              outline: 1px solid black !important; /* For cutting guides */
-              border-radius: 5px;
+              width: 264px;
+              height: 120px;
+              outline: 1px solid #ccc;
+              border-radius: 7px;
+              background: white;
+              padding: 6px 8px;
+              display: flex;
+              align-items: stretch;
+              gap: 0;
+              page-break-inside: avoid;
+              overflow: hidden;
+            }
+            .label-left {
+              width: 108px;
+              flex-shrink: 0;
+              display: flex;
+              flex-direction: column;
+              gap: 4px;
+              justify-content: center;
+            }
+            .label-divider {
+              width: 0.5px;
+              background: #ddd;
+              align-self: stretch;
+              margin: 2px 0;
+            }
+            .label-right {
+              flex: 1;
               display: flex;
               flex-direction: column;
               align-items: center;
               justify-content: center;
-              padding: 2mm;
-              page-break-inside: avoid;
-            }
-            .label .name {
-              font-size: 7pt;
-              font-weight: bold;
-              text-align: center;
-              max-width: 100%;
-              white-space: nowrap;
+              gap: 2px;
               overflow: hidden;
-              text-overflow: ellipsis;
             }
-            .label .size-badge {
-              font-size: 8pt;
+            .name {
+              font-family: Georgia, serif;
+              font-size: 8.5px;
               font-weight: bold;
-              background: #1677ff;
-              color: #fff;
-              padding: 0 4px;
-              border-radius: 3px;
-              margin-bottom: 1mm;
+              color: #111;
+              line-height: 1.3;
+              text-align: left;
+              word-break: break-word;
+              overflow: hidden;
+              display: -webkit-box;
+              -webkit-line-clamp: 2;
+              -webkit-box-orient: vertical;
             }
-            /* price removed from printed labels by request */
-            .label svg, .label canvas, .label img {
-              max-width: 55mm;
-              height: 14mm;
+            .size-badge {
+              background: #1e90ff;
+              color: white;
+              font-size: 7.5px;
+              font-weight: bold;
+              padding: 1.5px 7px;
+              border-radius: 20px;
+              text-align: center;
+              white-space: nowrap;
+            }
+            .promo-badge {
+              border: 1px solid #2e7d32;
+              color: #2e7d32;
+              background: #f4fbf4;
+              font-size: 6.5px;
+              font-weight: bold;
+              text-transform: uppercase;
+              padding: 1.5px 4px;
+              border-radius: 3px;
+              text-align: center;
+              line-height: 1.2;
+              word-break: break-word;
+              width: 100%;
+            }
+            .price-row {
+              display: flex;
+              align-items: center;
+              gap: 4px;
+              flex-wrap: nowrap;
+              width: 100%;
+            }
+            .mrp {
+              font-family: monospace;
+              font-size: 7.5px;
+              color: #999;
+              text-decoration: line-through;
+              white-space: nowrap;
+              flex-shrink: 0;
+            }
+            .sell-price {
+              font-family: monospace;
+              font-size: 11px;
+              font-weight: bold;
+              color: #c62828;
+              white-space: nowrap;
+              flex-shrink: 0;
+            }
+            .discount-tag {
+              background: #c62828;
+              color: white;
+              font-size: 6px;
+              font-weight: bold;
+              padding: 1.5px 3.5px;
+              border-radius: 3px;
+              white-space: nowrap;
+              flex-shrink: 0;
+            }
+            .barcode-svg {
+              width: 100%;
+              height: 52px;
+              margin: 0 2px;
+            }
+            .barcode-numbers {
+              display: flex;
+              justify-content: space-between;
+              width: 100%;
+              padding: 0 4px;
+              font-family: monospace;
+              font-size: 6.5px;
+              color: #444;
+            }
+            .barcode-input {
+              width: 100%;
+              padding: 1px 3px;
+              border:none;
+              font-family: monospace;
+              font-size: 6.5px;
+              text-align: center;
+              color: #333;
             }
             @media print { .label { border: none; } }
           </style>
@@ -151,12 +248,36 @@ export default function LabelPrinter({ productName, variants }: LabelPrinterProp
         <body>
           ${labels
             .map(
-              (v) => `
+              (v) => {
+                const mrp = Number(v.mrp ?? 0);
+                const sellPrice = Number(v.sellPrice ?? 0);
+                const discount = mrp > 0 && sellPrice > 0 ? Math.max(0, Math.round((1 - sellPrice / mrp) * 100)) : 0;
+                const barcodeStr = String(v.barcodeValue || "");
+                const startDigit = barcodeStr.charAt(0);
+                const endDigit = barcodeStr.charAt(barcodeStr.length - 1);
+                return `
             <div class="label" data-barcode="${v.barcodeValue}">
-              <div class="name">${productName.replace(/</g, "&lt;")}</div>
-              <div class="size-badge">Size: ${v.sizeLabel}</div>
-              <svg class="barcode-svg"></svg>
-            </div>`
+              <div class="label-left">
+                <div class="name">${productName.replace(/</g, "&lt;")}</div>
+                <div class="size-badge">Size: ${v.sizeLabel}</div>
+                <div class="promo-badge">RARE THREAD — SPECIAL PRICE</div>
+                <div class="price-row">
+                  <span class="mrp">₹${mrp.toLocaleString("en-IN")}</span>
+                  <span class="sell-price">₹${sellPrice.toLocaleString("en-IN")}</span>
+                  <span class="discount-tag">${discount}% OFF</span>
+                </div>
+              </div>
+              <div class="label-divider"></div>
+              <div class="label-right">
+                <svg class="barcode-svg" preserveAspectRatio="none"></svg>
+                <div class="barcode-numbers">
+                  <span>${startDigit}</span>
+                  <span>${endDigit}</span>
+                </div>
+                <input type="text" class="barcode-input" value="${v.barcodeValue}" readonly />
+              </div>
+            </div>`;
+              }
             )
             .join("")}
           <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
@@ -167,14 +288,14 @@ export default function LabelPrinter({ productName, variants }: LabelPrinterProp
                 var svg = label.querySelector('.barcode-svg');
                 try {
                   JsBarcode(svg, barcodeValue, {
-                    format: "EAN13", width: 2, height: 40,
-                    displayValue: true, fontSize: 8, margin: 2
+                    format: "EAN13", width: 1.2, height: 48,
+                    displayValue: false, margin: 2
                   });
                 } catch(e) {
                   // Fallback if EAN-13 fails
                   JsBarcode(svg, barcodeValue, {
-                    format: "CODE128", width: 1.2, height: 35,
-                    displayValue: true, fontSize: 8, margin: 2
+                    format: "CODE128", width: 1, height: 46,
+                    displayValue: false, margin: 2
                   });
                 }
               });
