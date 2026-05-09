@@ -1,14 +1,16 @@
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
-import { Modal, Button, Typography, Table, App } from "antd";
-import { PrinterOutlined, DownloadOutlined } from "@ant-design/icons";
+import { Modal, Button, Typography, Table, App, Dropdown } from "antd";
+import type { MenuProps } from "antd";
+import { PrinterOutlined, DownloadOutlined, EyeOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import BarcodeGenerator from "./BarcodeGenerator";
 import {
   BarcodePreview,
   CopiesInput,
 } from "./LabelPrinter.styled";
+import { generateBarcodeLabelHTML } from "@/modules/barcode/services/barcodeExportService";
 
 const { Text } = Typography;
 
@@ -29,6 +31,7 @@ export default function LabelPrinter({ productName, variants }: LabelPrinterProp
   const { message } = App.useApp();
   const [open, setOpen] = useState(false);
   const [copiesMap, setCopiesMap] = useState<Record<string, number>>({});
+  const [exportLoading, setExportLoading] = useState(false);
 
   // Compute initial copiesMap based on variants
   const initialCopiesMap = useMemo(
@@ -83,6 +86,94 @@ export default function LabelPrinter({ productName, variants }: LabelPrinterProp
     [message]
   );
 
+  const handleExportPdf = useCallback(
+    async (format: "download" | "preview" | "coreldraw" = "download") => {
+      try {
+        setExportLoading(true);
+
+        const labels = variants.flatMap((variant) =>
+          Array.from({ length: copiesMap[variant.variantSku] ?? 1 }, () => ({
+            productName,
+            sku: variant.variantSku,
+            sizeLabel: variant.sizeLabel,
+            quantity: copiesMap[variant.variantSku] ?? 1,
+            unitPrice: variant.sellPrice ?? 0,
+            mrp: variant.mrp ?? 0,
+            barcodeValue: variant.ean13 || variant.variantSku,
+          }))
+        );
+
+        if (labels.length === 0) {
+          message.error("No labels to export");
+          return;
+        }
+
+        const response = await fetch("/api/barcode/export-pdf", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            labels,
+            format: format === "coreldraw" ? "coreldraw" : "13x19",
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || "PDF export failed");
+        }
+
+        const blob = await response.blob();
+
+        if (format === "preview") {
+          const url = URL.createObjectURL(blob);
+          window.open(url, "_blank");
+        } else {
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = `barcode-labels-${format === "coreldraw" ? "coreldraw-" : ""}${Date.now()}.pdf`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        }
+
+        message.success(`${format === "preview" ? "Preview opened" : "PDF exported successfully"}`);
+        setOpen(false);
+      } catch (error) {
+        console.error("[LabelPrinter PDF export]", error);
+        message.error(error instanceof Error ? error.message : "PDF export failed");
+      } finally {
+        setExportLoading(false);
+      }
+    },
+    [copiesMap, message, productName, variants]
+  );
+
+  const exportMenuItems: MenuProps["items"] = [
+    {
+      key: "preview",
+      icon: <EyeOutlined />,
+      label: "Preview PDF",
+      onClick: () => handleExportPdf("preview"),
+    },
+    {
+      key: "download",
+      icon: <DownloadOutlined />,
+      label: "Download PDF",
+      onClick: () => handleExportPdf("download"),
+    },
+    {
+      type: "divider",
+    },
+    {
+      key: "coreldraw",
+      icon: <DownloadOutlined />,
+      label: "Export for CorelDRAW",
+      onClick: () => handleExportPdf("coreldraw"),
+    },
+  ];
+
   // ── Print all labels in one print job ────────────────────────────────────
   const handlePrint = () => {
     const printWindow = window.open("", "_blank");
@@ -90,221 +181,18 @@ export default function LabelPrinter({ productName, variants }: LabelPrinterProp
 
     // Build flat list: each variant repeated its copies times
     const labels = variants.flatMap((v) =>
-      Array.from({ length: copiesMap[v.variantSku] ?? 1 }, (_, i) => ({
-        ...v,
-        uid: `${v.variantSku}-${i}`,
+      Array.from({ length: copiesMap[v.variantSku] ?? 1 }, () => ({
+        productName,
+        sku: v.variantSku,
+        sizeLabel: v.sizeLabel,
+        quantity: copiesMap[v.variantSku] ?? 1,
+        unitPrice: v.sellPrice ?? 0,
+        mrp: v.mrp ?? 0,
         barcodeValue: v.ean13 || v.variantSku, // Use EAN-13 if available
       }))
     );
 
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Barcode Labels — ${productName.replace(/</g, "&lt;")}</title>
-          <style>
-            @page { size: A4; margin: 10mm; }
-            * { box-sizing: border-box; }
-            body {
-              margin: 0;
-              padding: 4mm;
-              font-family: Arial, sans-serif;
-              display: flex;
-              flex-wrap: wrap;
-              gap: 3mm;
-            }
-            .label {
-              width: 264px;
-              height: 120px;
-              outline: 1px solid #ccc;
-              border-radius: 7px;
-              background: white;
-              padding: 6px 8px;
-              display: flex;
-              align-items: stretch;
-              gap: 0;
-              page-break-inside: avoid;
-              overflow: hidden;
-            }
-            .label-left {
-              width: 108px;
-              flex-shrink: 0;
-              display: flex;
-              flex-direction: column;
-              gap: 4px;
-              justify-content: center;
-            }
-            .label-divider {
-              width: 0.5px;
-              background: #ddd;
-              align-self: stretch;
-              margin: 2px 0;
-            }
-            .label-right {
-              flex: 1;
-              display: flex;
-              flex-direction: column;
-              align-items: center;
-              justify-content: center;
-              gap: 2px;
-              overflow: hidden;
-            }
-            .name {
-              font-family: Georgia, serif;
-              font-size: 8.5px;
-              font-weight: bold;
-              color: #111;
-              line-height: 1.3;
-              text-align: left;
-              word-break: break-word;
-              overflow: hidden;
-              display: -webkit-box;
-              -webkit-line-clamp: 2;
-              -webkit-box-orient: vertical;
-            }
-            .size-badge {
-              background: #1e90ff;
-              color: white;
-              font-size: 7.5px;
-              font-weight: bold;
-              padding: 1.5px 7px;
-              border-radius: 20px;
-              text-align: center;
-              white-space: nowrap;
-            }
-            .promo-badge {
-              border: 1px solid #2e7d32;
-              color: #2e7d32;
-              background: #f4fbf4;
-              font-size: 6.5px;
-              font-weight: bold;
-              text-transform: uppercase;
-              padding: 1.5px 4px;
-              border-radius: 3px;
-              text-align: center;
-              line-height: 1.2;
-              word-break: break-word;
-              width: 100%;
-            }
-            .price-row {
-              display: flex;
-              align-items: center;
-              gap: 4px;
-              flex-wrap: nowrap;
-              width: 100%;
-            }
-            .mrp {
-              font-family: monospace;
-              font-size: 7.5px;
-              color: #999;
-              text-decoration: line-through;
-              white-space: nowrap;
-              flex-shrink: 0;
-            }
-            .sell-price {
-              font-family: monospace;
-              font-size: 11px;
-              font-weight: bold;
-              color: #c62828;
-              white-space: nowrap;
-              flex-shrink: 0;
-            }
-            .discount-tag {
-              background: #c62828;
-              color: white;
-              font-size: 6px;
-              font-weight: bold;
-              padding: 1.5px 3.5px;
-              border-radius: 3px;
-              white-space: nowrap;
-              flex-shrink: 0;
-            }
-            .barcode-svg {
-              width: 100%;
-              height: 52px;
-              margin: 0 2px;
-            }
-            .barcode-numbers {
-              display: flex;
-              justify-content: space-between;
-              width: 100%;
-              padding: 0 4px;
-              font-family: monospace;
-              font-size: 6.5px;
-              color: #444;
-            }
-            .barcode-input {
-              width: 100%;
-              padding: 1px 3px;
-              border:none;
-              font-family: monospace;
-              font-size: 6.5px;
-              text-align: center;
-              color: #333;
-            }
-            @media print { .label { border: none; } }
-          </style>
-        </head>
-        <body>
-          ${labels
-            .map(
-              (v) => {
-                const mrp = Number(v.mrp ?? 0);
-                const sellPrice = Number(v.sellPrice ?? 0);
-                const discount = mrp > 0 && sellPrice > 0 ? Math.max(0, Math.round((1 - sellPrice / mrp) * 100)) : 0;
-                const barcodeStr = String(v.barcodeValue || "");
-                const startDigit = barcodeStr.charAt(0);
-                const endDigit = barcodeStr.charAt(barcodeStr.length - 1);
-                return `
-            <div class="label" data-barcode="${v.barcodeValue}">
-              <div class="label-left">
-                <div class="name">${productName.replace(/</g, "&lt;")}</div>
-                <div class="size-badge">Size: ${v.sizeLabel}</div>
-                <div class="promo-badge">RARE THREAD — SPECIAL PRICE</div>
-                <div class="price-row">
-                  <span class="mrp">₹${mrp.toLocaleString("en-IN")}</span>
-                  <span class="sell-price">₹${sellPrice.toLocaleString("en-IN")}</span>
-                  <span class="discount-tag">${discount}% OFF</span>
-                </div>
-              </div>
-              <div class="label-divider"></div>
-              <div class="label-right">
-                <svg class="barcode-svg" preserveAspectRatio="none"></svg>
-                <div class="barcode-numbers">
-                  <span>${startDigit}</span>
-                  <span>${endDigit}</span>
-                </div>
-                <input type="text" class="barcode-input" value="${v.barcodeValue}" readonly />
-              </div>
-            </div>`;
-              }
-            )
-            .join("")}
-          <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
-          <script>
-            window.onload = function() {
-              document.querySelectorAll('.label').forEach(function(label) {
-                var barcodeValue = label.getAttribute('data-barcode');
-                var svg = label.querySelector('.barcode-svg');
-                try {
-                  JsBarcode(svg, barcodeValue, {
-                    format: "EAN13", width: 1.2, height: 48,
-                    displayValue: false, margin: 2
-                  });
-                } catch(e) {
-                  // Fallback if EAN-13 fails
-                  JsBarcode(svg, barcodeValue, {
-                    format: "CODE128", width: 1, height: 46,
-                    displayValue: false, margin: 2
-                  });
-                }
-              });
-              setTimeout(function() { window.print(); }, 400);
-            };
-          <\/script>
-        </body>
-      </html>
-    `);
+    printWindow.document.write(generateBarcodeLabelHTML(labels, { autoPrint: true }));
     printWindow.document.close();
     setOpen(false);
   };
@@ -375,13 +263,26 @@ export default function LabelPrinter({ productName, variants }: LabelPrinterProp
           </Button>,
           <Button
             key="print"
-            type="primary"
             icon={<PrinterOutlined />}
             onClick={handlePrint}
             disabled={totalLabels === 0}
           >
-            Print {totalLabels} label{totalLabels !== 1 ? "s" : ""}
+            Browser Print
           </Button>,
+          <Dropdown
+            key="export-dropdown"
+            menu={{ items: exportMenuItems }}
+            disabled={totalLabels === 0 || exportLoading}
+          >
+            <Button
+              type="primary"
+              icon={<DownloadOutlined />}
+              loading={exportLoading}
+              disabled={totalLabels === 0}
+            >
+              Export PDF
+            </Button>
+          </Dropdown>,
         ]}
       >
         {variants.length === 0 ? (

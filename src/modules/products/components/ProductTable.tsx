@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState, useRef } from "react";
-import { Table, Button, Space, Tag, Input, InputNumber, Select, Popconfirm, Tooltip, Badge, Flex, Empty, Modal, Card, Switch } from "antd";
-import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, EyeOutlined, UploadOutlined, CopyOutlined, PrinterOutlined, CloseOutlined } from "@ant-design/icons";
+import { Table, Button, Space, Tag, Input, InputNumber, Select, Popconfirm, Tooltip, Badge, Flex, Empty, Modal, Card, Switch, App, Dropdown } from "antd";
+import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, EyeOutlined, UploadOutlined, CopyOutlined, PrinterOutlined, CloseOutlined, DownloadOutlined } from "@ant-design/icons";
+import type { MenuProps } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import BarcodeGenerator from "@/modules/barcode/components/BarcodeGenerator";
 import type { Product } from "../types";
 import type { Category } from "@/modules/categories/types";
 import type { Brand } from "@/modules/brands/types";
 import { buildVariantSku } from "@/shared/services/barcodeService";
+import { generateBarcodeLabelHTML } from "@/modules/barcode/services/barcodeExportService";
 
 interface ProductTableProps {
   products: Product[];
@@ -69,10 +71,11 @@ const ProductTable = ({
   onClearAllFilters,
   currentCategory,
 }: ProductTableProps) => {
+  const { message } = App.useApp();
   const [barcodePrintOpen, setBarcodePrintOpen] = useState(false);
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
-  const productCacheRef = useRef<Record<string, Product>>({});
   const [copiesMap, setCopiesMap] = useState<Record<string, number>>({});
+  const [exportLoading, setExportLoading] = useState(false);
   const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
   const moreFiltersRef = useRef<HTMLDivElement>(null);
 
@@ -134,15 +137,13 @@ const ProductTable = ({
   );
 
   useEffect(() => {
-    if (products.length === 0) return;
-    products.forEach((product) => {
-      productCacheRef.current[product.id] = product;
-    });
+    const pageIds = new Set(products.map((product) => product.id));
+    setSelectedProductIds((prev) => prev.filter((id) => pageIds.has(id)));
   }, [products]);
 
   const selectedProducts = useMemo(
-    () => selectedProductIds.map((id) => productCacheRef.current[id]).filter(Boolean),
-    [selectedProductIds]
+    () => products.filter((product) => selectedProductIds.includes(product.id)),
+    [products, selectedProductIds]
   );
 
   const barcodeRows = useMemo(
@@ -181,52 +182,17 @@ const ProductTable = ({
     }));
   };
 
-  const normalizeAttributeList = (value: unknown): string[] => {
-    if (Array.isArray(value)) {
-      return value.map((item) => String(item)).filter(Boolean);
-    }
-    if (typeof value === "string") {
-      return value.split(",").map((item) => item.trim()).filter(Boolean);
-    }
-    if (value === null || value === undefined) {
-      return [];
-    }
-    return [String(value)];
-  };
-
-  const renderTagList = (values: string[], maxVisible = 3) => {
-    if (values.length === 0) {
-      return <span style={{ color: "#999" }}>—</span>;
-    }
-
-    const visible = values.slice(0, maxVisible);
-    const hiddenCount = values.length - visible.length;
-
-    return (
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, maxWidth: 220 }}>
-        {visible.map((value) => (
-          <Tag key={value} style={{ marginInlineEnd: 0, maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {value}
-          </Tag>
-        ))}
-        {hiddenCount > 0 && (
-          <Tag style={{ marginInlineEnd: 0 }}>+{hiddenCount}</Tag>
-        )}
-      </div>
-    );
-  };
-
-  const escapeHtml = (value: string): string =>
-    value
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/\"/g, "&quot;")
-      .replace(/'/g, "&#039;");
-
   const handlePrintLabels = () => {
     const labels = barcodeRows.flatMap((row) =>
-      Array.from({ length: copiesMap[row.key] ?? row.quantity }, () => row)
+      Array.from({ length: copiesMap[row.key] ?? row.quantity }, () => ({
+        productName: row.productName,
+        sku: row.sku,
+        sizeLabel: row.sizeLabel,
+        quantity: copiesMap[row.key] ?? row.quantity,
+        unitPrice: row.sellPrice,
+        mrp: row.mrp,
+        barcodeValue: row.barcodeValue,
+      }))
     );
 
     if (labels.length === 0) {
@@ -238,216 +204,96 @@ const ProductTable = ({
       return;
     }
 
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Product Barcode Labels</title>
-          <style>
-            @page { size: A4; margin: 10mm; }
-            * { box-sizing: border-box; }
-            body {
-              margin: 0;
-              padding: 4mm;
-              font-family: Arial, sans-serif;
-              display: flex;
-              flex-wrap: wrap;
-              gap: 3mm;
-            }
-            .label {
-              width: 264px;
-              height: 120px;
-              outline: 1px solid #ccc;
-              border-radius: 7px;
-              background: white;
-              padding: 6px 8px;
-              display: flex;
-              align-items: stretch;
-              gap: 0;
-              page-break-inside: avoid;
-              overflow: hidden;
-            }
-            .label-left {
-              width: 108px;
-              flex-shrink: 0;
-              display: flex;
-              flex-direction: column;
-              gap: 4px;
-              justify-content: center;
-            }
-            .label-divider {
-              width: 0.5px;
-              background: #ddd;
-              align-self: stretch;
-              margin: 2px 0;
-            }
-            .label-right {
-              flex: 1;
-              display: flex;
-              flex-direction: column;
-              align-items: center;
-              justify-content: center;
-              gap: 2px;
-              overflow: hidden;
-            }
-            .name {
-              font-family: Georgia, serif;
-              font-size: 8.5px;
-              font-weight: bold;
-              color: #111;
-              line-height: 1.3;
-              text-align: left;
-              word-break: break-word;
-              overflow: hidden;
-              display: -webkit-box;
-              -webkit-line-clamp: 2;
-              -webkit-box-orient: vertical;
-            }
-            .size-badge {
-              background: #1e90ff;
-              color: white;
-              font-size: 7.5px;
-              font-weight: bold;
-              padding: 1.5px 7px;
-              border-radius: 20px;
-              text-align: center;
-              white-space: nowrap;
-            }
-            .promo-badge {
-              border: 1px solid #2e7d32;
-              color: #2e7d32;
-              background: #f4fbf4;
-              font-size: 6.5px;
-              font-weight: bold;
-              text-transform: uppercase;
-              padding: 1.5px 4px;
-              border-radius: 3px;
-              text-align: center;
-              line-height: 1.2;
-              word-break: break-word;
-              width: 100%;
-            }
-            .price-row {
-              display: flex;
-              align-items: center;
-              gap: 4px;
-              flex-wrap: nowrap;
-              width: 100%;
-            }
-            .mrp {
-              font-family: monospace;
-              font-size: 7.5px;
-              color: #999;
-              text-decoration: line-through;
-              white-space: nowrap;
-              flex-shrink: 0;
-            }
-            .sell-price {
-              font-family: monospace;
-              font-size: 11px;
-              font-weight: bold;
-              color: #c62828;
-              white-space: nowrap;
-              flex-shrink: 0;
-            }
-            .discount-tag {
-              background: #c62828;
-              color: white;
-              font-size: 6px;
-              font-weight: bold;
-              padding: 1.5px 3.5px;
-              border-radius: 3px;
-              white-space: nowrap;
-              flex-shrink: 0;
-            }
-            .barcode-svg {
-              width: 100%;
-              height: 52px;
-              margin: 0 2px;
-            }
-            .barcode-numbers {
-              display: flex;
-              justify-content: space-between;
-              width: 100%;
-              padding: 0 4px;
-              font-family: monospace;
-              font-size: 6.5px;
-              color: #444;
-            }
-            .barcode-input {
-              width: 100%;
-              padding: 1px 3px;
-              border:none;
-              font-family: monospace;
-              font-size: 6.5px;
-              text-align: center;
-              color: #333;
-            }
-            @media print {
-              .label { border: none; }
-            }
-          </style>
-        </head>
-        <body>
-          ${labels
-            .map(
-              (row) => {
-                const mrp = Number(row.mrp) || 0;
-                const sellPrice = Number(row.sellPrice) || 0;
-                const discount = mrp > 0 && sellPrice > 0 ? Math.max(0, Math.round((1 - sellPrice / mrp) * 100)) : 0;
-                const barcodeStr = String(row.barcodeValue || "");
-                const startDigit = barcodeStr.charAt(0);
-                const endDigit = barcodeStr.charAt(barcodeStr.length - 1);
-                return `
-                <div class="label" data-barcode="${row.barcodeValue}">
-                  <div class="label-left">
-                    <div class="name">${escapeHtml(row.productName)}</div>
-                    <div class="size-badge">Size: ${escapeHtml(row.sizeLabel)}</div>
-                    <div class="promo-badge">RARE THREAD — SPECIAL PRICE</div>
-                    <div class="price-row">
-                      <span class="mrp">₹${mrp.toLocaleString("en-IN")}</span>
-                      <span class="sell-price">₹${sellPrice.toLocaleString("en-IN")}</span>
-                      <span class="discount-tag">${discount}% OFF</span>
-                    </div>
-                  </div>
-                  <div class="label-divider"></div>
-                  <div class="label-right">
-                    <svg class="barcode-svg" preserveAspectRatio="none"></svg>
-                    <div class="barcode-numbers">
-                      <span>${startDigit}</span>
-                      <span>${endDigit}</span>
-                    </div>
-                    <input type="text" class="barcode-input" value="${row.barcodeValue}" readonly />
-                  </div>
-                </div>
-              `;
-              }
-            )
-            .join("")}
-          <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
-          <script>
-            window.onload = function () {
-              document.querySelectorAll('.label').forEach(function (label) {
-                var barcodeValue = label.getAttribute('data-barcode');
-                var svg = label.querySelector('.barcode-svg');
-                JsBarcode(svg, barcodeValue, {
-                  format: 'EAN13',
-                  width: 1.2,
-                  height: 48,
-                  displayValue: false,
-                  margin: 2,
-                });
-              });
-              setTimeout(function () { window.print(); }, 400);
-            };
-          <\/script>
-        </body>
-      </html>
-    `);
+    printWindow.document.write(generateBarcodeLabelHTML(labels, { autoPrint: true }));
 
     printWindow.document.close();
     setBarcodePrintOpen(false);
   };
+
+  const handleExportPdf = async (format: "download" | "preview" | "coreldraw" = "download") => {
+    try {
+      setExportLoading(true);
+
+      const labels = barcodeRows.flatMap((row) =>
+        Array.from({ length: copiesMap[row.key] ?? row.quantity }, () => ({
+          productName: row.productName,
+          sku: row.sku,
+          sizeLabel: row.sizeLabel,
+          quantity: copiesMap[row.key] ?? row.quantity,
+          unitPrice: row.sellPrice,
+          mrp: row.mrp,
+          barcodeValue: row.barcodeValue,
+        }))
+      );
+
+      if (labels.length === 0) {
+        message.error("No labels to export");
+        return;
+      }
+
+      const response = await fetch("/api/barcode/export-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          labels,
+          format: format === "coreldraw" ? "coreldraw" : "13x19",
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "PDF export failed");
+      }
+
+      const blob = await response.blob();
+
+      if (format === "preview") {
+        const url = URL.createObjectURL(blob);
+        window.open(url, "_blank");
+      } else {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `barcode-labels-${format === "coreldraw" ? "coreldraw-" : ""}${Date.now()}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+
+      message.success(`${format === "preview" ? "Preview opened" : "PDF exported successfully"}`);
+      setBarcodePrintOpen(false);
+    } catch (error) {
+      console.error("[ProductTable PDF export]", error);
+      message.error(error instanceof Error ? error.message : "PDF export failed");
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+  const exportMenuItems: MenuProps["items"] = [
+    {
+      key: "preview",
+      icon: <EyeOutlined />,
+      label: "Preview PDF",
+      onClick: () => handleExportPdf("preview"),
+    },
+    {
+      key: "download",
+      icon: <DownloadOutlined />,
+      label: "Download PDF",
+      onClick: () => handleExportPdf("download"),
+    },
+    {
+      type: "divider",
+    },
+    {
+      key: "coreldraw",
+      icon: <DownloadOutlined />,
+      label: "Export for CorelDRAW",
+      onClick: () => handleExportPdf("coreldraw"),
+    },
+  ];
 
   const barcodeColumns: ColumnsType<(typeof barcodeRows)[number]> = [
     {
@@ -505,8 +351,6 @@ const ProductTable = ({
     {
       title: "Product",
       dataIndex: "name",
-      width: 240,
-      fixed: "left",
       sorter: (a, b) => a.name.localeCompare(b.name),
       render: (name: string, record) => (
         <div>
@@ -518,35 +362,13 @@ const ProductTable = ({
     {
       title: "Category",
       dataIndex: "categoryName",
-      width: 160,
       responsive: ["md"],
       render: (name: string) => <Tag>{name}</Tag>,
     },
     {
       title: "Brand",
       dataIndex: "brandName",
-      width: 140,
       responsive: ["md"],
-    },
-    {
-      title: "Size",
-      key: "sizes",
-      width: 220,
-      render: (_, record) => {
-        const sizes = Array.from(new Set(record.stock.map((item) => item.sizeLabel).filter(Boolean)));
-        return renderTagList(sizes);
-      },
-    },
-    {
-      title: "Color",
-      key: "colors",
-      width: 220,
-      render: (_, record) => {
-        const attributes = record.attributes ?? {};
-        const rawColors = (attributes as Record<string, unknown>).color ?? (attributes as Record<string, unknown>).colors;
-        const colors = normalizeAttributeList(rawColors);
-        return renderTagList(colors);
-      },
     },
     {
       title: "Price",
@@ -570,7 +392,7 @@ const ProductTable = ({
     {
       title: "Status",
       dataIndex: "isActive",
-      width: 110,
+      width: 90,
       align: "center",
       render: (active: boolean) => (
         <Tag color={active ? "green" : "default"}>{active ? "Active" : "Inactive"}</Tag>
@@ -581,7 +403,6 @@ const ProductTable = ({
       key: "actions",
       width: 180,
       align: "center",
-      fixed: "right",
       render: (_, record) => (
         <Space>
           <Tooltip title="View" destroyOnHidden>
@@ -838,13 +659,9 @@ const ProductTable = ({
         rowKey="id"
         rowSelection={{
           selectedRowKeys: selectedProductIds,
-          preserveSelectedRowKeys: true,
-          fixed: true,
-          columnWidth: 48,
           onChange: (selectedRowKeys) => setSelectedProductIds(selectedRowKeys.map(String)),
         }}
         loading={loading}
-        scroll={{ x: 1400 }}
         pagination={{
           current: page,
           pageSize,
@@ -905,8 +722,22 @@ const ProductTable = ({
             onClick={handlePrintLabels}
             disabled={totalLabels <= 0}
           >
-            Print {totalLabels} label{totalLabels === 1 ? "" : "s"}
+            Browser Print
           </Button>,
+          <Dropdown
+            key="export-dropdown"
+            menu={{ items: exportMenuItems }}
+            disabled={totalLabels <= 0 || exportLoading}
+          >
+            <Button
+              type="primary"
+              icon={<DownloadOutlined />}
+              loading={exportLoading}
+              disabled={totalLabels <= 0}
+            >
+              Export PDF
+            </Button>
+          </Dropdown>,
         ]}
       >
         <Table
