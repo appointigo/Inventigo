@@ -24,7 +24,7 @@ export default function DashboardPage() {
   const { sales, loading: salesLoading } = useSales();
 
   const today = dayjs().format("YYYY-MM-DD");
-  const todaysSales = sales.filter((sale) => dayjs(sale.createdAt).format("YYYY-MM-DD") === today);
+  const todaysSales = sales.filter((sale) => dayjs(sale.transactionDate).format("YYYY-MM-DD") === today);
   const todaySalesTotal = todaysSales.reduce((sum, sale) => sum + sale.total, 0);
   const revenueTotal = sales.reduce((sum, sale) => sum + sale.total, 0);
 

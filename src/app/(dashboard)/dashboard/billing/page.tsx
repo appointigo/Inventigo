@@ -2,9 +2,10 @@
 
 import dynamic from "next/dynamic";
 import { useState } from "react";
-import { ScanOutlined, HistoryOutlined } from "@ant-design/icons";
+import { ScanOutlined, HistoryOutlined, SwapOutlined } from "@ant-design/icons";
 import { useSales } from "@/modules/billing/hooks/useBilling";
 import SalesHistory from "@/modules/billing/components/SalesHistory";
+import ReturnExchangeView from "@/modules/billing/components/ReturnExchangeView";
 import { useMobileViewport } from "@/modules/mobile-dashboard/hooks/useMobileViewport";
 import { BillingPageTabs, HistoryPane, PageWrapper, PageTitle } from "./billing.styled";
 import BillingView from "@/modules/billing/components/BillingView";
@@ -13,6 +14,7 @@ const MobileBillingPage = dynamic(() => import("@/modules/mobile-dashboard/pages
 
 const BillingPage = () => {
   const [activeTab, setActiveTab] = useState("new-sale");
+  const [prefillSaleId, setPrefillSaleId] = useState<string | undefined>(undefined);
   const { isMobile, isReady } = useMobileViewport();
 
   const {
@@ -22,7 +24,10 @@ const BillingPage = () => {
     setFilters: setSalesFilters,
     createSale,
     refundSale,
+    collectPayment,
     getSaleById,
+    createReturnTransaction,
+    refresh,
   } = useSales();
 
   const defaultTaxPct = 0;
@@ -74,7 +79,32 @@ const BillingPage = () => {
                   filters={salesFilters}
                   onFiltersChange={setSalesFilters}
                   onRefund={refundSale}
+                  onCollectBalance={collectPayment}
                   onViewSale={getSaleById}
+                  onOpenReturnExchange={(saleId: string) => {
+                    setPrefillSaleId(saleId);
+                    setActiveTab("return-exchange");
+                  }}
+                />
+              </HistoryPane>
+            ),
+          },
+          {
+            key: "return-exchange",
+            label: (
+              <span>
+                <SwapOutlined /> Return / Exchange
+              </span>
+            ),
+            children: (
+              <HistoryPane>
+                <ReturnExchangeView
+                  sales={sales}
+                  loading={salesLoading}
+                  onFetchSale={getSaleById}
+                  onCreateReturnTransaction={createReturnTransaction}
+                  refreshSales={refresh}
+                  initialSaleId={prefillSaleId}
                 />
               </HistoryPane>
             ),

@@ -70,8 +70,8 @@ export const dashboardService = {
             status: "COMPLETED",
             ...(resolvedStoreId ? { storeId: resolvedStoreId } : { store: { orgId } }),
           },
-          select: { createdAt: true, total: true },
-          orderBy: { createdAt: "asc" },
+          select: { transactionDate: true, total: true },
+          orderBy: { transactionDate: "asc" },
         }),
       ]);
 
@@ -116,9 +116,9 @@ export const dashboardService = {
     const yearTotals = new Map<string, number>();
     for (const sale of sales) {
       const total = Number(sale.total);
-      const dayKey = formatDayKey(sale.createdAt);
-      const monthKey = formatMonthKey(sale.createdAt);
-      const yearKey = formatYearKey(sale.createdAt);
+      const dayKey = formatDayKey(sale.transactionDate);
+      const monthKey = formatMonthKey(sale.transactionDate);
+      const yearKey = formatYearKey(sale.transactionDate);
       dayTotals.set(dayKey, (dayTotals.get(dayKey) ?? 0) + total);
       monthTotals.set(monthKey, (monthTotals.get(monthKey) ?? 0) + total);
       yearTotals.set(yearKey, (yearTotals.get(yearKey) ?? 0) + total);

@@ -1,5 +1,5 @@
 export type PaymentMethodType = "CASH" | "CARD" | "UPI";
-export type SaleStatusType = "COMPLETED" | "REFUNDED";
+export type SaleStatusType = "COMPLETED" | "REFUNDED" | "EXCHANGED";
 
 /**
  * Input for creating a new sale.
@@ -9,10 +9,12 @@ export type CreateSaleInput = {
   paymentMethod: PaymentMethodType;
   discountAmount: number;
   taxAmount: number;
+  amountPaid?: number;
   customerName?: string;
   customerPhone?: string;
   customerEmail?: string;
   promoCodeId?: string;
+  transactionDate?: string;
 };
 
 export type CartItem = {
@@ -35,11 +37,39 @@ export type SaleFilters = {
   status?: SaleStatusType;
   paymentMethod?: PaymentMethodType;
   search?: string;
+  type?: "SALE" | "EXCHANGE" | "RETURN";
 };
 
 /**
  * Full sale detail with items.
  */
+export type ReturnTransactionItem = {
+  productId: string;
+  sizeId: string;
+  quantity: number;
+  total: number;
+  productName?: string;
+  sku?: string;
+  sizeLabel?: string;
+};
+
+export type ReturnTransactionHistory = {
+  id: string;
+  type: "RETURN" | "EXCHANGE" | "RETURN_EXCHANGE";
+  referenceNumber?: string;
+  saleInvoiceNumber?: string;
+  returnedItems: ReturnTransactionItem[];
+  exchangedItems: ReturnTransactionItem[];
+  netAmount: number;
+  offsetAmount: number;
+  refundAmount: number;
+  refundMethod?: PaymentMethodType;
+  reason?: string;
+  condition?: string;
+  notes?: string;
+  createdAt: string;
+};
+
 export type Sale = {
   id: string;
   invoiceNumber: string;
@@ -51,9 +81,15 @@ export type Sale = {
   discountAmount: number;
   taxAmount: number;
   total: number;
+  amountPaid: number;
+  amountDue: number;
   paymentMethod: PaymentMethodType;
+  paymentStatus: "PAID" | "PARTIAL" | "PENDING";
+  returnStatus: "NONE" | "PARTIAL" | "FULL";
   status: SaleStatusType;
   items: SaleItem[];
+  returnTransactions: ReturnTransactionHistory[];
+  transactionDate: string;
   createdAt: string;
 };
 
@@ -99,8 +135,13 @@ export type SaleSummary = {
   invoiceNumber: string;
   customerName: string | null;
   total: number;
+  amountPaid: number;
+  amountDue: number;
   paymentMethod: PaymentMethodType;
+  paymentStatus: "PAID" | "PARTIAL" | "PENDING";
+  returnStatus: "NONE" | "PARTIAL" | "FULL";
   status: SaleStatusType;
   itemCount: number;
+  transactionDate: string;
   createdAt: string;
 };

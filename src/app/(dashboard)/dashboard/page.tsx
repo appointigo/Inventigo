@@ -285,7 +285,7 @@ const DashboardPage = () => {
 
     if (period === "daily") {
       const currentDay = dayjs().format("YYYY-MM-DD");
-      return sales.filter((sale) => dayjs(sale.createdAt).format("YYYY-MM-DD") === currentDay);
+      return sales.filter((sale) => dayjs(sale.transactionDate).format("YYYY-MM-DD") === currentDay);
     }
 
     if (period === "weekly") {

@@ -56,6 +56,7 @@ model Store {
   leaveRequests  LeaveRequest[]
   purchaseOrders PurchaseOrder[]
   sales          Sale[]
+  returnTransactions ReturnTransaction[]
   attendances    StaffAttendance[]
   stockEntries   StockEntry[]
   stockMovements StockMovement[]
@@ -89,6 +90,8 @@ model User {
   leaveRequests   LeaveRequest[]    @relation("LeaveRequester")
   purchaseOrders  PurchaseOrder[]
   sales           Sale[]
+  salePayments    SalePayment[]
+  returnTransactions ReturnTransaction[]
   attendances     StaffAttendance[]
   stockMovements  StockMovement[]
   storeExpenses   StoreExpense[]
@@ -204,6 +207,8 @@ model Product {
   saleItems          SaleItem[]
   stockEntries       StockEntry[]
   stockMovements     StockMovement[]
+  returnedItems      ReturnTransactionItem[] @relation("ReturnedProduct")
+  newItems           ReturnTransactionItem[] @relation("NewProduct")
 
   @@unique([sku, orgId])
   @@index([orgId])
@@ -224,6 +229,8 @@ model Size {
   category           Category            @relation(fields: [categoryId], references: [id])
   stockEntries       StockEntry[]
   stockMovements     StockMovement[]
+  returnedItems      ReturnTransactionItem[] @relation("ReturnedSize")
+  newItems           ReturnTransactionItem[] @relation("NewSize")
 
   @@unique([label, categoryId])
   @@index([categoryId])
@@ -345,12 +352,20 @@ model Sale {
   total          Decimal       @db.Decimal(10, 2)
   paymentMethod  PaymentMethod @default(CASH)
   status         SaleStatus    @default(COMPLETED)
+  paymentStatus  PaymentStatus @default(PAID)
+  amountPaid     Decimal       @default(0) @db.Decimal(10, 2)
+  amountDue      Decimal       @default(0) @db.Decimal(10, 2)
+  returnStatus   ReturnStatus  @default(NONE)
+  promoVoided    Boolean       @default(false)
   createdBy      String
+  transactionDate DateTime      @default(now())
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   promoCodeId    String?
   customerId     String?
   items          SaleItem[]
+  payments       SalePayment[]
+  returnTransactions ReturnTransaction[]
   user           User          @relation(fields: [createdBy], references: [id])
   customer       Customer?     @relation(fields: [customerId], references: [id])
   promoCode      PromoCode?    @relation(fields: [promoCodeId], references: [id])
@@ -380,6 +395,75 @@ model SaleItem {
   @@map("sale_items")
 }
 
+model SalePayment {
+  id        String        @id @default(uuid())
+  saleId    String
+  amount    Decimal       @db.Decimal(10, 2)
+  method    PaymentMethod
+  paidAt    DateTime      @default(now())
+  note      String?
+  createdBy String
+  sale      Sale          @relation(fields: [saleId], references: [id])
+  user      User          @relation(fields: [createdBy], references: [id])
+
+  @@index([saleId])
+  @@index([paidAt])
+  @@map("sale_payments")
+}
+
+model ReturnTransaction {
+  id               String        @id @default(uuid())
+  referenceNumber  String        @unique
+  originalSaleId   String
+  storeId          String
+  customerId       String?
+  type             ReturnType
+  netAmount        Decimal       @db.Decimal(10, 2)
+  offsetAmount     Decimal       @default(0) @db.Decimal(10, 2)
+  refundAmount     Decimal       @db.Decimal(10, 2)
+  refundMethod     String?
+  reason           String?
+  condition        String?
+  notes            String?
+  createdAt        DateTime      @default(now())
+  createdBy        String
+  items            ReturnTransactionItem[]
+  sale             Sale          @relation(fields: [originalSaleId], references: [id])
+  customer         Customer?     @relation(fields: [customerId], references: [id])
+  user             User          @relation(fields: [createdBy], references: [id])
+  store            Store         @relation(fields: [storeId], references: [id])
+
+  @@index([originalSaleId])
+  @@index([storeId])
+  @@index([customerId])
+  @@index([createdAt])
+  @@map("return_transactions")
+}
+
+model ReturnTransactionItem {
+  id                   String            @id @default(uuid())
+  returnTransactionId  String
+  returnedProductId    String?
+  returnedSizeId       String?
+  returnedQuantity     Int
+  returnedUnitPrice    Decimal           @db.Decimal(10, 2)
+  newProductId         String?
+  newSizeId            String?
+  newQuantity          Int?
+  newUnitPrice         Decimal?          @db.Decimal(10, 2)
+  createdAt            DateTime          @default(now())
+  returnTransaction    ReturnTransaction @relation(fields: [returnTransactionId], references: [id])
+  returnedProduct      Product?          @relation("ReturnedProduct", fields: [returnedProductId], references: [id])
+  returnedSize         Size?             @relation("ReturnedSize", fields: [returnedSizeId], references: [id])
+  newProduct           Product?          @relation("NewProduct", fields: [newProductId], references: [id])
+  newSize              Size?             @relation("NewSize", fields: [newSizeId], references: [id])
+
+  @@index([returnTransactionId])
+  @@index([returnedProductId])
+  @@index([newProductId])
+  @@map("return_transaction_items")
+}
+
 model Customer {
   id        String       @id @default(uuid())
   orgId     String
@@ -396,6 +480,7 @@ model Customer {
   createdAt DateTime     @default(now())
   org       Organization @relation(fields: [orgId], references: [id])
   sales     Sale[]
+  returnTransactions ReturnTransaction[]
 
   @@unique([orgId, mobile])
   @@index([orgId])
@@ -695,12 +780,16 @@ enum StockMovementType {
   ADJUSTMENT
   SALE
   RETURN
+  EXCHANGE_IN
+  EXCHANGE_OUT
 }
 
 enum ReferenceType {
   PO
   SALE
   MANUAL
+  RETURN
+  EXCHANGE
 }
 
 enum PurchaseOrderStatus {
@@ -719,6 +808,25 @@ enum PaymentMethod {
 enum SaleStatus {
   COMPLETED
   REFUNDED
+  EXCHANGED
+}
+
+enum PaymentStatus {
+  PAID
+  PARTIAL
+  PENDING
+}
+
+enum ReturnStatus {
+  NONE
+  PARTIAL
+  FULL
+}
+
+enum ReturnType {
+  RETURN
+  EXCHANGE
+  RETURN_EXCHANGE
 }
 
 enum AttendanceStatus {

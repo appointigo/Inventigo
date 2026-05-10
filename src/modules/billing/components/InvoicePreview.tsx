@@ -3,7 +3,7 @@
 import { Modal, Table, Typography } from "antd";
 import { PrinterOutlined, CheckCircleFilled, CloseOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
-import type { Sale, SaleItem } from "../types";
+import type { ReturnTransactionItem, ReturnTransactionHistory, Sale, SaleItem } from "../types";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
 import dayjs from "dayjs";
 import { useStore } from "@/providers/StoreProvider";
@@ -81,6 +81,76 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
       })
       .join("");
 
+    const historySections = sale.returnTransactions.length
+      ? sale.returnTransactions
+          .map((transaction) => {
+            const returnedRows = (transaction.returnedItems ?? [])
+              .map((item, i) => `
+                <tr>
+                  <td>${i + 1}</td>
+                  <td>${item.productName ?? item.productId}<br><small style="color:#888">${item.sku ?? item.productId} · <span style="display:inline-block;background:#eff4ff;border:1px solid #bfdbfe;border-radius:3px;font-size:9pt;padding:0 5px;color:#2563eb;">${item.sizeLabel ?? item.sizeId}</span></small></td>
+                  <td style="text-align:center">${item.quantity}</td>
+                  <td style="text-align:right">${formatCurrency(item.total)}</td>
+                </tr>
+              `)
+              .join("");
+
+            const exchangedRows = (transaction.exchangedItems ?? [])
+              .map((item, i) => `
+                <tr>
+                  <td>${i + 1}</td>
+                  <td>${item.productName ?? item.productId}<br><small style="color:#888">${item.sku ?? item.productId} · <span style="display:inline-block;background:#eff4ff;border:1px solid #bfdbfe;border-radius:3px;font-size:9pt;padding:0 5px;color:#2563eb;">${item.sizeLabel ?? item.sizeId}</span></small></td>
+                  <td style="text-align:center">${item.quantity}</td>
+                  <td style="text-align:right">${formatCurrency(item.total)}</td>
+                </tr>
+              `)
+              .join("");
+
+            return `
+              <div style="margin-bottom:20px; padding:12px; border:1px solid #ddd; border-radius:8px;">
+                <div style="font-weight:700; margin-bottom:8px;">${transaction.type} · ${dayjs(transaction.createdAt).format("DD MMM YYYY, hh:mm A")}</div>
+                ${returnedRows ? `
+                  <div style="margin-bottom:12px;">
+                    <div style="font-weight:600; margin-bottom:6px;">Returned items</div>
+                    <table style="width:100%; border-collapse:collapse; margin-bottom:0;">
+                      <thead>
+                        <tr>
+                          <th style="text-align:left; padding:4px; border-bottom:1px solid #ddd;">#</th>
+                          <th style="text-align:left; padding:4px; border-bottom:1px solid #ddd;">Product</th>
+                          <th style="text-align:center; padding:4px; border-bottom:1px solid #ddd;">Qty</th>
+                          <th style="text-align:right; padding:4px; border-bottom:1px solid #ddd;">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>${returnedRows}</tbody>
+                    </table>
+                  </div>
+                ` : ""}
+                ${exchangedRows ? `
+                  <div>
+                    <div style="font-weight:600; margin-bottom:6px;">Exchanged items</div>
+                    <table style="width:100%; border-collapse:collapse; margin-bottom:0;">
+                      <thead>
+                        <tr>
+                          <th style="text-align:left; padding:4px; border-bottom:1px solid #ddd;">#</th>
+                          <th style="text-align:left; padding:4px; border-bottom:1px solid #ddd;">Product</th>
+                          <th style="text-align:center; padding:4px; border-bottom:1px solid #ddd;">Qty</th>
+                          <th style="text-align:right; padding:4px; border-bottom:1px solid #ddd;">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>${exchangedRows}</tbody>
+                    </table>
+                  </div>
+                ` : ""}
+                <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-top:12px; font-size:11pt;">
+                  <div>Refund: ${formatCurrency(transaction.refundAmount)}</div>
+                  <div>Offset: ${formatCurrency(transaction.offsetAmount)}</div>
+                </div>
+              </div>
+            `;
+          })
+          .join("")
+      : "";
+
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
@@ -112,8 +182,9 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
           <div class="info">
             <div>
               <strong>Invoice:</strong> ${sale.invoiceNumber}<br>
-              <strong>Date:</strong> ${dayjs(sale.createdAt).format("DD MMM YYYY, hh:mm A")}<br>
-              <strong>Payment:</strong> ${sale.paymentMethod}
+              <strong>Date:</strong> ${dayjs(sale.transactionDate).format("DD MMM YYYY, hh:mm A")}<br>
+              <strong>Payment:</strong> ${sale.paymentMethod}<br>
+              <strong>Payment status:</strong> ${sale.paymentStatus}
             </div>
             <div style="text-align:right">
               ${sale.customerName ? `<strong>Customer:</strong> ${sale.customerName}<br>` : ""}
@@ -135,10 +206,13 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
               ${itemRows}
             </tbody>
           </table>
+          ${historySections}
           <div class="totals">
             <div>Subtotal: ${formatCurrency(sale.subtotal)}</div>
             ${sale.discountAmount > 0 ? `<div>Discount: -${formatCurrency(sale.discountAmount)}</div>` : ""}
             ${sale.taxAmount > 0 ? `<div>Tax: ${formatCurrency(sale.taxAmount)}</div>` : ""}
+            <div>Amount paid: ${formatCurrency(sale.amountPaid)}</div>
+            ${sale.amountDue > 0 ? `<div>Amount due: ${formatCurrency(sale.amountDue)}</div>` : ""}
             <div class="grand-total">Total: ${formatCurrency(sale.total)}</div>
           </div>
           <div class="footer">Thank you for your purchase!</div>
@@ -201,6 +275,36 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
     },
   ];
 
+  const historyColumns: ColumnsType<ReturnTransactionItem> = [
+    {
+      title: "Product",
+      key: "product",
+      render: (_, record) => (
+        <>
+          <ItemNameCell>{record.productName ?? record.productId}</ItemNameCell>
+          <ItemSkuCell>
+            {record.sku ?? record.productId}
+            <SizeBadge>{record.sizeLabel ?? record.sizeId}</SizeBadge>
+          </ItemSkuCell>
+        </>
+      ),
+    },
+    {
+      title: "Qty",
+      dataIndex: "quantity",
+      width: 60,
+      align: "center",
+      render: (qty: number) => <Text strong>{qty}</Text>,
+    },
+    {
+      title: "Total",
+      dataIndex: "total",
+      width: 100,
+      align: "right",
+      render: (total: number) => <Text strong>{formatCurrency(total)}</Text>,
+    },
+  ];
+
   const isCompleted = sale.status === "COMPLETED";
 
   return (
@@ -222,7 +326,7 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
           <SuccessTextWrap>
             <SuccessTitle>Sale {isCompleted ? "Complete" : "Voided"}</SuccessTitle>
             <SuccessSubtext>
-              {dayjs(sale.createdAt).format("DD MMM YYYY · hh:mm A")}
+              {dayjs(sale.transactionDate).format("DD MMM YYYY · hh:mm A")}
             </SuccessSubtext>
           </SuccessTextWrap>
           <InvoiceNumBadge>{sale.invoiceNumber}</InvoiceNumBadge>
@@ -231,6 +335,10 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
           <MetaPill>
             <PillLabel>Payment</PillLabel>
             {sale.paymentMethod}
+          </MetaPill>
+          <MetaPill>
+            <PillLabel>Payment status</PillLabel>
+            {sale.paymentStatus}
           </MetaPill>
           <MetaPill $green={isCompleted}>
             <PillLabel>Status</PillLabel>
@@ -293,11 +401,77 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
               <span>{formatCurrency(sale.taxAmount)}</span>
             </SumRow>
           )}
+          <SumRow>
+            <span>Amount paid</span>
+            <span>{formatCurrency(sale.amountPaid)}</span>
+          </SumRow>
+          {sale.amountDue > 0 && (
+            <SumRow>
+              <span>Amount due</span>
+              <span>{formatCurrency(sale.amountDue)}</span>
+            </SumRow>
+          )}
           <TotalSumRow>
             <span>Total</span>
             <span>{formatCurrency(sale.total)}</span>
           </TotalSumRow>
         </SummaryCard>
+
+        {sale.returnTransactions.length > 0 && (
+          <div style={{ marginTop: 24 }}>
+            <SectionLabel>Return / Exchange history</SectionLabel>
+            {sale.returnTransactions.map((transaction) => (
+              <div
+                key={transaction.id}
+                style={{
+                  border: "1px solid #e8e8e8",
+                  borderRadius: 12,
+                  padding: 16,
+                  marginTop: 16,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 12 }}>
+                  <div>
+                    <Text strong>{transaction.type}</Text>
+                    <div style={{ color: "#6b7280", fontSize: 12 }}>{dayjs(transaction.createdAt).format("DD MMM YYYY · hh:mm A")}</div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <Text type="secondary">Refund</Text>
+                    <div>{formatCurrency(transaction.refundAmount)}</div>
+                    <Text type="secondary">Offset</Text>
+                    <div>{formatCurrency(transaction.offsetAmount)}</div>
+                  </div>
+                </div>
+                {transaction.returnedItems.length > 0 && (
+                  <div style={{ marginBottom: 12 }}>
+                    <Text strong>Returned items</Text>
+                    <Table
+                      columns={historyColumns}
+                      dataSource={transaction.returnedItems}
+                      rowKey={(item) => `${item.productId}-${item.sizeId}-returned`}
+                      pagination={false}
+                      size="small"
+                      style={{ marginTop: 8 }}
+                    />
+                  </div>
+                )}
+                {transaction.exchangedItems.length > 0 && (
+                  <div>
+                    <Text strong>Exchanged items</Text>
+                    <Table
+                      columns={historyColumns}
+                      dataSource={transaction.exchangedItems}
+                      rowKey={(item) => `${item.productId}-${item.sizeId}-exchanged`}
+                      pagination={false}
+                      size="small"
+                      style={{ marginTop: 8 }}
+                    />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* New sale banner */}
         {isCompleted && (

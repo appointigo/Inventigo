@@ -325,6 +325,8 @@ export default function BillingPage() {
         onRemove={cart.removeItem}
         onCheckout={() => void handleCheckout()}
         checkoutLoading={checkoutLoading}
+        transactionDate={cart.transactionDate}
+        onTransactionDateChange={cart.setTransactionDate}
       />
 
       {cameraScanOpen ? (

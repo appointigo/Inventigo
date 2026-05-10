@@ -2,8 +2,9 @@
 
 import { useState, useCallback, useMemo, useEffect, useRef, type KeyboardEvent } from "react";
 import dynamic from "next/dynamic";
-import { App, Input, Select, Spin } from "antd";
+import { App, DatePicker, Input, Select, Spin } from "antd";
 import { SearchOutlined, CheckOutlined, CloseOutlined, TagOutlined, LockOutlined, CameraOutlined } from "@ant-design/icons";
+import dayjs from "dayjs";
 import { useProducts } from "@/modules/products/hooks/useProducts";
 import { useCart } from "@/modules/billing/hooks/useBilling";
 import { sanitizeScannedBarcode } from "@/shared/services/barcodeService";
@@ -584,6 +585,16 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
     cart.customerName.trim().length > 0 &&
     cart.customerPhone.length >= 10;
 
+  useEffect(() => {
+    if (cart.items.length === 0) {
+      cart.setAmountPaid(0);
+      return;
+    }
+    if (cart.amountPaid <= 0) {
+      cart.setAmountPaid(total);
+    }
+  }, [cart.items.length, cart.amountPaid, cart.setAmountPaid, total]);
+
   // ─── Render ────────────────────────────────────────────────────────────────
   return (
     <ViewAWrapper>
@@ -946,6 +957,18 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
                 />
               </CustomerFieldFull>
             </CustomerGrid>
+            <div style={{ marginTop: 16 }}>
+              <FieldLabel style={{ marginBottom: 8, display: "block" }}>
+                Transaction Date
+              </FieldLabel>
+              <DatePicker
+                value={dayjs(cart.transactionDate)}
+                onChange={(date) => cart.setTransactionDate(date?.format("YYYY-MM-DD") ?? new Date().toISOString().slice(0, 10))}
+                disabledDate={(current) => current && current.isAfter(dayjs().endOf("day"))}
+                size="small"
+                style={{ width: "100%" }}
+              />
+            </div>
             {cart.items.length > 0 &&
               (!cart.customerName.trim() || cart.customerPhone.length < 10) && (
                 <CustWarning>⚠ Enter name &amp; phone to confirm sale</CustWarning>
@@ -967,6 +990,27 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
                 </APayPill>
               ))}
             </PayPillsGrid>
+          </CheckoutSection>
+
+          <CheckoutSection>
+            <CheckoutSectionLabel>Amount received</CheckoutSectionLabel>
+            <Input
+              type="number"
+              min={0}
+              value={cart.amountPaid}
+              onChange={(e) => {
+                const next = Number(e.target.value);
+                cart.setAmountPaid(clampNumber(Number.isNaN(next) ? 0 : next, 0, Math.max(0, total)));
+              }}
+              size="small"
+              prefix="₹"
+              placeholder={String(total)}
+            />
+            {cart.amountDue > 0 && (
+              <div style={{ marginTop: 8, color: "#b45309", fontSize: 12 }}>
+                {formatCurrency(cart.amountDue)} due after this payment
+              </div>
+            )}
           </CheckoutSection>
 
           {/* Available Offers */}
@@ -1157,6 +1201,16 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
                   )}
                 </ASumPctGroup>
               </ASumRow>
+              <ASumRow>
+                <span>Amount received</span>
+                <span>{formatCurrency(cart.amountPaid)}</span>
+              </ASumRow>
+              {cart.amountDue > 0 && (
+                <ASumRow>
+                  <span>Amount due</span>
+                  <span>{formatCurrency(cart.amountDue)}</span>
+                </ASumRow>
+              )}
               <ATotalRow>
                 <span>Total</span>
                 <span>{formatCurrency(total)}</span>

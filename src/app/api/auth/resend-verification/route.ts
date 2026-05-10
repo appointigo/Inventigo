@@ -12,37 +12,54 @@ const generateOtp = (): string => {
 
 const sendVerificationEmail = async (email: string, code: string): Promise<void> => {
   if (process.env.RESEND_API_KEY) {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: "Stockiva <onboarding@resend.dev>",
-        to: email,
-        subject: "Your new Stockiva verification code",
-        html: `
-          <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
-            <h2 style="color:#1677ff">New verification code</h2>
-            <p>Your new Stockiva verification code is:</p>
-            <div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#1677ff;margin:24px 0">
-              ${code}
+    try {
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: "onboarding@resend.dev",
+          to: email,
+          subject: "Your new Stockiva verification code",
+          html: `
+            <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+              <h2 style="color:#1677ff">New verification code</h2>
+              <p>Your new Stockiva verification code is:</p>
+              <div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#1677ff;margin:24px 0">
+                ${code}
+              </div>
+              <p style="color:#666">This code expires in 15 minutes.</p>
+              <p style="color:#999;font-size:12px">If you didn't request this, you can ignore this email.</p>
             </div>
-            <p style="color:#666">This code expires in 15 minutes.</p>
-            <p style="color:#999;font-size:12px">If you didn't request this, you can ignore this email.</p>
-          </div>
-        `,
-      }),
-    });
-    if (!res.ok) {
-      const err = await res.text();
-      console.error(`[resend-verification] Resend API error for ${email}:`, err);
+          `,
+          text: `Your verification code is: ${code}`,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        console.error(`[resend-verification] Resend API error for ${email}:`, err);
+        if (process.env.NODE_ENV !== "production") {
+          console.warn("[resend-verification] Resend email failed in development, falling back to console output.");
+          console.log(`\n[Stockiva OTP Resend] Email: ${email} | Code: ${code}\n`);
+          return;
+        }
+        throw new Error("Failed to send verification email");
+      }
+
+      console.log(`[resend-verification] Verification email sent to ${email}`);
+    } catch (error) {
+      console.error(`[resend-verification] Resend request failed for ${email}:`, error);
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("[resend-verification] Resend email request failed in development, falling back to console output.");
+        console.log(`\n[Stockiva OTP Resend] Email: ${email} | Code: ${code}\n`);
+        return;
+      }
       throw new Error("Failed to send verification email");
     }
-    console.log(`[resend-verification] Verification email sent to ${email}`);
-  } 
-  else {
+  } else {
     console.log(`\n[Stockiva OTP Resend] Email: ${email} | Code: ${code}\n`);
   }
 }

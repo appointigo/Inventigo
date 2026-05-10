@@ -1,7 +1,8 @@
 "use client";
 
 import { DeleteOutlined, MinusOutlined, PlusOutlined, ShoppingCartOutlined } from "@ant-design/icons";
-import { Button, Drawer, Empty, Input, Select, Space, Typography } from "antd";
+import { Button, DatePicker, Drawer, Empty, Input, Select, Space, Typography } from "antd";
+import dayjs from "dayjs";
 import type { PaymentMethodType } from "@/modules/billing/types";
 
 const PAYMENT_OPTIONS: Array<{ value: PaymentMethodType; label: string }> = [
@@ -31,6 +32,8 @@ export function BillingCart({
   onRemove,
   onCheckout,
   checkoutLoading,
+  transactionDate,
+  onTransactionDateChange,
 }: {
   open: boolean;
   onClose: () => void;
@@ -52,6 +55,8 @@ export function BillingCart({
   onRemove: (productId: string, sizeId: string) => void;
   onCheckout: () => void;
   checkoutLoading: boolean;
+  transactionDate: string;
+  onTransactionDateChange: (value: string) => void;
 }) {
   const taxAmount = Math.round(subtotal * taxPct / 100);
   const total = subtotal + taxAmount;
@@ -86,6 +91,17 @@ export function BillingCart({
         <Input value={customerName} onChange={(event) => onCustomerNameChange(event.target.value)} placeholder="Customer name" size="large" />
         <Input value={customerPhone} onChange={(event) => onCustomerPhoneChange(event.target.value.replace(/\D/g, "").slice(0, 10))} placeholder="Customer mobile" size="large" />
         <Input value={customerEmail} onChange={(event) => onCustomerEmailChange(event.target.value)} placeholder="Customer email (optional)" size="large" />
+
+        <div>
+          <Typography.Text strong style={{ display: "block", marginBottom: 8 }}>Transaction Date</Typography.Text>
+          <DatePicker
+            value={dayjs(transactionDate)}
+            onChange={(date) => onTransactionDateChange(date?.format('YYYY-MM-DD') ?? '')}
+            disabledDate={(current) => current && current.isAfter(dayjs().endOf('day'))}
+            style={{ width: '100%' }}
+            size="large"
+          />
+        </div>
 
         {(customerLoading || customerStats) ? (
           <div style={{ border: "1px solid #e5e7eb", borderRadius: 16, padding: 14, background: "#f8fafc" }}>

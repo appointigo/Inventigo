@@ -15,6 +15,7 @@ export function useSales(initialFilters?: SaleFilters) {
       if (filters.search) params.set("search", filters.search);
       if (filters.status) params.set("status", filters.status);
       if (filters.paymentMethod) params.set("paymentMethod", filters.paymentMethod);
+      if ((filters as any).type) params.set("type", (filters as any).type);
       if (filters.startDate) params.set("startDate", filters.startDate);
       if (filters.endDate) params.set("endDate", filters.endDate);
       const qs = params.toString();
@@ -56,10 +57,49 @@ export function useSales(initialFilters?: SaleFilters) {
     await fetchSales();
   };
 
+  const collectPayment = async (saleId: string, amount: number, paymentMethod: PaymentMethodType) => {
+    const res = await fetch(`/api/billing/${encodeURIComponent(saleId)}/payments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount, method: paymentMethod }),
+    });
+    if (!res.ok) {
+      const payload = await res.json().catch(() => ({ error: "Failed to collect payment" }));
+      throw new Error(payload?.error || "Failed to collect payment");
+    }
+    await fetchSales();
+  };
+
   const getSaleById = async (saleId: string): Promise<Sale | null> => {
     const res = await fetch(`/api/billing/${encodeURIComponent(saleId)}`);
     if (!res.ok) return null;
     return res.json();
+  };
+
+  const createReturnTransaction = async (
+    saleId: string,
+    payload: {
+      type: "RETURN" | "EXCHANGE" | "RETURN_EXCHANGE";
+      returnedItems: Array<{ productId: string; sizeId: string; quantity: number; total: number }>;
+      exchangedItems?: Array<{ productId: string; sizeId: string; quantity: number; total: number }>;
+      refundAmount: number;
+      offsetAmount: number;
+      refundMethod?: PaymentMethodType;
+      reason?: string;
+      condition?: string;
+      notes?: string;
+    }
+  ) => {
+    const res = await fetch(`/api/billing/${encodeURIComponent(saleId)}/return`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const payload = await res.json().catch(() => ({ error: "Failed to process return/exchange" }));
+      throw new Error(payload?.error || "Failed to process return/exchange");
+    }
+    await fetchSales();
   };
 
   return {
@@ -69,7 +109,9 @@ export function useSales(initialFilters?: SaleFilters) {
     setFilters,
     createSale,
     refundSale,
+    collectPayment,
     getSaleById,
+    createReturnTransaction,
     refresh: fetchSales,
   };
 }
@@ -80,10 +122,12 @@ export function useCart() {
   const [discountPct, setDiscountPct] = useState(0);
   const [taxPct, setTaxPct] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>("CASH");
+  const [amountPaid, setAmountPaid] = useState(0);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [promoCodeId, setPromoCodeId] = useState<string | null>(null);
+  const [transactionDate, setTransactionDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
   const addItem = (item: CartItem) => {
     setItems((prev) => {
@@ -120,25 +164,31 @@ export function useCart() {
     setDiscountPct(0);
     setTaxPct(0);
     setPaymentMethod("CASH");
+    setAmountPaid(0);
     setCustomerName("");
     setCustomerPhone("");
     setCustomerEmail("");
     setPromoCodeId(null);
+    setTransactionDate(new Date().toISOString().split('T')[0]);
   };
 
   const subtotal = items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
   const discountAmount = Math.round(subtotal * discountPct / 100);
   const taxAmount = Math.round(subtotal * taxPct / 100);
+  const total = subtotal - discountAmount + taxAmount;
+  const amountDue = Math.max(total - amountPaid, 0);
 
   const toCreateInput = (): CreateSaleInput => ({
     items,
     paymentMethod,
     discountAmount,
     taxAmount,
+    amountPaid: amountPaid > 0 ? amountPaid : total,
     customerName: customerName || undefined,
     customerPhone: customerPhone || undefined,
     customerEmail: customerEmail || undefined,
     promoCodeId: promoCodeId ?? undefined,
+    transactionDate,
   });
 
   return {
@@ -148,10 +198,14 @@ export function useCart() {
     taxPct,
     discountAmount,
     taxAmount,
+    total,
+    amountPaid,
+    amountDue,
     paymentMethod,
     customerName,
     customerPhone,
     customerEmail,
+    transactionDate,
     addItem,
     updateQuantity,
     removeItem,
@@ -159,9 +213,11 @@ export function useCart() {
     setDiscountPct,
     setTaxPct,
     setPaymentMethod,
+    setAmountPaid,
     setCustomerName,
     setCustomerPhone,
     setCustomerEmail,
+    setTransactionDate,
     promoCodeId,
     setPromoCodeId,
     toCreateInput,

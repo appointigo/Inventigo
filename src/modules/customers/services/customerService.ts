@@ -112,7 +112,7 @@ const toCustomerDetailDto = (row: any): CustomerDetailDto => ({
     invoiceNumber: sale.invoiceNumber,
     total: Number(sale.total),
     status: sale.status,
-    createdAt: sale.createdAt instanceof Date ? sale.createdAt.toISOString() : sale.createdAt,
+    createdAt: sale.transactionDate instanceof Date ? sale.transactionDate.toISOString() : sale.transactionDate,
   })),
 });
 
