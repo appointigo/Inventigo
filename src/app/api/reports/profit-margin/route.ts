@@ -15,6 +15,13 @@ type Aggregate = {
   gross_profit: number;
 };
 
+type AggregateEntry = {
+  createdAt: Date;
+  totalRevenue: number;
+  totalCost: number;
+  totalDiscount: number;
+};
+
 export const GET = async (request: Request) => {
   let user;
   try {
@@ -50,33 +57,63 @@ export const GET = async (request: Request) => {
       ...(Object.keys(createdAtFilter).length ? { createdAt: createdAtFilter } : {}),
     };
 
-    const sales = await prisma.sale.findMany({
-      where,
-      select: {
-        id: true,
-        createdAt: true,
-        total: true,
-        discountAmount: true,
-        items: {
-          select: {
-            quantity: true,
-            product: { select: { costPrice: true } },
+    const [sales, returnTransactions] = await Promise.all([
+      prisma.sale.findMany({
+        where,
+        select: {
+          id: true,
+          createdAt: true,
+          total: true,
+          discountAmount: true,
+          items: {
+            select: {
+              quantity: true,
+              product: { select: { costPrice: true } },
+            },
           },
         },
-      },
-      orderBy: { createdAt: "asc" },
-    });
+        orderBy: { createdAt: "asc" },
+      }),
+      prisma.returnTransaction.findMany({
+        where: {
+          store: { orgId: user.orgId },
+          ...(user.storeId ? { storeId: user.storeId } : {}),
+          ...(Object.keys(createdAtFilter).length ? { createdAt: createdAtFilter } : {}),
+        },
+        select: {
+          id: true,
+          createdAt: true,
+          netAmount: true,
+        },
+        orderBy: { createdAt: "asc" },
+      }),
+    ]);
+
+    const allEntries: AggregateEntry[] = [
+      ...sales.map((sale) => ({
+        createdAt: sale.createdAt,
+        totalRevenue: Number(sale.total ?? 0),
+        totalCost: sale.items.reduce(
+          (sum, item) => sum + Number(item.product.costPrice ?? 0) * Number(item.quantity ?? 0),
+          0
+        ),
+        totalDiscount: Number(sale.discountAmount ?? 0),
+      })),
+      ...returnTransactions.map((rt) => ({
+        createdAt: rt.createdAt,
+        totalRevenue: Number(rt.netAmount ?? 0),
+        totalCost: 0,
+        totalDiscount: 0,
+      })),
+    ];
 
     const grouped = new Map<string, Aggregate>();
 
-    for (const sale of sales) {
-      const createdAt = dayjs(sale.createdAt);
-      const totalRevenue = Number(sale.total ?? 0);
-      const totalDiscount = Number(sale.discountAmount ?? 0);
-      const totalCost = sale.items.reduce(
-        (sum, item) => sum + Number(item.product.costPrice ?? 0) * Number(item.quantity ?? 0),
-        0
-      );
+    for (const entry of allEntries) {
+      const createdAt = dayjs(entry.createdAt);
+      const totalRevenue = entry.totalRevenue;
+      const totalCost = entry.totalCost;
+      const totalDiscount = entry.totalDiscount;
       const grossProfit = totalRevenue - totalCost - totalDiscount;
 
       let period = createdAt.format("MMM YY");

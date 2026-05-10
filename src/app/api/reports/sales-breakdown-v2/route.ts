@@ -45,13 +45,31 @@ export const GET = async (request: Request) => {
           AND (${from}::text IS NULL OR s."createdAt" >= (${from}::date))
           AND (${to}::text IS NULL OR s."createdAt" < ((${to}::date + INTERVAL '1 day')))
         GROUP BY s.id, s."createdAt", s.total, s."discountAmount"
+      ), return_amounts AS (
+        -- include return transactions' net amounts as revenue contributions
+        SELECT
+          rt.id,
+          rt."createdAt",
+          COALESCE(rt."netAmount"::float8, 0) AS total_amount,
+          0::float8 AS discount_amount,
+          0::float8 AS total_cost
+        FROM return_transactions rt
+        JOIN stores st ON st.id = rt."storeId"
+        WHERE st."orgId" = ${user.orgId}
+          AND (${user.storeId}::text IS NULL OR rt."storeId" = ${user.storeId})
+          AND (${from}::text IS NULL OR rt."createdAt" >= (${from}::date))
+          AND (${to}::text IS NULL OR rt."createdAt" < ((${to}::date + INTERVAL '1 day')))
       )
       SELECT
         DATE_TRUNC(${dateTruncUnit}, "createdAt") AS period_start,
         COALESCE(SUM(total_amount), 0)::float8 AS total_revenue,
         COALESCE(SUM(discount_amount), 0)::float8 AS total_discount,
         COALESCE(SUM(total_amount - total_cost), 0)::float8 AS net_profit
-      FROM sale_cost
+      FROM (
+        SELECT * FROM sale_cost
+        UNION ALL
+        SELECT * FROM return_amounts
+      ) AS combined
       GROUP BY 1
       ORDER BY 1;
     `;

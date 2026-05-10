@@ -430,6 +430,13 @@ export const billingService = {
   },
 
   async getSales(orgId: string, filters?: SaleFilters): Promise<any[]> {
+    console.log("billingService.getSales called", { orgId, filters });
+    try {
+      // proceed
+    } catch (err) {
+      console.error("billingService.getSales error:", err);
+      throw err;
+    }
     // Build sale query
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const saleWhere: any = { store: { orgId } };
@@ -927,7 +934,7 @@ export const billingService = {
     const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     const endOfDay = new Date(startOfDay.getTime() + 86400000);
 
-    const [todayRows, allRows, receivables] = await Promise.all([
+    const [todaySales, allSales, todayReturns, allReturns, receivables] = await Promise.all([
       prisma.sale.findMany({
         where: { store: { orgId }, status: "COMPLETED", createdAt: { gte: startOfDay, lt: endOfDay } },
         select: { total: true },
@@ -936,18 +943,144 @@ export const billingService = {
         where: { store: { orgId }, status: "COMPLETED" },
         select: { total: true },
       }),
+      prisma.returnTransaction.findMany({
+        where: { store: { orgId }, createdAt: { gte: startOfDay, lt: endOfDay } },
+        select: { netAmount: true },
+      }),
+      prisma.returnTransaction.findMany({
+        where: { store: { orgId } },
+        select: { netAmount: true },
+      }),
       prisma.sale.aggregate({
         where: { store: { orgId }, status: "COMPLETED", amountDue: { gt: 0 } },
         _sum: { amountDue: true },
       }),
     ]);
 
+    const todayRevenue = todaySales.reduce((s, r) => s + Number(r.total), 0) + 
+                         todayReturns.reduce((s, r) => s + Number(r.netAmount ?? 0), 0);
+    const totalRevenue = allSales.reduce((s, r) => s + Number(r.total), 0) + 
+                         allReturns.reduce((s, r) => s + Number(r.netAmount ?? 0), 0);
+    
+    // Count sales and return transactions that have positive netAmount (which indicates top-ups/credits)
+    const totalSalesCount = todaySales.length;
+    const todayReturnCount = todayReturns.filter(r => Number(r.netAmount ?? 0) > 0).length;
+
     return {
-      todaySales: todayRows.length,
-      todayRevenue: todayRows.reduce((s, r) => s + Number(r.total), 0),
-      totalSales: allRows.length,
-      totalRevenue: allRows.reduce((s, r) => s + Number(r.total), 0),
+      todaySales: totalSalesCount + todayReturnCount,
+      todayRevenue,
+      totalSales: allSales.length + allReturns.filter(r => Number(r.netAmount ?? 0) > 0).length,
+      totalRevenue,
       openReceivables: Number(receivables._sum.amountDue ?? 0),
+    };
+  },
+
+  async getSalesPaged(orgId: string, filters?: SaleFilters, page = 1, limit = 20) {
+    // Build sale query
+    const saleWhere: any = { store: { orgId } };
+    if (filters?.status) saleWhere.status = filters.status;
+    if (filters?.paymentMethod) saleWhere.paymentMethod = filters.paymentMethod;
+    if (filters?.startDate) saleWhere.createdAt = { ...(saleWhere.createdAt ?? {}), gte: new Date(filters.startDate) };
+    if (filters?.endDate) {
+      const end = new Date(filters.endDate);
+      end.setDate(end.getDate() + 1);
+      saleWhere.createdAt = { ...(saleWhere.createdAt ?? {}), lt: end };
+    }
+
+    if (filters?.search) {
+      saleWhere.OR = [
+        { invoiceNumber: { contains: filters.search, mode: "insensitive" } },
+        { customerName: { contains: filters.search, mode: "insensitive" } },
+      ];
+    }
+
+    // Build return transaction query
+    const rtWhere: any = { store: { orgId } };
+    if (filters?.startDate) rtWhere.createdAt = { ...(rtWhere.createdAt ?? {}), gte: new Date(filters.startDate) };
+    if (filters?.endDate) {
+      const end = new Date(filters.endDate);
+      end.setDate(end.getDate() + 1);
+      rtWhere.createdAt = { ...(rtWhere.createdAt ?? {}), lt: end };
+    }
+
+    if (filters?.search) {
+      rtWhere.OR = [
+        { referenceNumber: { contains: filters.search, mode: "insensitive" } },
+        { sale: { invoiceNumber: { contains: filters.search, mode: "insensitive" } } },
+        { customer: { name: { contains: filters.search, mode: "insensitive" } } },
+      ];
+    }
+
+    if (filters?.type === "EXCHANGE") rtWhere.type = "EXCHANGE";
+    if (filters?.type === "RETURN") rtWhere.type = { in: ["RETURN", "RETURN_EXCHANGE"] };
+
+    const [sales, returnTxns] = await Promise.all([
+      prisma.sale.findMany({
+        where: saleWhere,
+        include: { items: { include: { product: true, size: true } }, customer: true, payments: true },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.returnTransaction.findMany({
+        where: rtWhere,
+        include: {
+          items: { include: { returnedProduct: true, returnedSize: true, newProduct: true, newSize: true } },
+          sale: { select: { invoiceNumber: true, id: true } },
+          customer: true,
+        },
+        orderBy: { createdAt: "desc" },
+      }),
+    ]);
+
+    const salesRows = sales.map((s) => ({
+      ...s,
+      rowType: "SALE",
+      transactionDate: s.transactionDate instanceof Date ? s.transactionDate.toISOString() : s.transactionDate,
+      createdAt: s.createdAt instanceof Date ? s.createdAt.toISOString() : s.createdAt,
+    }));
+
+    const rtRows = returnTxns.map((r) => ({
+      ...r,
+      rowType: "RETURN_TRANSACTION",
+      createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
+      saleInvoiceNumber: r.sale?.invoiceNumber ?? undefined,
+      customerName: r.customer?.name ?? null,
+    }));
+
+    let unified = [...salesRows, ...rtRows];
+
+    if (filters?.type === "SALE") {
+      unified = unified.filter((r) => r.rowType === "SALE");
+    }
+    if (filters?.type === "EXCHANGE") {
+      unified = unified.filter((r: any) => r.rowType === "RETURN_TRANSACTION" && r.type === "EXCHANGE");
+    }
+    if (filters?.type === "RETURN") {
+      unified = unified.filter((r: any) => r.rowType === "RETURN_TRANSACTION" && (r.type === "RETURN" || r.type === "RETURN_EXCHANGE"));
+    }
+
+    unified.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    const total = unified.length;
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    const start = Math.max(0, (page - 1) * limit);
+    const data = unified.slice(start, start + limit);
+
+    const kpis = await this.getSalesKPIs(orgId);
+
+    const exchangeCount = unified.filter((r: any) => r.rowType === "RETURN_TRANSACTION" && r.type === "EXCHANGE").length;
+    const refundCount = unified.filter((r: any) => r.rowType === "RETURN_TRANSACTION" && Number(r.refundAmount ?? 0) > 0).length;
+    const pendingRefundAmount = unified.filter((r: any) => r.rowType === "RETURN_TRANSACTION").reduce((s: number, r: any) => s + Number(r.refundAmount ?? 0), 0);
+
+    return {
+      data,
+      pagination: { page, limit, total, totalPages },
+      stats: {
+        totalSales: kpis.totalSales,
+        totalRevenue: kpis.totalRevenue,
+        exchangeCount,
+        refundCount,
+        pendingRefundAmount,
+      },
     };
   },
 };

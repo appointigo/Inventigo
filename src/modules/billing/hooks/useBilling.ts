@@ -7,6 +7,10 @@ export function useSales(initialFilters?: SaleFilters) {
   const [sales, setSales] = useState<SaleSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<SaleFilters>(initialFilters ?? {});
+  const [page, setPage] = useState<number>(1);
+  const [limit, setLimit] = useState<number>(20);
+  const [pagination, setPagination] = useState<{ page: number; limit: number; total: number; totalPages: number }>({ page: 1, limit: 20, total: 0, totalPages: 1 });
+  const [stats, setStats] = useState<any>(null);
 
   const fetchSales = useCallback(async () => {
     setLoading(true);
@@ -18,9 +22,25 @@ export function useSales(initialFilters?: SaleFilters) {
       if ((filters as any).type) params.set("type", (filters as any).type);
       if (filters.startDate) params.set("startDate", filters.startDate);
       if (filters.endDate) params.set("endDate", filters.endDate);
+      params.set("page", String(page));
+      params.set("limit", String(limit));
       const qs = params.toString();
-      const res = await fetch(`/api/billing${qs ? `?${qs}` : ""}`);
-      if (res.ok) setSales(await res.json());
+      const res = await fetch(`/api/billing/history${qs ? `?${qs}` : ""}`);
+      if (!res.ok) throw new Error("Failed to fetch sales");
+      const payload = await res.json().catch(() => null);
+      if (Array.isArray(payload)) {
+        setSales(payload as SaleSummary[]);
+        setPagination({ page, limit, total: payload.length, totalPages: Math.max(1, Math.ceil(payload.length / limit)) });
+        setStats(null);
+      } else if (payload && payload.data) {
+        setSales(payload.data as SaleSummary[]);
+        setPagination(payload.pagination ?? { page, limit, total: (payload.data?.length ?? 0), totalPages: Math.max(1, Math.ceil((payload.data?.length ?? 0) / limit)) });
+        setStats(payload.stats ?? null);
+      } else {
+        setSales([]);
+        setPagination({ page, limit, total: 0, totalPages: 1 });
+        setStats(null);
+      }
     } 
     catch (error) {
       console.error("Failed to fetch sales:", error);
@@ -28,7 +48,7 @@ export function useSales(initialFilters?: SaleFilters) {
     finally {
       setLoading(false);
     }
-  }, [filters]);
+  }, [filters, page, limit]);
 
   useEffect(() => {
     fetchSales();
@@ -107,6 +127,12 @@ export function useSales(initialFilters?: SaleFilters) {
     loading,
     filters,
     setFilters,
+    page,
+    setPage,
+    limit,
+    setLimit,
+    pagination,
+    stats,
     createSale,
     refundSale,
     collectPayment,

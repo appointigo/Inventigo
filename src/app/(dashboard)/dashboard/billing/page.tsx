@@ -22,6 +22,10 @@ const BillingPage = () => {
     loading: salesLoading,
     filters: salesFilters,
     setFilters: setSalesFilters,
+    page,
+    setPage,
+    pagination,
+    stats,
     createSale,
     refundSale,
     collectPayment,
@@ -85,6 +89,10 @@ const BillingPage = () => {
                     setPrefillSaleId(saleId);
                     setActiveTab("return-exchange");
                   }}
+                  page={page}
+                  setPage={setPage}
+                  totalPages={pagination?.totalPages}
+                  stats={stats}
                 />
               </HistoryPane>
             ),

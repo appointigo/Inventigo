@@ -180,11 +180,25 @@ const DashboardPage = () => {
   const [customDateRange, setCustomDateRange] = useState<[dayjs.Dayjs | null, dayjs.Dayjs | null] | null>(null);
 
   const today = dayjs().format("YYYY-MM-DD");
+  const revenueOfRow = (row: any) => {
+    if (!row) return 0;
+    if (row.rowType === "SALE") return Number(row.total ?? 0);
+    if (row.rowType === "RETURN_TRANSACTION") return Number(row.netAmount ?? 0);
+    return 0;
+  };
+
+  const isCountedTransaction = (row: any) => {
+    if (!row) return false;
+    if (row.rowType === "SALE") return true;
+    if (row.rowType === "RETURN_TRANSACTION") return Number(row.netAmount ?? 0) > 0; // top-ups count as a sale
+    return false;
+  };
+
   const todaysSales = sales.filter((sale) => dayjs(sale.createdAt).format("YYYY-MM-DD") === today);
-  const todayRevenue = todaysSales.reduce((sum, sale) => sum + sale.total, 0);
-  const totalRevenue = sales.reduce((sum, sale) => sum + sale.total, 0);
-  const totalSales = sales.length;
-  const totalSalesThisMonth = sales.filter((sale) => dayjs(sale.createdAt).isSame(dayjs(), "month")).length;
+  const todayRevenue = todaysSales.reduce((sum, sale) => sum + revenueOfRow(sale), 0);
+  const totalRevenue = sales.reduce((sum, sale) => sum + revenueOfRow(sale), 0);
+  const totalSales = sales.reduce((count, sale) => count + (isCountedTransaction(sale) ? 1 : 0), 0);
+  const totalSalesThisMonth = sales.filter((sale) => dayjs(sale.createdAt).isSame(dayjs(), "month") && isCountedTransaction(sale)).length;
 
   useEffect(() => {
     setContentVisible(false);
@@ -285,7 +299,7 @@ const DashboardPage = () => {
 
     if (period === "daily") {
       const currentDay = dayjs().format("YYYY-MM-DD");
-      return sales.filter((sale) => dayjs(sale.transactionDate).format("YYYY-MM-DD") === currentDay);
+      return sales.filter((sale) => dayjs(sale.createdAt).format("YYYY-MM-DD") === currentDay);
     }
 
     if (period === "weekly") {
@@ -311,7 +325,7 @@ const DashboardPage = () => {
     const salesToAnalyze = customDateRange && customDateRange[0] && customDateRange[1] ? filteredSales : sales;
     for (const sale of salesToAnalyze) {
       const key = dayOrder[dayjs(sale.createdAt).day()];
-      totals.set(key, (totals.get(key) ?? 0) + sale.total);
+      totals.set(key, (totals.get(key) ?? 0) + revenueOfRow(sale));
     }
     return dayOrder.map((day) => ({ day, total: totals.get(day) ?? 0 }));
   }, [sales, filteredSales, customDateRange]);
@@ -337,8 +351,8 @@ const DashboardPage = () => {
 
     if (customDateRange && customDateRange[0] && customDateRange[1]) {
       // Use filteredSales for custom date range
-      totalRevenueForPeriod = filteredSales.reduce((sum, sale) => sum + sale.total, 0);
-      transactionCount = filteredSales.length;
+      totalRevenueForPeriod = filteredSales.reduce((sum, sale) => sum + revenueOfRow(sale), 0);
+      transactionCount = filteredSales.reduce((count, row) => count + (isCountedTransaction(row) ? 1 : 0), 0);
       // For custom date range, we calculate discount and profit from available sales data
       // Assuming we can derive these from the sales data if available
       totalDiscount = 0; // Will be calculated from breakdown data if available
@@ -356,7 +370,7 @@ const DashboardPage = () => {
       totalRevenueForPeriod = periodRows.reduce((sum, row) => sum + Number(row.totalRevenue ?? 0), 0);
       totalDiscount = periodRows.reduce((sum, row) => sum + Number(row.discountGiven ?? 0), 0);
       totalProfit = periodRows.reduce((sum, row) => sum + Number(row.netProfit ?? 0), 0);
-      transactionCount = filteredSales.length;
+      transactionCount = filteredSales.reduce((count, row) => count + (isCountedTransaction(row) ? 1 : 0), 0);
     }
 
     const marginPct = totalRevenueForPeriod > 0 ? Math.round((totalProfit / totalRevenueForPeriod) * 100) : 0;

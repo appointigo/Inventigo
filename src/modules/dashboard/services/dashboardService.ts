@@ -75,6 +75,15 @@ export const dashboardService = {
         }),
       ]);
 
+    // Also include return transactions (net amounts) so that revenue trend reflects exchanges/refunds
+    const returnTxns = await prisma.returnTransaction.findMany({
+      where: {
+        ...(resolvedStoreId ? { storeId: resolvedStoreId } : { store: { orgId } }),
+      },
+      select: { createdAt: true, netAmount: true },
+      orderBy: { createdAt: "asc" },
+    });
+
     const allStock = stockResult.items;
     const allMovements = movementsResult.items;
 
@@ -122,6 +131,17 @@ export const dashboardService = {
       dayTotals.set(dayKey, (dayTotals.get(dayKey) ?? 0) + total);
       monthTotals.set(monthKey, (monthTotals.get(monthKey) ?? 0) + total);
       yearTotals.set(yearKey, (yearTotals.get(yearKey) ?? 0) + total);
+    }
+
+    // Add return transaction net amounts (can be positive for exchange top-ups or negative for refunds)
+    for (const rt of returnTxns) {
+      const amt = Number(rt.netAmount ?? 0);
+      const dayKey = formatDayKey(rt.createdAt as Date);
+      const monthKey = formatMonthKey(rt.createdAt as Date);
+      const yearKey = formatYearKey(rt.createdAt as Date);
+      dayTotals.set(dayKey, (dayTotals.get(dayKey) ?? 0) + amt);
+      monthTotals.set(monthKey, (monthTotals.get(monthKey) ?? 0) + amt);
+      yearTotals.set(yearKey, (yearTotals.get(yearKey) ?? 0) + amt);
     }
 
     const now = new Date();
