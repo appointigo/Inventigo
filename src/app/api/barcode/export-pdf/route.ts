@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
 
     // Launch Puppeteer browser
     const browser = await puppeteer.launch({
-      headless: isServerlessRuntime ? chromium.headless : true,
+      headless: true,
       executablePath,
       args: isServerlessRuntime
         ? [...chromium.args, "--no-sandbox", "--disable-setuid-sandbox"]
