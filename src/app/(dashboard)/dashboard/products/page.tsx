@@ -68,6 +68,14 @@ export default function ProductsPage() {
   );
   const hasSearchFilters = Boolean(currentSearch || currentCategoryId || currentBrandId);
 
+  const isMeaningfulAttributeValue = useCallback((value: string | string[] | boolean | undefined | null) => {
+    if (value === undefined || value === null || value === "" || value === "undefined" || value === "null") {
+      return false;
+    }
+
+    return !(Array.isArray(value) && value.length === 0);
+  }, []);
+
   useEffect(() => {
     setLocalPage(currentPage);
     setLocalPageSize(currentPageSize);
@@ -89,6 +97,10 @@ export default function ProductsPage() {
         "isActive",
       ]);
       if (knownKeys.has(key)) continue;
+
+      if (value === "undefined" || value === "null" || value === "") {
+        continue;
+      }
 
       if (result[key]) {
         const existing = result[key];
@@ -162,10 +174,15 @@ export default function ProductsPage() {
 
   const handleAttributeChange = useCallback(
     (name: string, value: string | string[] | boolean | undefined) => {
+      if (!isMeaningfulAttributeValue(value)) {
+        updateQuery({ [name]: undefined, page: "1" });
+        return;
+      }
+
       const normalizedValue = Array.isArray(value) ? value.join(",") : String(value);
-      updateQuery({ [name]: normalizedValue || undefined, page: "1" });
+      updateQuery({ [name]: normalizedValue, page: "1" });
     },
-    [updateQuery]
+    [isMeaningfulAttributeValue, updateQuery]
   );
 
   const handleClearAttributeFilters = useCallback(() => {

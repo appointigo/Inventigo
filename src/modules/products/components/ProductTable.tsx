@@ -77,7 +77,24 @@ const ProductTable = ({
   const [copiesMap, setCopiesMap] = useState<Record<string, number>>({});
   const [exportLoading, setExportLoading] = useState(false);
   const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
+  const [searchText, setSearchText] = useState(search);
   const moreFiltersRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setSearchText(search);
+  }, [search]);
+
+  useEffect(() => {
+    if (searchText === search) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      onSearchChange(searchText);
+    }, 200);
+
+    return () => window.clearTimeout(timer);
+  }, [onSearchChange, search, searchText]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -94,11 +111,19 @@ const ProductTable = ({
     };
   }, [moreFiltersOpen]);
 
+  const isMeaningfulFilterValue = (value: unknown) => {
+    if (value === undefined || value === null || value === "" || value === "undefined" || value === "null") {
+      return false;
+    }
+
+    return !(Array.isArray(value) && value.length === 0);
+  };
+
   const sizeOptions = currentCategory?.sizes?.map((size) => ({ label: size.label, value: size.id })) ?? [];
   const visibleAttributeFields = useMemo(() => attributeSchema?.fields?.slice(0, 3) ?? [], [attributeSchema]);
   const hiddenAttributeFields = useMemo(() => attributeSchema?.fields?.slice(3) ?? [], [attributeSchema]);
 
-  const sizeFilterValue = attributeFilters.sizeId;
+  const sizeFilterValue = isMeaningfulFilterValue(attributeFilters.sizeId) ? attributeFilters.sizeId : undefined;
   const sizeFilterLabel = typeof sizeFilterValue === "string"
     ? currentCategory?.sizes?.find((size) => size.id === sizeFilterValue)?.label ?? sizeFilterValue
     : Array.isArray(sizeFilterValue)
@@ -110,7 +135,7 @@ const ProductTable = ({
   const activeAttributeFilters = useMemo(() => {
     const active: Array<{ key: string; label: string; value: string | string[] | boolean }> = [];
 
-    if (sizeFilterValue !== undefined && sizeFilterValue !== null && sizeFilterValue !== "" && (!Array.isArray(sizeFilterValue) || sizeFilterValue.length > 0)) {
+    if (isMeaningfulFilterValue(sizeFilterValue)) {
       active.push({ key: "sizeId", label: "Size", value: sizeFilterLabel ?? String(sizeFilterValue) });
     }
 
@@ -118,7 +143,7 @@ const ProductTable = ({
       attributeSchema.fields.forEach((field) => {
         if (field.name === "sizeId") return;
         const value = attributeFilters[field.name];
-        if (value !== undefined && value !== null && value !== "" && (!Array.isArray(value) || value.length > 0)) {
+        if (isMeaningfulFilterValue(value)) {
           active.push({ key: field.name, label: field.name, value });
         }
       });
@@ -131,7 +156,7 @@ const ProductTable = ({
     () =>
       hiddenAttributeFields.filter((field) => {
         const value = attributeFilters[field.name];
-        return value !== undefined && value !== null && value !== "";
+        return isMeaningfulFilterValue(value);
       }).length,
     [hiddenAttributeFields, attributeFilters]
   );
@@ -449,8 +474,9 @@ const ProductTable = ({
           <Input
             placeholder="Search products..."
             prefix={<SearchOutlined />}
-            value={search}
-            onChange={(e) => onSearchChange(e.target.value)}
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            onPressEnter={() => onSearchChange(searchText)}
             allowClear
             style={{ width: 220 }}
           />

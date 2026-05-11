@@ -1,8 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import puppeteer from "puppeteer";
+import type { PDFOptions } from "puppeteer";
+import chromium from "@sparticuz/chromium";
 import { generateBarcodeLabelHTML } from "@/modules/barcode/services/barcodeExportService";
 
 export const runtime = "nodejs"; // Ensure Node.js runtime
+
+const isServerlessRuntime = Boolean(
+  process.env.VERCEL ||
+  process.env.AWS_LAMBDA_FUNCTION_NAME ||
+  process.env.AWS_EXECUTION_ENV ||
+  process.env.NETLIFY
+);
+
+async function resolveExecutablePath() {
+  const explicitExecutablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+  if (explicitExecutablePath) {
+    return explicitExecutablePath;
+  }
+
+  if (isServerlessRuntime) {
+    return await chromium.executablePath();
+  }
+
+  return puppeteer.executablePath();
+}
 
 interface RequestBody {
   labels: Array<{
@@ -60,14 +82,15 @@ export async function POST(request: NextRequest) {
     // Generate HTML template
     const htmlContent = generateBarcodeLabelHTML(body.labels);
 
+    const executablePath = await resolveExecutablePath();
+
     // Launch Puppeteer browser
     const browser = await puppeteer.launch({
       headless: true,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-      ],
+      executablePath,
+      args: isServerlessRuntime
+        ? [...chromium.args, "--no-sandbox", "--disable-setuid-sandbox"]
+        : ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
     });
 
     const page = await browser.newPage();
@@ -94,11 +117,11 @@ export async function POST(request: NextRequest) {
 
     // Wait for fonts to be loaded
     await page.evaluate(() => {
-      return (document as any).fonts.ready;
+      return document.fonts.ready;
     });
 
     // Generate PDF with format-specific settings
-    let pdfOptions: any = {
+    const pdfOptions: PDFOptions = {
       margin: {
         top: "0in",
         right: "0in",
