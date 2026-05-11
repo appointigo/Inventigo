@@ -5,6 +5,8 @@ import { Avatar, Card, Typography, Tag, Space, Button } from "antd";
 import { DownOutlined, UpOutlined, ShoppingCartOutlined, SwapOutlined, ArrowLeftOutlined, UserOutlined, FileTextOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
+import CollectPaymentSection from "./CollectPaymentSection";
+import PaymentHistorySection from "./PaymentHistorySection";
 
 interface Props {
   record: any;
@@ -13,6 +15,7 @@ interface Props {
   onCollectBalance?: (saleId: string, amount: number, method: any) => Promise<void>;
   onRefund?: (saleId: string) => Promise<void>;
   onOpenReturnExchange?: (saleId: string) => void;
+  onSaleUpdated?: (updatedSale: any) => void;
 }
 
 const badgeStyle = (type: string) => {
@@ -25,8 +28,9 @@ const badgeStyle = (type: string) => {
   }
 };
 
-export default function TransactionCard({ record, onViewSale, onViewReturn, onCollectBalance, onOpenReturnExchange }: Props) {
+export default function TransactionCard({ record: initialRecord, onViewSale, onViewReturn, onCollectBalance, onOpenReturnExchange, onSaleUpdated }: Props) {
   const [expanded, setExpanded] = useState(false);
+  const [record, setRecord] = useState(initialRecord);
 
   const isSale = record.rowType === "SALE";
 
@@ -61,7 +65,7 @@ export default function TransactionCard({ record, onViewSale, onViewReturn, onCo
     <Card
       size="small"
       style={{ marginBottom: 12, borderRadius: 12, border: "1px solid #e5e7eb", padding: 12 }}
-      bodyStyle={{ padding: 12 }}
+      styles={{ body: { padding: 12 } }}
       onClick={() => setExpanded((s) => !s)}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -139,8 +143,31 @@ export default function TransactionCard({ record, onViewSale, onViewReturn, onCo
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
                     <div style={{ color: "#6b7280" }}>Created by</div>
-                    <div>{record.createdByName ?? record.createdBy ?? "—"}</div>
+                    <div>{record.userName ?? "—"}</div>
                   </div>
+
+                  {/* Always show payment history for sales */}
+                  {isSale && (
+                    <PaymentHistorySection
+                      paymentHistory={record.payments ?? []}
+                      amountPaid={record.amountPaid ?? 0}
+                      amountDue={record.amountDue ?? 0}
+                    />
+                  )}
+
+                  {record.paymentStatus === "PARTIAL" && (
+                    <CollectPaymentSection
+                      saleId={record.id}
+                      amountDue={record.amountDue ?? 0}
+                      amountPaid={record.amountPaid ?? 0}
+                      paymentHistory={record.payments ?? []}
+                      defaultMethod={record.paymentMethod ?? "CASH"}
+                      onPaymentCollected={(updatedSale) => {
+                        setRecord(updatedSale);
+                        onSaleUpdated?.(updatedSale);
+                      }}
+                    />
+                  )}
 
                   <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
                     <Button type="primary" onClick={() => onViewSale?.(record.id)}>View full invoice</Button>
@@ -168,6 +195,12 @@ export default function TransactionCard({ record, onViewSale, onViewReturn, onCo
                 <div style={{ marginTop: 8, fontStyle: record.notes ? "italic" : "normal", color: record.notes ? "#374151" : "#9ca3af" }}>
                   {record.notes ?? "No notes added"}
                 </div>
+
+                {record.userName && (
+                  <div style={{ marginTop: 8, fontSize: 12, color: "#6b7280" }}>
+                    Processed by: <strong>{record.userName}</strong>
+                  </div>
+                )}
 
                 <div style={{ marginTop: 12 }}>
                   <div style={{ display: "flex", justifyContent: "space-between" }}>

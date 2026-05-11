@@ -481,7 +481,7 @@ export const billingService = {
     const [sales, returnTxns] = await Promise.all([
       prisma.sale.findMany({
         where: saleWhere,
-        include: { items: { include: { product: true, size: true } }, customer: true, payments: true },
+        include: { items: { include: { product: true, size: true } }, customer: true, payments: { include: { user: { select: { name: true } } } }, user: { select: { name: true } } },
         orderBy: { createdAt: "desc" },
       }),
       prisma.returnTransaction.findMany({
@@ -490,6 +490,7 @@ export const billingService = {
           items: { include: { returnedProduct: true, returnedSize: true, newProduct: true, newSize: true } },
           sale: { select: { invoiceNumber: true, id: true } },
           customer: true,
+          user: { select: { name: true } },
         },
         orderBy: { createdAt: "desc" },
       }),
@@ -501,6 +502,7 @@ export const billingService = {
       rowType: "SALE",
       transactionDate: s.transactionDate instanceof Date ? s.transactionDate.toISOString() : s.transactionDate,
       createdAt: s.createdAt instanceof Date ? s.createdAt.toISOString() : s.createdAt,
+      userName: s.user?.name ?? null,
     }));
 
     const rtRows = returnTxns.map((r) => ({
@@ -509,6 +511,7 @@ export const billingService = {
       createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
       saleInvoiceNumber: r.sale?.invoiceNumber ?? undefined,
       customerName: r.customer?.name ?? null,
+      userName: r.user?.name ?? null,
     }));
 
     let unified = [
@@ -633,16 +636,23 @@ export const billingService = {
     if (!sale || sale.status !== "COMPLETED") {
       throw new Error("Sale not found or not eligible for payment updates");
     }
+    if (sale.paymentStatus === "PAID") {
+      throw new Error("This sale is already fully paid");
+    }
     if (input.amount <= 0) {
       throw new Error("Payment amount must be greater than zero");
+    }
+    const currentAmountDue = Number(sale.amountDue ?? 0);
+    if (input.amount > currentAmountDue) {
+      throw new Error(`Payment cannot exceed outstanding balance of ₹${currentAmountDue.toFixed(2)}`);
     }
 
     const amountPaid = Number(sale.amountPaid ?? 0) + input.amount;
     const amountDue = Math.max(Number(sale.total) - amountPaid, 0);
     const paymentStatus = amountPaid >= Number(sale.total) ? "PAID" : "PARTIAL";
 
-    const payment = await prisma.$transaction(async (tx) => {
-      const created = await tx.salePayment.create({
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.salePayment.create({
         data: {
           saleId,
           amount: input.amount,
@@ -652,19 +662,32 @@ export const billingService = {
         },
       });
 
-      await tx.sale.update({
+      const updatedSale = await tx.sale.update({
         where: { id: saleId },
         data: {
           amountPaid: { increment: input.amount },
           amountDue,
           paymentStatus,
         },
+        include: {
+          items: { include: { product: true, size: true } },
+          customer: true,
+          payments: { include: { user: { select: { name: true } } }, orderBy: { paidAt: "desc" } },
+          user: { select: { name: true } },
+        },
       });
 
-      return created;
+      if (sale.customerId) {
+        await tx.customer.update({
+          where: { id: sale.customerId },
+          data: { totalSpent: { increment: input.amount } },
+        });
+      }
+
+      return updatedSale;
     });
 
-    return payment;
+    return toSaleDto(updated);
   },
 
   async createReturnTransaction(
@@ -924,54 +947,109 @@ export const billingService = {
   },
 
   async getSalesKPIs(orgId: string): Promise<{
-    todaySales: number;
-    todayRevenue: number;
-    totalSales: number;
-    totalRevenue: number;
-    openReceivables: number;
+    totalCollected: number;
+    totalCollectedLastMonth: number;
+    growthPercent: number;
+    exchangeCount: number;
+    exchangesFlaggedForReview: number;
+    refundCount: number;
+    refundGrowthPercent: number;
+    amountReceivable: number;
+    receivableCustomerCount: number;
+    pendingRefundAmount: number;
+    pendingRefundCount: number;
   }> {
     const today = new Date();
-    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const endOfDay = new Date(startOfDay.getTime() + 86400000);
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59);
 
-    const [todaySales, allSales, todayReturns, allReturns, receivables] = await Promise.all([
-      prisma.sale.findMany({
-        where: { store: { orgId }, status: "COMPLETED", createdAt: { gte: startOfDay, lt: endOfDay } },
-        select: { total: true },
+    // Previous month
+    const startOfPrevMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const endOfPrevMonth = new Date(today.getFullYear(), today.getMonth(), 0, 23, 59, 59);
+
+    // Fetch all data in parallel
+    const [
+      thisMonthPayments,
+      prevMonthPayments,
+      receivables,
+      partialSalesByCustomer,
+      allExchanges,
+      allRefunds,
+      thisMonthRefunds,
+      prevMonthRefunds,
+      pendingRefunds,
+      pendingRefundCount,
+    ] = await Promise.all([
+      prisma.salePayment.aggregate({
+        where: { paidAt: { gte: startOfMonth, lte: endOfMonth }, sale: { store: { orgId } } },
+        _sum: { amount: true },
       }),
-      prisma.sale.findMany({
-        where: { store: { orgId }, status: "COMPLETED" },
-        select: { total: true },
-      }),
-      prisma.returnTransaction.findMany({
-        where: { store: { orgId }, createdAt: { gte: startOfDay, lt: endOfDay } },
-        select: { netAmount: true },
-      }),
-      prisma.returnTransaction.findMany({
-        where: { store: { orgId } },
-        select: { netAmount: true },
+      prisma.salePayment.aggregate({
+        where: { paidAt: { gte: startOfPrevMonth, lte: endOfPrevMonth }, sale: { store: { orgId } } },
+        _sum: { amount: true },
       }),
       prisma.sale.aggregate({
-        where: { store: { orgId }, status: "COMPLETED", amountDue: { gt: 0 } },
+        where: { store: { orgId }, status: "COMPLETED", paymentStatus: "PARTIAL" },
         _sum: { amountDue: true },
+      }),
+      prisma.sale.groupBy({
+        by: ["customerId"],
+        where: { store: { orgId }, status: "COMPLETED", paymentStatus: "PARTIAL" },
+      }),
+      prisma.returnTransaction.count({
+        where: { store: { orgId }, type: "EXCHANGE" },
+      }),
+      prisma.returnTransaction.count({
+        where: { store: { orgId }, refundAmount: { gt: 0 } },
+      }),
+      prisma.returnTransaction.count({
+        where: { store: { orgId }, createdAt: { gte: startOfMonth, lte: endOfMonth }, refundAmount: { gt: 0 } },
+      }),
+      prisma.returnTransaction.count({
+        where: { store: { orgId }, createdAt: { gte: startOfPrevMonth, lte: endOfPrevMonth }, refundAmount: { gt: 0 } },
+      }),
+      prisma.returnTransaction.aggregate({
+        where: { store: { orgId }, refundAmount: { gt: 0 } },
+        _sum: { refundAmount: true },
+      }),
+      prisma.returnTransaction.count({
+        where: { store: { orgId }, refundAmount: { gt: 0 } },
       }),
     ]);
 
-    const todayRevenue = todaySales.reduce((s, r) => s + Number(r.total), 0) + 
-                         todayReturns.reduce((s, r) => s + Number(r.netAmount ?? 0), 0);
-    const totalRevenue = allSales.reduce((s, r) => s + Number(r.total), 0) + 
-                         allReturns.reduce((s, r) => s + Number(r.netAmount ?? 0), 0);
-    
-    // Count sales and return transactions that have positive netAmount (which indicates top-ups/credits)
-    const totalSalesCount = todaySales.length;
-    const todayReturnCount = todayReturns.filter(r => Number(r.netAmount ?? 0) > 0).length;
+    const totalCollected = Number(thisMonthPayments._sum.amount ?? 0);
+    const totalCollectedLastMonth = Number(prevMonthPayments._sum.amount ?? 0);
+    const growthPercent =
+      totalCollectedLastMonth === 0
+        ? totalCollected > 0
+          ? 100
+          : 0
+        : ((totalCollected - totalCollectedLastMonth) / totalCollectedLastMonth) * 100;
+
+    const amountReceivable = Number(receivables._sum.amountDue ?? 0);
+    const receivableCustomerCount = partialSalesByCustomer.length;
+
+    const refundGrowthPercent =
+      prevMonthRefunds === 0
+        ? thisMonthRefunds > 0
+          ? 100
+          : 0
+        : ((thisMonthRefunds - prevMonthRefunds) / prevMonthRefunds) * 100;
+
+    const pendingRefundAmount = Number(pendingRefunds._sum.refundAmount ?? 0);
 
     return {
-      todaySales: totalSalesCount + todayReturnCount,
-      todayRevenue,
-      totalSales: allSales.length + allReturns.filter(r => Number(r.netAmount ?? 0) > 0).length,
-      totalRevenue,
-      openReceivables: Number(receivables._sum.amountDue ?? 0),
+      totalCollected,
+      totalCollectedLastMonth,
+      growthPercent: Math.round(growthPercent * 100) / 100,
+      exchangeCount: allExchanges,
+      exchangesFlaggedForReview: 0, // To be implemented with review status field
+      refundCount: allRefunds,
+      refundGrowthPercent: Math.round(refundGrowthPercent * 100) / 100,
+      amountReceivable,
+      receivableCustomerCount,
+      pendingRefundAmount,
+      pendingRefundCount,
     };
   },
 
@@ -1075,11 +1153,11 @@ export const billingService = {
       data,
       pagination: { page, limit, total, totalPages },
       stats: {
-        totalSales: kpis.totalSales,
-        totalRevenue: kpis.totalRevenue,
-        exchangeCount,
-        refundCount,
-        pendingRefundAmount,
+        totalCollected: kpis.totalCollected,
+        amountReceivable: kpis.amountReceivable,
+        exchangeCount: kpis.exchangeCount,
+        refundCount: kpis.refundCount,
+        pendingRefundAmount: kpis.pendingRefundAmount,
       },
     };
   },

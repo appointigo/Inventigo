@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { Card, Row, Col, Typography, Space } from "antd";
-import { ArrowUpOutlined, SwapOutlined, RollbackOutlined, HourglassOutlined } from "@ant-design/icons";
+import { ArrowUpOutlined, SwapOutlined, RollbackOutlined, HourglassOutlined, DollarOutlined, UserOutlined } from "@ant-design/icons";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
 import dayjs from "dayjs";
 
@@ -46,58 +46,81 @@ export default function StatsStrip({ sales, kpis: propsKpis }: Props) {
   const pendingRefunds = sales.filter((s: any) => s.rowType === "RETURN_TRANSACTION" && s.refundAmount > 0).reduce((sum: number, r: any) => sum + Number(r.refundAmount ?? 0), 0);
 
   return (
-    <Row gutter={16} style={{ marginBottom: 16 }}>
-      <Col span={6}>
-        <div style={tileStyle}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.05em", color: "#6b7280", textTransform: "uppercase" }}>TOTAL SALES</div>
-              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 8 }}>{kpis ? formatCurrency(kpis.totalRevenue) : "—"}</div>
-              <div style={{ color: "#16a34a", marginTop: 6 }}>+{Math.floor(Math.random() * 10)}% from last month</div>
+    <>
+      {/* Row 1: Total Sales, Exchanges, Refunds */}
+      <Row gutter={16} style={{ marginBottom: 16 }}>
+        <Col span={6}>
+          <div style={tileStyle}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.05em", color: "#6b7280", textTransform: "uppercase" }}>TOTAL SALES</div>
+                <div style={{ fontSize: 18, fontWeight: 700, marginTop: 8 }}>{kpis ? formatCurrency(kpis.totalCollected) : "—"}</div>
+                <div style={{ color: kpis?.growthPercent >= 0 ? "#16a34a" : "#dc2626", marginTop: 6 }}>
+                  {kpis?.growthPercent >= 0 ? "+" : ""}{kpis?.growthPercent?.toFixed(1) ?? "0"}% from last month
+                </div>
+              </div>
+              <div style={{ color: "#10b981" }}><ArrowUpOutlined style={{ fontSize: 20 }} /></div>
             </div>
-            <div style={{ color: "#10b981" }}><ArrowUpOutlined style={{ fontSize: 20 }} /></div>
           </div>
-        </div>
-      </Col>
+        </Col>
 
-      <Col span={6}>
-        <div style={tileStyle}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.05em", color: "#6b7280", textTransform: "uppercase" }}>EXCHANGES</div>
-              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 8 }}>{exchangeCount}</div>
-              <div style={{ color: "#d97706", marginTop: 6 }}>{Math.max(0, exchangeCount - 1)} flagged for review</div>
+        <Col span={6}>
+          <div style={tileStyle}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.05em", color: "#6b7280", textTransform: "uppercase" }}>EXCHANGES</div>
+                <div style={{ fontSize: 18, fontWeight: 700, marginTop: 8 }}>{kpis?.exchangeCount ?? 0}</div>
+                <div style={{ color: "#d97706", marginTop: 6 }}>{kpis?.exchangesFlaggedForReview ?? 0} flagged for review</div>
+              </div>
+              <div style={{ color: "#d97706" }}><SwapOutlined style={{ fontSize: 20 }} /></div>
             </div>
-            <div style={{ color: "#d97706" }}><SwapOutlined style={{ fontSize: 20 }} /></div>
           </div>
-        </div>
-      </Col>
+        </Col>
 
-      <Col span={6}>
-        <div style={tileStyle}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.05em", color: "#6b7280", textTransform: "uppercase" }}>REFUNDS</div>
-              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 8 }}>{refundCount}</div>
-              <div style={{ color: "#ef4444", marginTop: 6 }}>{Math.floor(Math.random() * 5)}% from last month</div>
+        <Col span={6}>
+          <div style={tileStyle}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.05em", color: "#6b7280", textTransform: "uppercase" }}>REFUNDS</div>
+                <div style={{ fontSize: 18, fontWeight: 700, marginTop: 8 }}>{kpis?.refundCount ?? 0}</div>
+                <div style={{ color: kpis?.refundGrowthPercent >= 0 ? "#16a34a" : "#dc2626", marginTop: 6 }}>
+                  {kpis?.refundGrowthPercent >= 0 ? "+" : ""}{kpis?.refundGrowthPercent?.toFixed(1) ?? "0"}% from last month
+                </div>
+              </div>
+              <div style={{ color: "#ef4444" }}><RollbackOutlined style={{ fontSize: 20 }} /></div>
             </div>
-            <div style={{ color: "#ef4444" }}><RollbackOutlined style={{ fontSize: 20 }} /></div>
           </div>
-        </div>
-      </Col>
+        </Col>
 
-      <Col span={6}>
-        <div style={tileStyle}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.05em", color: "#6b7280", textTransform: "uppercase" }}>PENDING REFUND</div>
-              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 8 }}>{formatCurrency(pendingRefunds)}</div>
-              <div style={{ color: "#d97706", marginTop: 6 }}>{(sales.filter((s:any)=>s.refundAmount>0).length)} transactions</div>
+        <Col span={6}>
+          <div style={tileStyle}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.05em", color: "#6b7280", textTransform: "uppercase" }}>AMOUNT RECEIVABLE</div>
+                <div style={{ fontSize: 18, fontWeight: 700, marginTop: 8, color: "#f97316" }}>{kpis ? formatCurrency(kpis.amountReceivable) : "—"}</div>
+                <div style={{ color: "#f97316", marginTop: 6 }}>{kpis?.receivableCustomerCount ?? 0} customers</div>
+              </div>
+              <div style={{ color: "#f97316" }}><DollarOutlined style={{ fontSize: 20 }} /></div>
             </div>
-            <div style={{ color: "#d97706" }}><HourglassOutlined style={{ fontSize: 20 }} /></div>
           </div>
-        </div>
-      </Col>
-    </Row>
+        </Col>
+      </Row>
+
+      {/* Row 2: Pending Refunds */}
+      <Row gutter={16} style={{ marginBottom: 16 }}>
+        <Col span={6}>
+          <div style={tileStyle}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.05em", color: "#6b7280", textTransform: "uppercase" }}>PENDING REFUNDS</div>
+                <div style={{ fontSize: 18, fontWeight: 700, marginTop: 8, color: "#dc2626" }}>{kpis ? formatCurrency(kpis.pendingRefundAmount) : "—"}</div>
+                <div style={{ color: "#dc2626", marginTop: 6 }}>{kpis?.pendingRefundCount ?? 0} transactions</div>
+              </div>
+              <div style={{ color: "#dc2626" }}><HourglassOutlined style={{ fontSize: 20 }} /></div>
+            </div>
+          </div>
+        </Col>
+      </Row>
+    </>
   );
 }

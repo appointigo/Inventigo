@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireOrgAuth } from "@/lib/auth.middleware";
 
-type GroupBy = "day" | "week" | "month";
+type GroupBy = "day" | "week" | "month" | "year";
 
 type Row = {
   period_start: Date;
@@ -25,16 +25,16 @@ export const GET = async (request: Request) => {
     const from = searchParams.get("from");
     const to = searchParams.get("to");
 
-    const group: GroupBy = groupParam === "day" || groupParam === "week" ? groupParam : "month";
-    const dateTruncUnit = group === "day" ? "day" : group === "week" ? "week" : "month";
+    const group: GroupBy = groupParam === "day" || groupParam === "week" || groupParam === "year" ? groupParam : "month";
+    const dateTruncUnit = group === "day" ? "day" : group === "week" ? "week" : group === "year" ? "year" : "month";
 
     const rows = await prisma.$queryRaw<Row[]>`
-      WITH sale_cost AS (
+      WITH sale_breakdown AS (
         SELECT
           s.id,
-          s."createdAt",
-          s.total::float8 AS total_amount,
-          s."discountAmount"::float8 AS discount_amount,
+          s."transactionDate" AS period_date,
+          COALESCE(s.total::float8, s."amountPaid"::float8, 0) AS total_amount,
+          COALESCE(s."discountAmount"::float8, 0) AS discount_amount,
           COALESCE(SUM((p."costPrice"::float8) * si.quantity), 0)::float8 AS total_cost
         FROM sales s
         JOIN sale_items si ON si."saleId" = s.id
@@ -42,34 +42,17 @@ export const GET = async (request: Request) => {
         JOIN stores st ON st.id = s."storeId"
         WHERE st."orgId" = ${user.orgId}
           AND (${user.storeId}::text IS NULL OR s."storeId" = ${user.storeId})
-          AND (${from}::text IS NULL OR s."createdAt" >= (${from}::date))
-          AND (${to}::text IS NULL OR s."createdAt" < ((${to}::date + INTERVAL '1 day')))
-        GROUP BY s.id, s."createdAt", s.total, s."discountAmount"
-      ), return_amounts AS (
-        -- include return transactions' net amounts as revenue contributions
-        SELECT
-          rt.id,
-          rt."createdAt",
-          COALESCE(rt."netAmount"::float8, 0) AS total_amount,
-          0::float8 AS discount_amount,
-          0::float8 AS total_cost
-        FROM return_transactions rt
-        JOIN stores st ON st.id = rt."storeId"
-        WHERE st."orgId" = ${user.orgId}
-          AND (${user.storeId}::text IS NULL OR rt."storeId" = ${user.storeId})
-          AND (${from}::text IS NULL OR rt."createdAt" >= (${from}::date))
-          AND (${to}::text IS NULL OR rt."createdAt" < ((${to}::date + INTERVAL '1 day')))
+          AND s."status" = 'COMPLETED'
+          AND (${from}::text IS NULL OR s."transactionDate" >= (${from}::date))
+          AND (${to}::text IS NULL OR s."transactionDate" < ((${to}::date + INTERVAL '1 day')))
+        GROUP BY s.id, s."transactionDate", s.total, s."discountAmount"
       )
       SELECT
-        DATE_TRUNC(${dateTruncUnit}, "createdAt") AS period_start,
+        DATE_TRUNC(${dateTruncUnit}, period_date) AS period_start,
         COALESCE(SUM(total_amount), 0)::float8 AS total_revenue,
         COALESCE(SUM(discount_amount), 0)::float8 AS total_discount,
         COALESCE(SUM(total_amount - total_cost), 0)::float8 AS net_profit
-      FROM (
-        SELECT * FROM sale_cost
-        UNION ALL
-        SELECT * FROM return_amounts
-      ) AS combined
+      FROM sale_breakdown
       GROUP BY 1
       ORDER BY 1;
     `;

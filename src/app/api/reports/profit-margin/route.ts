@@ -36,34 +36,61 @@ export const GET = async (request: Request) => {
     const to = searchParams.get("to");
     const group = (searchParams.get("group") ?? "month") as GroupBy;
 
-    const createdAtFilter: Prisma.DateTimeFilter = {};
+    const paidAtFilter: Prisma.DateTimeFilter = {};
     if (from) {
       const fromDate = dayjs(from).startOf("day");
       if (fromDate.isValid()) {
-        createdAtFilter.gte = fromDate.toDate();
+        paidAtFilter.gte = fromDate.toDate();
       }
     }
     if (to) {
       const toDate = dayjs(to).endOf("day");
       if (toDate.isValid()) {
-        createdAtFilter.lte = toDate.toDate();
+        paidAtFilter.lte = toDate.toDate();
       }
     }
 
-    const where: Prisma.SaleWhereInput = {
-      status: "COMPLETED",
-      store: { orgId: user.orgId },
-      ...(user.storeId ? { storeId: user.storeId } : {}),
-      ...(Object.keys(createdAtFilter).length ? { createdAt: createdAtFilter } : {}),
-    };
-
-    const [sales, returnTransactions] = await Promise.all([
-      prisma.sale.findMany({
-        where,
+    const [salePayments, legacySales, returnTransactions] = await Promise.all([
+      prisma.salePayment.findMany({
+        where: {
+          sale: {
+            store: { orgId: user.orgId },
+            ...(user.storeId ? { storeId: user.storeId } : {}),
+            status: "COMPLETED",
+          },
+          ...(Object.keys(paidAtFilter).length ? { paidAt: paidAtFilter } : {}),
+        },
         select: {
           id: true,
-          createdAt: true,
-          total: true,
+          amount: true,
+          paidAt: true,
+          sale: {
+            select: {
+              id: true,
+              discountAmount: true,
+              items: {
+                select: {
+                  quantity: true,
+                  product: { select: { costPrice: true } },
+                },
+              },
+            },
+          },
+        },
+        orderBy: { paidAt: "asc" },
+      }),
+      prisma.sale.findMany({
+        where: {
+          status: "COMPLETED",
+          store: { orgId: user.orgId },
+          ...(user.storeId ? { storeId: user.storeId } : {}),
+          amountPaid: { gt: 0 },
+          payments: { none: {} },
+          ...(Object.keys(paidAtFilter).length ? { transactionDate: paidAtFilter } : {}),
+        },
+        select: {
+          transactionDate: true,
+          amountPaid: true,
           discountAmount: true,
           items: {
             select: {
@@ -72,13 +99,13 @@ export const GET = async (request: Request) => {
             },
           },
         },
-        orderBy: { createdAt: "asc" },
+        orderBy: { transactionDate: "asc" },
       }),
       prisma.returnTransaction.findMany({
         where: {
           store: { orgId: user.orgId },
           ...(user.storeId ? { storeId: user.storeId } : {}),
-          ...(Object.keys(createdAtFilter).length ? { createdAt: createdAtFilter } : {}),
+          ...(Object.keys(paidAtFilter).length ? { createdAt: paidAtFilter } : {}),
         },
         select: {
           id: true,
@@ -90,9 +117,18 @@ export const GET = async (request: Request) => {
     ]);
 
     const allEntries: AggregateEntry[] = [
-      ...sales.map((sale) => ({
-        createdAt: sale.createdAt,
-        totalRevenue: Number(sale.total ?? 0),
+      ...salePayments.map((sp) => ({
+        createdAt: sp.paidAt,
+        totalRevenue: Number(sp.amount ?? 0),
+        totalCost: sp.sale.items.reduce(
+          (sum, item) => sum + Number(item.product.costPrice ?? 0) * Number(item.quantity ?? 0),
+          0
+        ),
+        totalDiscount: Number(sp.sale.discountAmount ?? 0),
+      })),
+      ...legacySales.map((sale) => ({
+        createdAt: sale.transactionDate,
+        totalRevenue: Number(sale.amountPaid ?? 0),
         totalCost: sale.items.reduce(
           (sum, item) => sum + Number(item.product.costPrice ?? 0) * Number(item.quantity ?? 0),
           0
