@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   transpilePackages: ["antd", "@ant-design/icons"],
+  serverExternalPackages: ["@sparticuz/chromium"],
   poweredByHeader: false,
   async headers() {
     return [
