@@ -24,6 +24,7 @@ export function mapProductToDuplicateDraft(product: Product): ProductFormValues 
     isActive: product.isActive,
     sizes: product.stock.map((entry) => ({
       sizeId: entry.sizeId,
+      sizeLabel: entry.sizeLabel,
       quantity: 0, // Reset quantity to 0 for new product
       reorderLevel: Number(entry.reorderLevel) || 5,
     })),

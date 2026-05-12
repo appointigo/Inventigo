@@ -11,8 +11,9 @@ import type { Category } from "@/modules/categories/types";
 import type { Brand } from "@/modules/brands/types";
 import { useSuppliers } from "@/modules/suppliers/hooks/useSuppliers";
 import { calculateMarkup } from "../utils/calculateMarkup";
-import { getProductColorOptions, getColorHexByName } from "@/shared/theme/colorService";
+import { getColorHexByName } from "@/shared/theme/colorService";
 import { themeConfig } from "@/shared/theme/themeConfig";
+import { buildSizeLookupCache, resolveSizeLabel } from "../utils/sizeMapping";
 
 const CameraBarcodeScannerModal = dynamic(
   () => import("@/modules/barcode/components/CameraBarcodeScannerModal"),
@@ -39,6 +40,13 @@ const abbrevName = (name: string): string => {
 const generateSku = (brandName: string, categoryName: string): string =>
   `${abbrevName(brandName)}-${abbrevName(categoryName)}-${Math.floor(Math.random() * 900) + 100}`;
 
+type ProductSizeFormValue = {
+  sizeId: string;
+  sizeLabel?: string;
+  quantity: number;
+  reorderLevel?: number;
+};
+
 // ─── ProductForm ──────────────────────────────────────────────────────────────
 interface ProductFormProps {
   initialValues?: Product | null;
@@ -61,12 +69,13 @@ const ProductForm = ({ initialValues, duplicateValues, categories, brands, onSub
   const isEdit = isEditMode ?? !!initialValues;
 
   const { suppliers } = useSuppliers();
+  const sizeLookupCache = useMemo(() => buildSizeLookupCache(categories), [categories]);
 
   // Watched fields
   const imageUrl = Form.useWatch<string | undefined>("imageUrl", form);
   const selectedCategoryId = Form.useWatch<string | undefined>("categoryId", form);
   const selectedBrandId = Form.useWatch<string | undefined>("brandId", form);
-  const watchedSizes = Form.useWatch<{ sizeId: string; quantity: number }[] | undefined>("sizes", form);
+  const watchedSizes = Form.useWatch<ProductSizeFormValue[] | undefined>("sizes", form);
   const watchedAttrQty = Form.useWatch<number | null | undefined>(["attributes", "quantity"], form);
   const mrp = Form.useWatch<number | undefined>("mrp", form);
   const basePrice = Form.useWatch<number | undefined>("basePrice", form);
@@ -134,6 +143,7 @@ const ProductForm = ({ initialValues, duplicateValues, categories, brands, onSub
         ),
         sizes: initialValues.stock.map((s) => ({
           sizeId: s.sizeId,
+          sizeLabel: s.sizeLabel,
           quantity: s.quantity,
           reorderLevel: s.reorderLevel,
         })),
@@ -161,6 +171,7 @@ const ProductForm = ({ initialValues, duplicateValues, categories, brands, onSub
         ),
         sizes: (duplicateValues.sizes ?? []).map((s) => ({
           sizeId: s.sizeId,
+          sizeLabel: (s as ProductSizeFormValue).sizeLabel,
           quantity: s.quantity,
           reorderLevel: s.reorderLevel,
         })),
@@ -181,12 +192,12 @@ const ProductForm = ({ initialValues, duplicateValues, categories, brands, onSub
     if (!selectedCategory || isEdit) return;
 
     const categoryIds = new Set(selectedCategory.sizes.map((s) => s.id));
-    const current: { sizeId: string; quantity: number; reorderLevel?: number }[] = form.getFieldValue("sizes") ?? [];
+    const current: ProductSizeFormValue[] = form.getFieldValue("sizes") ?? [];
     const kept = current.filter((s) => categoryIds.has(s.sizeId));
     const presentIds = new Set(kept.map((s) => s.sizeId));
     const newEntries = selectedCategory.sizes
       .filter((sz) => !presentIds.has(sz.id))
-      .map((sz) => ({ sizeId: sz.id, quantity: 0, reorderLevel: 5 }));
+      .map((sz) => ({ sizeId: sz.id, sizeLabel: sz.label, quantity: 0, reorderLevel: 5 }));
     form.setFieldValue("sizes", [...kept, ...newEntries]);
   }, [selectedCategory, isEdit, form]);
 
@@ -267,6 +278,7 @@ const ProductForm = ({ initialValues, duplicateValues, categories, brands, onSub
       const sizes = (
         (values.sizes ?? []) as {
           sizeId: string;
+          sizeLabel?: string;
           quantity: number | string;
           reorderLevel?: number | string;
         }[]
@@ -767,8 +779,12 @@ const ProductForm = ({ initialValues, duplicateValues, categories, brands, onSub
                     </Row>
                     {fields.map((field) => {
                       const sizeId = form.getFieldValue(["sizes", field.name, "sizeId"]) as string;
-                      const sizeLabel =
-                        selectedCategory.sizes.find((s) => s.id === sizeId)?.label ?? sizeId;
+                      const fallbackSizeLabel = form.getFieldValue(["sizes", field.name, "sizeLabel"]) as string | undefined;
+                      const sizeLabel = resolveSizeLabel({
+                        sizeId,
+                        fallbackLabel: fallbackSizeLabel,
+                        cache: sizeLookupCache,
+                      });
                       return (
                         <Row key={field.key} gutter={16} align="middle" style={{ marginBottom: 12 }}>
                           <Col span={6}>
@@ -817,7 +833,7 @@ const ProductForm = ({ initialValues, duplicateValues, categories, brands, onSub
                         );
                         const availableSize = selectedCategory.sizes.find((s) => !currentSizeIds.has(s.id));
                         if (availableSize) {
-                          add({ sizeId: availableSize.id, quantity: 0, reorderLevel: 5 });
+                          add({ sizeId: availableSize.id, sizeLabel: availableSize.label, quantity: 0, reorderLevel: 5 });
                         }
                       }}
                       style={{ marginTop: 12, marginBottom: 12 }}
