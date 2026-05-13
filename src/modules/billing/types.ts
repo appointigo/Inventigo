@@ -2,11 +2,28 @@ export type PaymentMethodType = "CASH" | "CARD" | "UPI";
 export type SaleStatusType = "COMPLETED" | "REFUNDED" | "EXCHANGED";
 
 /**
+ * Single payment entry in a split payment
+ */
+export type SplitPaymentEntry = {
+  method: PaymentMethodType;
+  amount: number;
+};
+
+/**
+ * Split payment data with multiple payment methods
+ */
+export type SplitPaymentData = {
+  entries: SplitPaymentEntry[];
+};
+
+/**
  * Input for creating a new sale.
+ * Supports both single payment (paymentMethod) and split payments (splitPayments)
  */
 export type CreateSaleInput = {
   items: CartItem[];
-  paymentMethod: PaymentMethodType;
+  paymentMethod?: PaymentMethodType; // For backward compatibility and single payment
+  splitPayments?: SplitPaymentEntry[]; // For split payment mode
   discountAmount: number;
   taxAmount: number;
   amountPaid?: number;
@@ -70,6 +87,20 @@ export type ReturnTransactionHistory = {
   createdAt: string;
 };
 
+/**
+ * Individual payment record for a sale
+ */
+export type SalePayment = {
+  id: string;
+  saleId: string;
+  amount: number;
+  method: PaymentMethodType;
+  businessDate: string;
+  paidAt: string;
+  note?: string;
+  createdBy: string;
+};
+
 export type Sale = {
   id: string;
   invoiceNumber: string;
@@ -83,11 +114,12 @@ export type Sale = {
   total: number;
   amountPaid: number;
   amountDue: number;
-  paymentMethod: PaymentMethodType;
+  paymentMethod: PaymentMethodType | "SPLIT"; // SPLIT indicates multiple payment methods
   paymentStatus: "PAID" | "PARTIAL" | "PENDING";
   returnStatus: "NONE" | "PARTIAL" | "FULL";
   status: SaleStatusType;
   items: SaleItem[];
+  payments?: SalePayment[]; // Individual payment records
   returnTransactions: ReturnTransactionHistory[];
   transactionDate: string;
   createdAt: string;
@@ -137,7 +169,13 @@ export type SaleSummary = {
   total: number;
   amountPaid: number;
   amountDue: number;
-  paymentMethod: PaymentMethodType;
+  paymentMethod: PaymentMethodType | "SPLIT";
+  payments?: Array<{
+    method: PaymentMethodType;
+    amount: number;
+    businessDate?: string;
+    paidAt?: string;
+  }>;
   paymentStatus: "PAID" | "PARTIAL" | "PENDING";
   returnStatus: "NONE" | "PARTIAL" | "FULL";
   status: SaleStatusType;

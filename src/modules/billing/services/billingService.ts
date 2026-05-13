@@ -106,6 +106,89 @@ const generateReturnReferenceNumber = async (storeId: string, attempt = 0): Prom
   return `${prefix}${String(nextSeq).padStart(4, "0")}`;
 };
 
+const EPSILON = 0.01;
+const VALID_PAYMENT_METHODS = new Set(["CASH", "CARD", "UPI"]);
+
+type NormalizedPaymentEntry = {
+  method: "CASH" | "CARD" | "UPI";
+  amount: number;
+};
+
+const round2 = (value: number): number => Math.round(value * 100) / 100;
+
+const derivePresentationPaymentMethod = (
+  fallbackMethod: unknown,
+  payments: Array<{ method?: string; amount?: unknown }> | undefined
+): Sale["paymentMethod"] => {
+  const nonZeroMethods = new Set(
+    (payments ?? [])
+      .filter((p) => Number(p.amount ?? 0) > 0)
+      .map((p) => String(p.method ?? ""))
+      .filter((m) => VALID_PAYMENT_METHODS.has(m))
+  );
+
+  if (nonZeroMethods.size > 1) {
+    return "SPLIT";
+  }
+
+  if (nonZeroMethods.size === 1) {
+    return [...nonZeroMethods][0] as Sale["paymentMethod"];
+  }
+
+  return (fallbackMethod as Sale["paymentMethod"]) ?? "CASH";
+};
+
+const normalizePaymentEntries = (
+  splitPayments: Array<{ method?: string; amount?: number }> | undefined,
+  fallbackMethod: string | undefined,
+  fallbackAmount: number
+): NormalizedPaymentEntry[] => {
+  if (Array.isArray(splitPayments) && splitPayments.length > 0) {
+    const normalized = splitPayments
+      .map((entry) => ({
+        method: String(entry?.method ?? "").toUpperCase(),
+        amount: round2(Number(entry?.amount ?? 0)),
+      }))
+      .filter((entry) => entry.amount > 0);
+
+    if (normalized.length === 0) {
+      throw new Error("At least one split payment entry with amount is required");
+    }
+
+    for (const entry of normalized) {
+      if (!VALID_PAYMENT_METHODS.has(entry.method)) {
+        throw new Error(`Invalid payment method: ${entry.method}`);
+      }
+      if (entry.amount <= 0) {
+        throw new Error("Payment amount must be greater than zero");
+      }
+    }
+
+    return normalized as NormalizedPaymentEntry[];
+  }
+
+  if (fallbackAmount <= 0) {
+    return [];
+  }
+
+  const method = String(fallbackMethod ?? "CASH").toUpperCase();
+  if (!VALID_PAYMENT_METHODS.has(method)) {
+    throw new Error("Invalid payment method");
+  }
+
+  return [{ method: method as NormalizedPaymentEntry["method"], amount: round2(fallbackAmount) }];
+};
+
+const getPrimaryPaymentMethod = (entries: NormalizedPaymentEntry[], fallbackMethod?: string): "CASH" | "CARD" | "UPI" => {
+  if (entries.length === 0) {
+    const method = String(fallbackMethod ?? "CASH").toUpperCase();
+    return (VALID_PAYMENT_METHODS.has(method) ? method : "CASH") as "CASH" | "CARD" | "UPI";
+  }
+
+  const sorted = [...entries].sort((a, b) => b.amount - a.amount);
+  return sorted[0].method;
+};
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const toSaleDto = (s: any): Sale => ({
   id: s.id,
@@ -120,7 +203,7 @@ const toSaleDto = (s: any): Sale => ({
   total: Number(s.total),
   amountPaid: Number(s.amountPaid ?? 0),
   amountDue: Number(s.amountDue ?? 0),
-  paymentMethod: s.paymentMethod as Sale["paymentMethod"],
+  paymentMethod: derivePresentationPaymentMethod(s.paymentMethod, s.payments) as Sale["paymentMethod"],
   paymentStatus: s.paymentStatus as Sale["paymentStatus"],
   returnStatus: s.returnStatus as Sale["returnStatus"],
   status: s.status as Sale["status"],
@@ -135,6 +218,16 @@ const toSaleDto = (s: any): Sale => ({
     quantity: i.quantity,
     unitPrice: Number(i.unitPrice),
     total: Number(i.total),
+  })),
+  payments: (s.payments ?? []).map((p: any) => ({
+    id: p.id,
+    saleId: p.saleId,
+    amount: Number(p.amount),
+    method: p.method,
+    businessDate: p.businessDate instanceof Date ? p.businessDate.toISOString() : p.businessDate,
+    paidAt: p.paidAt instanceof Date ? p.paidAt.toISOString() : p.paidAt,
+    note: p.note ?? undefined,
+    createdBy: p.createdBy,
   })),
   returnTransactions: (s.returnTransactions ?? []).map((rt: any) => {
     const items = rt.items ?? [];
@@ -188,6 +281,7 @@ const saleInclude = {
       size: { select: { label: true } },
     },
   },
+  payments: true,
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -241,10 +335,23 @@ export const billingService = {
       resolvedPromoCodeId = promo.id;
     }
 
-    const total = subtotal - discountAmount + input.taxAmount;
-    const amountPaid = Math.max(0, input.amountPaid ?? total);
+    const total = round2(subtotal - discountAmount + input.taxAmount);
+    const requestedAmountPaid = round2(Math.max(0, Number(input.amountPaid ?? total)));
+    const paymentEntries = normalizePaymentEntries(input.splitPayments, input.paymentMethod, requestedAmountPaid);
+    const splitCollected = round2(paymentEntries.reduce((sum, entry) => sum + entry.amount, 0));
+
+    if (splitCollected > total + EPSILON) {
+      throw new Error(`Collected amount cannot exceed total invoice amount of ₹${total.toFixed(2)}`);
+    }
+
+    if (Math.abs(splitCollected - requestedAmountPaid) > EPSILON) {
+      throw new Error("Split payment total must match amount paid");
+    }
+
+    const amountPaid = splitCollected;
     const amountDue = Math.max(total - amountPaid, 0);
     const paymentStatus = amountPaid >= total ? "PAID" : amountPaid > 0 ? "PARTIAL" : "PENDING";
+    const primaryPaymentMethod = getPrimaryPaymentMethod(paymentEntries, input.paymentMethod);
 
     for (let attempt = 1; attempt <= 5; attempt += 1) {
       const invoiceNumber = await generateInvoiceNumber(storeId, attempt - 1);
@@ -265,7 +372,7 @@ export const billingService = {
               total,
               amountPaid,
               amountDue,
-              paymentMethod: input.paymentMethod,
+              paymentMethod: primaryPaymentMethod,
               paymentStatus,
               status: "COMPLETED",
               createdBy: userId,
@@ -280,14 +387,16 @@ export const billingService = {
                   total: it.unitPrice * it.quantity,
                 })),
               },
-              payments: amountPaid > 0 ? {
-                create: {
-                  amount: amountPaid,
-                  method: input.paymentMethod,
-                  businessDate: input.transactionDate ? new Date(input.transactionDate) : new Date(),
-                  createdBy: userId,
-                },
-              } : undefined,
+              payments: paymentEntries.length > 0
+                ? {
+                    create: paymentEntries.map((entry) => ({
+                      amount: entry.amount,
+                      method: entry.method,
+                      businessDate: input.transactionDate ? new Date(input.transactionDate) : new Date(),
+                      createdBy: userId,
+                    })),
+                  }
+                : undefined,
             },
             include: saleInclude,
           });
@@ -502,6 +611,13 @@ export const billingService = {
     const salesRows = sales.map((s) => ({
       ...s,
       rowType: "SALE",
+      paymentMethod: derivePresentationPaymentMethod(s.paymentMethod, s.payments),
+      payments: (s.payments ?? []).map((p) => ({
+        ...p,
+        amount: Number(p.amount ?? 0),
+        businessDate: p.businessDate instanceof Date ? p.businessDate.toISOString() : p.businessDate,
+        paidAt: p.paidAt instanceof Date ? p.paidAt.toISOString() : p.paidAt,
+      })),
       transactionDate: s.transactionDate instanceof Date ? s.transactionDate.toISOString() : s.transactionDate,
       createdAt: s.createdAt instanceof Date ? s.createdAt.toISOString() : s.createdAt,
       userName: s.user?.name ?? null,
@@ -631,7 +747,13 @@ export const billingService = {
     orgId: string,
     saleId: string,
     userId: string,
-    input: { amount: number; method: string; note?: string; businessDate?: string }
+    input: {
+      amount?: number;
+      method?: string;
+      splitPayments?: Array<{ method: string; amount: number }>;
+      note?: string;
+      businessDate?: string;
+    }
   ) {
     const sale = await prisma.sale.findFirst({
       where: { id: saleId, store: { orgId } },
@@ -642,36 +764,40 @@ export const billingService = {
     if (sale.paymentStatus === "PAID") {
       throw new Error("This sale is already fully paid");
     }
-    if (input.amount <= 0) {
-      throw new Error("Payment amount must be greater than zero");
-    }
+    const normalizedEntries = normalizePaymentEntries(input.splitPayments, input.method, Number(input.amount ?? 0));
+    const paymentDelta = round2(normalizedEntries.reduce((sum, entry) => sum + entry.amount, 0));
+    if (paymentDelta <= 0) throw new Error("Payment amount must be greater than zero");
+
     const currentAmountDue = Number(sale.amountDue ?? 0);
-    if (input.amount > currentAmountDue) {
+    if (paymentDelta > currentAmountDue + EPSILON) {
       throw new Error(`Payment cannot exceed outstanding balance of ₹${currentAmountDue.toFixed(2)}`);
     }
 
-    const amountPaid = Number(sale.amountPaid ?? 0) + input.amount;
+    const amountPaid = Number(sale.amountPaid ?? 0) + paymentDelta;
     const amountDue = Math.max(Number(sale.total) - amountPaid, 0);
     const paymentStatus = amountPaid >= Number(sale.total) ? "PAID" : "PARTIAL";
 
+    const primaryMethodForSale = getPrimaryPaymentMethod(normalizedEntries, input.method ?? sale.paymentMethod);
+
     const updated = await prisma.$transaction(async (tx) => {
-      await tx.salePayment.create({
-        data: {
+      await tx.salePayment.createMany({
+        data: normalizedEntries.map((entry) => ({
           saleId,
-          amount: input.amount,
-          method: input.method as any,
+          amount: entry.amount,
+          method: entry.method,
           note: input.note,
           businessDate: input.businessDate ? new Date(input.businessDate) : new Date(),
           createdBy: userId,
-        },
+        })),
       });
 
       const updatedSale = await tx.sale.update({
         where: { id: saleId },
         data: {
-          amountPaid: { increment: input.amount },
+          amountPaid: { increment: paymentDelta },
           amountDue,
           paymentStatus,
+          paymentMethod: primaryMethodForSale,
         },
         include: {
           items: { include: { product: true, size: true } },
@@ -684,7 +810,7 @@ export const billingService = {
       if (sale.customerId) {
         await tx.customer.update({
           where: { id: sale.customerId },
-          data: { totalSpent: { increment: input.amount } },
+          data: { totalSpent: { increment: paymentDelta } },
         });
       }
 
@@ -705,6 +831,8 @@ export const billingService = {
       refundAmount: number;
       offsetAmount?: number;
       refundMethod?: string;
+      topUpPayments?: Array<{ method: string; amount: number }>;
+      refundPayments?: Array<{ method: string; amount: number }>;
       reason?: string;
       condition?: string;
       notes?: string;
@@ -802,34 +930,40 @@ export const billingService = {
           });
 
           if (netAmount > 0) {
-            if (!input.refundMethod) {
-              throw new Error("Payment method is required for exchange top-up");
+            const topUpEntries = normalizePaymentEntries(input.topUpPayments, input.refundMethod, netAmount);
+            const topUpTotal = round2(topUpEntries.reduce((sum, entry) => sum + entry.amount, 0));
+            if (Math.abs(topUpTotal - netAmount) > EPSILON) {
+              throw new Error("Top-up split payment total must match exchange payable amount");
             }
-            await tx.salePayment.create({
-              data: {
+
+            await tx.salePayment.createMany({
+              data: topUpEntries.map((entry) => ({
                 saleId,
-                amount: netAmount,
-                method: input.refundMethod as any,
+                amount: entry.amount,
+                method: entry.method,
                 note: `Exchange top-up payment for ${returnTransaction.id}`,
                 businessDate,
                 createdBy: userId,
-              },
+              })),
             });
           }
 
           if (refundAmount > 0) {
-            if (!input.refundMethod) {
-              throw new Error("Refund method is required for return refunds");
+            const refundEntries = normalizePaymentEntries(input.refundPayments, input.refundMethod, refundAmount);
+            const refundTotal = round2(refundEntries.reduce((sum, entry) => sum + entry.amount, 0));
+            if (Math.abs(refundTotal - refundAmount) > EPSILON) {
+              throw new Error("Refund split payment total must match refund amount");
             }
-            await tx.salePayment.create({
-              data: {
+
+            await tx.salePayment.createMany({
+              data: refundEntries.map((entry) => ({
                 saleId,
-                amount: -refundAmount,
-                method: input.refundMethod as any,
+                amount: -entry.amount,
+                method: entry.method,
                 note: `Refund for return ${returnTransaction.id}`,
                 businessDate,
                 createdBy: userId,
-              },
+              })),
             });
           }
 
@@ -993,11 +1127,11 @@ export const billingService = {
       pendingRefundCount,
     ] = await Promise.all([
       prisma.salePayment.aggregate({
-        where: { paidAt: { gte: startOfMonth, lte: endOfMonth }, sale: { store: { orgId } } },
+        where: { businessDate: { gte: startOfMonth, lte: endOfMonth }, sale: { store: { orgId } } },
         _sum: { amount: true },
       }),
       prisma.salePayment.aggregate({
-        where: { paidAt: { gte: startOfPrevMonth, lte: endOfPrevMonth }, sale: { store: { orgId } } },
+        where: { businessDate: { gte: startOfPrevMonth, lte: endOfPrevMonth }, sale: { store: { orgId } } },
         _sum: { amount: true },
       }),
       prisma.sale.aggregate({
@@ -1015,10 +1149,10 @@ export const billingService = {
         where: { store: { orgId }, refundAmount: { gt: 0 } },
       }),
       prisma.returnTransaction.count({
-        where: { store: { orgId }, createdAt: { gte: startOfMonth, lte: endOfMonth }, refundAmount: { gt: 0 } },
+        where: { store: { orgId }, businessDate: { gte: startOfMonth, lte: endOfMonth }, refundAmount: { gt: 0 } },
       }),
       prisma.returnTransaction.count({
-        where: { store: { orgId }, createdAt: { gte: startOfPrevMonth, lte: endOfPrevMonth }, refundAmount: { gt: 0 } },
+        where: { store: { orgId }, businessDate: { gte: startOfPrevMonth, lte: endOfPrevMonth }, refundAmount: { gt: 0 } },
       }),
       prisma.returnTransaction.aggregate({
         where: { store: { orgId }, refundAmount: { gt: 0 } },
@@ -1124,6 +1258,13 @@ export const billingService = {
     const salesRows = sales.map((s) => ({
       ...s,
       rowType: "SALE",
+      paymentMethod: derivePresentationPaymentMethod(s.paymentMethod, s.payments),
+      payments: (s.payments ?? []).map((p) => ({
+        ...p,
+        amount: Number(p.amount ?? 0),
+        businessDate: p.businessDate instanceof Date ? p.businessDate.toISOString() : p.businessDate,
+        paidAt: p.paidAt instanceof Date ? p.paidAt.toISOString() : p.paidAt,
+      })),
       transactionDate: s.transactionDate instanceof Date ? s.transactionDate.toISOString() : s.transactionDate,
       createdAt: s.createdAt instanceof Date ? s.createdAt.toISOString() : s.createdAt,
     }));

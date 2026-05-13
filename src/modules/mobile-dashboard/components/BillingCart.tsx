@@ -3,7 +3,8 @@
 import { DeleteOutlined, MinusOutlined, PlusOutlined, ShoppingCartOutlined } from "@ant-design/icons";
 import { Button, DatePicker, Drawer, Empty, Input, Select, Space, Typography } from "antd";
 import dayjs from "dayjs";
-import type { PaymentMethodType } from "@/modules/billing/types";
+import type { PaymentMethodType, SplitPaymentEntry } from "@/modules/billing/types";
+import { SplitPaymentPanel } from "./SplitPaymentPanel";
 
 const PAYMENT_OPTIONS: Array<{ value: PaymentMethodType; label: string }> = [
   { value: "CASH", label: "Cash" },
@@ -20,6 +21,10 @@ export function BillingCart({
   onTaxChange,
   paymentMethod,
   onPaymentMethodChange,
+  splitMode,
+  onSplitModeChange,
+  splitPayments,
+  onSplitPaymentsChange,
   customerName,
   onCustomerNameChange,
   customerPhone,
@@ -43,6 +48,10 @@ export function BillingCart({
   onTaxChange: (value: number) => void;
   paymentMethod: PaymentMethodType;
   onPaymentMethodChange: (value: PaymentMethodType) => void;
+  splitMode: boolean;
+  onSplitModeChange: (value: boolean) => void;
+  splitPayments: SplitPaymentEntry[];
+  onSplitPaymentsChange: (entries: SplitPaymentEntry[]) => void;
   customerName: string;
   onCustomerNameChange: (value: string) => void;
   customerPhone: string;
@@ -60,6 +69,8 @@ export function BillingCart({
 }) {
   const taxAmount = Math.round(subtotal * taxPct / 100);
   const total = subtotal + taxAmount;
+  const splitTotal = splitPayments.reduce((sum, payment) => sum + payment.amount, 0);
+  const splitMatchesTotal = Math.abs(splitTotal - total) < 0.01;
 
   return (
     <Drawer title="Billing Cart" placement="right" open={open} onClose={onClose} size={420} destroyOnHidden>
@@ -131,7 +142,39 @@ export function BillingCart({
           </div>
         ) : null}
 
-        <Select value={paymentMethod} onChange={onPaymentMethodChange} options={PAYMENT_OPTIONS} size="large" />
+        <div style={{ display: "grid", gap: 10 }}>
+          <Typography.Text strong style={{ display: "block" }}>Payment Method</Typography.Text>
+          <Space.Compact block>
+            {PAYMENT_OPTIONS.map((option) => (
+              <Button
+                key={option.value}
+                type={!splitMode && paymentMethod === option.value ? "primary" : "default"}
+                onClick={() => {
+                  onSplitModeChange(false);
+                  onPaymentMethodChange(option.value);
+                }}
+                style={{ flex: 1 }}
+              >
+                {option.label}
+              </Button>
+            ))}
+            <Button
+              type={splitMode ? "primary" : "default"}
+              onClick={() => onSplitModeChange(true)}
+              style={{ flex: 1 }}
+            >
+              Split
+            </Button>
+          </Space.Compact>
+        </div>
+
+        {splitMode ? (
+          <SplitPaymentPanel
+            entries={splitPayments}
+            totalDue={total}
+            onEntriesChange={onSplitPaymentsChange}
+          />
+        ) : null}
         <Input type="number" min={0} value={taxPct} onChange={(event) => onTaxChange(Number(event.target.value || 0))} placeholder="Tax %" size="large" />
 
         <div style={{ border: "1px solid #e5e7eb", borderRadius: 16, padding: 14, background: "#f8fafc" }}>
@@ -149,9 +192,22 @@ export function BillingCart({
           </div>
         </div>
 
-        <Button type="primary" size="large" icon={<ShoppingCartOutlined />} disabled={items.length === 0} loading={checkoutLoading} onClick={onCheckout}>
+        <Button
+          type="primary"
+          size="large"
+          icon={<ShoppingCartOutlined />}
+          disabled={items.length === 0 || (splitMode && !splitMatchesTotal)}
+          loading={checkoutLoading}
+          onClick={onCheckout}
+        >
           Checkout
         </Button>
+
+        {splitMode && !splitMatchesTotal ? (
+          <Typography.Text type="danger" style={{ fontSize: 12, textAlign: "center" }}>
+            Split amount must exactly match total amount
+          </Typography.Text>
+        ) : null}
       </div>
     </Drawer>
   );

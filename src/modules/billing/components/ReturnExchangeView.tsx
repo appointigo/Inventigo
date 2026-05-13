@@ -22,6 +22,8 @@ interface ReturnExchangeViewProps {
       refundAmount: number;
       offsetAmount: number;
       refundMethod?: PaymentMethodType;
+      topUpPayments?: Array<{ method: PaymentMethodType; amount: number }>;
+      refundPayments?: Array<{ method: PaymentMethodType; amount: number }>;
       reason?: string;
       condition?: string;
       notes?: string;
@@ -50,6 +52,8 @@ const ReturnExchangeView = ({
   const [exchangeItems, setExchangeItems] = useState<CartItem[]>([]);
   const [productSearch, setProductSearch] = useState("");
   const [refundMethod, setRefundMethod] = useState<PaymentMethodType>("CASH");
+  const [splitMode, setSplitMode] = useState(false);
+  const [settlementSplits, setSettlementSplits] = useState<Array<{ method: PaymentMethodType; amount: number }>>([{ method: "CASH", amount: 0 }]);
   const [amountToCollect, setAmountToCollect] = useState<number>(0);
   const [reason, setReason] = useState("");
   const [condition, setCondition] = useState("");
@@ -80,6 +84,8 @@ const ReturnExchangeView = ({
       setReturnQuantities({});
       setExchangeItems([]);
       setRefundMethod("CASH");
+      setSplitMode(false);
+      setSettlementSplits([{ method: "CASH", amount: 0 }]);
       setReason("");
       setCondition("");
       setNotes("");
@@ -95,6 +101,8 @@ const ReturnExchangeView = ({
           setReturnQuantities({});
           setExchangeItems([]);
           setRefundMethod("CASH");
+          setSplitMode(false);
+          setSettlementSplits([{ method: "CASH", amount: 0 }]);
           setReason("");
           setCondition("");
           setNotes("");
@@ -162,10 +170,31 @@ const ReturnExchangeView = ({
         ? "EXCHANGE"
         : "RETURN";
   const requiresRefundMethod = netAmount > 0 || refundAmount > 0;
+  const settlementTargetAmount = netAmount > 0 ? amountToCollect : refundAmount;
+  const splitTotal = settlementSplits.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const splitValid =
+    !requiresRefundMethod
+      ? true
+      : settlementSplits.length > 0
+        && settlementSplits.every((item) => Number(item.amount) > 0)
+        && Math.abs(splitTotal - settlementTargetAmount) < 0.01;
 
   useEffect(() => {
     setAmountToCollect(offsetAmount);
   }, [offsetAmount]);
+
+  useEffect(() => {
+    if (!splitMode) return;
+    setSettlementSplits((prev) => {
+      if (prev.length === 0) return [{ method: refundMethod, amount: settlementTargetAmount }];
+      const next = [...prev];
+      const currentTotal = next.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+      if (Math.abs(currentTotal - settlementTargetAmount) > 0.01 && next.length === 1) {
+        next[0] = { ...next[0], amount: settlementTargetAmount };
+      }
+      return next;
+    });
+  }, [splitMode, settlementTargetAmount, refundMethod]);
 
   const variantRows = useMemo((): VariantRow[] => {
     const rows: VariantRow[] = products.flatMap((product) =>
@@ -431,6 +460,11 @@ const ReturnExchangeView = ({
       return;
     }
 
+    if (splitMode && requiresRefundMethod && !splitValid) {
+      message.error("Split payment total must match settlement amount.");
+      return;
+    }
+
     setSubmitting(true);
     try {
       await onCreateReturnTransaction(sale.id, {
@@ -445,6 +479,8 @@ const ReturnExchangeView = ({
         refundAmount,
         offsetAmount: amountToCollect,
         refundMethod: requiresRefundMethod ? refundMethod : undefined,
+        topUpPayments: splitMode && netAmount > 0 ? settlementSplits : undefined,
+        refundPayments: splitMode && refundAmount > 0 ? settlementSplits : undefined,
         reason: reason || undefined,
         condition: condition || undefined,
         notes: notes || undefined,
@@ -457,6 +493,8 @@ const ReturnExchangeView = ({
       setExchangeItems([]);
       setProductSearch("");
       setRefundMethod("CASH");
+      setSplitMode(false);
+      setSettlementSplits([{ method: "CASH", amount: 0 }]);
       setReason("");
       setCondition("");
       setNotes("");
@@ -706,16 +744,73 @@ const ReturnExchangeView = ({
                 {PAYMENT_OPTIONS.map((option) => (
                   <Button
                     key={option.value}
-                    type={refundMethod === option.value ? "primary" : "default"}
-                    onClick={() => setRefundMethod(option.value)}
+                    type={!splitMode && refundMethod === option.value ? "primary" : "default"}
+                    onClick={() => {
+                      setSplitMode(false);
+                      setRefundMethod(option.value);
+                    }}
                     size="small"
                     style={{ paddingInline: 4, height: token.controlHeightSM }}
                   >
                     {option.label}
                   </Button>
                 ))}
+                <Button
+                  type={splitMode ? "primary" : "default"}
+                  onClick={() => {
+                    setSplitMode(true);
+                    setSettlementSplits([{ method: refundMethod, amount: settlementTargetAmount }]);
+                  }}
+                  size="small"
+                  style={{ paddingInline: 4, height: token.controlHeightSM }}
+                >
+                  Split
+                </Button>
               </div>
             </div>
+
+            {splitMode && requiresRefundMethod ? (
+              <div style={{ border: "1px solid #e5e7eb", borderRadius: 10, padding: 10, display: "grid", gap: 8 }}>
+                {settlementSplits.map((entry, index) => (
+                  <div key={index} style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8 }}>
+                    <Select
+                      value={entry.method}
+                      options={PAYMENT_OPTIONS}
+                      onChange={(value) => {
+                        setSettlementSplits((prev) => prev.map((row, i) => (i === index ? { ...row, method: value } : row)));
+                      }}
+                    />
+                    <InputNumber
+                      min={0}
+                      precision={2}
+                      value={entry.amount}
+                      onChange={(value) => {
+                        setSettlementSplits((prev) => prev.map((row, i) => (i === index ? { ...row, amount: Number(value ?? 0) } : row)));
+                      }}
+                      style={{ width: "100%" }}
+                    />
+                    <Button
+                      danger
+                      disabled={settlementSplits.length === 1}
+                      onClick={() => setSettlementSplits((prev) => prev.filter((_, i) => i !== index))}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ))}
+
+                <Button
+                  type="dashed"
+                  onClick={() => setSettlementSplits((prev) => [...prev, { method: "CASH", amount: 0 }])}
+                >
+                  Add payment method
+                </Button>
+
+                <Text type={splitValid ? "success" : "danger"} style={{ fontSize: 12 }}>
+                  Entered: {formatCurrency(splitTotal)} | Expected: {formatCurrency(settlementTargetAmount)}
+                </Text>
+              </div>
+            ) : null}
 
             <div>
               <Text type="secondary" style={{ fontSize: 12 }}>Amount to collect</Text>
@@ -746,7 +841,7 @@ const ReturnExchangeView = ({
               type="primary"
               icon={<SwapOutlined />}
               loading={submitting}
-              disabled={returnedItems.length === 0 || submitting || !sale}
+              disabled={returnedItems.length === 0 || submitting || !sale || (splitMode && requiresRefundMethod && !splitValid)}
               onClick={handleSubmit}
               style={{ width: "100%", height: token.controlHeightLG }}
             >

@@ -16,21 +16,37 @@ export const POST = async (
   const { id } = await params;
   const body = await request.json();
   const amount = Number(body?.amount ?? 0);
-  const method = body?.method as "CASH" | "CARD" | "UPI";
+  const method = body?.method as "CASH" | "CARD" | "UPI" | undefined;
+  const splitPayments = Array.isArray(body?.splitPayments)
+    ? body.splitPayments.map((entry: any) => ({
+        method: String(entry?.method ?? "").toUpperCase(),
+        amount: Number(entry?.amount ?? 0),
+      }))
+    : undefined;
   const note = typeof body?.note === "string" ? body.note : undefined;
   const businessDate = typeof body?.businessDate === "string" ? body.businessDate : undefined;
 
-  if (!amount || amount <= 0) {
-    return NextResponse.json({ error: "Invalid payment amount" }, { status: 400 });
-  }
-  if (!method || !["CASH", "CARD", "UPI"].includes(method)) {
-    return NextResponse.json({ error: "Invalid payment method" }, { status: 400 });
+  if (splitPayments && splitPayments.length > 0) {
+    const invalidEntry = splitPayments.find(
+      (entry: any) => !["CASH", "CARD", "UPI"].includes(entry.method) || entry.amount <= 0
+    );
+    if (invalidEntry) {
+      return NextResponse.json({ error: "Invalid split payment entries" }, { status: 400 });
+    }
+  } else {
+    if (!amount || amount <= 0) {
+      return NextResponse.json({ error: "Invalid payment amount" }, { status: 400 });
+    }
+    if (!method || !["CASH", "CARD", "UPI"].includes(method)) {
+      return NextResponse.json({ error: "Invalid payment method" }, { status: 400 });
+    }
   }
 
   try {
     const payment = await billingService.recordSalePayment(user.orgId!, id, user.id, {
       amount,
       method,
+      splitPayments,
       note,
       businessDate,
     });

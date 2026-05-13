@@ -44,6 +44,18 @@ export const POST = async (
       refundAmount: Number(body.refundAmount ?? 0),
       offsetAmount: Number(body.offsetAmount ?? 0),
       refundMethod: typeof body.refundMethod === "string" ? body.refundMethod : undefined,
+      topUpPayments: Array.isArray(body.topUpPayments)
+        ? body.topUpPayments.map((entry: any) => ({
+            method: String(entry.method ?? "").toUpperCase(),
+            amount: Number(entry.amount ?? 0),
+          }))
+        : undefined,
+      refundPayments: Array.isArray(body.refundPayments)
+        ? body.refundPayments.map((entry: any) => ({
+            method: String(entry.method ?? "").toUpperCase(),
+            amount: Number(entry.amount ?? 0),
+          }))
+        : undefined,
       reason: typeof body.reason === "string" ? body.reason : undefined,
       condition: typeof body.condition === "string" ? body.condition : undefined,
       notes: typeof body.notes === "string" ? body.notes : undefined,

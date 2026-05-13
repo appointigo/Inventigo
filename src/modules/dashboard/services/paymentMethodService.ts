@@ -56,13 +56,36 @@ export function calculatePaymentMethodDistribution(
     return [];
   }
 
-  // Aggregate by payment method
+  // Aggregate by payment method. Prefer payment entries (split-aware),
+  // and fall back to sale.paymentMethod for legacy records (only valid methods).
   const methodTotals: Record<string, number> = {};
+  const validMethods = ["CASH", "CARD", "UPI"];
 
   completedSales.forEach((sale) => {
-    const method = sale.paymentMethod;
-    const amount = Number(sale.total) || 0;
-    methodTotals[method] = (methodTotals[method] ?? 0) + amount;
+    const paymentEntries = (sale.payments ?? [])
+      .filter((entry) => Number(entry.amount ?? 0) > 0)
+      .map((entry) => ({
+        method: entry.method,
+        amount: Number(entry.amount ?? 0),
+      }));
+
+    if (paymentEntries.length > 0) {
+      // Use individual payment entries (split payment breakdown)
+      paymentEntries.forEach((entry) => {
+        if (validMethods.includes(entry.method)) {
+          methodTotals[entry.method] = (methodTotals[entry.method] ?? 0) + entry.amount;
+        }
+      });
+      return;
+    }
+
+    // Fallback to sale.paymentMethod only for legacy records with valid methods
+    const fallbackMethod = sale.paymentMethod;
+    if (validMethods.includes(fallbackMethod)) {
+      const fallbackAmount = Number(sale.total) || 0;
+      methodTotals[fallbackMethod] = (methodTotals[fallbackMethod] ?? 0) + fallbackAmount;
+    }
+    // If method is "SPLIT" without payment entries, skip (data issue or in-progress)
   });
 
   // Calculate overall total
@@ -73,6 +96,7 @@ export function calculatePaymentMethodDistribution(
   }
 
   // Map to display format with percentages
+  // Note: SPLIT should never appear here - it's not a reportable payment method
   const methodLabels: Record<string, string> = {
     CASH: "Cash",
     CARD: "Card",
@@ -99,5 +123,15 @@ export function getTotalRevenueByMethod(
   let filteredSales = period ? filterSalesByPeriod(sales, period) : sales;
   
   const completedSales = filteredSales.filter((sale) => sale.status === "COMPLETED");
-  return completedSales.reduce((sum, sale) => sum + sale.total, 0);
+  return completedSales.reduce((sum, sale) => {
+    const hasPayments = Array.isArray(sale.payments) && sale.payments.length > 0;
+    if (!hasPayments) return sum + Number(sale.total || 0);
+
+    const paid = (sale.payments ?? []).reduce((entrySum, entry) => {
+      const amount = Number(entry.amount ?? 0);
+      return amount > 0 ? entrySum + amount : entrySum;
+    }, 0);
+
+    return sum + paid;
+  }, 0);
 }

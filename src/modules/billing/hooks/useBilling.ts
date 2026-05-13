@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import type { Sale, SaleFilters, SaleSummary, CartItem, CreateSaleInput, PaymentMethodType } from "../types";
+import type { Sale, SaleFilters, SaleSummary, CartItem, CreateSaleInput, PaymentMethodType, SplitPaymentEntry } from "../types";
 
 export function useSales(initialFilters?: SaleFilters) {
   const [sales, setSales] = useState<SaleSummary[]>([]);
@@ -77,11 +77,24 @@ export function useSales(initialFilters?: SaleFilters) {
     await fetchSales();
   };
 
-  const collectPayment = async (saleId: string, amount: number, paymentMethod: PaymentMethodType) => {
+  const collectPayment = async (
+    saleId: string,
+    amount: number,
+    paymentMethod: PaymentMethodType,
+    splitPayments?: Array<{ method: PaymentMethodType; amount: number }>,
+    note?: string,
+    businessDate?: string
+  ) => {
     const res = await fetch(`/api/billing/${encodeURIComponent(saleId)}/payments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount, method: paymentMethod }),
+      body: JSON.stringify({
+        amount,
+        method: paymentMethod,
+        splitPayments,
+        note,
+        businessDate,
+      }),
     });
     if (!res.ok) {
       const payload = await res.json().catch(() => ({ error: "Failed to collect payment" }));
@@ -105,6 +118,8 @@ export function useSales(initialFilters?: SaleFilters) {
       refundAmount: number;
       offsetAmount: number;
       refundMethod?: PaymentMethodType;
+      topUpPayments?: Array<{ method: PaymentMethodType; amount: number }>;
+      refundPayments?: Array<{ method: PaymentMethodType; amount: number }>;
       reason?: string;
       condition?: string;
       notes?: string;
@@ -155,6 +170,8 @@ export function useCart() {
   const [customerEmail, setCustomerEmail] = useState("");
   const [promoCodeId, setPromoCodeId] = useState<string | null>(null);
   const [transactionDate, setTransactionDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [splitMode, setSplitMode] = useState(false);
+  const [splitPayments, setSplitPayments] = useState<SplitPaymentEntry[]>([{ method: "CASH", amount: 0 }]);
 
   const addItem = (item: CartItem) => {
     setItems((prev) => {
@@ -198,6 +215,8 @@ export function useCart() {
     setCustomerEmail("");
     setPromoCodeId(null);
     setTransactionDate(new Date().toISOString().split('T')[0]);
+    setSplitMode(false);
+    setSplitPayments([{ method: "CASH", amount: 0 }]);
   };
 
   const subtotal = items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
@@ -206,18 +225,42 @@ export function useCart() {
   const total = subtotal - discountAmount + taxAmount;
   const amountDue = Math.max(total - amountPaid, 0);
 
-  const toCreateInput = (): CreateSaleInput => ({
-    items,
-    paymentMethod,
-    discountAmount,
-    taxAmount,
-    amountPaid: Math.max(0, amountPaid),
-    customerName: customerName || undefined,
-    customerPhone: customerPhone || undefined,
-    customerEmail: customerEmail || undefined,
-    promoCodeId: promoCodeId ?? undefined,
-    transactionDate,
-  });
+  const toCreateInput = (): CreateSaleInput => {
+    if (splitMode) {
+      const normalizedSplitPayments = splitPayments
+        .map((entry) => ({ method: entry.method, amount: Number(entry.amount || 0) }))
+        .filter((entry) => entry.amount > 0);
+
+      const splitAmountPaid = normalizedSplitPayments.reduce((sum, entry) => sum + entry.amount, 0);
+
+      return {
+        items,
+        paymentMethod,
+        splitPayments: normalizedSplitPayments,
+        discountAmount,
+        taxAmount,
+        amountPaid: Math.max(0, splitAmountPaid),
+        customerName: customerName || undefined,
+        customerPhone: customerPhone || undefined,
+        customerEmail: customerEmail || undefined,
+        promoCodeId: promoCodeId ?? undefined,
+        transactionDate,
+      };
+    }
+
+    return {
+      items,
+      paymentMethod,
+      discountAmount,
+      taxAmount,
+      amountPaid: Math.max(0, amountPaid),
+      customerName: customerName || undefined,
+      customerPhone: customerPhone || undefined,
+      customerEmail: customerEmail || undefined,
+      promoCodeId: promoCodeId ?? undefined,
+      transactionDate,
+    };
+  };
 
   return {
     items,
@@ -234,6 +277,8 @@ export function useCart() {
     customerPhone,
     customerEmail,
     transactionDate,
+    splitMode,
+    splitPayments,
     isAmountPaidManual,
     addItem,
     updateQuantity,
@@ -247,6 +292,8 @@ export function useCart() {
     setCustomerPhone,
     setCustomerEmail,
     setTransactionDate,
+    setSplitMode,
+    setSplitPayments,
     promoCodeId,
     setPromoCodeId,
     setIsAmountPaidManual,

@@ -580,10 +580,13 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
   const taxAmount = Math.round((cart.subtotal * cart.taxPct) / 100);
   const total = cart.subtotal - discountAmount + taxAmount;
   const totalItems = cart.items.reduce((s, i) => s + i.quantity, 0);
+  const splitTotalEntered = cart.splitPayments.reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+  const splitMatchesTotal = Math.abs(splitTotalEntered - total) < 0.01;
   const canConfirm =
     cart.items.length > 0 &&
     cart.customerName.trim().length > 0 &&
-    cart.customerPhone.length >= 10;
+    cart.customerPhone.length >= 10 &&
+    (!cart.splitMode || splitMatchesTotal);
 
   useEffect(() => {
     if (cart.items.length === 0) {
@@ -595,6 +598,11 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
       cart.setAmountPaid(total);
     }
   }, [cart.amountPaid, cart.isAmountPaidManual, cart.items.length, cart.setAmountPaid, cart.setIsAmountPaidManual, total]);
+
+  useEffect(() => {
+    if (!cart.splitMode) return;
+    cart.setAmountPaid(splitTotalEntered);
+  }, [cart, splitTotalEntered]);
 
   // ─── Render ────────────────────────────────────────────────────────────────
   return (
@@ -983,14 +991,85 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
               {PAYMENT_OPTIONS.map((opt) => (
                 <APayPill
                   key={opt.value}
-                  $active={cart.paymentMethod === opt.value}
-                  onClick={() => cart.setPaymentMethod(opt.value as PaymentMethodType)}
+                  $active={!cart.splitMode && cart.paymentMethod === opt.value}
+                  onClick={() => {
+                    cart.setSplitMode(false);
+                    cart.setPaymentMethod(opt.value as PaymentMethodType);
+                  }}
                 >
                   <PayPillEmoji>{opt.icon}</PayPillEmoji>
                   {opt.label}
                 </APayPill>
               ))}
+              <APayPill
+                $active={cart.splitMode}
+                onClick={() => {
+                  cart.setSplitMode(true);
+                  cart.setIsAmountPaidManual(true);
+                  if (cart.splitPayments.length === 0) {
+                    cart.setSplitPayments([{ method: cart.paymentMethod, amount: total }]);
+                  }
+                }}
+              >
+                <PayPillEmoji>🧾</PayPillEmoji>
+                Split
+              </APayPill>
             </PayPillsGrid>
+
+            {cart.splitMode ? (
+              <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+                {cart.splitPayments.map((entry, index) => (
+                  <div key={index} style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8 }}>
+                    <Select
+                      size="small"
+                      value={entry.method}
+                      options={PAYMENT_OPTIONS.map((opt) => ({ value: opt.value, label: opt.label }))}
+                      onChange={(value) => {
+                        const next = [...cart.splitPayments];
+                        next[index] = { ...next[index], method: value as PaymentMethodType };
+                        cart.setSplitPayments(next);
+                      }}
+                    />
+                    <Input
+                      size="small"
+                      type="number"
+                      min={0}
+                      value={entry.amount}
+                      onChange={(e) => {
+                        const next = [...cart.splitPayments];
+                        const amt = Number(e.target.value);
+                        next[index] = { ...next[index], amount: Number.isNaN(amt) ? 0 : Math.max(0, amt) };
+                        cart.setSplitPayments(next);
+                      }}
+                      placeholder="Amount"
+                    />
+                    <Button
+                      size="small"
+                      danger
+                      disabled={cart.splitPayments.length <= 1}
+                      onClick={() => {
+                        cart.setSplitPayments(cart.splitPayments.filter((_, i) => i !== index));
+                      }}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ))}
+
+                <Button
+                  size="small"
+                  onClick={() => {
+                    cart.setSplitPayments([...cart.splitPayments, { method: "CASH", amount: 0 }]);
+                  }}
+                >
+                  + Add Payment Method
+                </Button>
+
+                <div style={{ fontSize: 12, color: splitMatchesTotal ? "#15803d" : "#b45309" }}>
+                  Entered: {formatCurrency(splitTotalEntered)} · Remaining: {formatCurrency(Math.max(0, total - splitTotalEntered))}
+                </div>
+              </div>
+            ) : null}
           </CheckoutSection>
 
           <CheckoutSection>
@@ -1000,6 +1079,7 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
               min={0}
               value={cart.amountPaid}
               onChange={(e) => {
+                if (cart.splitMode) return;
                 const next = Number(e.target.value);
                 cart.setIsAmountPaidManual(true);
                 cart.setAmountPaid(clampNumber(Number.isNaN(next) ? 0 : next, 0, Math.max(0, total)));
@@ -1007,10 +1087,16 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
               size="small"
               prefix="₹"
               placeholder={String(total)}
+              disabled={cart.splitMode}
             />
             {cart.amountDue > 0 && (
               <div style={{ marginTop: 8, color: "#b45309", fontSize: 12 }}>
                 {formatCurrency(cart.amountDue)} due after this payment
+              </div>
+            )}
+            {cart.splitMode && !splitMatchesTotal && (
+              <div style={{ marginTop: 8, color: "#dc2626", fontSize: 12 }}>
+                Split total must match invoice total to confirm sale
               </div>
             )}
           </CheckoutSection>
