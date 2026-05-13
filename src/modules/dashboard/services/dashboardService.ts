@@ -67,7 +67,7 @@ export const dashboardService = {
         prisma.product.count({ where: { orgId } }),
         prisma.sale.findMany({
           where: {
-            status: "COMPLETED",
+            status: { in: ["COMPLETED", "EXCHANGED", "REFUNDED"] },
             ...(resolvedStoreId ? { storeId: resolvedStoreId } : { store: { orgId } }),
           },
           select: { transactionDate: true, total: true },
@@ -80,8 +80,8 @@ export const dashboardService = {
       where: {
         ...(resolvedStoreId ? { storeId: resolvedStoreId } : { store: { orgId } }),
       },
-      select: { createdAt: true, netAmount: true },
-      orderBy: { createdAt: "asc" },
+      select: { businessDate: true, createdAt: true, netAmount: true, offsetAmount: true, type: true },
+      orderBy: { businessDate: "asc" },
     });
 
     const allStock = stockResult.items;
@@ -133,15 +133,25 @@ export const dashboardService = {
       yearTotals.set(yearKey, (yearTotals.get(yearKey) ?? 0) + total);
     }
 
-    // Add return transaction net amounts (can be positive for exchange top-ups or negative for refunds)
+    // Add return transaction amounts to revenue tracking
+    // For EXCHANGE: offsetAmount (credit from returned item) + netAmount (additional payment) = total new product value
+    // For RETURN: netAmount (refund adjustment, typically negative)
     for (const rt of returnTxns) {
-      const amt = Number(rt.netAmount ?? 0);
-      const dayKey = formatDayKey(rt.createdAt as Date);
-      const monthKey = formatMonthKey(rt.createdAt as Date);
-      const yearKey = formatYearKey(rt.createdAt as Date);
-      dayTotals.set(dayKey, (dayTotals.get(dayKey) ?? 0) + amt);
-      monthTotals.set(monthKey, (monthTotals.get(monthKey) ?? 0) + amt);
-      yearTotals.set(yearKey, (yearTotals.get(yearKey) ?? 0) + amt);
+      let revenueAmount = Number(rt.netAmount ?? 0);
+      
+      // For exchange transactions, include the full value of the exchanged product
+      // This properly reflects the new product being sold in place of the old one
+      if (rt.type === "EXCHANGE") {
+        revenueAmount = Number(rt.offsetAmount ?? 0) + Number(rt.netAmount ?? 0);
+      }
+      
+      const reportDate = rt.businessDate ?? rt.createdAt;
+      const dayKey = formatDayKey(reportDate as Date);
+      const monthKey = formatMonthKey(reportDate as Date);
+      const yearKey = formatYearKey(reportDate as Date);
+      dayTotals.set(dayKey, (dayTotals.get(dayKey) ?? 0) + revenueAmount);
+      monthTotals.set(monthKey, (monthTotals.get(monthKey) ?? 0) + revenueAmount);
+      yearTotals.set(yearKey, (yearTotals.get(yearKey) ?? 0) + revenueAmount);
     }
 
     const now = new Date();
@@ -182,6 +192,7 @@ export const dashboardService = {
       quantity: m.quantity,
       reason: m.reason,
       userName: m.userName,
+      movementDate: m.movementDate,
       createdAt: m.createdAt,
     }));
 

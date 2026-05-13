@@ -47,6 +47,7 @@ export const POST = async (
       reason: typeof body.reason === "string" ? body.reason : undefined,
       condition: typeof body.condition === "string" ? body.condition : undefined,
       notes: typeof body.notes === "string" ? body.notes : undefined,
+      businessDate: typeof body.businessDate === "string" ? body.businessDate : undefined,
     });
     return NextResponse.json(transaction, { status: 201 });
   } catch (error) {

@@ -270,6 +270,7 @@ model StockMovement {
   referenceType ReferenceType?
   referenceId   String?
   createdBy     String
+  movementDate  DateTime          @default(now())
   createdAt     DateTime          @default(now())
   user          User              @relation(fields: [createdBy], references: [id])
   product       Product           @relation(fields: [productId], references: [id])
@@ -278,6 +279,7 @@ model StockMovement {
 
   @@index([productId])
   @@index([storeId])
+  @@index([movementDate])
   @@index([createdAt])
   @@index([referenceType, referenceId])
   @@map("stock_movements")
@@ -400,6 +402,7 @@ model SalePayment {
   saleId    String
   amount    Decimal       @db.Decimal(10, 2)
   method    PaymentMethod
+  businessDate DateTime   @default(now())
   paidAt    DateTime      @default(now())
   note      String?
   createdBy String
@@ -407,6 +410,7 @@ model SalePayment {
   user      User          @relation(fields: [createdBy], references: [id])
 
   @@index([saleId])
+  @@index([businessDate])
   @@index([paidAt])
   @@map("sale_payments")
 }
@@ -425,6 +429,7 @@ model ReturnTransaction {
   reason           String?
   condition        String?
   notes            String?
+  businessDate     DateTime      @default(now())
   createdAt        DateTime      @default(now())
   createdBy        String
   items            ReturnTransactionItem[]
@@ -436,6 +441,7 @@ model ReturnTransaction {
   @@index([originalSaleId])
   @@index([storeId])
   @@index([customerId])
+  @@index([businessDate])
   @@index([createdAt])
   @@map("return_transactions")
 }

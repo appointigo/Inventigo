@@ -18,6 +18,7 @@ export const POST = async (
   const amount = Number(body?.amount ?? 0);
   const method = body?.method as "CASH" | "CARD" | "UPI";
   const note = typeof body?.note === "string" ? body.note : undefined;
+  const businessDate = typeof body?.businessDate === "string" ? body.businessDate : undefined;
 
   if (!amount || amount <= 0) {
     return NextResponse.json({ error: "Invalid payment amount" }, { status: 400 });
@@ -31,6 +32,7 @@ export const POST = async (
       amount,
       method,
       note,
+      businessDate,
     });
     return NextResponse.json(payment, { status: 201 });
   } catch (error) {

@@ -37,6 +37,7 @@ export type RecentMovement = {
   quantity: number;
   reason: string | null;
   userName: string;
+  movementDate: string;
   createdAt: string;
 };
 

@@ -149,6 +149,7 @@ export function useCart() {
   const [taxPct, setTaxPct] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>("CASH");
   const [amountPaid, setAmountPaid] = useState(0);
+  const [isAmountPaidManual, setIsAmountPaidManual] = useState(false);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
@@ -191,6 +192,7 @@ export function useCart() {
     setTaxPct(0);
     setPaymentMethod("CASH");
     setAmountPaid(0);
+    setIsAmountPaidManual(false);
     setCustomerName("");
     setCustomerPhone("");
     setCustomerEmail("");
@@ -209,7 +211,7 @@ export function useCart() {
     paymentMethod,
     discountAmount,
     taxAmount,
-    amountPaid: amountPaid > 0 ? amountPaid : total,
+    amountPaid: Math.max(0, amountPaid),
     customerName: customerName || undefined,
     customerPhone: customerPhone || undefined,
     customerEmail: customerEmail || undefined,
@@ -232,6 +234,7 @@ export function useCart() {
     customerPhone,
     customerEmail,
     transactionDate,
+    isAmountPaidManual,
     addItem,
     updateQuantity,
     removeItem,
@@ -246,6 +249,7 @@ export function useCart() {
     setTransactionDate,
     promoCodeId,
     setPromoCodeId,
+    setIsAmountPaidManual,
     toCreateInput,
   };
 }

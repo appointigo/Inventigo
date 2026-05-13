@@ -587,13 +587,14 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
 
   useEffect(() => {
     if (cart.items.length === 0) {
+      cart.setIsAmountPaidManual(false);
       cart.setAmountPaid(0);
       return;
     }
-    if (cart.amountPaid <= 0) {
+    if (!cart.isAmountPaidManual) {
       cart.setAmountPaid(total);
     }
-  }, [cart.items.length, cart.amountPaid, cart.setAmountPaid, total]);
+  }, [cart.amountPaid, cart.isAmountPaidManual, cart.items.length, cart.setAmountPaid, cart.setIsAmountPaidManual, total]);
 
   // ─── Render ────────────────────────────────────────────────────────────────
   return (
@@ -1000,6 +1001,7 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
               value={cart.amountPaid}
               onChange={(e) => {
                 const next = Number(e.target.value);
+                cart.setIsAmountPaidManual(true);
                 cart.setAmountPaid(clampNumber(Number.isNaN(next) ? 0 : next, 0, Math.max(0, total)));
               }}
               size="small"

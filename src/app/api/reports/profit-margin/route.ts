@@ -50,47 +50,18 @@ export const GET = async (request: Request) => {
       }
     }
 
-    const [salePayments, legacySales, returnTransactions] = await Promise.all([
-      prisma.salePayment.findMany({
-        where: {
-          sale: {
-            store: { orgId: user.orgId },
-            ...(user.storeId ? { storeId: user.storeId } : {}),
-            status: "COMPLETED",
-          },
-          ...(Object.keys(paidAtFilter).length ? { paidAt: paidAtFilter } : {}),
-        },
-        select: {
-          id: true,
-          amount: true,
-          paidAt: true,
-          sale: {
-            select: {
-              id: true,
-              discountAmount: true,
-              items: {
-                select: {
-                  quantity: true,
-                  product: { select: { costPrice: true } },
-                },
-              },
-            },
-          },
-        },
-        orderBy: { paidAt: "asc" },
-      }),
+    const [sales, returnTransactions] = await Promise.all([
       prisma.sale.findMany({
         where: {
-          status: "COMPLETED",
+          status: { in: ["COMPLETED", "EXCHANGED", "REFUNDED"] },
           store: { orgId: user.orgId },
           ...(user.storeId ? { storeId: user.storeId } : {}),
-          amountPaid: { gt: 0 },
-          payments: { none: {} },
           ...(Object.keys(paidAtFilter).length ? { transactionDate: paidAtFilter } : {}),
         },
         select: {
+          id: true,
           transactionDate: true,
-          amountPaid: true,
+          total: true,
           discountAmount: true,
           items: {
             select: {
@@ -105,42 +76,89 @@ export const GET = async (request: Request) => {
         where: {
           store: { orgId: user.orgId },
           ...(user.storeId ? { storeId: user.storeId } : {}),
-          ...(Object.keys(paidAtFilter).length ? { createdAt: paidAtFilter } : {}),
+          ...(Object.keys(paidAtFilter).length ? { businessDate: paidAtFilter } : {}),
         },
         select: {
           id: true,
+          type: true,
+          businessDate: true,
           createdAt: true,
           netAmount: true,
+          offsetAmount: true,
+          items: {
+            select: {
+              newProductId: true,
+              newQuantity: true,
+              newUnitPrice: true,
+              newProduct: { select: { costPrice: true } },
+              returnedProductId: true,
+              returnedQuantity: true,
+              returnedUnitPrice: true,
+              returnedProduct: { select: { costPrice: true } },
+            },
+          },
         },
-        orderBy: { createdAt: "asc" },
+        orderBy: { businessDate: "asc" },
       }),
     ]);
 
     const allEntries: AggregateEntry[] = [
-      ...salePayments.map((sp) => ({
-        createdAt: sp.paidAt,
-        totalRevenue: Number(sp.amount ?? 0),
-        totalCost: sp.sale.items.reduce(
-          (sum, item) => sum + Number(item.product.costPrice ?? 0) * Number(item.quantity ?? 0),
-          0
-        ),
-        totalDiscount: Number(sp.sale.discountAmount ?? 0),
-      })),
-      ...legacySales.map((sale) => ({
+      ...sales.map((sale) => ({
         createdAt: sale.transactionDate,
-        totalRevenue: Number(sale.amountPaid ?? 0),
+        totalRevenue: Number(sale.total ?? 0),
         totalCost: sale.items.reduce(
           (sum, item) => sum + Number(item.product.costPrice ?? 0) * Number(item.quantity ?? 0),
           0
         ),
         totalDiscount: Number(sale.discountAmount ?? 0),
       })),
-      ...returnTransactions.map((rt) => ({
-        createdAt: rt.createdAt,
-        totalRevenue: Number(rt.netAmount ?? 0),
-        totalCost: 0,
-        totalDiscount: 0,
-      })),
+      ...returnTransactions.map((rt) => {
+        const exchangedItems = rt.items.filter((item) => item.newProductId);
+        const returnedItems = rt.items.filter((item) => item.returnedProductId);
+
+        const exchangedRevenue = exchangedItems.reduce(
+          (sum, item) => sum + Number(item.newUnitPrice ?? 0) * Number(item.newQuantity ?? 0),
+          0
+        );
+        const exchangedCost = exchangedItems.reduce(
+          (sum, item) => sum + Number(item.newProduct?.costPrice ?? 0) * Number(item.newQuantity ?? 0),
+          0
+        );
+
+        const returnedRevenue = returnedItems.reduce(
+          (sum, item) => sum + Number(item.returnedUnitPrice ?? 0) * Number(item.returnedQuantity ?? 0),
+          0
+        );
+        const returnedCost = returnedItems.reduce(
+          (sum, item) => sum + Number(item.returnedProduct?.costPrice ?? 0) * Number(item.returnedQuantity ?? 0),
+          0
+        );
+
+        if (rt.type === "EXCHANGE") {
+          return {
+            createdAt: rt.businessDate ?? rt.createdAt,
+            totalRevenue: exchangedRevenue,
+            totalCost: exchangedCost,
+            totalDiscount: 0,
+          };
+        }
+
+        if (rt.type === "RETURN") {
+          return {
+            createdAt: rt.businessDate ?? rt.createdAt,
+            totalRevenue: -returnedRevenue,
+            totalCost: -returnedCost,
+            totalDiscount: 0,
+          };
+        }
+
+        return {
+          createdAt: rt.businessDate ?? rt.createdAt,
+          totalRevenue: exchangedRevenue - returnedRevenue,
+          totalCost: exchangedCost - returnedCost,
+          totalDiscount: 0,
+        };
+      }),
     ];
 
     const grouped = new Map<string, Aggregate>();

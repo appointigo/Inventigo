@@ -284,6 +284,7 @@ export const billingService = {
                 create: {
                   amount: amountPaid,
                   method: input.paymentMethod,
+                  businessDate: input.transactionDate ? new Date(input.transactionDate) : new Date(),
                   createdBy: userId,
                 },
               } : undefined,
@@ -326,6 +327,7 @@ export const billingService = {
                 reason: `Sale ${invoiceNumber}`,
                 referenceType: "SALE",
                 referenceId: created.id,
+                movementDate: input.transactionDate ? new Date(input.transactionDate) : new Date(),
                 createdBy: userId,
               },
             });
@@ -458,11 +460,11 @@ export const billingService = {
 
     // Build return transaction query
     const rtWhere: any = { store: { orgId } };
-    if (filters?.startDate) rtWhere.createdAt = { ...(rtWhere.createdAt ?? {}), gte: new Date(filters.startDate) };
+    if (filters?.startDate) rtWhere.businessDate = { ...(rtWhere.businessDate ?? {}), gte: new Date(filters.startDate) };
     if (filters?.endDate) {
       const end = new Date(filters.endDate);
       end.setDate(end.getDate() + 1);
-      rtWhere.createdAt = { ...(rtWhere.createdAt ?? {}), lt: end };
+      rtWhere.businessDate = { ...(rtWhere.businessDate ?? {}), lt: end };
     }
 
     if (filters?.search) {
@@ -492,7 +494,7 @@ export const billingService = {
           customer: true,
           user: { select: { name: true } },
         },
-        orderBy: { createdAt: "desc" },
+        orderBy: { businessDate: "desc" },
       }),
     ]);
 
@@ -508,6 +510,7 @@ export const billingService = {
     const rtRows = returnTxns.map((r) => ({
       ...r,
       rowType: "RETURN_TRANSACTION",
+      businessDate: r.businessDate instanceof Date ? r.businessDate.toISOString() : r.businessDate,
       createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
       saleInvoiceNumber: r.sale?.invoiceNumber ?? undefined,
       customerName: r.customer?.name ?? null,
@@ -535,7 +538,7 @@ export const billingService = {
     }
 
     // Sort by createdAt desc
-    unified.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    unified.sort((a, b) => new Date((b as any).businessDate ?? b.createdAt).getTime() - new Date((a as any).businessDate ?? a.createdAt).getTime());
 
     return unified;
   },
@@ -628,7 +631,7 @@ export const billingService = {
     orgId: string,
     saleId: string,
     userId: string,
-    input: { amount: number; method: string; note?: string }
+    input: { amount: number; method: string; note?: string; businessDate?: string }
   ) {
     const sale = await prisma.sale.findFirst({
       where: { id: saleId, store: { orgId } },
@@ -658,6 +661,7 @@ export const billingService = {
           amount: input.amount,
           method: input.method as any,
           note: input.note,
+          businessDate: input.businessDate ? new Date(input.businessDate) : new Date(),
           createdBy: userId,
         },
       });
@@ -704,6 +708,7 @@ export const billingService = {
       reason?: string;
       condition?: string;
       notes?: string;
+      businessDate?: string;
     }
   ) {
     const sale = await prisma.sale.findFirst({
@@ -752,6 +757,7 @@ export const billingService = {
     const netAmount = exchangedTotal - returnedTotal;
     const offsetAmount = returnedTotal;
     const refundAmount = Math.max(returnedTotal - exchangedTotal, 0);
+    const businessDate = input.businessDate ? new Date(input.businessDate) : new Date();
 
     for (let attempt = 1; attempt <= 5; attempt += 1) {
       const referenceNumber = await generateReturnReferenceNumber(sale.storeId, attempt - 1);
@@ -772,6 +778,7 @@ export const billingService = {
               reason: input.reason,
               condition: input.condition,
               notes: input.notes,
+              businessDate,
               createdBy: userId,
               items: {
                 create: [
@@ -804,6 +811,7 @@ export const billingService = {
                 amount: netAmount,
                 method: input.refundMethod as any,
                 note: `Exchange top-up payment for ${returnTransaction.id}`,
+                businessDate,
                 createdBy: userId,
               },
             });
@@ -819,6 +827,7 @@ export const billingService = {
                 amount: -refundAmount,
                 method: input.refundMethod as any,
                 note: `Refund for return ${returnTransaction.id}`,
+                businessDate,
                 createdBy: userId,
               },
             });
@@ -865,11 +874,13 @@ export const billingService = {
                 productId: item.productId,
                 sizeId: item.sizeId,
                 storeId: sale.storeId,
-                type: isExchangeFlow ? "EXCHANGE_IN" : "RETURN",
+
+                type: "RETURN",
                 quantity: item.quantity,
                 reason: `Return for sale ${sale.invoiceNumber}`,
-                referenceType: isExchangeFlow ? "EXCHANGE" : "RETURN",
+                referenceType: "SALE",
                 referenceId: returnTransaction.id,
+                movementDate: businessDate,
                 createdBy: userId,
               },
             });
@@ -907,11 +918,12 @@ export const billingService = {
                 productId: item.productId,
                 sizeId: item.sizeId,
                 storeId: sale.storeId,
-                type: "EXCHANGE_OUT",
+                type: "SALE",
                 quantity: item.quantity,
                 reason: `Exchange for sale ${sale.invoiceNumber}`,
-                referenceType: "EXCHANGE",
+                referenceType: "SALE",
                 referenceId: returnTransaction.id,
+                movementDate: businessDate,
                 createdBy: userId,
               },
             });
@@ -1074,11 +1086,11 @@ export const billingService = {
 
     // Build return transaction query
     const rtWhere: any = { store: { orgId } };
-    if (filters?.startDate) rtWhere.createdAt = { ...(rtWhere.createdAt ?? {}), gte: new Date(filters.startDate) };
+    if (filters?.startDate) rtWhere.businessDate = { ...(rtWhere.businessDate ?? {}), gte: new Date(filters.startDate) };
     if (filters?.endDate) {
       const end = new Date(filters.endDate);
       end.setDate(end.getDate() + 1);
-      rtWhere.createdAt = { ...(rtWhere.createdAt ?? {}), lt: end };
+      rtWhere.businessDate = { ...(rtWhere.businessDate ?? {}), lt: end };
     }
 
     if (filters?.search) {
@@ -1105,7 +1117,7 @@ export const billingService = {
           sale: { select: { invoiceNumber: true, id: true } },
           customer: true,
         },
-        orderBy: { createdAt: "desc" },
+        orderBy: { businessDate: "desc" },
       }),
     ]);
 
@@ -1119,6 +1131,7 @@ export const billingService = {
     const rtRows = returnTxns.map((r) => ({
       ...r,
       rowType: "RETURN_TRANSACTION",
+      businessDate: r.businessDate instanceof Date ? r.businessDate.toISOString() : r.businessDate,
       createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
       saleInvoiceNumber: r.sale?.invoiceNumber ?? undefined,
       customerName: r.customer?.name ?? null,
@@ -1136,7 +1149,7 @@ export const billingService = {
       unified = unified.filter((r: any) => r.rowType === "RETURN_TRANSACTION" && (r.type === "RETURN" || r.type === "RETURN_EXCHANGE"));
     }
 
-    unified.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    unified.sort((a, b) => new Date((b as any).businessDate ?? b.createdAt).getTime() - new Date((a as any).businessDate ?? a.createdAt).getTime());
 
     const total = unified.length;
     const totalPages = Math.max(1, Math.ceil(total / limit));

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Avatar, Card, Typography, Tag, Space, Button } from "antd";
 import { DownOutlined, UpOutlined, ShoppingCartOutlined, SwapOutlined, ArrowLeftOutlined, UserOutlined, FileTextOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
@@ -32,7 +32,15 @@ export default function TransactionCard({ record: initialRecord, onViewSale, onV
   const [expanded, setExpanded] = useState(false);
   const [record, setRecord] = useState(initialRecord);
 
+  useEffect(() => {
+    setRecord((current: any) => ({
+      ...initialRecord,
+      rowType: current?.rowType ?? initialRecord.rowType ?? "SALE",
+    }));
+  }, [initialRecord]);
+
   const isSale = record.rowType === "SALE";
+  const businessDate = record.businessDate ?? record.transactionDate ?? record.createdAt;
 
   const avatar = (() => {
     if (isSale) return { bg: "#dbeafe", color: "#2563eb", icon: <ShoppingCartOutlined /> };
@@ -41,7 +49,7 @@ export default function TransactionCard({ record: initialRecord, onViewSale, onV
   })();
 
   const title = isSale ? `#${record.invoiceNumber}` : `#${record.referenceNumber}`;
-  const subtitle = `${record.customerName ?? "Walk-in"} • ${dayjs(record.createdAt).format("h:mm A")}`;
+  const subtitle = `${record.customerName ?? "Walk-in"} • ${dayjs(businessDate).format("h:mm A")}`;
 
   const amountDisplay = (() => {
     if (isSale) return formatCurrency(record.total);
@@ -139,7 +147,7 @@ export default function TransactionCard({ record: initialRecord, onViewSale, onV
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
                     <div style={{ color: "#6b7280" }}>Date</div>
-                    <div>{dayjs(record.createdAt).format("DD MMM YYYY, h:mm A")}</div>
+                    <div>{dayjs(record.transactionDate ?? record.createdAt).format("DD MMM YYYY, h:mm A")}</div>
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
                     <div style={{ color: "#6b7280" }}>Created by</div>
@@ -163,7 +171,12 @@ export default function TransactionCard({ record: initialRecord, onViewSale, onV
                       paymentHistory={record.payments ?? []}
                       defaultMethod={record.paymentMethod ?? "CASH"}
                       onPaymentCollected={(updatedSale) => {
-                        setRecord(updatedSale);
+                        setRecord((current: any) => ({
+                          ...current,
+                          ...updatedSale,
+                          rowType: current.rowType ?? "SALE",
+                          id: current.id,
+                        }));
                         onSaleUpdated?.(updatedSale);
                       }}
                     />
@@ -185,7 +198,7 @@ export default function TransactionCard({ record: initialRecord, onViewSale, onV
                 <div style={{ marginTop: 8 }}>
                   <div style={{ padding: 8, borderLeft: "2px solid #e5e7eb" }}>
                     <div style={{ fontWeight: 700 }}>Settled & Completed</div>
-                    <div style={{ color: "#6b7280", fontSize: 13 }}>{dayjs(record.createdAt).format("DD MMM YYYY, h:mm A")} • Ref {record.referenceNumber}</div>
+                    <div style={{ color: "#6b7280", fontSize: 13 }}>{dayjs(record.businessDate ?? record.createdAt).format("DD MMM YYYY, h:mm A")} • Ref {record.referenceNumber}</div>
                   </div>
                 </div>
               </div>

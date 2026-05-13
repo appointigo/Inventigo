@@ -19,7 +19,7 @@ function filterSalesByPeriod(
   const now = dayjs();
 
   return sales.filter((sale) => {
-    const saleDate = dayjs(sale.createdAt);
+    const saleDate = dayjs(sale.transactionDate ?? sale.createdAt);
     if (!saleDate.isValid()) return false;
 
     switch (period) {
