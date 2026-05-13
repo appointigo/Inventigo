@@ -343,6 +343,10 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
     }
   }, [cart, discountMode, discountValue]);
 
+  useEffect(() => {
+    cart.setDiscountMode(discountMode === "RUPEE" ? "FLAT" : "PERCENTAGE");
+  }, [cart, discountMode]);
+
   // ─── Promo handlers ────────────────────────────────────────────────────────
   const handleApplyPromo = () => {
     const code = promoInput.trim().toUpperCase();
@@ -597,7 +601,7 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
     if (!cart.isAmountPaidManual) {
       cart.setAmountPaid(total);
     }
-  }, [cart.amountPaid, cart.isAmountPaidManual, cart.items.length, cart.setAmountPaid, cart.setIsAmountPaidManual, total]);
+  }, [cart, cart.amountPaid, cart.isAmountPaidManual, cart.items.length, cart.setAmountPaid, cart.setIsAmountPaidManual, total]);
 
   useEffect(() => {
     if (!cart.splitMode) return;

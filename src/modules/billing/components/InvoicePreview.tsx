@@ -3,7 +3,7 @@
 import { Modal, Table, Typography } from "antd";
 import { PrinterOutlined, CheckCircleFilled, CloseOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
-import type { ReturnTransactionItem, ReturnTransactionHistory, Sale, SaleItem } from "../types";
+import type { ReturnTransactionItem, Sale, SaleItem } from "../types";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
 import dayjs from "dayjs";
 import { useStore } from "@/providers/StoreProvider";
@@ -55,12 +55,33 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
 
   if (!sale) return null;
 
+  const round2 = (value: number) => Math.round(value * 100) / 100;
+
+  const getItemSnapshot = (item: SaleItem) => {
+    const unitMrp = item.mrp != null ? Number(item.mrp) : Number(item.unitPrice);
+    const finalUnitPrice = item.finalUnitPrice != null
+      ? Number(item.finalUnitPrice)
+      : item.sellingPrice != null
+        ? Number(item.sellingPrice)
+        : Number(item.unitPrice);
+    const lineTotal = item.finalLineAmount != null ? Number(item.finalLineAmount) : Number(item.total);
+    const mrpLineTotal = round2(unitMrp * item.quantity);
+    const savings = Math.max(0, round2(mrpLineTotal - lineTotal));
+    const discountPercent = unitMrp > 0 ? Math.round(((unitMrp - finalUnitPrice) / unitMrp) * 100) : 0;
+
+    return { unitMrp, finalUnitPrice, lineTotal, mrpLineTotal, savings, discountPercent };
+  };
+
+  const mrpSubtotal = round2(sale.items.reduce((sum, item) => sum + ((item.mrp != null ? Number(item.mrp) : Number(item.unitPrice)) * item.quantity), 0));
+  const totalSavings = Math.max(0, round2(mrpSubtotal - Number(sale.total)));
+
   const handlePrint = () => {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
 
     const itemRows = sale.items
       .map((item, i) => {
+        const { unitMrp, finalUnitPrice, lineTotal, savings, discountPercent } = getItemSnapshot(item);
         const attrValues = Object.values(item.attributes ?? {})
           .filter((v) => {
             const s = String(v).trim().toLowerCase();
@@ -72,10 +93,19 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
         return `
           <tr>
             <td>${i + 1}</td>
-            <td>${item.productName}<br><small style="color:#888">${item.sku} · <span style="display:inline-block;background:#eff4ff;border:1px solid #bfdbfe;border-radius:3px;font-size:9pt;padding:0 5px;color:#2563eb;">${item.sizeLabel}</span>${attrValues}</small></td>
-            <td style="text-align:right">${formatCurrency(item.unitPrice)}</td>
+            <td>
+              <div style="font-weight:700;margin-bottom:4px;">${item.productName}</div>
+              <div style="font-size:10pt;color:#666;line-height:1.4;">
+                ${item.sku} · ${item.sizeLabel}${attrValues}
+              </div>
+              <div style="margin-top:6px;font-size:10pt;color:#111;">
+                <span style="font-weight:700;">${formatCurrency(finalUnitPrice)}</span>
+                ${unitMrp > finalUnitPrice ? `<span style="margin-left:8px;text-decoration:line-through;color:#888;">${formatCurrency(unitMrp)}</span>` : ""}
+              </div>
+              ${unitMrp > finalUnitPrice ? `<div style="font-size:10pt;color:#15803d;">${discountPercent}% OFF${savings > 0 ? ` • Save ${formatCurrency(savings)}` : ""}</div>` : ""}
+            </td>
             <td style="text-align:center">${item.quantity}</td>
-            <td style="text-align:right">${formatCurrency(item.total)}</td>
+            <td style="text-align:right">${formatCurrency(lineTotal)}</td>
           </tr>
         `;
       })
@@ -208,12 +238,13 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
           </table>
           ${historySections}
           <div class="totals">
-            <div>Subtotal: ${formatCurrency(sale.subtotal)}</div>
+            <div>Subtotal (MRP): ${formatCurrency(mrpSubtotal)}</div>
             ${sale.discountAmount > 0 ? `<div>Discount: -${formatCurrency(sale.discountAmount)}</div>` : ""}
+            ${totalSavings > 0 ? `<div>You Saved: ${formatCurrency(totalSavings)}</div>` : ""}
             ${sale.taxAmount > 0 ? `<div>Tax: ${formatCurrency(sale.taxAmount)}</div>` : ""}
             <div>Amount paid: ${formatCurrency(sale.amountPaid)}</div>
             ${sale.amountDue > 0 ? `<div>Amount due: ${formatCurrency(sale.amountDue)}</div>` : ""}
-            <div class="grand-total">Total: ${formatCurrency(sale.total)}</div>
+            <div class="grand-total">Final Total: ${formatCurrency(sale.total)}</div>
           </div>
           <div class="footer">Thank you for your purchase!</div>
           <script>window.onload = function() { setTimeout(function() { window.print(); }, 300); }<\/script>
@@ -255,9 +286,24 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
     {
       title: "Price",
       dataIndex: "unitPrice",
-      width: 100,
+      width: 140,
       align: "right",
-      render: (price: number) => <Text type="secondary">{formatCurrency(price)}</Text>,
+      render: (_price: number, record) => {
+        const { unitMrp, finalUnitPrice, savings, discountPercent } = getItemSnapshot(record);
+        return (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+            <Text strong>{formatCurrency(finalUnitPrice)}</Text>
+            {unitMrp > finalUnitPrice && (
+              <>
+                <Text delete type="secondary" style={{ fontSize: 12 }}>
+                  {formatCurrency(unitMrp)}
+                </Text>
+                <DiscountText>{discountPercent}% OFF{ savings > 0 ? ` • Save ${formatCurrency(savings)}` : "" }</DiscountText>
+              </>
+            )}
+          </div>
+        );
+      },
     },
     {
       title: "Qty",
@@ -271,7 +317,7 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
       dataIndex: "total",
       width: 100,
       align: "right",
-      render: (total: number) => <Text strong>{formatCurrency(total)}</Text>,
+      render: (_total: number, record) => <Text strong>{formatCurrency(record.finalLineAmount ?? record.total)}</Text>,
     },
   ];
 
@@ -301,7 +347,7 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
       dataIndex: "total",
       width: 100,
       align: "right",
-      render: (total: number) => <Text strong>{formatCurrency(total)}</Text>,
+      render: (_total: number, record) => <Text strong>{formatCurrency(record.total)}</Text>,
     },
   ];
 
@@ -386,13 +432,19 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
         {/* Summary */}
         <SummaryCard>
           <SumRow>
-            <span>Subtotal</span>
-            <span>{formatCurrency(sale.subtotal)}</span>
+            <span>Subtotal (MRP)</span>
+            <span>{formatCurrency(mrpSubtotal)}</span>
           </SumRow>
           {sale.discountAmount > 0 && (
             <SumRow>
               <DiscountText>Discount</DiscountText>
               <DiscountText>−{formatCurrency(sale.discountAmount)}</DiscountText>
+            </SumRow>
+          )}
+          {totalSavings > 0 && (
+            <SumRow>
+              <DiscountText>You Saved</DiscountText>
+              <DiscountText>{formatCurrency(totalSavings)}</DiscountText>
             </SumRow>
           )}
           {sale.taxAmount > 0 && (
@@ -401,18 +453,30 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
               <span>{formatCurrency(sale.taxAmount)}</span>
             </SumRow>
           )}
+          {sale.calculatedTotal != null && (
+            <SumRow>
+              <span>Calculated Total</span>
+              <span>{formatCurrency(sale.calculatedTotal)}</span>
+            </SumRow>
+          )}
+          {sale.roundOffAmount !== 0 && (
+            <SumRow>
+              <span>Round Off</span>
+              <span>{sale.roundOffAmount > 0 ? '+' : ''}{formatCurrency(sale.roundOffAmount)}</span>
+            </SumRow>
+          )}
           <SumRow>
             <span>Amount paid</span>
             <span>{formatCurrency(sale.amountPaid)}</span>
           </SumRow>
           {sale.amountDue > 0 && (
             <SumRow>
-              <span>Amount due</span>
-              <span>{formatCurrency(sale.amountDue)}</span>
+              <DiscountText>Amount due</DiscountText>
+              <DiscountText>{formatCurrency(sale.amountDue)}</DiscountText>
             </SumRow>
           )}
           <TotalSumRow>
-            <span>Total</span>
+            <span>Final Payable</span>
             <span>{formatCurrency(sale.total)}</span>
           </TotalSumRow>
         </SummaryCard>

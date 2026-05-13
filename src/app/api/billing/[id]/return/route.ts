@@ -56,6 +56,11 @@ export const POST = async (
             amount: Number(entry.amount ?? 0),
           }))
         : undefined,
+      transactionDate: typeof body.transactionDate === "string" ? body.transactionDate : undefined,
+      discountType: typeof body.discountType === "string" ? body.discountType : undefined,
+      discountPercent: Number(body.discountPercent ?? 0),
+      discountAmount: Number(body.discountAmount ?? 0),
+      taxRate: Number(body.taxRate ?? 0),
       reason: typeof body.reason === "string" ? body.reason : undefined,
       condition: typeof body.condition === "string" ? body.condition : undefined,
       notes: typeof body.notes === "string" ? body.notes : undefined,

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import type { CreateSaleInput, Sale, SaleItem, SaleFilters, SaleSummary } from "../types";
 import { customerService } from "@/modules/customers/services/customerService";
+import { allocatePricingSnapshots } from "../utils/pricingEngine";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -115,6 +116,7 @@ type NormalizedPaymentEntry = {
 };
 
 const round2 = (value: number): number => Math.round(value * 100) / 100;
+const clamp0 = (value: number): number => (Number.isFinite(value) && value > 0 ? value : 0);
 
 const derivePresentationPaymentMethod = (
   fallbackMethod: unknown,
@@ -179,6 +181,17 @@ const normalizePaymentEntries = (
   return [{ method: method as NormalizedPaymentEntry["method"], amount: round2(fallbackAmount) }];
 };
 
+const extractHistoricalUnitAmount = (item: any): number => {
+  const effectiveUnit = Number(item?.effectiveUnitPrice ?? item?.finalUnitPrice ?? item?.sellingPrice ?? item?.unitPrice ?? 0);
+  if (effectiveUnit > 0) {
+    return round2(effectiveUnit);
+  }
+
+  const quantity = Math.max(1, Number(item?.quantity ?? 1));
+  const lineTotal = Number(item?.finalLineAmount ?? item?.total ?? 0);
+  return round2(lineTotal / quantity);
+};
+
 const getPrimaryPaymentMethod = (entries: NormalizedPaymentEntry[], fallbackMethod?: string): "CASH" | "CARD" | "UPI" => {
   if (entries.length === 0) {
     const method = String(fallbackMethod ?? "CASH").toUpperCase();
@@ -200,7 +213,10 @@ const toSaleDto = (s: any): Sale => ({
   subtotal: Number(s.subtotal),
   discountAmount: Number(s.discountAmount),
   taxAmount: Number(s.taxAmount),
-  total: Number(s.total),
+  total: Number(s.finalPayableAmount ?? s.total),
+  calculatedTotal: s.calculatedTotal != null ? Number(s.calculatedTotal) : undefined,
+  roundOffAmount: Number(s.roundOffAmount ?? 0),
+  finalPayableAmount: s.finalPayableAmount != null ? Number(s.finalPayableAmount) : undefined,
   amountPaid: Number(s.amountPaid ?? 0),
   amountDue: Number(s.amountDue ?? 0),
   paymentMethod: derivePresentationPaymentMethod(s.paymentMethod, s.payments) as Sale["paymentMethod"],
@@ -218,6 +234,18 @@ const toSaleDto = (s: any): Sale => ({
     quantity: i.quantity,
     unitPrice: Number(i.unitPrice),
     total: Number(i.total),
+    mrp: i.mrp != null ? Number(i.mrp) : Number(i.unitPrice),
+    sellingPrice: i.sellingPrice != null ? Number(i.sellingPrice) : Number(i.unitPrice),
+    discountType: i.discountType ?? undefined,
+    appliedDiscountPercent: i.appliedDiscountPercent != null ? Number(i.appliedDiscountPercent) : undefined,
+    allocatedDiscount: i.allocatedDiscount != null ? Number(i.allocatedDiscount) : undefined,
+    taxableAmount: i.taxableAmount != null ? Number(i.taxableAmount) : undefined,
+    taxAmount: i.taxAmount != null ? Number(i.taxAmount) : undefined,
+    finalUnitPrice: i.finalUnitPrice != null ? Number(i.finalUnitPrice) : Number(i.unitPrice),
+    finalLineAmount: i.finalLineAmount != null ? Number(i.finalLineAmount) : Number(i.total),
+    effectiveUnitPrice: i.effectiveUnitPrice != null ? Number(i.effectiveUnitPrice) : Number(i.unitPrice),
+    costPrice: i.costPrice != null ? Number(i.costPrice) : undefined,
+    pricingSnapshotDate: i.pricingSnapshotDate instanceof Date ? i.pricingSnapshotDate.toISOString() : i.pricingSnapshotDate ?? undefined,
   })),
   payments: (s.payments ?? []).map((p: any) => ({
     id: p.id,
@@ -331,17 +359,66 @@ export const billingService = {
       }
 
       // Recompute discount server-side from promo.discountPct
-      discountAmount = Math.round(subtotal * Number(promo.discountPct)) / 100;
+      discountAmount = Math.round((subtotal * Number(promo.discountPct)) / 100);
       resolvedPromoCodeId = promo.id;
     }
 
-    const total = round2(subtotal - discountAmount + input.taxAmount);
-    const requestedAmountPaid = round2(Math.max(0, Number(input.amountPaid ?? total)));
-    const paymentEntries = normalizePaymentEntries(input.splitPayments, input.paymentMethod, requestedAmountPaid);
-    const splitCollected = round2(paymentEntries.reduce((sum, entry) => sum + entry.amount, 0));
+    const transactionDate = input.transactionDate ? new Date(input.transactionDate) : new Date();
+    const productIds = [...new Set(input.items.map((item) => item.productId))];
+    const products = productIds.length > 0
+      ? await prisma.product.findMany({
+          where: { id: { in: productIds } },
+          select: { id: true, mrp: true, costPrice: true },
+        })
+      : [];
+    const productMap = new Map(products.map((product) => [product.id, product]));
+    const pricing = allocatePricingSnapshots(
+      input.items.map((item) => {
+        const product = productMap.get(item.productId);
+        return {
+          productId: item.productId,
+          quantity: item.quantity,
+          mrp: Number(product?.mrp ?? item.unitPrice),
+          sellingPrice: Number(item.unitPrice),
+          costPrice: product?.costPrice != null ? Number(product.costPrice) : undefined,
+          eligibleForDiscount: true,
+        };
+      }),
+      {
+        discountType: input.discountType ?? "PERCENTAGE",
+        discountPercent: input.discountPercent ?? 0,
+        discountAmount,
+        taxRate: input.taxRate ?? 0,
+        taxMode: input.taxMode ?? "EXCLUSIVE",
+        pricingSnapshotDate: transactionDate,
+      }
+    );
 
-    if (splitCollected > total + EPSILON) {
-      throw new Error(`Collected amount cannot exceed total invoice amount of ₹${total.toFixed(2)}`);
+    discountAmount = pricing.discountAmount;
+    const taxAmount = pricing.taxAmount;
+    const calculatedTotal = pricing.total;
+
+    // Compute round-off for retail billing
+    const finalPayableAmount = Math.round(calculatedTotal);
+    const roundOffAmount = round2(finalPayableAmount - calculatedTotal);
+
+    let requestedAmountPaid = round2(Math.max(0, Number(input.amountPaid ?? finalPayableAmount)));
+    const paymentEntries = normalizePaymentEntries(input.splitPayments, input.paymentMethod, requestedAmountPaid);
+    let splitCollected = round2(paymentEntries.reduce((sum, entry) => sum + entry.amount, 0));
+
+    const overpayment = round2(splitCollected - finalPayableAmount);
+    const singleCashPaymentEntry = paymentEntries.length === 1 && paymentEntries[0].method === "CASH";
+
+    if (overpayment > EPSILON) {
+      if (singleCashPaymentEntry && overpayment <= 1) {
+        // Accept minor cash tendering differences by clamping the recorded payment
+        // to the invoice total. The actual cash drawer can handle the change.
+        paymentEntries[0].amount = finalPayableAmount;
+        splitCollected = finalPayableAmount;
+        requestedAmountPaid = finalPayableAmount;
+      } else {
+        throw new Error(`Collected amount cannot exceed total invoice amount of ₹${finalPayableAmount.toFixed(2)}`);
+      }
     }
 
     if (Math.abs(splitCollected - requestedAmountPaid) > EPSILON) {
@@ -349,8 +426,8 @@ export const billingService = {
     }
 
     const amountPaid = splitCollected;
-    const amountDue = Math.max(total - amountPaid, 0);
-    const paymentStatus = amountPaid >= total ? "PAID" : amountPaid > 0 ? "PARTIAL" : "PENDING";
+    const amountDue = Math.max(finalPayableAmount - amountPaid, 0);
+    const paymentStatus = amountPaid >= finalPayableAmount ? "PAID" : amountPaid > 0 ? "PARTIAL" : "PENDING";
     const primaryPaymentMethod = getPrimaryPaymentMethod(paymentEntries, input.paymentMethod);
 
     for (let attempt = 1; attempt <= 5; attempt += 1) {
@@ -368,31 +445,49 @@ export const billingService = {
               customerEmail: customer.email,
               subtotal,
               discountAmount,
-              taxAmount: input.taxAmount,
-              total,
+              taxAmount,
+              total: finalPayableAmount,
+              calculatedTotal,
+              roundOffAmount,
+              finalPayableAmount,
               amountPaid,
               amountDue,
               paymentMethod: primaryPaymentMethod,
               paymentStatus,
               status: "COMPLETED",
               createdBy: userId,
-              transactionDate: input.transactionDate ? new Date(input.transactionDate) : new Date(),
+              transactionDate,
               promoCodeId: resolvedPromoCodeId,
               items: {
-                create: input.items.map((it) => ({
-                  productId: it.productId,
-                  sizeId: it.sizeId,
-                  quantity: it.quantity,
-                  unitPrice: it.unitPrice,
-                  total: it.unitPrice * it.quantity,
-                })),
+                create: input.items.map((it, index) => {
+                  const snapshot = pricing.snapshots[index];
+                  return {
+                    productId: it.productId,
+                    sizeId: it.sizeId,
+                    quantity: it.quantity,
+                    unitPrice: it.unitPrice,
+                    total: it.unitPrice * it.quantity,
+                    mrp: snapshot?.mrp ?? it.unitPrice,
+                    sellingPrice: snapshot?.sellingPrice ?? it.unitPrice,
+                    discountType: snapshot?.discountType ?? null,
+                    appliedDiscountPercent: snapshot?.appliedDiscountPercent ?? null,
+                    allocatedDiscount: snapshot?.allocatedDiscount ?? 0,
+                    taxableAmount: snapshot?.taxableAmount ?? 0,
+                    taxAmount: snapshot?.taxAmount ?? 0,
+                    finalUnitPrice: snapshot?.finalUnitPrice ?? it.unitPrice,
+                    finalLineAmount: snapshot?.finalLineAmount ?? it.unitPrice * it.quantity,
+                    effectiveUnitPrice: snapshot?.effectiveUnitPrice ?? it.unitPrice,
+                    costPrice: snapshot?.costPrice ?? null,
+                    pricingSnapshotDate: snapshot?.pricingSnapshotDate ?? transactionDate,
+                  };
+                }),
               },
               payments: paymentEntries.length > 0
                 ? {
                     create: paymentEntries.map((entry) => ({
                       amount: entry.amount,
                       method: entry.method,
-                      businessDate: input.transactionDate ? new Date(input.transactionDate) : new Date(),
+                      businessDate: transactionDate,
                       createdBy: userId,
                     })),
                   }
@@ -447,7 +542,7 @@ export const billingService = {
             where: { id: customer.id },
             data: {
               lastVisitAt: visitDate,
-              totalSpent: { increment: total },
+              totalSpent: { increment: finalPayableAmount },
               totalVisits: { increment: 1 },
             },
           });
@@ -774,8 +869,9 @@ export const billingService = {
     }
 
     const amountPaid = Number(sale.amountPaid ?? 0) + paymentDelta;
-    const amountDue = Math.max(Number(sale.total) - amountPaid, 0);
-    const paymentStatus = amountPaid >= Number(sale.total) ? "PAID" : "PARTIAL";
+    const finalPayableAmount = Number(sale.finalPayableAmount ?? sale.total);
+    const amountDue = Math.max(finalPayableAmount - amountPaid, 0);
+    const paymentStatus = amountPaid >= finalPayableAmount ? "PAID" : "PARTIAL";
 
     const primaryMethodForSale = getPrimaryPaymentMethod(normalizedEntries, input.method ?? sale.paymentMethod);
 
@@ -837,6 +933,11 @@ export const billingService = {
       condition?: string;
       notes?: string;
       businessDate?: string;
+      transactionDate?: string;
+      discountType?: "PERCENTAGE" | "FLAT";
+      discountPercent?: number;
+      discountAmount?: number;
+      taxRate?: number;
     }
   ) {
     const sale = await prisma.sale.findFirst({
@@ -860,6 +961,24 @@ export const billingService = {
       saleItemsByKey.set(`${item.productId}:${item.sizeId}`, item);
     }
 
+    const returnedLineItems = input.returnedItems.map((item) => {
+      const historicalSaleItem = saleItemsByKey.get(`${item.productId}:${item.sizeId}`);
+      const historicalUnitAmount = historicalSaleItem
+        ? extractHistoricalUnitAmount(historicalSaleItem)
+        : round2(Number(item.total) / Math.max(1, item.quantity));
+
+      return {
+        ...item,
+        historicalUnitAmount,
+        total: round2(historicalUnitAmount * item.quantity),
+      };
+    });
+
+    const exchangedLineItems = (input.exchangedItems ?? []).map((item) => ({
+      ...item,
+      total: round2(Number(item.total ?? 0)),
+    }));
+
     const returnedQty = input.returnedItems.reduce((sum, item) => sum + item.quantity, 0);
     for (const item of input.returnedItems) {
       const key = `${item.productId}:${item.sizeId}`;
@@ -880,12 +999,37 @@ export const billingService = {
 
     const totalQty = sale.items.reduce((sum, item) => sum + item.quantity, 0);
     const returnStatus = returnedQty >= totalQty ? "FULL" : "PARTIAL";
-    const returnedTotal = input.returnedItems.reduce((sum, item) => sum + item.total, 0);
-    const exchangedTotal = input.exchangedItems?.reduce((sum, item) => sum + item.total, 0) ?? 0;
-    const netAmount = exchangedTotal - returnedTotal;
-    const offsetAmount = returnedTotal;
-    const refundAmount = Math.max(returnedTotal - exchangedTotal, 0);
+    const returnedTotal = returnedLineItems.reduce((sum, item) => sum + item.total, 0);
+    const exchangedTotal = exchangedLineItems.reduce((sum, item) => sum + item.total, 0);
+    
+    // Calculate discount on the difference or exchanged total
+    const baseForDiscount = Math.max(exchangedTotal, 0);
+    const discountType = input.discountType ?? "PERCENTAGE";
+    const discountPercent = clamp0(Number(input.discountPercent ?? 0));
+    const discountAmountInput = clamp0(Number(input.discountAmount ?? 0));
+    
+    let discountAmount = 0;
+    if (discountType === "PERCENTAGE") {
+      discountAmount = round2((baseForDiscount * discountPercent) / 100);
+    } else {
+      discountAmount = Math.min(discountAmountInput, baseForDiscount);
+    }
+    
+    // Calculate final amounts
+    const calculatedTotal = exchangedTotal - discountAmount;
+    const taxRate = clamp0(Number(input.taxRate ?? 0));
+    const taxAmount = taxRate > 0 ? round2((calculatedTotal * taxRate) / 100) : 0;
+    const calculatedWithTax = calculatedTotal + taxAmount;
+    
+    // Apply round-off
+    const finalPayable = Math.round(calculatedWithTax);
+    const roundOffAmount = round2(finalPayable - calculatedWithTax);
+    
+    const netAmount = Math.max(finalPayable - returnedTotal, 0);
+    const offsetAmount = netAmount;
+    const refundAmount = Math.max(returnedTotal - finalPayable, 0);
     const businessDate = input.businessDate ? new Date(input.businessDate) : new Date();
+    const transactionDate = input.transactionDate ? new Date(input.transactionDate) : new Date();
 
     for (let attempt = 1; attempt <= 5; attempt += 1) {
       const referenceNumber = await generateReturnReferenceNumber(sale.storeId, attempt - 1);
@@ -906,17 +1050,29 @@ export const billingService = {
               reason: input.reason,
               condition: input.condition,
               notes: input.notes,
+              discountType: discountType || undefined,
+              discountPercent: discountPercent > 0 ? new Prisma.Decimal(discountPercent) : undefined,
+              discountAmount: discountAmount > 0 ? new Prisma.Decimal(discountAmount) : undefined,
+              taxRate: taxRate > 0 ? new Prisma.Decimal(taxRate) : undefined,
+              calculatedTotal: new Prisma.Decimal(calculatedWithTax),
+              roundOffAmount: new Prisma.Decimal(roundOffAmount),
+              finalPayable: new Prisma.Decimal(finalPayable),
+              splitPaymentData: (input.topUpPayments || input.refundPayments) ? JSON.stringify({
+                topUpPayments: input.topUpPayments,
+                refundPayments: input.refundPayments,
+              }) : undefined,
+              transactionDate,
               businessDate,
               createdBy: userId,
               items: {
                 create: [
-                  ...input.returnedItems.map((ri) => ({
+                  ...returnedLineItems.map((ri) => ({
                     returnedProductId: ri.productId,
                     returnedSizeId: ri.sizeId,
                     returnedQuantity: ri.quantity,
-                    returnedUnitPrice: new Prisma.Decimal(Number(ri.total) / (ri.quantity || 1)),
+                    returnedUnitPrice: new Prisma.Decimal(ri.historicalUnitAmount),
                   })),
-                  ...(input.exchangedItems ?? []).map((ei) => ({
+                  ...exchangedLineItems.map((ei) => ({
                     returnedQuantity: 0,
                     returnedUnitPrice: new Prisma.Decimal(0),
                     newProductId: ei.productId,

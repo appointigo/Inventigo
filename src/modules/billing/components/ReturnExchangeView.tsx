@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { App, Button, Card, Input, InputNumber, Select, Space, Spin, Table, Typography, Divider, Tag, theme } from "antd";
+import { App, Button, Card, Input, InputNumber, Select, Space, Spin, Table, Typography, Divider, Tag, theme, DatePicker, Row, Col } from "antd";
 import { SearchOutlined, SwapOutlined, ReloadOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
+import dayjs from "dayjs";
 import { useProducts } from "@/modules/products/hooks/useProducts";
 import type { SaleSummary, Sale, SaleItem, VariantRow, CartItem, PaymentMethodType } from "../types";
 import { PAYMENT_OPTIONS } from "../constants";
@@ -27,6 +28,11 @@ interface ReturnExchangeViewProps {
       reason?: string;
       condition?: string;
       notes?: string;
+      transactionDate?: string;
+      discountType?: "PERCENTAGE" | "FLAT";
+      discountPercent?: number;
+      discountAmount?: number;
+      taxRate?: number;
     }
   ) => Promise<void>;
   refreshSales: () => Promise<void>;
@@ -51,13 +57,24 @@ const ReturnExchangeView = ({
   const [returnQuantities, setReturnQuantities] = useState<Record<string, number>>({});
   const [exchangeItems, setExchangeItems] = useState<CartItem[]>([]);
   const [productSearch, setProductSearch] = useState("");
-  const [refundMethod, setRefundMethod] = useState<PaymentMethodType>("CASH");
-  const [splitMode, setSplitMode] = useState(false);
-  const [settlementSplits, setSettlementSplits] = useState<Array<{ method: PaymentMethodType; amount: number }>>([{ method: "CASH", amount: 0 }]);
-  const [amountToCollect, setAmountToCollect] = useState<number>(0);
+  
+  // Transaction details
+  const [transactionDate, setTransactionDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [reason, setReason] = useState("");
   const [condition, setCondition] = useState("");
   const [notes, setNotes] = useState("");
+  
+  // Discount and tax
+  const [discountType, setDiscountType] = useState<"PERCENTAGE" | "FLAT">("PERCENTAGE");
+  const [discountValue, setDiscountValue] = useState<number>(0);
+  const [taxRate, setTaxRate] = useState<number>(0);
+  
+  // Payment
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>("CASH");
+  const [splitMode, setSplitMode] = useState(false);
+  const [settlementSplits, setSettlementSplits] = useState<Array<{ method: PaymentMethodType; amount: number }>>([{ method: "CASH", amount: 0 }]);
+  const [amountReceived, setAmountReceived] = useState<number>(0);
+  
   const [submitting, setSubmitting] = useState(false);
 
   const { products, loading: productsLoading } = useProducts(
@@ -83,9 +100,14 @@ const ReturnExchangeView = ({
       setSale(null);
       setReturnQuantities({});
       setExchangeItems([]);
-      setRefundMethod("CASH");
+      setTransactionDate(new Date().toISOString().split('T')[0]);
+      setDiscountType("PERCENTAGE");
+      setDiscountValue(0);
+      setTaxRate(0);
+      setPaymentMethod("CASH");
       setSplitMode(false);
       setSettlementSplits([{ method: "CASH", amount: 0 }]);
+      setAmountReceived(0);
       setReason("");
       setCondition("");
       setNotes("");
@@ -100,9 +122,14 @@ const ReturnExchangeView = ({
           setSale(fetched);
           setReturnQuantities({});
           setExchangeItems([]);
-          setRefundMethod("CASH");
+          setTransactionDate(new Date().toISOString().split('T')[0]);
+          setDiscountType("PERCENTAGE");
+          setDiscountValue(0);
+          setTaxRate(0);
+          setPaymentMethod("CASH");
           setSplitMode(false);
           setSettlementSplits([{ method: "CASH", amount: 0 }]);
+          setAmountReceived(0);
           setReason("");
           setCondition("");
           setNotes("");
@@ -141,12 +168,16 @@ const ReturnExchangeView = ({
     () =>
       returnRows
         .filter((item) => item.returnQty > 0)
-        .map((item) => ({
-          productId: item.productId,
-          sizeId: item.sizeId,
-          quantity: item.returnQty,
-          total: item.returnQty * item.unitPrice,
-        })),
+        .map((item) => {
+          // Use transactional snapshot price paid by customer, not MRP
+          const pricePaid = item.effectiveUnitPrice ?? item.finalUnitPrice ?? item.sellingPrice ?? item.unitPrice;
+          return {
+            productId: item.productId,
+            sizeId: item.sizeId,
+            quantity: item.returnQty,
+            total: Math.round(item.returnQty * pricePaid * 100) / 100,
+          };
+        }),
     [returnRows]
   );
 
@@ -160,33 +191,50 @@ const ReturnExchangeView = ({
     [exchangeItems]
   );
 
-  const offsetAmount = Math.max(exchangeTotal - returnedTotal, 0);
-  const refundAmount = Math.max(returnedTotal - exchangeTotal, 0);
-  const netAmount = exchangeTotal - returnedTotal;
+  // Discount calculation
+  const baseForDiscount = Math.max(exchangeTotal, 0);
+  const calculatedDiscount =
+    discountType === "PERCENTAGE"
+      ? Math.round((baseForDiscount * discountValue) / 100 * 100) / 100
+      : Math.min(discountValue, baseForDiscount);
+
+  // Tax and totals
+  const calculatedTotal = exchangeTotal - calculatedDiscount;
+  const calculatedTax = taxRate > 0 ? Math.round((calculatedTotal * taxRate) / 100 * 100) / 100 : 0;
+  const calculatedWithTax = calculatedTotal + calculatedTax;
+  
+  // Round-off calculation
+  const finalPayable = Math.round(calculatedWithTax);
+  const roundOff = Math.round((finalPayable - calculatedWithTax) * 100) / 100;
+
+  // Settlement amounts
+  const netAmount = Math.max(finalPayable - returnedTotal, 0);
+  const refundAmount = Math.max(returnedTotal - finalPayable, 0);
+  const offsetAmount = netAmount;
+
   const exchangeType =
     returnedItems.length > 0 && exchangeItems.length > 0
       ? "RETURN_EXCHANGE"
       : exchangeItems.length > 0
         ? "EXCHANGE"
         : "RETURN";
-  const requiresRefundMethod = netAmount > 0 || refundAmount > 0;
-  const settlementTargetAmount = netAmount > 0 ? amountToCollect : refundAmount;
+
+  const requiresPayment = netAmount > 0;
+  const amountDue = Math.max(netAmount - amountReceived, 0);
+
+  const settlementTargetAmount = requiresPayment ? amountDue : refundAmount;
   const splitTotal = settlementSplits.reduce((sum, item) => sum + Number(item.amount || 0), 0);
   const splitValid =
-    !requiresRefundMethod
+    !requiresPayment
       ? true
-      : settlementSplits.length > 0
-        && settlementSplits.every((item) => Number(item.amount) > 0)
-        && Math.abs(splitTotal - settlementTargetAmount) < 0.01;
-
-  useEffect(() => {
-    setAmountToCollect(offsetAmount);
-  }, [offsetAmount]);
+      : splitMode
+        ? Math.abs(splitTotal - settlementTargetAmount) < 0.01
+        : true;
 
   useEffect(() => {
     if (!splitMode) return;
     setSettlementSplits((prev) => {
-      if (prev.length === 0) return [{ method: refundMethod, amount: settlementTargetAmount }];
+      if (prev.length === 0) return [{ method: paymentMethod, amount: settlementTargetAmount }];
       const next = [...prev];
       const currentTotal = next.reduce((sum, row) => sum + Number(row.amount || 0), 0);
       if (Math.abs(currentTotal - settlementTargetAmount) > 0.01 && next.length === 1) {
@@ -194,7 +242,7 @@ const ReturnExchangeView = ({
       }
       return next;
     });
-  }, [splitMode, settlementTargetAmount, refundMethod]);
+  }, [splitMode, settlementTargetAmount, paymentMethod]);
 
   const variantRows = useMemo((): VariantRow[] => {
     const rows: VariantRow[] = products.flatMap((product) =>
@@ -331,14 +379,14 @@ const ReturnExchangeView = ({
       key: "unitPrice",
       width: 120,
       align: "right",
-      render: (value: number) => formatCurrency(value),
+      render: (_value: number, record) => formatCurrency(record.effectiveUnitPrice ?? record.finalUnitPrice ?? record.sellingPrice ?? record.unitPrice),
     },
     {
       title: "Total",
       key: "total",
       width: 120,
       align: "right",
-      render: (_value, item) => formatCurrency(item.returnQty * item.unitPrice),
+      render: (_value, item) => formatCurrency(item.returnQty * (item.effectiveUnitPrice ?? item.finalUnitPrice ?? item.sellingPrice ?? item.unitPrice)),
     },
   ];
 
@@ -455,12 +503,12 @@ const ReturnExchangeView = ({
       return;
     }
 
-    if (requiresRefundMethod && !refundMethod) {
-      message.error("Select a refund method for the refund amount.");
+    if (requiresPayment && !paymentMethod) {
+      message.error("Select a payment method.");
       return;
     }
 
-    if (splitMode && requiresRefundMethod && !splitValid) {
+    if (splitMode && requiresPayment && !splitValid) {
       message.error("Split payment total must match settlement amount.");
       return;
     }
@@ -477,13 +525,18 @@ const ReturnExchangeView = ({
           total: item.quantity * item.unitPrice,
         })),
         refundAmount,
-        offsetAmount: amountToCollect,
-        refundMethod: requiresRefundMethod ? refundMethod : undefined,
-        topUpPayments: splitMode && netAmount > 0 ? settlementSplits : undefined,
+        offsetAmount: offsetAmount,
+        refundMethod: requiresPayment ? paymentMethod : undefined,
+        topUpPayments: splitMode && requiresPayment ? settlementSplits : undefined,
         refundPayments: splitMode && refundAmount > 0 ? settlementSplits : undefined,
         reason: reason || undefined,
         condition: condition || undefined,
         notes: notes || undefined,
+        transactionDate,
+        discountType: discountValue > 0 ? discountType : undefined,
+        discountPercent: discountType === "PERCENTAGE" && discountValue > 0 ? discountValue : undefined,
+        discountAmount: discountType === "FLAT" && discountValue > 0 ? discountValue : undefined,
+        taxRate: taxRate > 0 ? taxRate : undefined,
       });
 
       message.success("Return / exchange processed successfully.");
@@ -492,9 +545,13 @@ const ReturnExchangeView = ({
       setReturnQuantities({});
       setExchangeItems([]);
       setProductSearch("");
-      setRefundMethod("CASH");
+      setPaymentMethod("CASH");
       setSplitMode(false);
       setSettlementSplits([{ method: "CASH", amount: 0 }]);
+      setAmountReceived(0);
+      setDiscountType("PERCENTAGE");
+      setDiscountValue(0);
+      setTaxRate(0);
       setReason("");
       setCondition("");
       setNotes("");
@@ -699,6 +756,15 @@ const ReturnExchangeView = ({
                     rows={1}
                   />
                 </div>
+                <div style={{ marginTop: 12 }}>
+                  <Text type="secondary" style={{ fontSize: 12, display: "block", marginBottom: 8 }}>Transaction Date</Text>
+                  <DatePicker
+                    value={dayjs(transactionDate)}
+                    onChange={(date) => setTransactionDate(date?.format("YYYY-MM-DD") ?? "")}
+                    disabledDate={(current) => current && current.isAfter(dayjs().endOf("day"))}
+                    style={{ width: "100%" }}
+                  />
+                </div>
               </Card>
             </>
           )}
@@ -724,12 +790,30 @@ const ReturnExchangeView = ({
                 </div>
                 <Divider style={{ margin: "6px 0" }} />
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <Text>Discount</Text>
+                  <Text strong style={{ color: "#f59e0b" }}>-{formatCurrency(calculatedDiscount)}</Text>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <Text>Tax</Text>
+                  <Text strong style={{ color: "#16a34a" }}>+{formatCurrency(calculatedTax)}</Text>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
                   <Text>Price difference</Text>
                   <Text strong>{formatCurrency(exchangeTotal - returnedTotal)}</Text>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <Text>Amount to collect</Text>
-                  <Text strong style={{ color: "#15803d" }}>{formatCurrency(amountToCollect)}</Text>
+                  <Text>Calculated total</Text>
+                  <Text strong>{formatCurrency(calculatedWithTax)}</Text>
+                </div>
+                {roundOff !== 0 ? (
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <Text>Round off</Text>
+                    <Text strong>{roundOff > 0 ? "+" : ""}{formatCurrency(roundOff)}</Text>
+                  </div>
+                ) : null}
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <Text>Exchange net due</Text>
+                  <Text strong style={{ color: "#15803d" }}>{formatCurrency(netAmount)}</Text>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
                   <Text>Amount to refund</Text>
@@ -739,15 +823,50 @@ const ReturnExchangeView = ({
             </div>
 
             <div>
+              <Text type="secondary" style={{ fontSize: 12 }}>Discount</Text>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
+                <Select
+                  value={discountType}
+                  onChange={(value) => setDiscountType(value as "PERCENTAGE" | "FLAT")}
+                  options={[
+                    { label: "Percentage (%)", value: "PERCENTAGE" },
+                    { label: "Fixed (₹)", value: "FLAT" },
+                  ]}
+                  size="small"
+                />
+                <InputNumber
+                  min={0}
+                  max={discountType === "PERCENTAGE" ? 100 : baseForDiscount}
+                  value={discountValue}
+                  onChange={(value) => setDiscountValue(Number(value ?? 0))}
+                  size="small"
+                  style={{ width: "100%" }}
+                />
+              </div>
+            </div>
+
+            <div>
+              <Text type="secondary" style={{ fontSize: 12 }}>Tax (%)</Text>
+              <InputNumber
+                min={0}
+                max={100}
+                value={taxRate}
+                onChange={(value) => setTaxRate(Number(value ?? 0))}
+                size="small"
+                style={{ width: "100%", marginTop: 8 }}
+              />
+            </div>
+
+            <div>
               <Text type="secondary" style={{ fontSize: 12 }}>Payment method</Text>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginTop: 8 }}>
                 {PAYMENT_OPTIONS.map((option) => (
                   <Button
                     key={option.value}
-                    type={!splitMode && refundMethod === option.value ? "primary" : "default"}
+                    type={!splitMode && paymentMethod === option.value ? "primary" : "default"}
                     onClick={() => {
                       setSplitMode(false);
-                      setRefundMethod(option.value);
+                      setPaymentMethod(option.value);
                     }}
                     size="small"
                     style={{ paddingInline: 4, height: token.controlHeightSM }}
@@ -759,7 +878,7 @@ const ReturnExchangeView = ({
                   type={splitMode ? "primary" : "default"}
                   onClick={() => {
                     setSplitMode(true);
-                    setSettlementSplits([{ method: refundMethod, amount: settlementTargetAmount }]);
+                    setSettlementSplits([{ method: paymentMethod, amount: settlementTargetAmount }]);
                   }}
                   size="small"
                   style={{ paddingInline: 4, height: token.controlHeightSM }}
@@ -769,7 +888,7 @@ const ReturnExchangeView = ({
               </div>
             </div>
 
-            {splitMode && requiresRefundMethod ? (
+            {splitMode && requiresPayment ? (
               <div style={{ border: "1px solid #e5e7eb", borderRadius: 10, padding: 10, display: "grid", gap: 8 }}>
                 {settlementSplits.map((entry, index) => (
                   <div key={index} style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8 }}>
@@ -813,26 +932,20 @@ const ReturnExchangeView = ({
             ) : null}
 
             <div>
-              <Text type="secondary" style={{ fontSize: 12 }}>Amount to collect</Text>
+              <Text type="secondary" style={{ fontSize: 12 }}>Amount received</Text>
               <InputNumber
-                value={amountToCollect}
-                onChange={(value) => setAmountToCollect(Number(value ?? 0))}
+                min={0}
+                value={amountReceived}
+                onChange={(value) => setAmountReceived(Number(value ?? 0))}
                 size="middle"
                 style={{ width: "100%", marginTop: 6, height: token.controlHeight }}
-                min={0}
               />
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginTop: 8 }}>
-                {[100, 500, 1000, amountToCollect].map((amt, index) => (
-                  <Button
-                    key={`${amt}-${index}`}
-                    size="small"
-                    onClick={() => setAmountToCollect(Number(amt))}
-                    style={{ height: token.controlHeightSM }}
-                  >
-                    {formatCurrency(Number(amt))}
-                  </Button>
-                ))}
-              </div>
+              {amountDue > 0 && (
+                <Row justify="space-between" style={{ marginTop: 8 }}>
+                  <Text type="secondary">Amount due</Text>
+                  <Text type="danger">{formatCurrency(amountDue)}</Text>
+                </Row>
+              )}
             </div>
 
             <Input.TextArea placeholder="Additional notes (optional)" rows={3} />
@@ -841,7 +954,7 @@ const ReturnExchangeView = ({
               type="primary"
               icon={<SwapOutlined />}
               loading={submitting}
-              disabled={returnedItems.length === 0 || submitting || !sale || (splitMode && requiresRefundMethod && !splitValid)}
+              disabled={returnedItems.length === 0 || submitting || !sale || (splitMode && requiresPayment && !splitValid)}
               onClick={handleSubmit}
               style={{ width: "100%", height: token.controlHeightLG }}
             >

@@ -24,6 +24,10 @@ export type CreateSaleInput = {
   items: CartItem[];
   paymentMethod?: PaymentMethodType; // For backward compatibility and single payment
   splitPayments?: SplitPaymentEntry[]; // For split payment mode
+  discountType?: "PERCENTAGE" | "FLAT";
+  discountPercent?: number;
+  taxRate?: number;
+  taxMode?: "EXCLUSIVE" | "INCLUSIVE";
   discountAmount: number;
   taxAmount: number;
   amountPaid?: number;
@@ -111,7 +115,10 @@ export type Sale = {
   subtotal: number;
   discountAmount: number;
   taxAmount: number;
-  total: number;
+  total: number; // finalPayableAmount for backward compatibility
+  calculatedTotal?: number;
+  roundOffAmount: number;
+  finalPayableAmount?: number;
   amountPaid: number;
   amountDue: number;
   paymentMethod: PaymentMethodType | "SPLIT"; // SPLIT indicates multiple payment methods
@@ -136,6 +143,18 @@ export type SaleItem = {
   quantity: number;
   unitPrice: number;
   total: number;
+  mrp?: number;
+  sellingPrice?: number;
+  discountType?: "PERCENTAGE" | "FLAT";
+  appliedDiscountPercent?: number;
+  allocatedDiscount?: number;
+  taxableAmount?: number;
+  taxAmount?: number;
+  finalUnitPrice?: number;
+  finalLineAmount?: number;
+  effectiveUnitPrice?: number;
+  costPrice?: number;
+  pricingSnapshotDate?: string;
 };
 
 /**

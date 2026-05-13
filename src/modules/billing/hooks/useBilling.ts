@@ -162,6 +162,7 @@ export function useCart() {
   const [items, setItems] = useState<CartItem[]>([]);
   const [discountPct, setDiscountPct] = useState(0);
   const [taxPct, setTaxPct] = useState(0);
+  const [discountMode, setDiscountMode] = useState<"PERCENTAGE" | "FLAT">("PERCENTAGE");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>("CASH");
   const [amountPaid, setAmountPaid] = useState(0);
   const [isAmountPaidManual, setIsAmountPaidManual] = useState(false);
@@ -207,6 +208,7 @@ export function useCart() {
     setItems([]);
     setDiscountPct(0);
     setTaxPct(0);
+    setDiscountMode("PERCENTAGE");
     setPaymentMethod("CASH");
     setAmountPaid(0);
     setIsAmountPaidManual(false);
@@ -237,6 +239,10 @@ export function useCart() {
         items,
         paymentMethod,
         splitPayments: normalizedSplitPayments,
+        discountType: discountMode,
+        discountPercent: discountPct,
+        taxRate: taxPct,
+        taxMode: "EXCLUSIVE",
         discountAmount,
         taxAmount,
         amountPaid: Math.max(0, splitAmountPaid),
@@ -251,6 +257,10 @@ export function useCart() {
     return {
       items,
       paymentMethod,
+      discountType: discountMode,
+      discountPercent: discountPct,
+      taxRate: taxPct,
+      taxMode: "EXCLUSIVE",
       discountAmount,
       taxAmount,
       amountPaid: Math.max(0, amountPaid),
@@ -267,6 +277,7 @@ export function useCart() {
     subtotal,
     discountPct,
     taxPct,
+    discountMode,
     discountAmount,
     taxAmount,
     total,
@@ -286,6 +297,7 @@ export function useCart() {
     clearCart,
     setDiscountPct,
     setTaxPct,
+    setDiscountMode,
     setPaymentMethod,
     setAmountPaid,
     setCustomerName,

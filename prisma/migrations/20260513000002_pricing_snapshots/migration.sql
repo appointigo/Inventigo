@@ -1,0 +1,14 @@
+-- Add immutable sale item pricing snapshot columns for discount/tax history.
+ALTER TABLE "sale_items"
+  ADD COLUMN IF NOT EXISTS "mrp" DECIMAL(10,2),
+  ADD COLUMN IF NOT EXISTS "sellingPrice" DECIMAL(10,2),
+  ADD COLUMN IF NOT EXISTS "discountType" TEXT,
+  ADD COLUMN IF NOT EXISTS "appliedDiscountPercent" DECIMAL(10,2),
+  ADD COLUMN IF NOT EXISTS "allocatedDiscount" DECIMAL(10,2) DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "taxableAmount" DECIMAL(10,2) DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "taxAmount" DECIMAL(10,2) DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "finalUnitPrice" DECIMAL(10,2) DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "finalLineAmount" DECIMAL(10,2) DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "effectiveUnitPrice" DECIMAL(10,2) DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "costPrice" DECIMAL(10,2),
+  ADD COLUMN IF NOT EXISTS "pricingSnapshotDate" TIMESTAMP(3);
