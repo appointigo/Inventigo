@@ -70,9 +70,8 @@ async function hasTable(tableName: string) {
   }
 }
 
-export const dashboardService = {
+export const dashboardServiceCompat = {
   async getData(orgId: string, storeId: string | null, startDate?: Date, endDate?: Date): Promise<DashboardData> {
-    // Resolve storeId — fall back to first store in the org if not set
     let resolvedStoreId = storeId;
     if (!resolvedStoreId) {
       const firstStore = await prisma.store.findFirst({ where: { orgId }, select: { id: true } });
@@ -102,31 +101,26 @@ export const dashboardService = {
       prisma.product.count({ where: { orgId } }),
     ]);
 
-    const stockResult =
-      baseResults[0].status === "fulfilled" ? baseResults[0].value : { items: [], total: 0 };
-    const movementsResult =
-      baseResults[1].status === "fulfilled" ? baseResults[1].value : { items: [], total: 0 };
-    const productCosts =
-      baseResults[2].status === "fulfilled" ? baseResults[2].value : [];
-    const pendingPOsCount =
-      baseResults[3].status === "fulfilled" ? baseResults[3].value : 0;
-    const totalProducts =
-      baseResults[4].status === "fulfilled" ? baseResults[4].value : 0;
+    const stockResult = baseResults[0].status === "fulfilled" ? baseResults[0].value : { items: [], total: 0 };
+    const movementsResult = baseResults[1].status === "fulfilled" ? baseResults[1].value : { items: [], total: 0 };
+    const productCosts = baseResults[2].status === "fulfilled" ? baseResults[2].value : [];
+    const pendingPOsCount = baseResults[3].status === "fulfilled" ? baseResults[3].value : 0;
+    const totalProducts = baseResults[4].status === "fulfilled" ? baseResults[4].value : 0;
 
     if (baseResults[0].status === "rejected") {
-      console.error("[dashboardService] stock levels failed", baseResults[0].reason);
+      console.error("[dashboardServiceCompat] stock levels failed", baseResults[0].reason);
     }
     if (baseResults[1].status === "rejected") {
-      console.error("[dashboardService] movement history failed", baseResults[1].reason);
+      console.error("[dashboardServiceCompat] movement history failed", baseResults[1].reason);
     }
     if (baseResults[2].status === "rejected") {
-      console.error("[dashboardService] product costs failed", baseResults[2].reason);
+      console.error("[dashboardServiceCompat] product costs failed", baseResults[2].reason);
     }
     if (baseResults[3].status === "rejected") {
-      console.error("[dashboardService] pending PO count failed", baseResults[3].reason);
+      console.error("[dashboardServiceCompat] pending PO count failed", baseResults[3].reason);
     }
     if (baseResults[4].status === "rejected") {
-      console.error("[dashboardService] total products count failed", baseResults[4].reason);
+      console.error("[dashboardServiceCompat] total products count failed", baseResults[4].reason);
     }
 
     let sales: Array<{ report_date: Date; total: number }> = [];
@@ -148,7 +142,7 @@ export const dashboardService = {
         ORDER BY report_date ASC
       `;
     } catch (error) {
-      console.error("[dashboardService] failed to load sales history", error);
+      console.error("[dashboardServiceCompat] failed to load sales history", error);
     }
 
     let returnTxns: Array<{ report_date: Date; net_amount: number; offset_amount: number; type: string }> = [];
@@ -168,17 +162,9 @@ export const dashboardService = {
             ? Prisma.sql`COALESCE(rt."transactionDate", rt."createdAt")`
             : Prisma.sql`rt."createdAt"`;
 
-        const netAmountExpr = hasNetAmount
-          ? Prisma.sql`rt."netAmount"::float8`
-          : Prisma.sql`0::float8`;
-
-        const offsetAmountExpr = hasOffsetAmount
-          ? Prisma.sql`rt."offsetAmount"::float8`
-          : Prisma.sql`0::float8`;
-
-        const typeExpr = hasType
-          ? Prisma.sql`rt.type::text`
-          : Prisma.sql`'RETURN'::text`;
+        const netAmountExpr = hasNetAmount ? Prisma.sql`rt."netAmount"::float8` : Prisma.sql`0::float8`;
+        const offsetAmountExpr = hasOffsetAmount ? Prisma.sql`rt."offsetAmount"::float8` : Prisma.sql`0::float8`;
+        const typeExpr = hasType ? Prisma.sql`rt.type::text` : Prisma.sql`'RETURN'::text`;
 
         returnTxns = await prisma.$queryRaw<Array<{ report_date: Date; net_amount: number; offset_amount: number; type: string }>>`
           SELECT
@@ -196,7 +182,7 @@ export const dashboardService = {
         `;
       }
     } catch (error) {
-      console.error("[dashboardService] failed to load return transactions", error);
+      console.error("[dashboardServiceCompat] failed to load return transactions", error);
     }
 
     const allStock = stockResult.items;
@@ -208,10 +194,7 @@ export const dashboardService = {
     }
 
     const lowStockCount = allStock.filter((s) => s.status === "LOW" || s.status === "OUT").length;
-    const totalStockValue = allStock.reduce(
-      (sum, row) => sum + row.quantity * (costPriceMap.get(row.productId) ?? 0),
-      0
-    );
+    const totalStockValue = allStock.reduce((sum, row) => sum + row.quantity * (costPriceMap.get(row.productId) ?? 0), 0);
 
     const brandMap = new Map<string, number>();
     const categoryQuantityMap = new Map<string, number>();
@@ -238,6 +221,7 @@ export const dashboardService = {
     const dayTotals = new Map<string, number>();
     const monthTotals = new Map<string, number>();
     const yearTotals = new Map<string, number>();
+
     for (const sale of sales) {
       const total = Number(sale.total);
       const saleDate = new Date(sale.report_date);
@@ -247,22 +231,14 @@ export const dashboardService = {
       dayTotals.set(dayKey, (dayTotals.get(dayKey) ?? 0) + total);
       monthTotals.set(monthKey, (monthTotals.get(monthKey) ?? 0) + total);
       yearTotals.set(yearKey, (yearTotals.get(yearKey) ?? 0) + total);
-      
     }
 
-    // Add return transaction amounts to revenue tracking
-    // For EXCHANGE: offsetAmount (credit from returned item) + netAmount (additional payment) = total new product value
-    // For RETURN: netAmount (refund adjustment, typically negative)
     for (const rt of returnTxns) {
-      
       let revenueAmount = Number(rt.net_amount ?? 0);
-      
-      // For exchange transactions, include the full value of the exchanged product
-      // This properly reflects the new product being sold in place of the old one
       if (rt.type === "EXCHANGE") {
         revenueAmount = Number(rt.offset_amount ?? 0) + Number(rt.net_amount ?? 0);
       }
-      
+
       const reportDate = new Date(rt.report_date);
       const dayKey = formatDayKey(reportDate);
       const monthKey = formatMonthKey(reportDate);

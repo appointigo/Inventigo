@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { Sale, SaleFilters, SaleSummary, CartItem, CreateSaleInput, PaymentMethodType, SplitPaymentEntry } from "../types";
 
 export function useSales(initialFilters?: SaleFilters) {
@@ -11,8 +11,21 @@ export function useSales(initialFilters?: SaleFilters) {
   const [limit, setLimit] = useState<number>(20);
   const [pagination, setPagination] = useState<{ page: number; limit: number; total: number; totalPages: number }>({ page: 1, limit: 20, total: 0, totalPages: 1 });
   const [stats, setStats] = useState<any>(null);
+  const activeRequestIdRef = useRef(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const fetchSales = useCallback(async () => {
+    const requestId = activeRequestIdRef.current + 1;
+    activeRequestIdRef.current = requestId;
+
+    // Cancel any in-flight request so only the latest filter/page request wins.
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -25,9 +38,18 @@ export function useSales(initialFilters?: SaleFilters) {
       params.set("page", String(page));
       params.set("limit", String(limit));
       const qs = params.toString();
-      const res = await fetch(`/api/billing/history${qs ? `?${qs}` : ""}`);
+      const res = await fetch(`/api/billing/history${qs ? `?${qs}` : ""}`, {
+        signal: controller.signal,
+        cache: "no-store",
+      });
       if (!res.ok) throw new Error("Failed to fetch sales");
       const payload = await res.json().catch(() => null);
+
+      // Ignore stale responses that raced with a newer request.
+      if (requestId !== activeRequestIdRef.current) {
+        return;
+      }
+
       if (Array.isArray(payload)) {
         setSales(payload as SaleSummary[]);
         setPagination({ page, limit, total: payload.length, totalPages: Math.max(1, Math.ceil(payload.length / limit)) });
@@ -43,12 +65,25 @@ export function useSales(initialFilters?: SaleFilters) {
       }
     } 
     catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        return;
+      }
       console.error("Failed to fetch sales:", error);
     } 
     finally {
-      setLoading(false);
+      if (requestId === activeRequestIdRef.current) {
+        setLoading(false);
+      }
     }
   }, [filters, page, limit]);
+
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   useEffect(() => {
     fetchSales();

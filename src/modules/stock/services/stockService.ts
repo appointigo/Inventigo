@@ -179,7 +179,6 @@ export const stockService = {
         include: {
           product: { select: { name: true, sku: true, category: { select: { name: true } } } },
           size: { select: { label: true } },
-          user: { select: { name: true } },
         },
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -187,6 +186,14 @@ export const stockService = {
       }),
       prisma.stockMovement.count({ where }),
     ]);
+
+    // Resolve user names in a separate query so orphaned historical rows don't
+    // break dashboard APIs due to strict relation hydration.
+    const creatorIds = Array.from(new Set(movements.map((m) => m.createdBy).filter(Boolean)));
+    const users = creatorIds.length
+      ? await prisma.user.findMany({ where: { id: { in: creatorIds } }, select: { id: true, name: true } })
+      : [];
+    const userNameById = new Map(users.map((u) => [u.id, u.name]));
 
     return {
       items: movements.map((m) => ({
@@ -198,7 +205,7 @@ export const stockService = {
         type: m.type,
         quantity: m.quantity,
         reason: m.reason ?? null,
-        userName: m.user.name,
+        userName: userNameById.get(m.createdBy) ?? "Unknown",
         movementDate: m.movementDate.toISOString(),
         createdAt: m.createdAt.toISOString(),
       })),

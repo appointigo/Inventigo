@@ -22,6 +22,59 @@ type AggregateEntry = {
   totalDiscount: number;
 };
 
+async function hasTable(tableName: string) {
+  try {
+    const result = await prisma.$queryRaw<Array<{ has_table: boolean }>>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = current_schema()
+          AND table_name = ${tableName}
+      ) AS has_table
+    `;
+
+    return result[0]?.has_table ?? false;
+  } catch {
+    return false;
+  }
+}
+
+async function hasColumn(tableName: string, columnName: string) {
+  try {
+    const result = await prisma.$queryRaw<Array<{ has_column: boolean }>>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = ${tableName}
+          AND column_name = ${columnName}
+      ) AS has_column
+    `;
+
+    return result[0]?.has_column ?? false;
+  } catch {
+    return false;
+  }
+}
+
+async function hasEnumValue(enumName: string, enumValue: string) {
+  try {
+    const result = await prisma.$queryRaw<Array<{ has_value: boolean }>>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM pg_type t
+        JOIN pg_enum e ON t.oid = e.enumtypid
+        WHERE t.typname = ${enumName}
+          AND e.enumlabel = ${enumValue}
+      ) AS has_value
+    `;
+
+    return result[0]?.has_value ?? false;
+  } catch {
+    return false;
+  }
+}
+
 export const GET = async (request: Request) => {
   let user;
   try {
@@ -50,112 +103,175 @@ export const GET = async (request: Request) => {
       }
     }
 
-    const [sales, returnTransactions] = await Promise.all([
-      prisma.sale.findMany({
-        where: {
-          status: { in: ["COMPLETED", "EXCHANGED", "REFUNDED"] },
-          store: { orgId: user.orgId },
-          ...(user.storeId ? { storeId: user.storeId } : {}),
-          ...(Object.keys(paidAtFilter).length ? { transactionDate: paidAtFilter } : {}),
-        },
-        select: {
-          id: true,
-          transactionDate: true,
-          total: true,
-          discountAmount: true,
-          items: {
-            select: {
-              quantity: true,
-              product: { select: { costPrice: true } },
-            },
-          },
-        },
-        orderBy: { transactionDate: "asc" },
-      }),
-      prisma.returnTransaction.findMany({
-        where: {
-          store: { orgId: user.orgId },
-          ...(user.storeId ? { storeId: user.storeId } : {}),
-          ...(Object.keys(paidAtFilter).length ? { businessDate: paidAtFilter } : {}),
-        },
-        select: {
-          id: true,
-          type: true,
-          businessDate: true,
-          createdAt: true,
-          netAmount: true,
-          offsetAmount: true,
-          items: {
-            select: {
-              newProductId: true,
-              newQuantity: true,
-              newUnitPrice: true,
-              newProduct: { select: { costPrice: true } },
-              returnedProductId: true,
-              returnedQuantity: true,
-              returnedUnitPrice: true,
-              returnedProduct: { select: { costPrice: true } },
-            },
-          },
-        },
-        orderBy: { businessDate: "asc" },
-      }),
+    const [supportsExchangedStatus, hasReturnTransactionsTable, hasReturnItemsTable, hasReturnBusinessDate] = await Promise.all([
+      hasEnumValue("SaleStatus", "EXCHANGED"),
+      hasTable("return_transactions"),
+      hasTable("return_transaction_items"),
+      hasColumn("return_transactions", "businessDate"),
     ]);
 
+    const saleStatuses = supportsExchangedStatus
+      ? (["COMPLETED", "EXCHANGED", "REFUNDED"] as const)
+      : (["COMPLETED", "REFUNDED"] as const);
+
+    const saleWhere: any = {
+      status: { in: saleStatuses as any },
+      store: { orgId: user.orgId },
+      ...(user.storeId ? { storeId: user.storeId } : {}),
+    };
+
+    if (Object.keys(paidAtFilter).length) {
+      saleWhere.createdAt = paidAtFilter;
+    }
+
+    const saleSelect: any = {
+      id: true,
+      createdAt: true,
+      total: true,
+      discountAmount: true,
+      items: {
+        select: {
+          quantity: true,
+          product: { select: { costPrice: true } },
+        },
+      },
+    };
+
+    const sales = await prisma.sale.findMany({
+      where: saleWhere,
+      select: saleSelect,
+      orderBy: { createdAt: "asc" },
+    });
+
+    let returnTransactions: any[] = [];
+    if (hasReturnTransactionsTable) {
+      const returnWhere: any = {
+        store: { orgId: user.orgId },
+        ...(user.storeId ? { storeId: user.storeId } : {}),
+      };
+
+      if (Object.keys(paidAtFilter).length) {
+        if (hasReturnBusinessDate) {
+          returnWhere.businessDate = paidAtFilter;
+        } else {
+          returnWhere.createdAt = paidAtFilter;
+        }
+      }
+
+      const returnSelect: any = {
+        id: true,
+        type: true,
+        createdAt: true,
+        netAmount: true,
+        offsetAmount: true,
+      };
+      if (hasReturnBusinessDate) {
+        returnSelect.businessDate = true;
+      }
+      if (hasReturnItemsTable) {
+        returnSelect.items = {
+          select: {
+            newProductId: true,
+            newQuantity: true,
+            newUnitPrice: true,
+            newProduct: { select: { costPrice: true } },
+            returnedProductId: true,
+            returnedQuantity: true,
+            returnedUnitPrice: true,
+            returnedProduct: { select: { costPrice: true } },
+          },
+        };
+      }
+
+      returnTransactions = await prisma.returnTransaction.findMany({
+        where: returnWhere,
+        select: returnSelect,
+        orderBy: hasReturnBusinessDate ? ({ businessDate: "asc" } as any) : ({ createdAt: "asc" } as any),
+      });
+    }
+
     const allEntries: AggregateEntry[] = [
-      ...sales.map((sale) => ({
-        createdAt: sale.transactionDate,
+      ...sales.map((sale: any) => ({
+        createdAt: sale.createdAt,
         totalRevenue: Number(sale.total ?? 0),
         totalCost: sale.items.reduce(
-          (sum, item) => sum + Number(item.product.costPrice ?? 0) * Number(item.quantity ?? 0),
+          (sum: number, item: any) => sum + Number(item.product.costPrice ?? 0) * Number(item.quantity ?? 0),
           0
         ),
         totalDiscount: Number(sale.discountAmount ?? 0),
       })),
-      ...returnTransactions.map((rt) => {
-        const exchangedItems = rt.items.filter((item) => item.newProductId);
-        const returnedItems = rt.items.filter((item) => item.returnedProductId);
+      ...returnTransactions.map((rt: any) => {
+        const items = Array.isArray(rt.items) ? rt.items : [];
+        const exchangedItems = items.filter((item: any) => item.newProductId);
+        const returnedItems = items.filter((item: any) => item.returnedProductId);
 
         const exchangedRevenue = exchangedItems.reduce(
-          (sum, item) => sum + Number(item.newUnitPrice ?? 0) * Number(item.newQuantity ?? 0),
+          (sum: number, item: any) => sum + Number(item.newUnitPrice ?? 0) * Number(item.newQuantity ?? 0),
           0
         );
         const exchangedCost = exchangedItems.reduce(
-          (sum, item) => sum + Number(item.newProduct?.costPrice ?? 0) * Number(item.newQuantity ?? 0),
+          (sum: number, item: any) => sum + Number(item.newProduct?.costPrice ?? 0) * Number(item.newQuantity ?? 0),
           0
         );
 
         const returnedRevenue = returnedItems.reduce(
-          (sum, item) => sum + Number(item.returnedUnitPrice ?? 0) * Number(item.returnedQuantity ?? 0),
+          (sum: number, item: any) => sum + Number(item.returnedUnitPrice ?? 0) * Number(item.returnedQuantity ?? 0),
           0
         );
         const returnedCost = returnedItems.reduce(
-          (sum, item) => sum + Number(item.returnedProduct?.costPrice ?? 0) * Number(item.returnedQuantity ?? 0),
+          (sum: number, item: any) => sum + Number(item.returnedProduct?.costPrice ?? 0) * Number(item.returnedQuantity ?? 0),
           0
         );
 
         if (rt.type === "EXCHANGE") {
+          if (items.length > 0) {
+            return {
+              createdAt: rt.businessDate ?? rt.createdAt,
+              totalRevenue: exchangedRevenue,
+              totalCost: exchangedCost,
+              totalDiscount: 0,
+            };
+          }
+
           return {
             createdAt: rt.businessDate ?? rt.createdAt,
-            totalRevenue: exchangedRevenue,
-            totalCost: exchangedCost,
+            totalRevenue: Number(rt.offsetAmount ?? 0) + Number(rt.netAmount ?? 0),
+            totalCost: 0,
             totalDiscount: 0,
           };
         }
 
         if (rt.type === "RETURN") {
+          if (items.length > 0) {
+            return {
+              createdAt: rt.businessDate ?? rt.createdAt,
+              totalRevenue: -returnedRevenue,
+              totalCost: -returnedCost,
+              totalDiscount: 0,
+            };
+          }
+
           return {
             createdAt: rt.businessDate ?? rt.createdAt,
-            totalRevenue: -returnedRevenue,
-            totalCost: -returnedCost,
+            totalRevenue: Number(rt.netAmount ?? 0),
+            totalCost: 0,
+            totalDiscount: 0,
+          };
+        }
+
+        if (items.length > 0) {
+          return {
+            createdAt: rt.businessDate ?? rt.createdAt,
+            totalRevenue: exchangedRevenue - returnedRevenue,
+            totalCost: exchangedCost - returnedCost,
             totalDiscount: 0,
           };
         }
 
         return {
           createdAt: rt.businessDate ?? rt.createdAt,
-          totalRevenue: exchangedRevenue - returnedRevenue,
-          totalCost: exchangedCost - returnedCost,
+          totalRevenue: Number(rt.netAmount ?? 0),
+          totalCost: 0,
           totalDiscount: 0,
         };
       }),

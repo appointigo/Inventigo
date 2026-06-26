@@ -69,6 +69,31 @@ export const POST = async (
     return NextResponse.json(transaction, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 400 });
+
+    // Known business-rule violations should return 400 with the message,
+    // while unexpected failures return 500 for clearer debugging.
+    const knownValidationErrors = [
+      "Returned items are required",
+      "Sale not found",
+      "Only completed sales can be returned or exchanged",
+      "Exchange/return window has expired",
+      "Invalid returned quantity",
+      "Returned item not found in original sale",
+      "Invalid exchanged quantity",
+      "Insufficient stock for exchange item",
+      "Invalid payment method",
+      "Payment amount must be greater than zero",
+      "Top-up split payment total",
+      "Refund split payment total",
+    ];
+
+    const isValidationError = knownValidationErrors.some((fragment) => message.includes(fragment));
+    const status = isValidationError ? 400 : 500;
+
+    if (!isValidationError) {
+      console.error("/api/billing/[id]/return POST error", error);
+    }
+
+    return NextResponse.json({ error: message }, { status });
   }
 };

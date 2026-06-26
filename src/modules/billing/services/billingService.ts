@@ -202,6 +202,49 @@ const getPrimaryPaymentMethod = (entries: NormalizedPaymentEntry[], fallbackMeth
   return sorted[0].method;
 };
 
+async function hasTable(tableName: string) {
+  try {
+    const result = await prisma.$queryRaw<Array<{ has_table: boolean }>>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = current_schema()
+          AND table_name = ${tableName}
+      ) AS has_table
+    `;
+
+    return result[0]?.has_table ?? false;
+  } catch {
+    return false;
+  }
+}
+
+let supportsExchangedStatusCache: boolean | null = null;
+
+async function supportsExchangedSaleStatus() {
+  if (supportsExchangedStatusCache !== null) {
+    return supportsExchangedStatusCache;
+  }
+
+  try {
+    const result = await prisma.$queryRaw<Array<{ has_value: boolean }>>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM pg_type t
+        JOIN pg_enum e ON t.oid = e.enumtypid
+        WHERE t.typname = 'SaleStatus'
+          AND e.enumlabel = 'EXCHANGED'
+      ) AS has_value
+    `;
+
+    supportsExchangedStatusCache = result[0]?.has_value ?? false;
+    return supportsExchangedStatusCache;
+  } catch {
+    supportsExchangedStatusCache = false;
+    return false;
+  }
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const toSaleDto = (s: any): Sale => ({
   id: s.id,
@@ -258,30 +301,63 @@ const toSaleDto = (s: any): Sale => ({
     createdBy: p.createdBy,
   })),
   returnTransactions: (s.returnTransactions ?? []).map((rt: any) => {
-    const items = rt.items ?? [];
-    const returnedItems = items
-      .filter((it: any) => it.returnedProductId)
-      .map((item: any) => ({
-        productId: String(item.returnedProductId),
-        sizeId: String(item.returnedSizeId),
-        quantity: Number(item.returnedQuantity),
-        total: Number(item.returnedUnitPrice ?? 0) * Number(item.returnedQuantity ?? 0),
-        productName: item.productName ?? undefined,
-        sku: item.sku ?? undefined,
-        sizeLabel: item.sizeLabel ?? undefined,
-      }));
+    const relationalItems: any[] = rt.items ?? [];
 
-    const exchangedItems = items
-      .filter((it: any) => it.newProductId)
-      .map((item: any) => ({
-        productId: String(item.newProductId),
-        sizeId: String(item.newSizeId),
-        quantity: Number(item.newQuantity),
-        total: Number(item.newUnitPrice ?? 0) * Number(item.newQuantity ?? 0),
-        productName: item.productName ?? undefined,
-        sku: item.sku ?? undefined,
-        sizeLabel: item.sizeLabel ?? undefined,
-      }));
+    // ── Backward-compatibility: old return transactions (created before the
+    // return_transaction_items relational table was introduced) store their
+    // item lists as JSONB in returnedItems / exchangedItems columns.  When the
+    // relational table is empty we fall back to those JSONB arrays so legacy
+    // records render correctly.
+    const legacyReturned: any[] = relationalItems.length === 0 && Array.isArray(rt.returnedItems)
+      ? rt.returnedItems
+      : [];
+    const legacyExchanged: any[] = relationalItems.length === 0 && Array.isArray(rt.exchangedItems)
+      ? rt.exchangedItems
+      : [];
+
+    const returnedItems = relationalItems.length > 0
+      ? relationalItems
+          .filter((it: any) => it.returnedProductId)
+          .map((item: any) => ({
+            productId: String(item.returnedProductId),
+            sizeId: String(item.returnedSizeId ?? ""),
+            quantity: Number(item.returnedQuantity),
+            total: Number(item.returnedUnitPrice ?? 0) * Number(item.returnedQuantity ?? 0),
+            productName: item.returnedProduct?.name ?? item.productName ?? undefined,
+            sku: item.returnedProduct?.sku ?? item.sku ?? undefined,
+            sizeLabel: item.returnedSize?.label ?? item.sizeLabel ?? undefined,
+          }))
+      : legacyReturned.map((item: any) => ({
+          productId: String(item.productId ?? ""),
+          sizeId: String(item.sizeId ?? ""),
+          quantity: Number(item.quantity ?? 0),
+          total: Number(item.total ?? 0),
+          productName: undefined,
+          sku: undefined,
+          sizeLabel: undefined,
+        }));
+
+    const exchangedItems = relationalItems.length > 0
+      ? relationalItems
+          .filter((it: any) => it.newProductId)
+          .map((item: any) => ({
+            productId: String(item.newProductId),
+            sizeId: String(item.newSizeId ?? ""),
+            quantity: Number(item.newQuantity ?? 0),
+            total: Number(item.newUnitPrice ?? 0) * Number(item.newQuantity ?? 0),
+            productName: item.newProduct?.name ?? item.productName ?? undefined,
+            sku: item.newProduct?.sku ?? item.sku ?? undefined,
+            sizeLabel: item.newSize?.label ?? item.sizeLabel ?? undefined,
+          }))
+      : legacyExchanged.map((item: any) => ({
+          productId: String(item.productId ?? ""),
+          sizeId: String(item.sizeId ?? ""),
+          quantity: Number(item.quantity ?? 0),
+          total: Number(item.total ?? 0),
+          productName: undefined,
+          sku: undefined,
+          sizeLabel: undefined,
+        }));
 
     return {
       id: rt.id,
@@ -563,9 +639,28 @@ export const billingService = {
   },
 
   async getSaleById(orgId: string, id: string): Promise<Sale | null> {
+    const hasReturnItemsTable = await hasTable("return_transaction_items");
+
     const sale = await prisma.sale.findFirst({
       where: { id, store: { orgId } },
-      include: { ...saleInclude, payments: true, returnTransactions: { include: { items: true } } },
+      include: {
+        ...saleInclude,
+        payments: true,
+        returnTransactions: hasReturnItemsTable
+          ? {
+              include: {
+                items: {
+                  include: {
+                    returnedProduct: { select: { name: true, sku: true } },
+                    returnedSize: { select: { label: true } },
+                    newProduct: { select: { name: true, sku: true } },
+                    newSize: { select: { label: true } },
+                  },
+                },
+              },
+            }
+          : true,
+      },
     });
 
     if (!sale) {
@@ -643,16 +738,57 @@ export const billingService = {
       console.error("billingService.getSales error:", err);
       throw err;
     }
+    const hasReturnItemsTable = await hasTable("return_transaction_items");
+
+    const supportsExchangedStatus = await supportsExchangedSaleStatus();
+
     // Build sale query
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const saleWhere: any = { store: { orgId } };
-    if (filters?.status) saleWhere.status = filters.status;
+    if (filters?.status) {
+      if (filters.status === "EXCHANGED" && !supportsExchangedStatus) {
+        // Legacy DBs may not have EXCHANGED in SaleStatus enum yet.
+        // Degrade gracefully to COMPLETED instead of throwing P2007.
+        saleWhere.status = "COMPLETED";
+      } else {
+        saleWhere.status = filters.status;
+      }
+    }
     if (filters?.paymentMethod) saleWhere.paymentMethod = filters.paymentMethod;
-    if (filters?.startDate) saleWhere.createdAt = { ...(saleWhere.createdAt ?? {}), gte: new Date(filters.startDate) };
-    if (filters?.endDate) {
-      const end = new Date(filters.endDate);
-      end.setDate(end.getDate() + 1);
-      saleWhere.createdAt = { ...(saleWhere.createdAt ?? {}), lt: end };
+
+    // Date range filter: use transactionDate (canonical for backdated billing) with
+    // an OR fallback to createdAt so records created before the transactionDate
+    // migration (20260509000000) are still included.
+    if (filters?.startDate || filters?.endDate) {
+      const dateFilters: any[] = [];
+      if (filters.startDate) {
+        const from = new Date(filters.startDate);
+        dateFilters.push({ transactionDate: { gte: from } });
+        dateFilters.push({ createdAt: { gte: from } });
+      }
+      if (filters.endDate) {
+        const end = new Date(filters.endDate);
+        end.setDate(end.getDate() + 1);
+        // Combine start + end into the same OR clause
+        if (filters.startDate) {
+          const from = new Date(filters.startDate);
+          saleWhere.OR = [
+            { transactionDate: { gte: from, lt: end } },
+            { createdAt: { gte: from, lt: end } },
+          ];
+        } else {
+          saleWhere.OR = [
+            { transactionDate: { lt: end } },
+            { createdAt: { lt: end } },
+          ];
+        }
+      } else if (filters.startDate) {
+        const from = new Date(filters.startDate);
+        saleWhere.OR = [
+          { transactionDate: { gte: from } },
+          { createdAt: { gte: from } },
+        ];
+      }
     }
 
     if (filters?.search) {
@@ -692,12 +828,25 @@ export const billingService = {
       }),
       prisma.returnTransaction.findMany({
         where: rtWhere,
-        include: {
-          items: { include: { returnedProduct: true, returnedSize: true, newProduct: true, newSize: true } },
-          sale: { select: { invoiceNumber: true, id: true } },
-          customer: true,
-          user: { select: { name: true } },
-        },
+        include: hasReturnItemsTable
+          ? {
+              items: {
+                include: {
+                  returnedProduct: { select: { name: true, sku: true } },
+                  returnedSize: { select: { label: true } },
+                  newProduct: { select: { name: true, sku: true } },
+                  newSize: { select: { label: true } },
+                },
+              },
+              sale: { select: { invoiceNumber: true, id: true } },
+              customer: true,
+              user: { select: { name: true } },
+            }
+          : {
+              sale: { select: { invoiceNumber: true, id: true } },
+              customer: true,
+              user: { select: { name: true } },
+            },
         orderBy: { businessDate: "desc" },
       }),
     ]);
@@ -707,7 +856,7 @@ export const billingService = {
       ...s,
       rowType: "SALE",
       paymentMethod: derivePresentationPaymentMethod(s.paymentMethod, s.payments),
-      payments: (s.payments ?? []).map((p) => ({
+      payments: (s.payments ?? []).map((p: any) => ({
         ...p,
         amount: Number(p.amount ?? 0),
         businessDate: p.businessDate instanceof Date ? p.businessDate.toISOString() : p.businessDate,
@@ -887,6 +1036,8 @@ export const billingService = {
         })),
       });
 
+      // Cast to `any` so toSaleDto can access dynamic includes (payments, user)
+      // without fighting Prisma's deep-conditional return type inference.
       const updatedSale = await tx.sale.update({
         where: { id: saleId },
         data: {
@@ -901,7 +1052,7 @@ export const billingService = {
           payments: { include: { user: { select: { name: true } } }, orderBy: { paidAt: "desc" } },
           user: { select: { name: true } },
         },
-      });
+      }) as any;
 
       if (sale.customerId) {
         await tx.customer.update({
@@ -940,6 +1091,9 @@ export const billingService = {
       taxRate?: number;
     }
   ) {
+    const supportsExchangedStatus = await supportsExchangedSaleStatus();
+    const hasReturnItemsTable = await hasTable("return_transaction_items");
+
     const sale = await prisma.sale.findFirst({
       where: { id: saleId, store: { orgId } },
       include: { items: true },
@@ -1036,60 +1190,65 @@ export const billingService = {
 
       try {
         const transaction = await prisma.$transaction(async (tx) => {
+          const returnTransactionData: any = {
+            referenceNumber,
+            originalSaleId: saleId,
+            storeId: sale.storeId,
+            customerId: sale.customerId ?? undefined,
+            type: input.type as any,
+            netAmount: new Prisma.Decimal(netAmount),
+            offsetAmount: new Prisma.Decimal(offsetAmount),
+            refundAmount: new Prisma.Decimal(refundAmount),
+            refundMethod: input.refundMethod,
+            reason: input.reason,
+            condition: input.condition,
+            notes: input.notes,
+            discountType: discountType || undefined,
+            discountPercent: discountPercent > 0 ? new Prisma.Decimal(discountPercent) : undefined,
+            discountAmount: discountAmount > 0 ? new Prisma.Decimal(discountAmount) : undefined,
+            taxRate: taxRate > 0 ? new Prisma.Decimal(taxRate) : undefined,
+            calculatedTotal: new Prisma.Decimal(calculatedWithTax),
+            roundOffAmount: new Prisma.Decimal(roundOffAmount),
+            finalPayable: new Prisma.Decimal(finalPayable),
+            splitPaymentData: (input.topUpPayments || input.refundPayments) ? JSON.stringify({
+              topUpPayments: input.topUpPayments,
+              refundPayments: input.refundPayments,
+            }) : undefined,
+            transactionDate,
+            businessDate,
+            createdBy: userId,
+          };
+
+          if (hasReturnItemsTable) {
+            returnTransactionData.items = {
+              create: [
+                ...returnedLineItems.map((ri) => ({
+                  returnedProductId: ri.productId,
+                  returnedSizeId: ri.sizeId,
+                  returnedQuantity: ri.quantity,
+                  returnedUnitPrice: new Prisma.Decimal(ri.historicalUnitAmount),
+                })),
+                ...exchangedLineItems.map((ei) => ({
+                  returnedQuantity: 0,
+                  returnedUnitPrice: new Prisma.Decimal(0),
+                  newProductId: ei.productId,
+                  newSizeId: ei.sizeId,
+                  newQuantity: ei.quantity,
+                  newUnitPrice: new Prisma.Decimal(Number(ei.total) / (ei.quantity || 1)),
+                })),
+              ],
+            };
+          }
+
           const returnTransaction = await tx.returnTransaction.create({
-            data: {
-              referenceNumber,
-              originalSaleId: saleId,
-              storeId: sale.storeId,
-              customerId: sale.customerId ?? undefined,
-              type: input.type as any,
-              netAmount: new Prisma.Decimal(netAmount),
-              offsetAmount: new Prisma.Decimal(offsetAmount),
-              refundAmount: new Prisma.Decimal(refundAmount),
-              refundMethod: input.refundMethod,
-              reason: input.reason,
-              condition: input.condition,
-              notes: input.notes,
-              discountType: discountType || undefined,
-              discountPercent: discountPercent > 0 ? new Prisma.Decimal(discountPercent) : undefined,
-              discountAmount: discountAmount > 0 ? new Prisma.Decimal(discountAmount) : undefined,
-              taxRate: taxRate > 0 ? new Prisma.Decimal(taxRate) : undefined,
-              calculatedTotal: new Prisma.Decimal(calculatedWithTax),
-              roundOffAmount: new Prisma.Decimal(roundOffAmount),
-              finalPayable: new Prisma.Decimal(finalPayable),
-              splitPaymentData: (input.topUpPayments || input.refundPayments) ? JSON.stringify({
-                topUpPayments: input.topUpPayments,
-                refundPayments: input.refundPayments,
-              }) : undefined,
-              transactionDate,
-              businessDate,
-              createdBy: userId,
-              items: {
-                create: [
-                  ...returnedLineItems.map((ri) => ({
-                    returnedProductId: ri.productId,
-                    returnedSizeId: ri.sizeId,
-                    returnedQuantity: ri.quantity,
-                    returnedUnitPrice: new Prisma.Decimal(ri.historicalUnitAmount),
-                  })),
-                  ...exchangedLineItems.map((ei) => ({
-                    returnedQuantity: 0,
-                    returnedUnitPrice: new Prisma.Decimal(0),
-                    newProductId: ei.productId,
-                    newSizeId: ei.sizeId,
-                    newQuantity: ei.quantity,
-                    newUnitPrice: new Prisma.Decimal(Number(ei.total) / (ei.quantity || 1)),
-                  })),
-                ],
-              },
-            },
+            data: returnTransactionData,
           });
 
           if (netAmount > 0) {
             const topUpEntries = normalizePaymentEntries(input.topUpPayments, input.refundMethod, netAmount);
             const topUpTotal = round2(topUpEntries.reduce((sum, entry) => sum + entry.amount, 0));
-            if (Math.abs(topUpTotal - netAmount) > EPSILON) {
-              throw new Error("Top-up split payment total must match exchange payable amount");
+            if (topUpTotal - netAmount > EPSILON) {
+              throw new Error("Top-up split payment total cannot exceed exchange payable amount");
             }
 
             await tx.salePayment.createMany({
@@ -1107,8 +1266,8 @@ export const billingService = {
           if (refundAmount > 0) {
             const refundEntries = normalizePaymentEntries(input.refundPayments, input.refundMethod, refundAmount);
             const refundTotal = round2(refundEntries.reduce((sum, entry) => sum + entry.amount, 0));
-            if (Math.abs(refundTotal - refundAmount) > EPSILON) {
-              throw new Error("Refund split payment total must match refund amount");
+            if (refundTotal - refundAmount > EPSILON) {
+              throw new Error("Refund split payment total cannot exceed refund amount");
             }
 
             await tx.salePayment.createMany({
@@ -1224,7 +1383,9 @@ export const billingService = {
               ? returnStatus === "FULL"
                 ? "REFUNDED"
                 : sale.status
-              : "EXCHANGED";
+              : supportsExchangedStatus
+                ? "EXCHANGED"
+                : "COMPLETED";
 
           await tx.sale.update({
             where: { id: saleId },
@@ -1356,15 +1517,36 @@ export const billingService = {
   },
 
   async getSalesPaged(orgId: string, filters?: SaleFilters, page = 1, limit = 20) {
+    const supportsExchangedStatus = await supportsExchangedSaleStatus();
+    const hasReturnItemsTable = await hasTable("return_transaction_items");
+
     // Build sale query
     const saleWhere: any = { store: { orgId } };
-    if (filters?.status) saleWhere.status = filters.status;
+    if (filters?.status) {
+      if (filters.status === "EXCHANGED" && !supportsExchangedStatus) {
+        saleWhere.status = "COMPLETED";
+      } else {
+        saleWhere.status = filters.status;
+      }
+    }
     if (filters?.paymentMethod) saleWhere.paymentMethod = filters.paymentMethod;
-    if (filters?.startDate) saleWhere.createdAt = { ...(saleWhere.createdAt ?? {}), gte: new Date(filters.startDate) };
-    if (filters?.endDate) {
-      const end = new Date(filters.endDate);
-      end.setDate(end.getDate() + 1);
-      saleWhere.createdAt = { ...(saleWhere.createdAt ?? {}), lt: end };
+
+    // Date range: prefer transactionDate (backdatable canonical date); fall back
+    // to createdAt for records created before the transactionDate migration.
+    if (filters?.startDate || filters?.endDate) {
+      if (filters?.startDate && filters?.endDate) {
+        const from = new Date(filters.startDate);
+        const end = new Date(filters.endDate);
+        end.setDate(end.getDate() + 1);
+        saleWhere.transactionDate = { gte: from, lt: end };
+      } else if (filters?.startDate) {
+        const from = new Date(filters.startDate);
+        saleWhere.transactionDate = { gte: from };
+      } else if (filters?.endDate) {
+        const end = new Date(filters.endDate);
+        end.setDate(end.getDate() + 1);
+        saleWhere.transactionDate = { lt: end };
+      }
     }
 
     if (filters?.search) {
@@ -1402,11 +1584,23 @@ export const billingService = {
       }),
       prisma.returnTransaction.findMany({
         where: rtWhere,
-        include: {
-          items: { include: { returnedProduct: true, returnedSize: true, newProduct: true, newSize: true } },
-          sale: { select: { invoiceNumber: true, id: true } },
-          customer: true,
-        },
+        include: hasReturnItemsTable
+          ? {
+              items: {
+                include: {
+                  returnedProduct: { select: { name: true, sku: true } },
+                  returnedSize: { select: { label: true } },
+                  newProduct: { select: { name: true, sku: true } },
+                  newSize: { select: { label: true } },
+                },
+              },
+              sale: { select: { invoiceNumber: true, id: true } },
+              customer: true,
+            }
+          : {
+              sale: { select: { invoiceNumber: true, id: true } },
+              customer: true,
+            },
         orderBy: { businessDate: "desc" },
       }),
     ]);
@@ -1415,7 +1609,7 @@ export const billingService = {
       ...s,
       rowType: "SALE",
       paymentMethod: derivePresentationPaymentMethod(s.paymentMethod, s.payments),
-      payments: (s.payments ?? []).map((p) => ({
+      payments: (s.payments ?? []).map((p: any) => ({
         ...p,
         amount: Number(p.amount ?? 0),
         businessDate: p.businessDate instanceof Date ? p.businessDate.toISOString() : p.businessDate,

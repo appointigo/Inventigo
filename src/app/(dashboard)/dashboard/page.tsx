@@ -51,12 +51,19 @@ const CARD_BORDER = "0.5px solid #e5e7eb";
 const BRAND_COLORS = ["#378ADD", "#15A085", "#E67E22", "#5B4DB7", "#D94E8F", "#6B8E23", "#C08A1D", "#E05252", "#0E7490", "#2F6EA8"];
 
 type RevenueView = "day" | "month" | "year";
+type DateGroup = "day" | "week" | "month" | "year";
 
 type SalesBreakdownRow = {
   period: string;
   total_revenue: number;
   total_discount: number;
   net_profit: number;
+  transaction_count?: number;
+};
+
+type DateRangeWindow = {
+  from: string;
+  to: string;
 };
 
 function formatCurrency(value: number) {
@@ -169,12 +176,12 @@ const DashboardPage = () => {
   const { storeId } = useStore();
   const { data, loading } = useDashboard(storeId ?? undefined);
   const { items: lowStockItems, loading: lowStockLoading } = useLowStockAlerts();
-  const { sales } = useSales();
+  const { sales, setFilters: setSalesFilters, setLimit: setSalesLimit, setPage: setSalesPage } = useSales();
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
   const [revenueView, setRevenueView] = useState<RevenueView>("day");
   // Global period state for Sales & Revenue tab
   const [period, setPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('daily');
-  const [salesBreakdownData, setSalesBreakdownData] = useState<Array<{ label: string; totalRevenue: number; discountGiven: number; netProfit: number; period: string }>>([]);
+  const [salesBreakdownData, setSalesBreakdownData] = useState<Array<{ label: string; totalRevenue: number; discountGiven: number; netProfit: number; transactionCount: number; period: string }>>([]);
   const [salesBreakdownLoading, setSalesBreakdownLoading] = useState(false);
   const [contentVisible, setContentVisible] = useState(true);
   const [customDateRange, setCustomDateRange] = useState<[dayjs.Dayjs | null, dayjs.Dayjs | null] | null>(null);
@@ -187,6 +194,17 @@ const DashboardPage = () => {
     return 0;
   };
 
+  const rowDate = (row: any) => {
+    if (!row) return dayjs("");
+    if (row.rowType === "SALE") {
+      return dayjs(row.transactionDate ?? row.createdAt);
+    }
+    if (row.rowType === "RETURN_TRANSACTION") {
+      return dayjs(row.businessDate ?? row.transactionDate ?? row.createdAt);
+    }
+    return dayjs(row.createdAt);
+  };
+
   const isCountedTransaction = (row: any) => {
     if (!row) return false;
     if (row.rowType === "SALE") return true;
@@ -194,11 +212,95 @@ const DashboardPage = () => {
     return false;
   };
 
-  const todaysSales = sales.filter((sale) => dayjs(sale.createdAt).format("YYYY-MM-DD") === today);
+  const todaysSales = sales.filter((sale) => rowDate(sale).format("YYYY-MM-DD") === today);
   const todayRevenue = todaysSales.reduce((sum, sale) => sum + revenueOfRow(sale), 0);
   const totalRevenue = sales.reduce((sum, sale) => sum + revenueOfRow(sale), 0);
   const totalSales = sales.reduce((count, sale) => count + (isCountedTransaction(sale) ? 1 : 0), 0);
-  const totalSalesThisMonth = sales.filter((sale) => dayjs(sale.createdAt).isSame(dayjs(), "month") && isCountedTransaction(sale)).length;
+  const totalSalesThisMonth = sales.filter((sale) => rowDate(sale).isSame(dayjs(), "month") && isCountedTransaction(sale)).length;
+
+  const getSalesGrouping = (period: 'daily' | 'weekly' | 'monthly' | 'yearly'): DateGroup =>
+    period === 'daily' ? 'day' : period === 'weekly' ? 'week' : period === 'yearly' ? 'year' : 'month';
+
+  const createSalesRange = (period: 'daily' | 'weekly' | 'monthly' | 'yearly', customRange: [dayjs.Dayjs | null, dayjs.Dayjs | null] | null): DateRangeWindow => {
+    if (customRange?.[0] && customRange?.[1]) {
+      return {
+        from: customRange[0].startOf('day').format('YYYY-MM-DD'),
+        to: customRange[1].endOf('day').format('YYYY-MM-DD'),
+      };
+    }
+
+    const now = dayjs().endOf('day');
+    if (period === 'daily') {
+      return {
+        from: now.subtract(6, 'day').startOf('day').format('YYYY-MM-DD'),
+        to: now.format('YYYY-MM-DD'),
+      };
+    }
+    if (period === 'weekly') {
+      return {
+        from: now.subtract(3, 'week').startOf('week').format('YYYY-MM-DD'),
+        to: now.format('YYYY-MM-DD'),
+      };
+    }
+    if (period === 'monthly') {
+      return {
+        from: now.subtract(11, 'month').startOf('month').format('YYYY-MM-DD'),
+        to: now.format('YYYY-MM-DD'),
+      };
+    }
+
+    return {
+      from: now.subtract(4, 'year').startOf('year').format('YYYY-MM-DD'),
+      to: now.format('YYYY-MM-DD'),
+    };
+  };
+
+  const buildSalesBreakdownData = (
+    rows: SalesBreakdownRow[],
+    periodType: 'daily' | 'weekly' | 'monthly' | 'yearly',
+    range: DateRangeWindow
+  ) => {
+    const group = getSalesGrouping(periodType);
+    const start = dayjs(range.from).startOf(group);
+    const end = dayjs(range.to).endOf(group);
+
+    const count =
+      periodType === 'daily'
+        ? Math.max(1, end.diff(start, 'day') + 1)
+        : periodType === 'weekly'
+        ? Math.max(1, end.diff(start, 'week') + 1)
+        : periodType === 'monthly'
+        ? Math.max(1, end.diff(start, 'month') + 1)
+        : Math.max(1, end.diff(start, 'year') + 1);
+
+    const rowMap = new Map<string, SalesBreakdownRow>();
+    for (const row of rows) {
+      const key = dayjs(row.period).startOf(group).format('YYYY-MM-DD');
+      rowMap.set(key, row);
+    }
+
+    return Array.from({ length: count }, (_, index) => {
+      const pointDate = start.add(index, group);
+      const row = rowMap.get(pointDate.format('YYYY-MM-DD'));
+      const label =
+        periodType === 'daily'
+          ? pointDate.format('DD MMM')
+          : periodType === 'weekly'
+          ? `Wk of ${pointDate.format('DD MMM')}`
+          : periodType === 'yearly'
+          ? pointDate.format('YYYY')
+          : pointDate.format('MMM YY');
+
+      return {
+        label,
+        totalRevenue: Number(row?.total_revenue ?? 0),
+        discountGiven: Number(row?.total_discount ?? 0),
+        netProfit: Number(row?.net_profit ?? 0),
+        transactionCount: Number(row?.transaction_count ?? 0),
+        period: pointDate.format('YYYY-MM-DD'),
+      };
+    });
+  };
 
   useEffect(() => {
     setContentVisible(false);
@@ -247,32 +349,32 @@ const DashboardPage = () => {
 
   const revenueData = data?.revenueTrend?.[revenueView] ?? [];
 
+  const effectiveDateRange = useMemo<DateRangeWindow>(() => createSalesRange(period, customDateRange), [customDateRange, period]);
+
+  useEffect(() => {
+    setSalesLimit(5000);
+    setSalesPage(1);
+    setSalesFilters({
+      startDate: effectiveDateRange.from,
+      endDate: effectiveDateRange.to,
+    });
+  }, [effectiveDateRange, setSalesFilters, setSalesLimit, setSalesPage]);
+
   useEffect(() => {
     let cancelled = false;
     const loadSalesBreakdown = async () => {
       setSalesBreakdownLoading(true);
       try {
-        const group = period === "daily" ? "day" : period === "weekly" ? "week" : period === "yearly" ? "year" : "month";
-        const res = await fetch(`/api/reports/sales-breakdown-v2?group=${group}`);
+        const group = getSalesGrouping(period);
+        const params = new URLSearchParams({
+          group,
+          from: effectiveDateRange.from,
+          to: effectiveDateRange.to,
+        });
+        const res = await fetch(`/api/reports/sales-breakdown-v2?${params.toString()}`);
         const rows = res.ok ? (await res.json() as SalesBreakdownRow[]) : [];
         if (cancelled) return;
-        const mapped = (Array.isArray(rows) ? rows : []).map((row) => {
-          const date = dayjs(row.period);
-          const label = period === "daily"
-            ? (date.isValid() ? date.format("DD MMM") : String(row.period))
-            : period === "weekly"
-              ? (date.isValid() ? `Wk ${date.format("DD MMM")}` : String(row.period))
-              : period === "yearly"
-                ? (date.isValid() ? date.format("YYYY") : String(row.period))
-                : (date.isValid() ? date.format("MMM YY") : String(row.period));
-          return {
-            label,
-            totalRevenue: Number(row.total_revenue ?? 0),
-            discountGiven: Number(row.total_discount ?? 0),
-            netProfit: Number(row.net_profit ?? 0),
-            period: String(row.period ?? ""),
-          };
-        });
+        const mapped = buildSalesBreakdownData(Array.isArray(rows) ? rows : [], period, effectiveDateRange);
         setSalesBreakdownData(mapped);
       } catch {
         if (!cancelled) {
@@ -286,37 +388,33 @@ const DashboardPage = () => {
     };
     loadSalesBreakdown();
     return () => { cancelled = true; };
-  }, [period]);
+  }, [effectiveDateRange, period]);
 
   const filteredSales = useMemo(() => {
-    // If custom date range is selected, filter by that
-    if (customDateRange && customDateRange[0] && customDateRange[1]) {
-      const startDate = customDateRange[0].startOf('day');
-      const endDate = customDateRange[1].endOf('day');
-      return sales.filter((sale) => {
-        const saleDate = dayjs(sale.createdAt);
-        return saleDate.isAfter(startDate) || saleDate.isSame(startDate) && (saleDate.isBefore(endDate) || saleDate.isSame(endDate));
-      });
-    }
-    return sales;
-  }, [period, sales, customDateRange]);
+    const startDate = dayjs(effectiveDateRange.from).startOf("day");
+    const endDate = dayjs(effectiveDateRange.to).endOf("day");
+
+    return sales.filter((sale) => {
+      const saleDate = rowDate(sale);
+      return !saleDate.isBefore(startDate) && !saleDate.isAfter(endDate);
+    });
+  }, [effectiveDateRange, sales]);
 
   const dayOfWeekPatternData = useMemo(() => {
     const dayOrder = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const totals = new Map<string, number>(dayOrder.map((day) => [day, 0]));
-    const salesToAnalyze = customDateRange && customDateRange[0] && customDateRange[1] ? filteredSales : sales;
-    for (const sale of salesToAnalyze) {
-      const key = dayOrder[dayjs(sale.createdAt).day()];
+    for (const sale of filteredSales) {
+      const key = dayOrder[rowDate(sale).day()];
       totals.set(key, (totals.get(key) ?? 0) + revenueOfRow(sale));
     }
     return dayOrder.map((day) => ({ day, total: totals.get(day) ?? 0 }));
-  }, [sales, filteredSales, customDateRange]);
+  }, [filteredSales]);
 
   const salesRangeLabel = useMemo(() => {
     if (filteredSales.length === 0) {
       return "No data";
     }
-    const dates = filteredSales.map((sale) => dayjs(sale.createdAt));
+    const dates = filteredSales.map((sale) => rowDate(sale));
     const minDate = dayjs.min(dates);
     const maxDate = dayjs.max(dates);
     if (!minDate || !maxDate) {
@@ -331,21 +429,10 @@ const DashboardPage = () => {
     let totalProfit = 0;
     let transactionCount = 0;
 
-    if (customDateRange && customDateRange[0] && customDateRange[1]) {
-      // Use filteredSales for custom date range
-      totalRevenueForPeriod = filteredSales.reduce((sum, sale) => sum + revenueOfRow(sale), 0);
-      transactionCount = filteredSales.reduce((count, row) => count + (isCountedTransaction(row) ? 1 : 0), 0);
-      // For custom date range, we calculate discount and profit from available sales data
-      // Assuming we can derive these from the sales data if available
-      totalDiscount = 0; // Will be calculated from breakdown data if available
-      totalProfit = 0;
-    } else {
-      // Use salesBreakdownData for preset periods
-      totalRevenueForPeriod = salesBreakdownData.reduce((sum, row) => sum + Number(row.totalRevenue ?? 0), 0);
-      totalDiscount = salesBreakdownData.reduce((sum, row) => sum + Number(row.discountGiven ?? 0), 0);
-      totalProfit = salesBreakdownData.reduce((sum, row) => sum + Number(row.netProfit ?? 0), 0);
-      transactionCount = sales.reduce((count, row) => count + (isCountedTransaction(row) ? 1 : 0), 0);
-    }
+    totalRevenueForPeriod = salesBreakdownData.reduce((sum, row) => sum + Number(row.totalRevenue ?? 0), 0);
+    totalDiscount = salesBreakdownData.reduce((sum, row) => sum + Number(row.discountGiven ?? 0), 0);
+    totalProfit = salesBreakdownData.reduce((sum, row) => sum + Number(row.netProfit ?? 0), 0);
+    transactionCount = salesBreakdownData.reduce((sum, row) => sum + Number(row.transactionCount ?? 0), 0);
 
     const marginPct = totalRevenueForPeriod > 0 ? Math.round((totalProfit / totalRevenueForPeriod) * 100) : 0;
     const discountPct = totalRevenueForPeriod > 0 ? Math.round((totalDiscount / totalRevenueForPeriod) * 100) : 0;
@@ -371,12 +458,12 @@ const DashboardPage = () => {
       },
       {
         label: "Total sales",
-        value: filteredSales.length.toString(),
+        value: transactionCount.toString(),
         color: "#111827",
         subLabel: "transactions",
       },
     ];
-  }, [filteredSales, filteredSales.length, period, salesBreakdownData, customDateRange]);
+  }, [salesBreakdownData]);
 
   const chartLoading = loading;
 
@@ -917,6 +1004,8 @@ const DashboardPage = () => {
                 formatCurrency={formatCurrency}
                 formatCurrencyCompactK={formatCurrencyCompactK}
                 period={period}
+                from={effectiveDateRange.from}
+                to={effectiveDateRange.to}
               />
               {/* DiscountImpact component would go here, pass period as prop if needed */}
             </div>

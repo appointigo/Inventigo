@@ -269,12 +269,13 @@ export const customerService = {
       where: { id: customerId, orgId },
       include: {
         sales: {
-          orderBy: { createdAt: "desc" },
+          orderBy: { transactionDate: "desc" },
           select: {
             id: true,
             invoiceNumber: true,
             total: true,
             status: true,
+            transactionDate: true,
             createdAt: true,
           },
           take: 50,
@@ -376,17 +377,25 @@ export const customerService = {
         where: { customerId, status: "COMPLETED", store: { orgId } },
         _sum: { total: true },
       }),
+      // Use transactionDate (may be backdated) as the canonical purchase date;
+      // fall back to createdAt for records created before the transactionDate
+      // migration (20260509000000).  We order by transactionDate DESC so that
+      // a backdated sale that is actually the customer’s most-recent visit shows
+      // up correctly.
       prisma.sale.findFirst({
         where: { customerId, status: "COMPLETED", store: { orgId } },
-        orderBy: { createdAt: "desc" },
-        select: { createdAt: true },
+        orderBy: { transactionDate: "desc" },
+        select: { transactionDate: true, createdAt: true },
       }),
     ]);
+
+    const lastPurchaseDate =
+      latest?.transactionDate ?? latest?.createdAt ?? null;
 
     return {
       totalVisits: visits,
       totalSpend: Number(spend._sum.total ?? 0),
-      lastPurchaseDate: latest?.createdAt ? latest.createdAt.toISOString() : null,
+      lastPurchaseDate: lastPurchaseDate ? lastPurchaseDate.toISOString() : null,
     };
   },
 
