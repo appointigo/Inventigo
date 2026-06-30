@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { App, Button, Card, Input, InputNumber, Select, Space, Spin, Table, Typography, Divider, Tag, theme, DatePicker, Row, Col } from "antd";
+import { App, Button, Card, Input, InputNumber, Select, Space, Spin, Table, Typography, Divider, Tag, theme, DatePicker, Row } from "antd";
 import { SearchOutlined, SwapOutlined, ReloadOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
@@ -498,8 +498,8 @@ const ReturnExchangeView = ({
       return;
     }
 
-    if (returnedItems.length === 0) {
-      message.error("Select at least one returned item.");
+    if (returnedItems.length === 0 && exchangeItems.length === 0) {
+      message.error("Select at least one returned or exchange item.");
       return;
     }
 
@@ -954,7 +954,7 @@ const ReturnExchangeView = ({
               type="primary"
               icon={<SwapOutlined />}
               loading={submitting}
-              disabled={returnedItems.length === 0 || submitting || !sale || (splitMode && requiresPayment && !splitValid)}
+              disabled={(returnedItems.length === 0 && exchangeItems.length === 0) || submitting || !sale || (splitMode && requiresPayment && !splitValid)}
               onClick={handleSubmit}
               style={{ width: "100%", height: token.controlHeightLG }}
             >

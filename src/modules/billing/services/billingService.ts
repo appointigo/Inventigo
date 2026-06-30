@@ -219,6 +219,24 @@ async function hasTable(tableName: string) {
   }
 }
 
+async function hasColumn(tableName: string, columnName: string) {
+  try {
+    const result = await prisma.$queryRaw<Array<{ has_column: boolean }>>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = ${tableName}
+          AND column_name = ${columnName}
+      ) AS has_column
+    `;
+
+    return result[0]?.has_column ?? false;
+  } catch {
+    return false;
+  }
+}
+
 let supportsExchangedStatusCache: boolean | null = null;
 
 async function supportsExchangedSaleStatus() {
@@ -244,6 +262,131 @@ async function supportsExchangedSaleStatus() {
     return false;
   }
 }
+
+type ReturnTransactionDtoItemInput = {
+  productId: string;
+  sizeId: string;
+  quantity: number;
+  total: number;
+  productName?: string;
+  sku?: string;
+  sizeLabel?: string;
+};
+
+type ReturnTransactionRelationItem = {
+  returnedProductId?: string | null;
+  returnedSizeId?: string | null;
+  returnedQuantity?: number | null;
+  returnedUnitPrice?: Prisma.Decimal | number | string | null;
+  returnedProduct?: { name?: string | null; sku?: string | null } | null;
+  returnedSize?: { label?: string | null } | null;
+  newProductId?: string | null;
+  newSizeId?: string | null;
+  newQuantity?: number | null;
+  newUnitPrice?: Prisma.Decimal | number | string | null;
+  newProduct?: { name?: string | null; sku?: string | null } | null;
+  newSize?: { label?: string | null } | null;
+};
+
+type ReturnTransactionRecord = {
+  id: string;
+  referenceNumber?: string | null;
+  originalSaleId?: string | null;
+  storeId?: string | null;
+  customerId?: string | null;
+  type: string;
+  items?: ReturnTransactionRelationItem[];
+  netAmount?: Prisma.Decimal | number | string | null;
+  offsetAmount?: Prisma.Decimal | number | string | null;
+  refundAmount?: Prisma.Decimal | number | string | null;
+  refundMethod?: string | null;
+  reason?: string | null;
+  condition?: string | null;
+  notes?: string | null;
+  transactionDate?: Date | string | null;
+  businessDate?: Date | string | null;
+  createdAt?: Date | string | null;
+};
+
+type LegacyReturnTransactionItems = {
+  id: string;
+  returnedItems: unknown;
+  exchangedItems: unknown;
+};
+
+const normalizeLegacyTransactionItems = (items: unknown) =>
+  Array.isArray(items)
+    ? items.map((item) => {
+        const record = item && typeof item === "object" ? item as Record<string, unknown> : {};
+
+        return {
+          productId: String(record.productId ?? ""),
+          sizeId: String(record.sizeId ?? ""),
+          quantity: Number(record.quantity ?? 0),
+          total: Number(record.total ?? 0),
+          productName: typeof record.productName === "string" ? record.productName : undefined,
+          sku: typeof record.sku === "string" ? record.sku : undefined,
+          sizeLabel: typeof record.sizeLabel === "string" ? record.sizeLabel : undefined,
+        };
+      })
+    : [];
+
+const toReturnTransactionDto = (
+  rt: ReturnTransactionRecord,
+  fallbackReturnedItems: ReturnTransactionDtoItemInput[] = [],
+  fallbackExchangedItems: ReturnTransactionDtoItemInput[] = []
+) => {
+  const relationalItems = rt.items ?? [];
+
+  const returnedItems = relationalItems.length > 0
+    ? relationalItems
+        .filter((item) => item.returnedProductId)
+        .map((item) => ({
+          productId: String(item.returnedProductId),
+          sizeId: String(item.returnedSizeId ?? ""),
+          quantity: Number(item.returnedQuantity ?? 0),
+          total: round2(Number(item.returnedUnitPrice ?? 0) * Number(item.returnedQuantity ?? 0)),
+          productName: item.returnedProduct?.name ?? undefined,
+          sku: item.returnedProduct?.sku ?? undefined,
+          sizeLabel: item.returnedSize?.label ?? undefined,
+        }))
+    : fallbackReturnedItems.map((item) => ({ ...item, total: round2(item.total) }));
+
+  const exchangedItems = relationalItems.length > 0
+    ? relationalItems
+        .filter((item) => item.newProductId)
+        .map((item) => ({
+          productId: String(item.newProductId),
+          sizeId: String(item.newSizeId ?? ""),
+          quantity: Number(item.newQuantity ?? 0),
+          total: round2(Number(item.newUnitPrice ?? 0) * Number(item.newQuantity ?? 0)),
+          productName: item.newProduct?.name ?? undefined,
+          sku: item.newProduct?.sku ?? undefined,
+          sizeLabel: item.newSize?.label ?? undefined,
+        }))
+    : fallbackExchangedItems.map((item) => ({ ...item, total: round2(item.total) }));
+
+  return {
+    id: rt.id,
+    referenceNumber: rt.referenceNumber,
+    originalSaleId: rt.originalSaleId,
+    storeId: rt.storeId,
+    customerId: rt.customerId ?? null,
+    type: rt.type,
+    returnedItems,
+    exchangedItems,
+    netAmount: Number(rt.netAmount ?? 0),
+    offsetAmount: Number(rt.offsetAmount ?? 0),
+    refundAmount: Number(rt.refundAmount ?? 0),
+    refundMethod: rt.refundMethod ?? undefined,
+    reason: rt.reason ?? undefined,
+    condition: rt.condition ?? undefined,
+    notes: rt.notes ?? undefined,
+    transactionDate: rt.transactionDate instanceof Date ? rt.transactionDate.toISOString() : rt.transactionDate ?? undefined,
+    businessDate: rt.businessDate instanceof Date ? rt.businessDate.toISOString() : rt.businessDate ?? undefined,
+    createdAt: rt.createdAt instanceof Date ? rt.createdAt.toISOString() : rt.createdAt,
+  };
+};
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const toSaleDto = (s: any): Sale => ({
@@ -302,62 +445,51 @@ const toSaleDto = (s: any): Sale => ({
   })),
   returnTransactions: (s.returnTransactions ?? []).map((rt: any) => {
     const relationalItems: any[] = rt.items ?? [];
+    const providedReturnedItems = normalizeLegacyTransactionItems(rt.returnedItems);
+    const providedExchangedItems = normalizeLegacyTransactionItems(rt.exchangedItems);
 
     // ── Backward-compatibility: old return transactions (created before the
     // return_transaction_items relational table was introduced) store their
     // item lists as JSONB in returnedItems / exchangedItems columns.  When the
     // relational table is empty we fall back to those JSONB arrays so legacy
     // records render correctly.
-    const legacyReturned: any[] = relationalItems.length === 0 && Array.isArray(rt.returnedItems)
-      ? rt.returnedItems
-      : [];
-    const legacyExchanged: any[] = relationalItems.length === 0 && Array.isArray(rt.exchangedItems)
-      ? rt.exchangedItems
-      : [];
+    const relationalReturnedItems = relationalItems
+      .filter((it: any) => it.returnedProductId)
+      .map((item: any) => ({
+        productId: String(item.returnedProductId),
+        sizeId: String(item.returnedSizeId ?? ""),
+        quantity: Number(item.returnedQuantity),
+        total: Number(item.returnedUnitPrice ?? 0) * Number(item.returnedQuantity ?? 0),
+        productName: item.returnedProduct?.name ?? item.productName ?? undefined,
+        sku: item.returnedProduct?.sku ?? item.sku ?? undefined,
+        sizeLabel: item.returnedSize?.label ?? item.sizeLabel ?? undefined,
+      }));
 
-    const returnedItems = relationalItems.length > 0
-      ? relationalItems
-          .filter((it: any) => it.returnedProductId)
-          .map((item: any) => ({
-            productId: String(item.returnedProductId),
-            sizeId: String(item.returnedSizeId ?? ""),
-            quantity: Number(item.returnedQuantity),
-            total: Number(item.returnedUnitPrice ?? 0) * Number(item.returnedQuantity ?? 0),
-            productName: item.returnedProduct?.name ?? item.productName ?? undefined,
-            sku: item.returnedProduct?.sku ?? item.sku ?? undefined,
-            sizeLabel: item.returnedSize?.label ?? item.sizeLabel ?? undefined,
-          }))
-      : legacyReturned.map((item: any) => ({
-          productId: String(item.productId ?? ""),
-          sizeId: String(item.sizeId ?? ""),
-          quantity: Number(item.quantity ?? 0),
-          total: Number(item.total ?? 0),
-          productName: undefined,
-          sku: undefined,
-          sizeLabel: undefined,
-        }));
+    const returnedItems = relationalReturnedItems.length > 0
+      ? (providedReturnedItems.length === relationalReturnedItems.length &&
+          providedReturnedItems.some((item) => item.productName || item.sku || item.sizeLabel)
+          ? providedReturnedItems
+          : relationalReturnedItems)
+      : providedReturnedItems;
 
-    const exchangedItems = relationalItems.length > 0
-      ? relationalItems
-          .filter((it: any) => it.newProductId)
-          .map((item: any) => ({
-            productId: String(item.newProductId),
-            sizeId: String(item.newSizeId ?? ""),
-            quantity: Number(item.newQuantity ?? 0),
-            total: Number(item.newUnitPrice ?? 0) * Number(item.newQuantity ?? 0),
-            productName: item.newProduct?.name ?? item.productName ?? undefined,
-            sku: item.newProduct?.sku ?? item.sku ?? undefined,
-            sizeLabel: item.newSize?.label ?? item.sizeLabel ?? undefined,
-          }))
-      : legacyExchanged.map((item: any) => ({
-          productId: String(item.productId ?? ""),
-          sizeId: String(item.sizeId ?? ""),
-          quantity: Number(item.quantity ?? 0),
-          total: Number(item.total ?? 0),
-          productName: undefined,
-          sku: undefined,
-          sizeLabel: undefined,
-        }));
+    const relationalExchangedItems = relationalItems
+      .filter((it: any) => it.newProductId)
+      .map((item: any) => ({
+        productId: String(item.newProductId),
+        sizeId: String(item.newSizeId ?? ""),
+        quantity: Number(item.newQuantity ?? 0),
+        total: Number(item.newUnitPrice ?? 0) * Number(item.newQuantity ?? 0),
+        productName: item.newProduct?.name ?? item.productName ?? undefined,
+        sku: item.newProduct?.sku ?? item.sku ?? undefined,
+        sizeLabel: item.newSize?.label ?? item.sizeLabel ?? undefined,
+      }));
+
+    const exchangedItems = relationalExchangedItems.length > 0
+      ? (providedExchangedItems.length === relationalExchangedItems.length &&
+          providedExchangedItems.some((item) => item.productName || item.sku || item.sizeLabel)
+          ? providedExchangedItems
+          : relationalExchangedItems)
+      : providedExchangedItems;
 
     return {
       id: rt.id,
@@ -640,6 +772,10 @@ export const billingService = {
 
   async getSaleById(orgId: string, id: string): Promise<Sale | null> {
     const hasReturnItemsTable = await hasTable("return_transaction_items");
+    const [hasLegacyReturnedItemsColumn, hasLegacyExchangedItemsColumn] = await Promise.all([
+      hasColumn("return_transactions", "returnedItems"),
+      hasColumn("return_transactions", "exchangedItems"),
+    ]);
 
     const sale = await prisma.sale.findFirst({
       where: { id, store: { orgId } },
@@ -669,9 +805,51 @@ export const billingService = {
 
     const returnTransactions = (sale.returnTransactions ?? []) as any[];
     const historyItems = returnTransactions.flatMap((rt: any) => (rt.items ?? []));
+    const returnTransactionIds = returnTransactions.map((rt: any) => String(rt.id)).filter(Boolean);
+    const legacyItemsRows =
+      hasLegacyReturnedItemsColumn && hasLegacyExchangedItemsColumn && returnTransactionIds.length > 0
+        ? await prisma.$queryRaw<LegacyReturnTransactionItems[]>`
+            SELECT "id", "returnedItems", "exchangedItems"
+            FROM "return_transactions"
+            WHERE "id" IN (${Prisma.join(returnTransactionIds)})
+          `
+        : [];
+    const legacyItemsByTransactionId = new Map(
+      legacyItemsRows.map((row) => [
+        row.id,
+        {
+          returnedItems: normalizeLegacyTransactionItems(row.returnedItems),
+          exchangedItems: normalizeLegacyTransactionItems(row.exchangedItems),
+        },
+      ])
+    );
+    const legacyHistoryItems = [...legacyItemsByTransactionId.values()].flatMap((items) => [
+      ...items.returnedItems,
+      ...items.exchangedItems,
+    ]);
+    const saleLineMap = new Map(
+      (sale.items ?? []).map((item: any) => [
+        `${item.productId}:${item.sizeId}`,
+        {
+          productName: item.product?.name ?? undefined,
+          sku: item.product?.sku ?? undefined,
+          sizeLabel: item.size?.label ?? undefined,
+        },
+      ])
+    );
 
-    const productIds = [...new Set(historyItems.flatMap((item: any) => [item.returnedProductId, item.newProductId].filter(Boolean).map(String)))];
-    const sizeIds = [...new Set(historyItems.flatMap((item: any) => [item.returnedSizeId, item.newSizeId].filter(Boolean).map(String)))];
+    const productIds = [
+      ...new Set([
+        ...historyItems.flatMap((item: any) => [item.returnedProductId, item.newProductId].filter(Boolean).map(String)),
+        ...legacyHistoryItems.map((item) => item.productId).filter(Boolean),
+      ]),
+    ];
+    const sizeIds = [
+      ...new Set([
+        ...historyItems.flatMap((item: any) => [item.returnedSizeId, item.newSizeId].filter(Boolean).map(String)),
+        ...legacyHistoryItems.map((item) => item.sizeId).filter(Boolean),
+      ]),
+    ];
 
     const [products, sizes] = await Promise.all([
       productIds.length > 0
@@ -687,15 +865,50 @@ export const billingService = {
           })
         : [],
     ]);
+    const stockEntries = productIds.length > 0
+      ? await prisma.stockEntry.findMany({
+          where: {
+            OR: [
+              { id: { in: productIds } },
+              { productId: { in: productIds } },
+            ],
+          },
+          include: {
+            product: { select: { id: true, name: true, sku: true } },
+            size: { select: { id: true, label: true } },
+          },
+        })
+      : [];
 
     const productMap = Object.fromEntries(products.map((product) => [product.id, product]));
     const sizeMap = Object.fromEntries(sizes.map((size) => [size.id, size.label]));
+    const stockEntryByIdMap = Object.fromEntries(stockEntries.map((entry) => [entry.id, entry]));
+    const stockEntryByVariantMap = Object.fromEntries(
+      stockEntries.map((entry) => [`${entry.productId}:${entry.sizeId}`, entry])
+    );
+    const enrichHistoryItems = (items: ReturnTransactionDtoItemInput[]) =>
+      items.map((item) => {
+        const saleLine = saleLineMap.get(`${item.productId}:${item.sizeId}`);
+        const stockEntryById = stockEntryByIdMap[item.productId];
+        const stockEntryByVariant = stockEntryByVariantMap[`${item.productId}:${item.sizeId}`];
+        const stockEntry = stockEntryById ?? stockEntryByVariant;
+
+        return {
+          ...item,
+          productId: stockEntry?.productId ?? item.productId,
+          sizeId: stockEntry?.sizeId ?? item.sizeId,
+          productName: item.productName ?? saleLine?.productName ?? stockEntry?.product?.name ?? productMap[item.productId]?.name ?? item.productId,
+          sku: item.sku ?? saleLine?.sku ?? stockEntry?.product?.sku ?? productMap[item.productId]?.sku ?? item.productId,
+          sizeLabel: item.sizeLabel ?? saleLine?.sizeLabel ?? stockEntry?.size?.label ?? sizeMap[item.sizeId] ?? item.sizeId,
+        };
+      });
 
     const saleWithHistory = {
       ...sale,
       returnTransactions: returnTransactions.map((rt: any) => {
         const items = rt.items ?? [];
-        const returnedItems = items
+        const legacyItems = legacyItemsByTransactionId.get(String(rt.id));
+        const returnedItems = enrichHistoryItems(items
           .filter((it: any) => it.returnedProductId)
           .map((item: any) => ({
             productId: String(item.returnedProductId),
@@ -705,9 +918,9 @@ export const billingService = {
             productName: productMap[String(item.returnedProductId)]?.name ?? undefined,
             sku: productMap[String(item.returnedProductId)]?.sku ?? undefined,
             sizeLabel: sizeMap[String(item.returnedSizeId)] ?? undefined,
-          }));
+          })));
 
-        const exchangedItems = items
+        const exchangedItems = enrichHistoryItems(items
           .filter((it: any) => it.newProductId)
           .map((item: any) => ({
             productId: String(item.newProductId),
@@ -717,12 +930,12 @@ export const billingService = {
             productName: productMap[String(item.newProductId)]?.name ?? undefined,
             sku: productMap[String(item.newProductId)]?.sku ?? undefined,
             sizeLabel: sizeMap[String(item.newSizeId)] ?? undefined,
-          }));
+          })));
 
         return {
           ...rt,
-          returnedItems,
-          exchangedItems,
+          returnedItems: returnedItems.length > 0 ? returnedItems : enrichHistoryItems(legacyItems?.returnedItems ?? []),
+          exchangedItems: exchangedItems.length > 0 ? exchangedItems : enrichHistoryItems(legacyItems?.exchangedItems ?? []),
         };
       }),
     };
@@ -1093,6 +1306,10 @@ export const billingService = {
   ) {
     const supportsExchangedStatus = await supportsExchangedSaleStatus();
     const hasReturnItemsTable = await hasTable("return_transaction_items");
+    const [hasLegacyReturnedItemsColumn, hasLegacyExchangedItemsColumn] = await Promise.all([
+      hasColumn("return_transactions", "returnedItems"),
+      hasColumn("return_transactions", "exchangedItems"),
+    ]);
 
     const sale = await prisma.sale.findFirst({
       where: { id: saleId, store: { orgId } },
@@ -1132,6 +1349,18 @@ export const billingService = {
       ...item,
       total: round2(Number(item.total ?? 0)),
     }));
+    const returnedItemsJson = returnedLineItems.map((item) => ({
+      productId: item.productId,
+      sizeId: item.sizeId,
+      quantity: item.quantity,
+      total: item.total,
+    }));
+    const exchangedItemsJson = exchangedLineItems.map((item) => ({
+      productId: item.productId,
+      sizeId: item.sizeId,
+      quantity: item.quantity,
+      total: item.total,
+    }));
 
     const returnedQty = input.returnedItems.reduce((sum, item) => sum + item.quantity, 0);
     for (const item of input.returnedItems) {
@@ -1152,7 +1381,7 @@ export const billingService = {
     }
 
     const totalQty = sale.items.reduce((sum, item) => sum + item.quantity, 0);
-    const returnStatus = returnedQty >= totalQty ? "FULL" : "PARTIAL";
+    const returnStatus = returnedQty === 0 ? "NONE" : returnedQty >= totalQty ? "FULL" : "PARTIAL";
     const returnedTotal = returnedLineItems.reduce((sum, item) => sum + item.total, 0);
     const exchangedTotal = exchangedLineItems.reduce((sum, item) => sum + item.total, 0);
     
@@ -1242,7 +1471,31 @@ export const billingService = {
 
           const returnTransaction = await tx.returnTransaction.create({
             data: returnTransactionData,
+            ...(hasReturnItemsTable
+              ? {
+                  include: {
+                    items: {
+                      include: {
+                        returnedProduct: { select: { name: true, sku: true } },
+                        returnedSize: { select: { label: true } },
+                        newProduct: { select: { name: true, sku: true } },
+                        newSize: { select: { label: true } },
+                      },
+                    },
+                  },
+                }
+              : {}),
           });
+
+          if (hasLegacyReturnedItemsColumn && hasLegacyExchangedItemsColumn) {
+            await tx.$executeRaw`
+              UPDATE "return_transactions"
+              SET
+                "returnedItems" = CAST(${JSON.stringify(returnedItemsJson)} AS jsonb),
+                "exchangedItems" = CAST(${JSON.stringify(exchangedItemsJson)} AS jsonb)
+              WHERE "id" = ${returnTransaction.id}
+            `;
+          }
 
           if (netAmount > 0) {
             const topUpEntries = normalizePaymentEntries(input.topUpPayments, input.refundMethod, netAmount);
@@ -1398,7 +1651,7 @@ export const billingService = {
           return returnTransaction;
         });
 
-        return transaction;
+        return toReturnTransactionDto(transaction, returnedLineItems, exchangedLineItems);
       } catch (error) {
         if (attempt < 5 && isInvoiceNumberConflict(error)) {
           // Retry on reference/invoice unique conflicts
@@ -1437,9 +1690,10 @@ export const billingService = {
       receivables,
       partialSalesByCustomer,
       allExchanges,
-      allRefunds,
-      thisMonthRefunds,
-      prevMonthRefunds,
+      refundedSales,
+      returnRefunds,
+      thisMonthReturnRefunds,
+      prevMonthReturnRefunds,
       pendingRefunds,
       pendingRefundCount,
     ] = await Promise.all([
@@ -1452,15 +1706,18 @@ export const billingService = {
         _sum: { amount: true },
       }),
       prisma.sale.aggregate({
-        where: { store: { orgId }, status: "COMPLETED", paymentStatus: "PARTIAL" },
+        where: { store: { orgId }, status: { not: "REFUNDED" }, paymentStatus: "PARTIAL", amountDue: { gt: 0 } },
         _sum: { amountDue: true },
       }),
       prisma.sale.groupBy({
         by: ["customerId"],
-        where: { store: { orgId }, status: "COMPLETED", paymentStatus: "PARTIAL" },
+        where: { store: { orgId }, status: { not: "REFUNDED" }, paymentStatus: "PARTIAL", amountDue: { gt: 0 } },
       }),
       prisma.returnTransaction.count({
-        where: { store: { orgId }, type: "EXCHANGE" },
+        where: { store: { orgId }, type: { in: ["EXCHANGE", "RETURN_EXCHANGE"] } },
+      }),
+      prisma.sale.count({
+        where: { store: { orgId }, status: "REFUNDED" },
       }),
       prisma.returnTransaction.count({
         where: { store: { orgId }, refundAmount: { gt: 0 } },
@@ -1490,16 +1747,17 @@ export const billingService = {
         : ((totalCollected - totalCollectedLastMonth) / totalCollectedLastMonth) * 100;
 
     const amountReceivable = Number(receivables._sum.amountDue ?? 0);
-    const receivableCustomerCount = partialSalesByCustomer.length;
+    const receivableCustomerCount = partialSalesByCustomer.filter((row) => row.customerId).length;
 
     const refundGrowthPercent =
-      prevMonthRefunds === 0
-        ? thisMonthRefunds > 0
+      prevMonthReturnRefunds === 0
+        ? thisMonthReturnRefunds > 0
           ? 100
           : 0
-        : ((thisMonthRefunds - prevMonthRefunds) / prevMonthRefunds) * 100;
+        : ((thisMonthReturnRefunds - prevMonthReturnRefunds) / prevMonthReturnRefunds) * 100;
 
     const pendingRefundAmount = Number(pendingRefunds._sum.refundAmount ?? 0);
+    const refundCount = refundedSales + returnRefunds;
 
     return {
       totalCollected,
@@ -1507,7 +1765,7 @@ export const billingService = {
       growthPercent: Math.round(growthPercent * 100) / 100,
       exchangeCount: allExchanges,
       exchangesFlaggedForReview: 0, // To be implemented with review status field
-      refundCount: allRefunds,
+      refundCount,
       refundGrowthPercent: Math.round(refundGrowthPercent * 100) / 100,
       amountReceivable,
       receivableCustomerCount,
@@ -1649,21 +1907,10 @@ export const billingService = {
 
     const kpis = await this.getSalesKPIs(orgId);
 
-    const exchangeCount = unified.filter((r: any) => r.rowType === "RETURN_TRANSACTION" && r.type === "EXCHANGE").length;
-    const refundCount = unified.filter((r: any) => r.rowType === "RETURN_TRANSACTION" && Number(r.refundAmount ?? 0) > 0).length;
-    const pendingRefundAmount = unified.filter((r: any) => r.rowType === "RETURN_TRANSACTION").reduce((s: number, r: any) => s + Number(r.refundAmount ?? 0), 0);
-
     return {
       data,
       pagination: { page, limit, total, totalPages },
-      stats: {
-        totalCollected: kpis.totalCollected,
-        amountReceivable: kpis.amountReceivable,
-        exchangeCount: kpis.exchangeCount,
-        refundCount: kpis.refundCount,
-        pendingRefundAmount: kpis.pendingRefundAmount,
-      },
+      stats: kpis,
     };
   },
 };
-

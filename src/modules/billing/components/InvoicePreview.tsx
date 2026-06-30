@@ -72,6 +72,24 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
     return { unitMrp, finalUnitPrice, lineTotal, mrpLineTotal, savings, discountPercent };
   };
 
+  const getHistoryItemDisplay = (item: ReturnTransactionItem) => {
+    const productName = item.productName?.trim();
+    const productId = item.productId?.trim();
+    const sku = item.sku?.trim();
+    const sizeLabel = item.sizeLabel?.trim();
+    const sizeId = item.sizeId?.trim();
+    const primary = productName || sku || productId || "Product";
+    const secondaryParts = [sku, productId].filter(
+      (value): value is string => Boolean(value && value !== primary)
+    );
+
+    return {
+      primary,
+      secondary: secondaryParts.join(" · "),
+      size: sizeLabel || sizeId,
+    };
+  };
+
   const mrpSubtotal = round2(sale.items.reduce((sum, item) => sum + ((item.mrp != null ? Number(item.mrp) : Number(item.unitPrice)) * item.quantity), 0));
   const totalSavings = Math.max(0, round2(mrpSubtotal - Number(sale.total)));
 
@@ -115,25 +133,45 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
       ? sale.returnTransactions
           .map((transaction) => {
             const returnedRows = (transaction.returnedItems ?? [])
-              .map((item, i) => `
-                <tr>
-                  <td>${i + 1}</td>
-                  <td>${item.productName ?? item.productId}<br><small style="color:#888">${item.sku ?? item.productId} · <span style="display:inline-block;background:#eff4ff;border:1px solid #bfdbfe;border-radius:3px;font-size:9pt;padding:0 5px;color:#2563eb;">${item.sizeLabel ?? item.sizeId}</span></small></td>
-                  <td style="text-align:center">${item.quantity}</td>
-                  <td style="text-align:right">${formatCurrency(item.total)}</td>
-                </tr>
-              `)
+              .map((item, i) => {
+                const product = getHistoryItemDisplay(item);
+
+                return `
+                  <tr>
+                    <td>${i + 1}</td>
+                    <td>
+                      <div style="font-weight:700;margin-bottom:3px;">${product.primary}</div>
+                      <small style="color:#888">
+                        ${product.secondary}
+                        ${product.size ? `<span style="display:inline-block;background:#eff4ff;border:1px solid #bfdbfe;border-radius:3px;font-size:9pt;padding:0 5px;color:#2563eb;">${product.size}</span>` : ""}
+                      </small>
+                    </td>
+                    <td style="text-align:center">${item.quantity}</td>
+                    <td style="text-align:right">${formatCurrency(item.total)}</td>
+                  </tr>
+                `;
+              })
               .join("");
 
             const exchangedRows = (transaction.exchangedItems ?? [])
-              .map((item, i) => `
-                <tr>
-                  <td>${i + 1}</td>
-                  <td>${item.productName ?? item.productId}<br><small style="color:#888">${item.sku ?? item.productId} · <span style="display:inline-block;background:#eff4ff;border:1px solid #bfdbfe;border-radius:3px;font-size:9pt;padding:0 5px;color:#2563eb;">${item.sizeLabel ?? item.sizeId}</span></small></td>
-                  <td style="text-align:center">${item.quantity}</td>
-                  <td style="text-align:right">${formatCurrency(item.total)}</td>
-                </tr>
-              `)
+              .map((item, i) => {
+                const product = getHistoryItemDisplay(item);
+
+                return `
+                  <tr>
+                    <td>${i + 1}</td>
+                    <td>
+                      <div style="font-weight:700;margin-bottom:3px;">${product.primary}</div>
+                      <small style="color:#888">
+                        ${product.secondary}
+                        ${product.size ? `<span style="display:inline-block;background:#eff4ff;border:1px solid #bfdbfe;border-radius:3px;font-size:9pt;padding:0 5px;color:#2563eb;">${product.size}</span>` : ""}
+                      </small>
+                    </td>
+                    <td style="text-align:center">${item.quantity}</td>
+                    <td style="text-align:right">${formatCurrency(item.total)}</td>
+                  </tr>
+                `;
+              })
               .join("");
 
             return `
@@ -325,15 +363,19 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
     {
       title: "Product",
       key: "product",
-      render: (_, record) => (
-        <>
-          <ItemNameCell>{record.productName ?? record.productId}</ItemNameCell>
-          <ItemSkuCell>
-            {record.sku ?? record.productId}
-            <SizeBadge>{record.sizeLabel ?? record.sizeId}</SizeBadge>
-          </ItemSkuCell>
-        </>
-      ),
+      render: (_, record) => {
+        const product = getHistoryItemDisplay(record);
+
+        return (
+          <>
+            <ItemNameCell>{product.primary}</ItemNameCell>
+            <ItemSkuCell>
+              {product.secondary}
+              {product.size && <SizeBadge>{product.size}</SizeBadge>}
+            </ItemSkuCell>
+          </>
+        );
+      },
     },
     {
       title: "Qty",
