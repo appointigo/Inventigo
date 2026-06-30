@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState, useRef } from "react";
-import { Table, Button, Space, Tag, Input, InputNumber, Select, Popconfirm, Tooltip, Badge, Flex, Empty, Modal, Card, Switch, App, Dropdown } from "antd";
+import type { Key } from "react";
+import { Table, Button, Space, Tag, Input, InputNumber, Select, Popconfirm, Tooltip, Badge, Flex, Empty, Modal, Switch, App, Dropdown } from "antd";
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, EyeOutlined, UploadOutlined, CopyOutlined, PrinterOutlined, CloseOutlined, DownloadOutlined } from "@ant-design/icons";
 import type { MenuProps } from "antd";
 import type { ColumnsType } from "antd/es/table";
@@ -67,13 +68,13 @@ const ProductTable = ({
   attributeSchema,
   attributeFilters,
   onAttributeChange,
-  onClearAttributeFilters,
   onClearAllFilters,
   currentCategory,
 }: ProductTableProps) => {
   const { message } = App.useApp();
   const [barcodePrintOpen, setBarcodePrintOpen] = useState(false);
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
+  const [selectedProductsById, setSelectedProductsById] = useState<Record<string, Product>>({});
   const [copiesMap, setCopiesMap] = useState<Record<string, number>>({});
   const [exportLoading, setExportLoading] = useState(false);
   const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
@@ -161,14 +162,9 @@ const ProductTable = ({
     [hiddenAttributeFields, attributeFilters]
   );
 
-  useEffect(() => {
-    const pageIds = new Set(products.map((product) => product.id));
-    setSelectedProductIds((prev) => prev.filter((id) => pageIds.has(id)));
-  }, [products]);
-
   const selectedProducts = useMemo(
-    () => products.filter((product) => selectedProductIds.includes(product.id)),
-    [products, selectedProductIds]
+    () => selectedProductIds.map((id) => selectedProductsById[id]).filter((product): product is Product => Boolean(product)),
+    [selectedProductIds, selectedProductsById]
   );
 
   const barcodeRows = useMemo(
@@ -189,6 +185,39 @@ const ProductTable = ({
   );
 
   const totalLabels = barcodeRows.reduce((sum, row) => sum + (copiesMap[row.key] ?? row.quantity), 0);
+
+  const clearBarcodeSelection = () => {
+    setSelectedProductIds([]);
+    setSelectedProductsById({});
+    setCopiesMap({});
+  };
+
+  const handleSelectionChange = (nextKeys: Key[]) => {
+    const nextVisibleSelectedIds = new Set(nextKeys.map(String));
+    const visibleProductIds = new Set(products.map((product) => product.id));
+    const visibleSelectedProducts = products.filter((product) => nextVisibleSelectedIds.has(product.id));
+
+    setSelectedProductIds((prev) => {
+      const hiddenSelectedIds = prev.filter((id) => !visibleProductIds.has(id));
+      return [...hiddenSelectedIds, ...visibleSelectedProducts.map((product) => product.id)];
+    });
+
+    setSelectedProductsById((prev) => {
+      const next = { ...prev };
+
+      products.forEach((product) => {
+        if (!nextVisibleSelectedIds.has(product.id)) {
+          delete next[product.id];
+        }
+      });
+
+      visibleSelectedProducts.forEach((product) => {
+        next[product.id] = product;
+      });
+
+      return next;
+    });
+  };
 
   const handleOpenBarcodePrint = () => {
     setCopiesMap(
@@ -233,6 +262,7 @@ const ProductTable = ({
 
     printWindow.document.close();
     setBarcodePrintOpen(false);
+    clearBarcodeSelection();
   };
 
   const handleExportPdf = async (format: "download" | "preview" | "coreldraw" = "download") => {
@@ -260,6 +290,7 @@ const ProductTable = ({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          productIds: selectedProductIds,
           labels,
           format: format === "coreldraw" ? "coreldraw" : "13x19",
         }),
@@ -288,6 +319,7 @@ const ProductTable = ({
 
       message.success(`${format === "preview" ? "Preview opened" : "PDF exported successfully"}`);
       setBarcodePrintOpen(false);
+      clearBarcodeSelection();
     } catch (error) {
       console.error("[ProductTable PDF export]", error);
       message.error(error instanceof Error ? error.message : "PDF export failed");
@@ -514,6 +546,11 @@ const ProductTable = ({
         )}
         </Space>
         <Space>
+          {selectedProductIds.length > 0 && (
+            <Button icon={<CloseOutlined />} onClick={clearBarcodeSelection}>
+              Clear Selection
+            </Button>
+          )}
           <Button
             icon={<PrinterOutlined />}
             disabled={selectedProductIds.length === 0 || barcodeRows.length === 0}
@@ -685,7 +722,8 @@ const ProductTable = ({
         rowKey="id"
         rowSelection={{
           selectedRowKeys: selectedProductIds,
-          onChange: (selectedRowKeys) => setSelectedProductIds(selectedRowKeys.map(String)),
+          preserveSelectedRowKeys: true,
+          onChange: handleSelectionChange,
         }}
         loading={loading}
         pagination={{
