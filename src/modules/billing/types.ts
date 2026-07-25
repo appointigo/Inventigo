@@ -59,6 +59,7 @@ export type SaleFilters = {
   paymentMethod?: PaymentMethodType;
   search?: string;
   type?: "SALE" | "EXCHANGE" | "RETURN";
+  sizeId?: string;
 };
 
 /**
