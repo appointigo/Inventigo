@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { App, Button, Card, Input, InputNumber, Select, Space, Spin, Table, Typography, Divider, Tag, theme, DatePicker, Row, Drawer, Badge, FloatButton } from "antd";
-import { SearchOutlined, SwapOutlined, ReloadOutlined } from "@ant-design/icons";
+import { App, Button, Card, Input, InputNumber, Select, Space, Spin, Table, Typography, Divider, Tag, theme, DatePicker, Row, Drawer, Badge, FloatButton, Collapse } from "antd";
+import { SearchOutlined, SwapOutlined, ReloadOutlined, FilterOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import { useProducts } from "@/modules/products/hooks/useProducts";
+import { useBrands } from "@/modules/brands/hooks/useBrands";
+import { useCategories } from "@/modules/categories/hooks/useCategories";
 import type { SaleSummary, Sale, SaleItem, VariantRow, CartItem, PaymentMethodType } from "../types";
 import { PAYMENT_OPTIONS } from "../constants";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
@@ -57,6 +59,12 @@ const ReturnExchangeView = ({
   const [returnQuantities, setReturnQuantities] = useState<Record<string, number>>({});
   const [exchangeItems, setExchangeItems] = useState<CartItem[]>([]);
   const [productSearch, setProductSearch] = useState("");
+  const [productFilters, setProductFilters] = useState<{ categoryId?: string; brandId?: string; sizeId?: string }>({});
+  const [activeProductFilters, setActiveProductFilters] = useState<{ categoryId?: string; brandId?: string; sizeId?: string }>({});
+  const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
+
+  const { brands } = useBrands();
+  const { categories } = useCategories();
   
   // Transaction details
   const [transactionDate, setTransactionDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -80,21 +88,23 @@ const ReturnExchangeView = ({
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const { products, loading: productsLoading } = useProducts(
-    productSearch.trim() ? { search: productSearch.trim() } : undefined
-  );
-
-  const availableSales = useMemo(
-    () => sales.filter((item) => item.status === "COMPLETED"),
-    [sales]
+    {
+      search: productSearch.trim() || undefined,
+      categoryId: activeProductFilters.categoryId,
+      brandId: activeProductFilters.brandId,
+      sizeId: activeProductFilters.sizeId,
+    }
   );
 
   const saleOptions = useMemo(
     () =>
-      availableSales.map((item) => ({
+      sales
+        .filter((item) => item.status === "COMPLETED")
+        .map((item) => ({
         label: `${item.invoiceNumber} — ${item.customerName ?? "Walk-in"}`,
         value: item.id,
       })),
-    [availableSales]
+    [sales]
   );
 
   useEffect(() => {
@@ -285,10 +295,7 @@ const ReturnExchangeView = ({
 
     return rows.filter(
       (row) =>
-        row.productName.toLowerCase().includes(query) ||
-        row.sku.toLowerCase().includes(query) ||
-        row.variantSku?.toLowerCase().includes(query) ||
-        row.externalBarcode?.toLowerCase().includes(query)
+        row.productName.toLowerCase().includes(query) || row.sku.toLowerCase().includes(query) || row.variantSku?.toLowerCase().includes(query) || row.externalBarcode?.toLowerCase().includes(query)
     );
   }, [products, productSearch]);
 
@@ -655,16 +662,67 @@ const ReturnExchangeView = ({
               <Card size="small" title="Exchange Items" styles={{ body: { padding: token.paddingXS } }}>
                 <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 420px", gap: 16 }}>
                   <div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 180px", gap: 12, marginBottom: 12 }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 12 }}>
                       <Input
                         placeholder="Search products by name / SKU / barcode"
                         prefix={<SearchOutlined />}
                         value={productSearch}
                         onChange={(event) => setProductSearch(event.target.value)}
                         allowClear
-                        size="middle"
                       />
-                      <Select placeholder="All categories" options={[]} disabled size="middle" />
+                      <Button
+                        icon={<FilterOutlined />}
+                        onClick={() => setAdvancedFiltersOpen(prev => !prev)}
+                      >
+                        Filters <Badge count={Object.values(activeProductFilters).filter(Boolean).length} size="small" />
+                      </Button>
+                      <Collapse
+                        size="small"
+                        ghost
+                        activeKey={advancedFiltersOpen ? ['1'] : []}
+                        onChange={(keys) => setAdvancedFiltersOpen(keys.includes('1'))}
+                        expandIconPlacement="end"
+                        style={{ padding: 0, background: '#fafafa' }}
+                        items={[{
+                          key: '1',
+                          showArrow: false,
+                          children: (
+                            <>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                                <Select
+                                  placeholder="All Categories"
+                                  allowClear
+                                  value={productFilters.categoryId}
+                                  onChange={(value) => setProductFilters(prev => ({ ...prev, categoryId: value }))}
+                                  options={categories.map(c => ({ label: c.name, value: c.id }))}
+                                />
+                                <Select
+                                  placeholder="All Brands"
+                                  allowClear
+                                  value={productFilters.brandId}
+                                  onChange={(value) => setProductFilters(prev => ({ ...prev, brandId: value }))}
+                                  options={brands.map(b => ({ label: b.name, value: b.id }))}
+                                />
+                                <Select
+                                  placeholder="All Sizes"
+                                  allowClear
+                                  value={productFilters.sizeId}
+                                  onChange={(value) => setProductFilters(prev => ({ ...prev, sizeId: value }))}
+                                  options={[...new Map(categories.flatMap(c => c.sizes).map(s => [s.id, s])).values()].map(s => ({ label: s.label, value: s.id }))}
+                                />
+                              </div>
+                              <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                                <Button size="small" onClick={() => { setProductFilters({}); setActiveProductFilters({}); }}>
+                                  Reset
+                                </Button>
+                                <Button type="primary" size="small" onClick={() => setActiveProductFilters(productFilters)}>
+                                  Apply Filters
+                                </Button>
+                              </div>
+                            </>
+                          ),
+                        }]}
+                      />
                     </div>
                     <Table
                       className="return-exchange-table"
@@ -675,7 +733,7 @@ const ReturnExchangeView = ({
                       pagination={{ pageSize: 6 }}
                       loading={productsLoading}
                       locale={{ emptyText: productSearch ? "No matching products." : "Start typing to find exchange items." }}
-                    />
+                      />
                   </div>
                   <Card size="small" title="Selected Exchange Items" styles={{ body: { padding: token.paddingXXS } }}>
                     {exchangeItems.length === 0 ? (
@@ -767,7 +825,7 @@ const ReturnExchangeView = ({
           <FloatButton
             type="primary"
             icon={<SwapOutlined />}
-            description={settlementButtonLabel}
+            content={settlementButtonLabel}
             shape="square"
             style={{ right: 24, width: "auto", minWidth: 120, height: 48, padding: "0 12px" }}
             onClick={() => setDrawerOpen(true)}
@@ -780,8 +838,7 @@ const ReturnExchangeView = ({
           placement="right"
           onClose={() => setDrawerOpen(false)}
           open={drawerOpen}
-          width={520}
-          styles={{ body: { padding: 0, display: "flex", flexDirection: "column" } }}
+          styles={{ wrapper: { width: 520 }, body: { padding: 0, display: "flex", flexDirection: "column" } }}
           footer={
             <div style={{ textAlign: "right", display: "flex", gap: 8, justifyContent: "flex-end" }}>
               <Button onClick={() => setDrawerOpen(false)} style={{ height: token.controlHeightLG }}>

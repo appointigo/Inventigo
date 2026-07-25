@@ -1796,6 +1796,37 @@ export const billingService = {
       ];
     }
 
+    if (filters?.sizeId) {
+      saleWhere.items = { some: { sizeId: filters.sizeId } };
+    }
+
+    // Date range filter: use transactionDate (canonical for backdated billing) with
+    // an OR fallback to createdAt so records created before the transactionDate
+    // migration are still included.
+    // MOVED HERE FROM IN-MEMORY FILTER TO FIX PAGINATION.
+    if (filters?.startDate || filters?.endDate) {
+      const dateFilters: any[] = [];
+      const from = filters.startDate ? new Date(filters.startDate) : null;
+      const to = filters.endDate ? new Date(filters.endDate) : null;
+      if (to) {
+        to.setDate(to.getDate() + 1); // Make it inclusive of the end day
+      }
+
+      const transactionDateClause: any = {};
+      if (from) transactionDateClause.gte = from;
+      if (to) transactionDateClause.lt = to;
+
+      const createdAtClause: any = {};
+      if (from) createdAtClause.gte = from;
+      if (to) createdAtClause.lt = to;
+
+      // businessDate is an alias for transactionDate on sales
+      saleWhere.OR = [
+        { transactionDate: transactionDateClause },
+        { createdAt: createdAtClause },
+      ];
+    }
+
     // Build return transaction query
     const rtWhere: any = { store: { orgId } };
     if (filters?.startDate) rtWhere.businessDate = { ...(rtWhere.businessDate ?? {}), gte: new Date(filters.startDate) };
@@ -1860,19 +1891,6 @@ export const billingService = {
       businessDate: s.transactionDate instanceof Date ? s.transactionDate.toISOString() : s.transactionDate ?? (s.createdAt instanceof Date ? s.createdAt.toISOString() : s.createdAt),
     }));
 
-    const saleStart = filters?.startDate ? new Date(filters.startDate) : null;
-    const saleEnd = filters?.endDate ? new Date(filters.endDate) : null;
-    if (saleEnd) {
-      saleEnd.setDate(saleEnd.getDate() + 1);
-    }
-
-    const filteredSalesRows = salesRows.filter((sale) => {
-      const effectiveSaleDate = new Date((sale as any).businessDate ?? sale.transactionDate ?? sale.createdAt);
-      if (saleStart && effectiveSaleDate < saleStart) return false;
-      if (saleEnd && effectiveSaleDate >= saleEnd) return false;
-      return true;
-    });
-
     const rtRows = returnTxns.map((r) => ({
       ...r,
       rowType: "RETURN_TRANSACTION",
@@ -1882,7 +1900,7 @@ export const billingService = {
       customerName: r.customer?.name ?? null,
     }));
 
-    let unified = [...filteredSalesRows, ...rtRows];
+    let unified = [...salesRows, ...rtRows];
 
     if (filters?.type === "SALE") {
       unified = unified.filter((r) => r.rowType === "SALE");
