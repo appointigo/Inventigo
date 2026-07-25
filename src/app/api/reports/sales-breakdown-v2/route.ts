@@ -52,12 +52,14 @@ export const GET = async (request: Request) => {
   let user;
   try {
     user = await requireOrgAuth();
+    console.log("Authenticated user:", user);
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
     const { searchParams } = new URL(request.url);
+    console.log("Search parameters:", searchParams.toString());
     const groupParam = (searchParams.get("group") ?? "month") as GroupBy;
     const from = searchParams.get("from");
     const to = searchParams.get("to");
@@ -74,7 +76,11 @@ export const GET = async (request: Request) => {
       hasColumn("return_transactions", "type"),
     ]);
 
-    const salesDateExpr = Prisma.sql`s."createdAt"`;
+    const hasSalesTransactionDate = await hasColumn("sales", "transactionDate");
+
+    const salesDateExpr = hasSalesTransactionDate
+      ? Prisma.sql`COALESCE(s."transactionDate", s."createdAt")`
+      : Prisma.sql`s."createdAt"`;
 
     const returnDateExpr = hasReturnBusinessDate
       ? Prisma.sql`COALESCE(rt."businessDate", rt."createdAt")`
@@ -115,6 +121,8 @@ export const GET = async (request: Request) => {
           AND (${to}::text IS NULL OR ${returnDateExpr} < ((${to}::date + INTERVAL '1 day')))
       )`
       : Prisma.empty;
+
+      console.log("Return breakdown CTE:", returnBreakdownCte);
 
     const combinedCte = hasReturnTransactionsTable
       ? Prisma.sql`
@@ -161,6 +169,7 @@ export const GET = async (request: Request) => {
       ORDER BY 1;
     `;
 
+    console.log("Sales breakdown rows:", rows);
     const data = rows.map((row) => ({
       period: row.period_start,
       total_revenue: Number(row.total_revenue ?? 0),
@@ -168,6 +177,7 @@ export const GET = async (request: Request) => {
       net_profit: Number(row.net_profit ?? 0),
       transaction_count: Number(row.transaction_count ?? 0),
     }));
+    console.log("Sales breakdown data:", data);
 
     return NextResponse.json(data);
   } catch {

@@ -103,11 +103,12 @@ export const GET = async (request: Request) => {
       }
     }
 
-    const [supportsExchangedStatus, hasReturnTransactionsTable, hasReturnItemsTable, hasReturnBusinessDate] = await Promise.all([
+    const [supportsExchangedStatus, hasReturnTransactionsTable, hasReturnItemsTable, hasReturnBusinessDate, hasSalesTransactionDate] = await Promise.all([
       hasEnumValue("SaleStatus", "EXCHANGED"),
       hasTable("return_transactions"),
       hasTable("return_transaction_items"),
       hasColumn("return_transactions", "businessDate"),
+      hasColumn("sales", "transactionDate"),
     ]);
 
     const saleStatuses = supportsExchangedStatus
@@ -121,12 +122,13 @@ export const GET = async (request: Request) => {
     };
 
     if (Object.keys(paidAtFilter).length) {
-      saleWhere.createdAt = paidAtFilter;
+      saleWhere[hasSalesTransactionDate ? "transactionDate" : "createdAt"] = paidAtFilter;
     }
 
     const saleSelect: any = {
       id: true,
       createdAt: true,
+      transactionDate: hasSalesTransactionDate,
       total: true,
       discountAmount: true,
       items: {
@@ -192,7 +194,7 @@ export const GET = async (request: Request) => {
 
     const allEntries: AggregateEntry[] = [
       ...sales.map((sale: any) => ({
-        createdAt: sale.createdAt,
+        createdAt: hasSalesTransactionDate ? sale.transactionDate ?? sale.createdAt : sale.createdAt,
         totalRevenue: Number(sale.total ?? 0),
         totalCost: sale.items.reduce(
           (sum: number, item: any) => sum + Number(item.product.costPrice ?? 0) * Number(item.quantity ?? 0),

@@ -3,19 +3,24 @@ import { Prisma } from "@prisma/client";
 import { stockService } from "@/modules/stock/services/stockService";
 import type { DashboardData, StockByCategory, TopBrand, RecentMovement, RevenueTrendPoint, RevenueTrend } from "../types";
 
-const formatDayKey = (date: Date) => date.toISOString().slice(0, 10);
-const formatMonthKey = (date: Date) => `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
-const formatYearKey = (date: Date) => String(date.getUTCFullYear());
+const formatDayKey = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+const formatMonthKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+const formatYearKey = (date: Date) => String(date.getFullYear());
 
 const shiftDays = (date: Date, days: number) => {
   const d = new Date(date);
-  d.setUTCDate(d.getUTCDate() + days);
+  d.setDate(d.getDate() + days);
   return d;
 };
 
 const shiftMonths = (date: Date, months: number) => {
-  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
-  d.setUTCMonth(d.getUTCMonth() + months);
+  const d = new Date(date.getFullYear(), date.getMonth(), 1);
+  d.setMonth(d.getMonth() + months);
   return d;
 };
 
@@ -279,7 +284,7 @@ export const dashboardService = {
         (offset) => formatDayKey(shiftDays(now, offset)),
         (key) => {
           const [year, month, day] = key.split("-").map(Number);
-          return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
+          return new Date(year, month - 1, day).toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
         },
         dayTotals
       ),
@@ -288,13 +293,13 @@ export const dashboardService = {
         (offset) => formatMonthKey(shiftMonths(now, offset)),
         (key) => {
           const [year, month] = key.split("-").map(Number);
-          return new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString("en-IN", { month: "short", year: "2-digit" });
+          return new Date(year, month - 1, 1).toLocaleDateString("en-IN", { month: "short", year: "2-digit" });
         },
         monthTotals
       ),
       year: buildRangePoints(
         5,
-        (offset) => String(now.getUTCFullYear() + offset),
+        (offset) => String(now.getFullYear() + offset),
         (key) => key,
         yearTotals
       ),
