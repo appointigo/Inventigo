@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Avatar, Card, Typography, Tag, Space, Button } from "antd";
+import { Avatar, Card, Typography, Tag, Space, Button, Divider } from "antd";
 import { DownOutlined, UpOutlined, ShoppingCartOutlined, SwapOutlined, ArrowLeftOutlined, UserOutlined, FileTextOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
@@ -48,8 +48,32 @@ export default function TransactionCard({ record: initialRecord, onViewSale, onV
     return { bg: "#fee2e2", color: "#dc2626", icon: <ArrowLeftOutlined /> };
   })();
 
-  const title = isSale ? `#${record.invoiceNumber}` : `#${record.referenceNumber}`;
-  const subtitle = `${record.customerName ?? "Walk-in"} • ${dayjs(businessDate).format("h:mm A")}`;
+  if (!isSale) {
+    const amountDisplay = (() => {
+      if (record.netAmount > 0) return { text: `+${formatCurrency(record.netAmount)}`, color: "#16a34a" };
+      if (record.refundAmount > 0) return { text: `−${formatCurrency(record.refundAmount)}`, color: "#dc2626" };
+      return { text: formatCurrency(0), color: "#6b7280" };
+    })();
+
+    return (
+      <Card size="small" style={{ marginBottom: 12, borderRadius: 12, border: "1px solid #e5e7eb" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
+          <div>
+            <Typography.Title level={5} style={{ margin: 0 }}>#{record.referenceNumber}</Typography.Title>
+            <Typography.Text type="secondary">{record.customerName ?? "Walk-in"} • {dayjs(businessDate).format("DD MMM YYYY, h:mm A")}</Typography.Text>
+            <div style={{ marginTop: 12 }}>
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>Original Invoice</Typography.Text>
+              <div><a onClick={(e) => { e.stopPropagation(); onViewSale?.(record.originalSaleId); }}>#{record.saleInvoiceNumber}</a></div>
+            </div>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: amountDisplay.color }}>{amountDisplay.text}</div>
+            <div style={{ marginTop: 4 }}><Tag color={record.netAmount > 0 ? "green" : "purple"}>{record.netAmount > 0 ? "Collected" : "Refunded"}</Tag></div>
+          </div>
+        </div>
+      </Card>
+    );
+  }
 
   const amountDisplay = (() => {
     if (isSale) return formatCurrency(record.total);
@@ -57,6 +81,9 @@ export default function TransactionCard({ record: initialRecord, onViewSale, onV
     if (record.refundAmount > 0) return `−${formatCurrency(record.refundAmount)}`;
     return formatCurrency(0);
   })();
+
+  const title = isSale ? `#${record.invoiceNumber}` : `#${record.referenceNumber}`;
+  const subtitle = `${record.customerName ?? "Walk-in"} • ${dayjs(businessDate).format("h:mm A")}`;
 
   const paymentBadge = isSale ? (record.paymentStatus ?? "PAID") : (record.netAmount > 0 ? "COLLECTED" : record.refundAmount > 0 ? "REFUNDED" : "NIL");
 
@@ -82,6 +109,20 @@ export default function TransactionCard({ record: initialRecord, onViewSale, onV
           <div style={{ minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <Typography.Text strong ellipsis style={{ maxWidth: 420 }}>{title}</Typography.Text>
+              {!isSale && record.saleInvoiceNumber && (
+                <Typography.Text
+                  copyable={{ text: record.saleInvoiceNumber }}
+                  style={{ fontSize: 12, color: "#6b7280" }}
+                >
+                  for{" "}
+                  <a
+                    onClick={(e) => { e.stopPropagation(); onViewSale?.(record.originalSaleId); }}
+                    style={{ color: "#2563eb", fontWeight: 500 }}
+                  >
+                    #{record.saleInvoiceNumber}
+                  </a>
+                </Typography.Text>
+              )}
             </div>
             <div style={{ color: "#6b7280", fontSize: 13 }}>{subtitle}</div>
           </div>

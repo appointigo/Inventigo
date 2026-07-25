@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { App, Button, Card, Input, InputNumber, Select, Space, Spin, Table, Typography, Divider, Tag, theme, DatePicker, Row } from "antd";
+import { App, Button, Card, Input, InputNumber, Select, Space, Spin, Table, Typography, Divider, Tag, theme, DatePicker, Row, Drawer, Badge, FloatButton } from "antd";
 import { SearchOutlined, SwapOutlined, ReloadOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
@@ -74,8 +74,10 @@ const ReturnExchangeView = ({
   const [splitMode, setSplitMode] = useState(false);
   const [settlementSplits, setSettlementSplits] = useState<Array<{ method: PaymentMethodType; amount: number }>>([{ method: "CASH", amount: 0 }]);
   const [amountReceived, setAmountReceived] = useState<number>(0);
+  const [isAmountReceivedManual, setIsAmountReceivedManual] = useState(false);
   
   const [submitting, setSubmitting] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const { products, loading: productsLoading } = useProducts(
     productSearch.trim() ? { search: productSearch.trim() } : undefined
@@ -108,6 +110,7 @@ const ReturnExchangeView = ({
       setSplitMode(false);
       setSettlementSplits([{ method: "CASH", amount: 0 }]);
       setAmountReceived(0);
+      setIsAmountReceivedManual(false);
       setReason("");
       setCondition("");
       setNotes("");
@@ -130,6 +133,7 @@ const ReturnExchangeView = ({
           setSplitMode(false);
           setSettlementSplits([{ method: "CASH", amount: 0 }]);
           setAmountReceived(fetched.amountDue ?? 0);
+          setIsAmountReceivedManual(false);
           setReason("");
           setCondition("");
           setNotes("");
@@ -178,7 +182,7 @@ const ReturnExchangeView = ({
             total: Math.round(item.returnQty * pricePaid * 100) / 100,
           };
         }),
-    [returnRows]
+    [returnRows, returnQuantities]
   );
 
   const returnedTotal = useMemo(
@@ -230,6 +234,13 @@ const ReturnExchangeView = ({
       : splitMode
         ? Math.abs(splitTotal - settlementTargetAmount) < 0.01
         : true;
+
+  useEffect(() => {
+    // Auto-fill amount received with net due amount if not manually edited
+    if (!isAmountReceivedManual) {
+      setAmountReceived(netAmount > 0 ? netAmount : 0);
+    }
+  }, [netAmount, isAmountReceivedManual]);
 
   useEffect(() => {
     if (!splitMode) return;
@@ -390,61 +401,6 @@ const ReturnExchangeView = ({
     },
   ];
 
-  const exchangeColumns: ColumnsType<CartItem> = [
-    {
-      title: "Item",
-      dataIndex: "productName",
-      key: "productName",
-      render: (_text, item) => (
-        <div>
-          <Text strong>{item.productName}</Text>
-          <div style={{ marginTop: 2, color: "#6b7280", fontSize: 12 }}>
-            {item.sku} • {item.sizeLabel}
-          </div>
-        </div>
-      ),
-    },
-    {
-      title: "Qty",
-      dataIndex: "quantity",
-      key: "quantity",
-      width: 120,
-      render: (value: number, item) => (
-        <InputNumber
-          min={1}
-          value={value}
-          onChange={(value) => handleExchangeQuantityChange(item.productId, item.sizeId, value)}
-          style={{ width: "100%" }}
-        />
-      ),
-    },
-    {
-      title: "Unit price",
-      dataIndex: "unitPrice",
-      key: "unitPrice",
-      width: 120,
-      align: "right",
-      render: (value: number) => formatCurrency(value),
-    },
-    {
-      title: "Total",
-      key: "total",
-      width: 120,
-      align: "right",
-      render: (_value, item) => formatCurrency(item.quantity * item.unitPrice),
-    },
-    {
-      title: "Action",
-      key: "action",
-      width: 100,
-      render: (_value, item) => (
-        <Button type="link" danger size="small" onClick={() => handleRemoveExchangeItem(item.productId, item.sizeId)}>
-          Remove
-        </Button>
-      ),
-    },
-  ];
-
   const productColumns: ColumnsType<VariantRow> = [
     {
       title: "Item",
@@ -555,6 +511,7 @@ const ReturnExchangeView = ({
       setReason("");
       setCondition("");
       setNotes("");
+      setDrawerOpen(false);
       await refreshSales();
     } catch (error) {
       const messageText = error instanceof Error ? error.message : "Failed to process return/exchange.";
@@ -563,6 +520,10 @@ const ReturnExchangeView = ({
       setSubmitting(false);
     }
   };
+
+  const settlementButtonLabel = useMemo(() => {
+    return netAmount > 0 ? `Pay ${formatCurrency(netAmount)}` : refundAmount > 0 ? `Refund ${formatCurrency(refundAmount)}` : "Settle";
+  }, [netAmount, refundAmount]);
 
   return (
     <div style={{ width: "100%" }}>
@@ -585,8 +546,8 @@ const ReturnExchangeView = ({
           display: none;
         }
       `}</style>
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 360px", gap: 16 }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16, width: "100%" }}>
           <Card
             size="small"
             title="Return / Exchange"
@@ -692,7 +653,7 @@ const ReturnExchangeView = ({
               </Card>
 
               <Card size="small" title="Exchange Items" styles={{ body: { padding: token.paddingXS } }}>
-                <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 340px", gap: 16 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 420px", gap: 16 }}>
                   <div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 180px", gap: 12, marginBottom: 12 }}>
                       <Input
@@ -717,18 +678,50 @@ const ReturnExchangeView = ({
                     />
                   </div>
                   <Card size="small" title="Selected Exchange Items" styles={{ body: { padding: token.paddingXXS } }}>
-                    {exchangeItems.length > 0 ? (
-                      <Table
-                        className="return-exchange-table"
-                        columns={exchangeColumns}
-                        dataSource={exchangeItems}
-                        rowKey={(item) => `${item.productId}-${item.sizeId}`}
-                        pagination={false}
-                        size="small"
-                      />
-                    ) : (
+                    {exchangeItems.length === 0 ? (
                       <div style={{ padding: 16, textAlign: "center", color: "#94a3b8" }}>
                         No exchange items selected.
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 8 }}>
+                        {exchangeItems.map((item) => (
+                          <Card key={`${item.productId}-${item.sizeId}`} size="small" style={{ background: "#f8fafc" }}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                              <div>
+                                <Text strong>{item.productName}</Text>
+                                <div style={{ fontSize: 12, color: "#64748b" }}>{item.sku} • {item.sizeLabel}</div>
+                              </div>
+                              <Divider style={{ margin: 0 }} />
+                              <div style={{ display: "grid", gridTemplateColumns: "1fr auto", alignItems: "center", gap: 8, fontSize: 13 }}>
+                                <Text type="secondary">Unit Price</Text>
+                                <Text strong>{formatCurrency(item.unitPrice)}</Text>
+
+                                <Text type="secondary">Quantity</Text>
+                                <InputNumber
+                                  min={1}
+                                  value={item.quantity}
+                                  onChange={(value) => handleExchangeQuantityChange(item.productId, item.sizeId, value)}
+                                  size="small"
+                                  style={{ width: 80 }}
+                                />
+
+                                <Text type="secondary">Total</Text>
+                                <Text strong>{formatCurrency(item.quantity * item.unitPrice)}</Text>
+                              </div>
+                              <Divider style={{ margin: 0 }} />
+                              <div style={{ textAlign: "right" }}>
+                                <Button
+                                  type="text"
+                                  danger
+                                  size="small"
+                                  onClick={() => handleRemoveExchangeItem(item.productId, item.sizeId)}
+                                >
+                                  Remove
+                                </Button>
+                              </div>
+                            </div>
+                          </Card>
+                        ))}
                       </div>
                     )}
                   </Card>
@@ -770,201 +763,224 @@ const ReturnExchangeView = ({
           )}
         </div>
 
-        <Card
-          size="small"
+        {sale && (
+          <FloatButton
+            type="primary"
+            icon={<SwapOutlined />}
+            description={settlementButtonLabel}
+            shape="square"
+            style={{ right: 24, width: "auto", minWidth: 120, height: 48, padding: "0 12px" }}
+            onClick={() => setDrawerOpen(true)}
+            badge={{ count: returnedItems.length + exchangeItems.length, color: token.colorSuccess }}
+          />
+        )}
+
+        <Drawer
           title="Review & Settle"
-          styles={{ body: { padding: token.paddingSM } }}
-          style={{ position: "sticky", top: 16, alignSelf: "start", borderColor: token.colorBorderSecondary, boxShadow: "0 2px 12px rgba(15, 23, 42, 0.08)" }}
+          placement="right"
+          onClose={() => setDrawerOpen(false)}
+          open={drawerOpen}
+          width={520}
+          styles={{ body: { padding: 0, display: "flex", flexDirection: "column" } }}
+          footer={
+            <div style={{ textAlign: "right", display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <Button onClick={() => setDrawerOpen(false)} style={{ height: token.controlHeightLG }}>
+                Cancel
+              </Button>
+              <Button
+                type="primary"
+                icon={<SwapOutlined />}
+                loading={submitting}
+                disabled={(returnedItems.length === 0 && exchangeItems.length === 0) || submitting || !sale || (splitMode && requiresPayment && !splitValid)}
+                onClick={handleSubmit}
+                style={{ height: token.controlHeightLG }}
+              >
+                Complete Exchange
+              </Button>
+            </div>
+          }
         >
-          <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
-            <div>
-              <Text type="secondary" style={{ fontSize: 12 }}>Summary</Text>
-              <div style={{ marginTop: 8, display: "grid", gap: 8 }}>
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <Text>Total returned</Text>
-                  <Text strong style={{ color: "#b42318" }}>{formatCurrency(returnedTotal)}</Text>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <Text>Total exchange</Text>
-                  <Text strong style={{ color: "#2563eb" }}>{formatCurrency(exchangeTotal)}</Text>
-                </div>
-                <Divider style={{ margin: "6px 0" }} />
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <Text>Discount</Text>
-                  <Text strong style={{ color: "#f59e0b" }}>-{formatCurrency(calculatedDiscount)}</Text>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <Text>Tax</Text>
-                  <Text strong style={{ color: "#16a34a" }}>+{formatCurrency(calculatedTax)}</Text>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <Text>Price difference</Text>
-                  <Text strong>{formatCurrency(exchangeTotal - returnedTotal)}</Text>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <Text>Calculated total</Text>
-                  <Text strong>{formatCurrency(calculatedWithTax)}</Text>
-                </div>
-                {roundOff !== 0 ? (
+          <div style={{ flex: 1, overflowY: "auto", padding: token.paddingLG }}>
+            <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
+              <div>
+                <Text type="secondary" style={{ fontSize: 12 }}>Summary</Text>
+                <div style={{ marginTop: 8, display: "grid", gap: 8 }}>
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <Text>Round off</Text>
-                    <Text strong>{roundOff > 0 ? "+" : ""}{formatCurrency(roundOff)}</Text>
+                    <Text>Total returned</Text>
+                    <Text strong style={{ color: "#b42318" }}>{formatCurrency(returnedTotal)}</Text>
                   </div>
-                ) : null}
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <Text>Exchange net due</Text>
-                  <Text strong style={{ color: "#15803d" }}>{formatCurrency(netAmount)}</Text>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <Text>Amount to refund</Text>
-                  <Text strong style={{ color: "#9333ea" }}>{formatCurrency(refundAmount)}</Text>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <Text>Total exchange</Text>
+                    <Text strong style={{ color: "#2563eb" }}>{formatCurrency(exchangeTotal)}</Text>
+                  </div>
+                  <Divider style={{ margin: "6px 0" }} />
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <Text>Discount</Text>
+                    <Text strong style={{ color: "#f59e0b" }}>-{formatCurrency(calculatedDiscount)}</Text>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <Text>Tax</Text>
+                    <Text strong style={{ color: "#16a34a" }}>+{formatCurrency(calculatedTax)}</Text>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <Text>Price difference</Text>
+                    <Text strong>{formatCurrency(exchangeTotal - returnedTotal)}</Text>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <Text>Calculated total</Text>
+                    <Text strong>{formatCurrency(calculatedWithTax)}</Text>
+                  </div>
+                  {roundOff !== 0 ? (
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <Text>Round off</Text>
+                      <Text strong>{roundOff > 0 ? "+" : ""}{formatCurrency(roundOff)}</Text>
+                    </div>
+                  ) : null}
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <Text>Exchange net due</Text>
+                    <Text strong style={{ color: "#15803d" }}>{formatCurrency(netAmount)}</Text>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <Text>Amount to refund</Text>
+                    <Text strong style={{ color: "#9333ea" }}>{formatCurrency(refundAmount)}</Text>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div>
-              <Text type="secondary" style={{ fontSize: 12 }}>Discount</Text>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
-                <Select
-                  value={discountType}
-                  onChange={(value) => setDiscountType(value as "PERCENTAGE" | "FLAT")}
-                  options={[
-                    { label: "Percentage (%)", value: "PERCENTAGE" },
-                    { label: "Fixed (₹)", value: "FLAT" },
-                  ]}
-                  size="small"
-                />
+              <div>
+                <Text type="secondary" style={{ fontSize: 12 }}>Discount</Text>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
+                  <Select
+                    value={discountType}
+                    onChange={(value) => setDiscountType(value as "PERCENTAGE" | "FLAT")}
+                    options={[
+                      { label: "Percentage (%)", value: "PERCENTAGE" },
+                      { label: "Fixed (₹)", value: "FLAT" },
+                    ]}
+                    size="small"
+                  />
+                  <InputNumber
+                    min={0}
+                    max={discountType === "PERCENTAGE" ? 100 : baseForDiscount}
+                    value={discountValue}
+                    onChange={(value) => setDiscountValue(Number(value ?? 0))}
+                    size="small"
+                    style={{ width: "100%" }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Text type="secondary" style={{ fontSize: 12 }}>Tax (%)</Text>
                 <InputNumber
                   min={0}
-                  max={discountType === "PERCENTAGE" ? 100 : baseForDiscount}
-                  value={discountValue}
-                  onChange={(value) => setDiscountValue(Number(value ?? 0))}
+                  max={100}
+                  value={taxRate}
+                  onChange={(value) => setTaxRate(Number(value ?? 0))}
                   size="small"
-                  style={{ width: "100%" }}
+                  style={{ width: "100%", marginTop: 8 }}
                 />
               </div>
-            </div>
 
-            <div>
-              <Text type="secondary" style={{ fontSize: 12 }}>Tax (%)</Text>
-              <InputNumber
-                min={0}
-                max={100}
-                value={taxRate}
-                onChange={(value) => setTaxRate(Number(value ?? 0))}
-                size="small"
-                style={{ width: "100%", marginTop: 8 }}
-              />
-            </div>
-
-            <div>
-              <Text type="secondary" style={{ fontSize: 12 }}>Payment method</Text>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginTop: 8 }}>
-                {PAYMENT_OPTIONS.map((option) => (
+              <div>
+                <Text type="secondary" style={{ fontSize: 12 }}>Payment method</Text>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginTop: 8 }}>
+                  {PAYMENT_OPTIONS.map((option) => (
+                    <Button
+                      key={option.value}
+                      type={!splitMode && paymentMethod === option.value ? "primary" : "default"}
+                      onClick={() => {
+                        setSplitMode(false);
+                        setPaymentMethod(option.value);
+                      }}
+                      size="small"
+                      style={{ paddingInline: 4, height: token.controlHeightSM }}
+                    >
+                      {option.label}
+                    </Button>
+                  ))}
                   <Button
-                    key={option.value}
-                    type={!splitMode && paymentMethod === option.value ? "primary" : "default"}
+                    type={splitMode ? "primary" : "default"}
                     onClick={() => {
-                      setSplitMode(false);
-                      setPaymentMethod(option.value);
+                      setSplitMode(true);
+                      setSettlementSplits([{ method: paymentMethod, amount: settlementTargetAmount }]);
                     }}
                     size="small"
                     style={{ paddingInline: 4, height: token.controlHeightSM }}
                   >
-                    {option.label}
+                    Split
                   </Button>
-                ))}
-                <Button
-                  type={splitMode ? "primary" : "default"}
-                  onClick={() => {
-                    setSplitMode(true);
-                    setSettlementSplits([{ method: paymentMethod, amount: settlementTargetAmount }]);
-                  }}
-                  size="small"
-                  style={{ paddingInline: 4, height: token.controlHeightSM }}
-                >
-                  Split
-                </Button>
+                </div>
               </div>
-            </div>
 
-            {splitMode && requiresPayment ? (
-              <div style={{ border: "1px solid #e5e7eb", borderRadius: 10, padding: 10, display: "grid", gap: 8 }}>
-                {settlementSplits.map((entry, index) => (
-                  <div key={index} style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8 }}>
-                    <Select
-                      value={entry.method}
-                      options={PAYMENT_OPTIONS}
-                      onChange={(value) => {
-                        setSettlementSplits((prev) => prev.map((row, i) => (i === index ? { ...row, method: value } : row)));
-                      }}
-                    />
-                    <InputNumber
-                      min={0}
-                      precision={2}
-                      value={entry.amount}
-                      onChange={(value) => {
-                        setSettlementSplits((prev) => prev.map((row, i) => (i === index ? { ...row, amount: Number(value ?? 0) } : row)));
-                      }}
-                      style={{ width: "100%" }}
-                    />
-                    <Button
-                      danger
-                      disabled={settlementSplits.length === 1}
-                      onClick={() => setSettlementSplits((prev) => prev.filter((_, i) => i !== index))}
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                ))}
+              {splitMode && requiresPayment ? (
+                <div style={{ border: "1px solid #e5e7eb", borderRadius: 10, padding: 10, display: "grid", gap: 8 }}>
+                  {settlementSplits.map((entry, index) => (
+                    <div key={index} style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8 }}>
+                      <Select
+                        value={entry.method}
+                        options={PAYMENT_OPTIONS}
+                        onChange={(value) => {
+                          setSettlementSplits((prev) => prev.map((row, i) => (i === index ? { ...row, method: value } : row)));
+                        }}
+                      />
+                      <InputNumber
+                        min={0}
+                        precision={2}
+                        value={entry.amount}
+                        onChange={(value) => {
+                          setSettlementSplits((prev) => prev.map((row, i) => (i === index ? { ...row, amount: Number(value ?? 0) } : row)));
+                        }}
+                        style={{ width: "100%" }}
+                formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                      />
+                      <Button
+                        danger
+                        disabled={settlementSplits.length === 1}
+                        onClick={() => setSettlementSplits((prev) => prev.filter((_, i) => i !== index))}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  ))}
 
-                <Button
-                  type="dashed"
-                  onClick={() => setSettlementSplits((prev) => [...prev, { method: "CASH", amount: 0 }])}
-                >
-                  Add payment method
-                </Button>
+                  <Button
+                    type="dashed"
+                    onClick={() => setSettlementSplits((prev) => [...prev, { method: "CASH", amount: 0 }])}
+                  >
+                    Add payment method
+                  </Button>
 
-                <Text type={splitValid ? "success" : "danger"} style={{ fontSize: 12 }}>
-                  Entered: {formatCurrency(splitTotal)} | Expected: {formatCurrency(settlementTargetAmount)}
-                </Text>
+                  <Text type={splitValid ? "success" : "danger"} style={{ fontSize: 12 }}>
+                    Entered: {formatCurrency(splitTotal)} | Expected: {formatCurrency(settlementTargetAmount)}
+                  </Text>
+                </div>
+              ) : null}
+
+              <div>
+                <Text type="secondary" style={{ fontSize: 12 }}>Amount received</Text>
+                <InputNumber
+                  min={0}
+                  value={amountReceived}
+                onChange={(value) => {
+                  setIsAmountReceivedManual(true);
+                  setAmountReceived(Number(value ?? 0));
+                }}
+                  size="middle"
+                  style={{ width: "100%", marginTop: 6, height: token.controlHeight }}
+                />
+                {amountDue > 0 && (
+                  <Row justify="space-between" style={{ marginTop: 8 }}>
+                    <Text type="secondary">Amount due</Text>
+                    <Text type="danger">{formatCurrency(amountDue)}</Text>
+                  </Row>
+                )}
               </div>
-            ) : null}
 
-            <div>
-              <Text type="secondary" style={{ fontSize: 12 }}>Amount received</Text>
-              <InputNumber
-                min={0}
-                value={amountReceived}
-                onChange={(value) => setAmountReceived(Number(value ?? 0))}
-                size="middle"
-                style={{ width: "100%", marginTop: 6, height: token.controlHeight }}
-              />
-              {amountDue > 0 && (
-                <Row justify="space-between" style={{ marginTop: 8 }}>
-                  <Text type="secondary">Amount due</Text>
-                  <Text type="danger">{formatCurrency(amountDue)}</Text>
-                </Row>
-              )}
-            </div>
-
-            <Input.TextArea placeholder="Additional notes (optional)" rows={3} />
-
-            <Button
-              type="primary"
-              icon={<SwapOutlined />}
-              loading={submitting}
-              disabled={(returnedItems.length === 0 && exchangeItems.length === 0) || submitting || !sale || (splitMode && requiresPayment && !splitValid)}
-              onClick={handleSubmit}
-              style={{ width: "100%", height: token.controlHeightLG }}
-            >
-              Complete Exchange
-            </Button>
-            <Button type="default" danger style={{ width: "100%", height: token.controlHeight }}>
-              Cancel
-            </Button>
-          </Space>
-        </Card>
+              <Input.TextArea placeholder="Additional notes (optional)" rows={3} />
+            </Space>
+          </div>
+        </Drawer>
       </div>
     </div>
   );
