@@ -129,7 +129,7 @@ const ReturnExchangeView = ({
           setPaymentMethod("CASH");
           setSplitMode(false);
           setSettlementSplits([{ method: "CASH", amount: 0 }]);
-          setAmountReceived(0);
+          setAmountReceived(fetched.amountDue ?? 0);
           setReason("");
           setCondition("");
           setNotes("");
@@ -776,7 +776,7 @@ const ReturnExchangeView = ({
           styles={{ body: { padding: token.paddingSM } }}
           style={{ position: "sticky", top: 16, alignSelf: "start", borderColor: token.colorBorderSecondary, boxShadow: "0 2px 12px rgba(15, 23, 42, 0.08)" }}
         >
-          <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+          <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
             <div>
               <Text type="secondary" style={{ fontSize: 12 }}>Summary</Text>
               <div style={{ marginTop: 8, display: "grid", gap: 8 }}>

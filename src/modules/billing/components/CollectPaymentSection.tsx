@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Button, InputNumber, Input, Space, Typography, message, Spin, Select } from "antd";
+import { Button, InputNumber, Input, Space, Typography, Spin, Select, App } from "antd";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
 
 interface PaymentRecord {
@@ -36,6 +36,7 @@ export default function CollectPaymentSection({
   defaultMethod = "CASH",
   onPaymentCollected,
 }: CollectPaymentSectionProps) {
+  const { message } = App.useApp();
   const [collectAmount, setCollectAmount] = useState<number>(amountDue);
   const [paymentMethod, setPaymentMethod] = useState<MethodType>(defaultMethod);
   const [splitMode, setSplitMode] = useState(false);
@@ -103,7 +104,10 @@ export default function CollectPaymentSection({
   };
 
   return (
-    <div style={{ padding: "16px 0", borderTop: "1px solid #e5e7eb", borderBottom: "1px solid #e5e7eb" }}>
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={{ padding: "16px 0", borderTop: "1px solid #e5e7eb", borderBottom: "1px solid #e5e7eb" }}
+    >
       <Typography.Text strong style={{ display: "block", marginBottom: 12, color: "#111827" }}>
         COLLECT PAYMENT
       </Typography.Text>
@@ -122,7 +126,7 @@ export default function CollectPaymentSection({
       </div>
 
       {/* Collect Now Form */}
-      <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+      <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
         <div>
           <Typography.Text style={{ fontSize: 12, color: "#6b7280", display: "block", marginBottom: 6 }}>
             Collect now
@@ -256,16 +260,12 @@ export default function CollectPaymentSection({
 
         <Button
           type="primary"
-          loading={submitting}
+          loading={false}
           disabled={!isValidAmount || submitting}
           onClick={handleCollectPayment}
           style={{ width: "100%", height: 40 }}
         >
-          {submitting ? (
-            <Spin size="small" />
-          ) : (
-            `Collect ₹${Number(collectAmount ?? 0).toFixed(2)}`
-          )}
+          {submitting ? <Spin size="small" /> : `Collect ₹${Number(collectAmount ?? 0).toFixed(2)}`}
         </Button>
       </Space>
     </div>
