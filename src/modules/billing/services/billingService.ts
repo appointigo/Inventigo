@@ -1789,24 +1789,6 @@ export const billingService = {
     }
     if (filters?.paymentMethod) saleWhere.paymentMethod = filters.paymentMethod;
 
-    // Date range: prefer transactionDate (backdatable canonical date); fall back
-    // to createdAt for records created before the transactionDate migration.
-    if (filters?.startDate || filters?.endDate) {
-      if (filters?.startDate && filters?.endDate) {
-        const from = new Date(filters.startDate);
-        const end = new Date(filters.endDate);
-        end.setDate(end.getDate() + 1);
-        saleWhere.transactionDate = { gte: from, lt: end };
-      } else if (filters?.startDate) {
-        const from = new Date(filters.startDate);
-        saleWhere.transactionDate = { gte: from };
-      } else if (filters?.endDate) {
-        const end = new Date(filters.endDate);
-        end.setDate(end.getDate() + 1);
-        saleWhere.transactionDate = { lt: end };
-      }
-    }
-
     if (filters?.search) {
       saleWhere.OR = [
         { invoiceNumber: { contains: filters.search, mode: "insensitive" } },
@@ -1875,7 +1857,21 @@ export const billingService = {
       })),
       transactionDate: s.transactionDate instanceof Date ? s.transactionDate.toISOString() : s.transactionDate,
       createdAt: s.createdAt instanceof Date ? s.createdAt.toISOString() : s.createdAt,
+      businessDate: s.transactionDate instanceof Date ? s.transactionDate.toISOString() : s.transactionDate ?? (s.createdAt instanceof Date ? s.createdAt.toISOString() : s.createdAt),
     }));
+
+    const saleStart = filters?.startDate ? new Date(filters.startDate) : null;
+    const saleEnd = filters?.endDate ? new Date(filters.endDate) : null;
+    if (saleEnd) {
+      saleEnd.setDate(saleEnd.getDate() + 1);
+    }
+
+    const filteredSalesRows = salesRows.filter((sale) => {
+      const effectiveSaleDate = new Date((sale as any).businessDate ?? sale.transactionDate ?? sale.createdAt);
+      if (saleStart && effectiveSaleDate < saleStart) return false;
+      if (saleEnd && effectiveSaleDate >= saleEnd) return false;
+      return true;
+    });
 
     const rtRows = returnTxns.map((r) => ({
       ...r,
@@ -1886,7 +1882,7 @@ export const billingService = {
       customerName: r.customer?.name ?? null,
     }));
 
-    let unified = [...salesRows, ...rtRows];
+    let unified = [...filteredSalesRows, ...rtRows];
 
     if (filters?.type === "SALE") {
       unified = unified.filter((r) => r.rowType === "SALE");
@@ -1898,7 +1894,7 @@ export const billingService = {
       unified = unified.filter((r: any) => r.rowType === "RETURN_TRANSACTION" && (r.type === "RETURN" || r.type === "RETURN_EXCHANGE"));
     }
 
-    unified.sort((a, b) => new Date((b as any).businessDate ?? b.createdAt).getTime() - new Date((a as any).businessDate ?? a.createdAt).getTime());
+    unified.sort((a, b) => new Date((b as any).businessDate ?? b.transactionDate ?? b.createdAt).getTime() - new Date((a as any).businessDate ?? a.transactionDate ?? a.createdAt).getTime());
 
     const total = unified.length;
     const totalPages = Math.max(1, Math.ceil(total / limit));

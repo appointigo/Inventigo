@@ -116,7 +116,7 @@ export default function SalesHistory({
         {(!loading && sales.length === 0) && <Card>No transactions found.</Card>}
 
         <div>
-          {sales.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((rec: any) => (
+          {sales.map((rec: any) => (
             <TransactionCard
               key={rec.id}
               record={rec}
