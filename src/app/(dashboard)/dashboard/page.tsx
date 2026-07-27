@@ -400,6 +400,14 @@ const DashboardPage = () => {
     });
   }, [effectiveDateRange, sales]);
 
+  const paymentSales = useMemo(() => {
+    if (period === "daily" && !customDateRange) {
+      const selectedDay = dayjs(effectiveDateRange.to).startOf("day");
+      return sales.filter((sale) => rowDate(sale).isSame(selectedDay, "day"));
+    }
+    return filteredSales;
+  }, [period, customDateRange, effectiveDateRange.to, filteredSales, sales]);
+
   const dayOfWeekPatternData = useMemo(() => {
     const dayOrder = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const totals = new Map<string, number>(dayOrder.map((day) => [day, 0]));
@@ -429,11 +437,10 @@ const DashboardPage = () => {
     let totalProfit = 0;
     let transactionCount = 0;
 
-    // When viewing daily granularity we want the cards to reflect the
-    // currently selected day (most recent point in the chart). For
-    // weekly/monthly/yearly views we keep the existing behaviour of
-    // showing the aggregated totals across the selected range.
-    if (period === 'daily') {
+    // When viewing the built-in daily period, cards should reflect the
+    // most recent day only. When using a custom range, even if the period
+    // tab is still 'daily', we should aggregate across the full selected range.
+    if (period === 'daily' && !customDateRange) {
       const last = salesBreakdownData[salesBreakdownData.length - 1];
       totalRevenueForPeriod = Number(last?.totalRevenue ?? 0);
       totalDiscount = Number(last?.discountGiven ?? 0);
@@ -912,7 +919,7 @@ const DashboardPage = () => {
             <section style={{ background: "#ffffff", border: "0.5px solid rgba(0, 0, 0, 0.10)", borderRadius: 12, padding: 20 }}>
               <div style={{ fontSize: 15, fontWeight: 500, color: "#111827", marginBottom: 16 }}>Payment method distribution</div>
               <PaymentMethodDistributionChart 
-                sales={filteredSales} 
+                sales={paymentSales} 
                 loading={false} 
                 height={340}
               />
