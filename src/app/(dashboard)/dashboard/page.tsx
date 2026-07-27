@@ -621,10 +621,10 @@ const DashboardPage = () => {
               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No brand stock data" />
             ) : (
               <ResponsiveContainer width="100%" height={topBrandsChartHeight}>
-                <BarChart layout="vertical" data={topBrands} margin={{ top: 8, right: 12, left: 12, bottom: 8 }}>
+                <BarChart layout="vertical" data={topBrands} margin={{ top: 8, right: 12, left: 24, bottom: 8 }}>
                   <CartesianGrid stroke="#e5e7eb" strokeDasharray="3 3" horizontal={false} vertical />
                   <XAxis type="number" tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} tickFormatter={(value) => formatCurrencyCompactK(Number(value))} />
-                  <YAxis type="category" dataKey="brand" width={90} tick={{ fontSize: 11, fill: "#4b5563" }} axisLine={false} tickLine={false} />
+                  <YAxis type="category" dataKey="brand" width={180} interval={0} tick={{ fontSize: 11, fill: "#4b5563" }} axisLine={false} tickLine={false} />
                   <Tooltip formatter={(value) => formatCurrency(Number(value ?? 0))} labelStyle={{ fontSize: 11, color: "#6b7280" }} contentStyle={{ borderRadius: 8, border: "0.5px solid #e5e7eb" }} />
                   <Bar dataKey="stockValue" radius={[0, 4, 4, 0]} barSize={14}>
                     {topBrands.map((_, index) => (
