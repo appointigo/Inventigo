@@ -429,10 +429,23 @@ const DashboardPage = () => {
     let totalProfit = 0;
     let transactionCount = 0;
 
-    totalRevenueForPeriod = salesBreakdownData.reduce((sum, row) => sum + Number(row.totalRevenue ?? 0), 0);
-    totalDiscount = salesBreakdownData.reduce((sum, row) => sum + Number(row.discountGiven ?? 0), 0);
-    totalProfit = salesBreakdownData.reduce((sum, row) => sum + Number(row.netProfit ?? 0), 0);
-    transactionCount = salesBreakdownData.reduce((sum, row) => sum + Number(row.transactionCount ?? 0), 0);
+    // When viewing daily granularity we want the cards to reflect the
+    // currently selected day (most recent point in the chart). For
+    // weekly/monthly/yearly views we keep the existing behaviour of
+    // showing the aggregated totals across the selected range.
+    if (period === 'daily') {
+      const last = salesBreakdownData[salesBreakdownData.length - 1];
+      totalRevenueForPeriod = Number(last?.totalRevenue ?? 0);
+      totalDiscount = Number(last?.discountGiven ?? 0);
+      totalProfit = Number(last?.netProfit ?? 0);
+      transactionCount = Number(last?.transactionCount ?? 0);
+    } 
+    else {
+      totalRevenueForPeriod = salesBreakdownData.reduce((sum, row) => sum + Number(row.totalRevenue ?? 0), 0);
+      totalDiscount = salesBreakdownData.reduce((sum, row) => sum + Number(row.discountGiven ?? 0), 0);
+      totalProfit = salesBreakdownData.reduce((sum, row) => sum + Number(row.netProfit ?? 0), 0);
+      transactionCount = salesBreakdownData.reduce((sum, row) => sum + Number(row.transactionCount ?? 0), 0);
+    }
 
     const marginPct = totalRevenueForPeriod > 0 ? Math.round((totalProfit / totalRevenueForPeriod) * 100) : 0;
     const discountPct = totalRevenueForPeriod > 0 ? Math.round((totalDiscount / totalRevenueForPeriod) * 100) : 0;
@@ -463,7 +476,7 @@ const DashboardPage = () => {
         subLabel: "transactions",
       },
     ];
-  }, [salesBreakdownData]);
+  }, [salesBreakdownData, period]);
 
   const chartLoading = loading;
 
@@ -765,28 +778,6 @@ const DashboardPage = () => {
               format="DD MMM YYYY"
               style={{ width: "auto", minWidth: 280 }}
             />
-            {customDateRange && customDateRange[0] && customDateRange[1] && (
-              <button
-                type="button"
-                onClick={() => {
-                  setCustomDateRange(null);
-                  setPeriod('daily');
-                }}
-                style={{
-                  border: "none",
-                  borderRadius: 6,
-                  padding: "6px 12px",
-                  fontSize: 12,
-                  fontWeight: 500,
-                  cursor: "pointer",
-                  background: "#f3f4f6",
-                  color: "#6b7280",
-                  transition: "all 0.2s ease",
-                }}
-              >
-                Clear
-              </button>
-            )}
           </div>
 
           {/* METRIC CARDS ROW: 4 white cards with proper styling */}
