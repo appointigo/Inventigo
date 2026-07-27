@@ -313,10 +313,6 @@ export default function BillingPage() {
         onTaxChange={cart.setTaxPct}
         paymentMethod={cart.paymentMethod}
         onPaymentMethodChange={cart.setPaymentMethod}
-        splitMode={cart.splitMode}
-        onSplitModeChange={cart.setSplitMode}
-        splitPayments={cart.splitPayments}
-        onSplitPaymentsChange={cart.setSplitPayments}
         customerName={cart.customerName}
         onCustomerNameChange={cart.setCustomerName}
         customerPhone={cart.customerPhone}
@@ -329,8 +325,6 @@ export default function BillingPage() {
         onRemove={cart.removeItem}
         onCheckout={() => void handleCheckout()}
         checkoutLoading={checkoutLoading}
-        transactionDate={cart.transactionDate}
-        onTransactionDateChange={cart.setTransactionDate}
       />
 
       {cameraScanOpen ? (

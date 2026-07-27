@@ -1,26 +1,20 @@
 import { prisma } from "@/lib/db";
-import { Prisma } from "@prisma/client";
 import { stockService } from "@/modules/stock/services/stockService";
 import type { DashboardData, StockByCategory, TopBrand, RecentMovement, RevenueTrendPoint, RevenueTrend } from "../types";
 
-const formatDayKey = (date: Date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
-const formatMonthKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-const formatYearKey = (date: Date) => String(date.getFullYear());
+const formatDayKey = (date: Date) => date.toISOString().slice(0, 10);
+const formatMonthKey = (date: Date) => `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+const formatYearKey = (date: Date) => String(date.getUTCFullYear());
 
 const shiftDays = (date: Date, days: number) => {
   const d = new Date(date);
-  d.setDate(d.getDate() + days);
+  d.setUTCDate(d.getUTCDate() + days);
   return d;
 };
 
 const shiftMonths = (date: Date, months: number) => {
-  const d = new Date(date.getFullYear(), date.getMonth(), 1);
-  d.setMonth(d.getMonth() + months);
+  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+  d.setUTCMonth(d.getUTCMonth() + months);
   return d;
 };
 
@@ -40,41 +34,6 @@ const buildRangePoints = (
   });
 };
 
-async function hasColumn(tableName: string, columnName: string) {
-  try {
-    const result = await prisma.$queryRaw<Array<{ has_column: boolean }>>`
-      SELECT EXISTS (
-        SELECT 1
-        FROM information_schema.columns
-        WHERE table_schema = current_schema()
-          AND table_name = ${tableName}
-          AND column_name = ${columnName}
-      ) AS has_column
-    `;
-
-    return result[0]?.has_column ?? false;
-  } catch {
-    return false;
-  }
-}
-
-async function hasTable(tableName: string) {
-  try {
-    const result = await prisma.$queryRaw<Array<{ has_table: boolean }>>`
-      SELECT EXISTS (
-        SELECT 1
-        FROM information_schema.tables
-        WHERE table_schema = current_schema()
-          AND table_name = ${tableName}
-      ) AS has_table
-    `;
-
-    return result[0]?.has_table ?? false;
-  } catch {
-    return false;
-  }
-}
-
 export const dashboardService = {
   async getData(orgId: string, storeId: string | null, startDate?: Date, endDate?: Date): Promise<DashboardData> {
     // Resolve storeId — fall back to first store in the org if not set
@@ -84,125 +43,37 @@ export const dashboardService = {
       resolvedStoreId = firstStore?.id ?? null;
     }
 
-    const baseResults = await Promise.allSettled([
-      resolvedStoreId
-        ? stockService.getStockLevels({ storeId: resolvedStoreId, page: 1, pageSize: 1000 })
-        : Promise.resolve({ items: [], total: 0 }),
-      resolvedStoreId
-        ? stockService.getMovementHistory({
-            storeId: resolvedStoreId,
-            startDate,
-            endDate,
-            page: 1,
-            pageSize: startDate || endDate ? 1000 : 10,
-          })
-        : Promise.resolve({ items: [], total: 0 }),
-      prisma.product.findMany({
-        where: { orgId },
-        select: { id: true, costPrice: true },
-      }),
-      prisma.purchaseOrder.count({
-        where: { status: { in: ["DRAFT", "ORDERED"] }, store: { orgId } },
-      }),
-      prisma.product.count({ where: { orgId } }),
-    ]);
-
-    const stockResult =
-      baseResults[0].status === "fulfilled" ? baseResults[0].value : { items: [], total: 0 };
-    const movementsResult =
-      baseResults[1].status === "fulfilled" ? baseResults[1].value : { items: [], total: 0 };
-    const productCosts =
-      baseResults[2].status === "fulfilled" ? baseResults[2].value : [];
-    const pendingPOsCount =
-      baseResults[3].status === "fulfilled" ? baseResults[3].value : 0;
-    const totalProducts =
-      baseResults[4].status === "fulfilled" ? baseResults[4].value : 0;
-
-    if (baseResults[0].status === "rejected") {
-      console.error("[dashboardService] stock levels failed", baseResults[0].reason);
-    }
-    if (baseResults[1].status === "rejected") {
-      console.error("[dashboardService] movement history failed", baseResults[1].reason);
-    }
-    if (baseResults[2].status === "rejected") {
-      console.error("[dashboardService] product costs failed", baseResults[2].reason);
-    }
-    if (baseResults[3].status === "rejected") {
-      console.error("[dashboardService] pending PO count failed", baseResults[3].reason);
-    }
-    if (baseResults[4].status === "rejected") {
-      console.error("[dashboardService] total products count failed", baseResults[4].reason);
-    }
-
-    let sales: Array<{ report_date: Date; total: number }> = [];
-    try {
-      const hasTransactionDate = await hasColumn("sales", "transactionDate");
-      const salesDateExpr = hasTransactionDate
-        ? Prisma.sql`COALESCE(s."transactionDate", s."createdAt")`
-        : Prisma.sql`s."createdAt"`;
-
-      sales = await prisma.$queryRaw<Array<{ report_date: Date; total: number }>>`
-        SELECT ${salesDateExpr} AS report_date, s.total::float8 AS total
-        FROM sales s
-        JOIN stores st ON st.id = s."storeId"
-        WHERE st."orgId" = ${orgId}
-          AND (${resolvedStoreId}::text IS NULL OR s."storeId" = ${resolvedStoreId})
-          AND s.status::text IN ('COMPLETED', 'EXCHANGED', 'REFUNDED')
-          ${startDate ? Prisma.sql`AND ${salesDateExpr} >= ${startDate}` : Prisma.empty}
-          ${endDate ? Prisma.sql`AND ${salesDateExpr} < ((${endDate}::date + INTERVAL '1 day'))` : Prisma.empty}
-        ORDER BY report_date ASC
-      `;
-    } catch (error) {
-      console.error("[dashboardService] failed to load sales history", error);
-    }
-
-    let returnTxns: Array<{ report_date: Date; net_amount: number; offset_amount: number; type: string }> = [];
-    try {
-      if (await hasTable("return_transactions")) {
-        const [hasBusinessDate, hasTransactionDate, hasNetAmount, hasOffsetAmount, hasType] = await Promise.all([
-          hasColumn("return_transactions", "businessDate"),
-          hasColumn("return_transactions", "transactionDate"),
-          hasColumn("return_transactions", "netAmount"),
-          hasColumn("return_transactions", "offsetAmount"),
-          hasColumn("return_transactions", "type"),
-        ]);
-
-        const returnDateExpr = hasBusinessDate
-          ? Prisma.sql`COALESCE(rt."businessDate", rt."createdAt")`
-          : hasTransactionDate
-            ? Prisma.sql`COALESCE(rt."transactionDate", rt."createdAt")`
-            : Prisma.sql`rt."createdAt"`;
-
-        const netAmountExpr = hasNetAmount
-          ? Prisma.sql`rt."netAmount"::float8`
-          : Prisma.sql`0::float8`;
-
-        const offsetAmountExpr = hasOffsetAmount
-          ? Prisma.sql`rt."offsetAmount"::float8`
-          : Prisma.sql`0::float8`;
-
-        const typeExpr = hasType
-          ? Prisma.sql`rt.type::text`
-          : Prisma.sql`'RETURN'::text`;
-
-        returnTxns = await prisma.$queryRaw<Array<{ report_date: Date; net_amount: number; offset_amount: number; type: string }>>`
-          SELECT
-            ${returnDateExpr} AS report_date,
-            ${netAmountExpr} AS net_amount,
-            ${offsetAmountExpr} AS offset_amount,
-            ${typeExpr} AS type
-          FROM return_transactions rt
-          JOIN stores st ON st.id = rt."storeId"
-          WHERE st."orgId" = ${orgId}
-            AND (${resolvedStoreId}::text IS NULL OR rt."storeId" = ${resolvedStoreId})
-            ${startDate ? Prisma.sql`AND ${returnDateExpr} >= ${startDate}` : Prisma.empty}
-            ${endDate ? Prisma.sql`AND ${returnDateExpr} < ((${endDate}::date + INTERVAL '1 day'))` : Prisma.empty}
-          ORDER BY report_date ASC
-        `;
-      }
-    } catch (error) {
-      console.error("[dashboardService] failed to load return transactions", error);
-    }
+    const [stockResult, movementsResult, productCosts, pendingPOsCount, totalProducts, sales] =
+      await Promise.all([
+        resolvedStoreId
+          ? stockService.getStockLevels({ storeId: resolvedStoreId, page: 1, pageSize: 1000 })
+          : Promise.resolve({ items: [], total: 0 }),
+        resolvedStoreId
+          ? stockService.getMovementHistory({
+              storeId: resolvedStoreId,
+              startDate,
+              endDate,
+              page: 1,
+              pageSize: startDate || endDate ? 1000 : 10,
+            })
+          : Promise.resolve({ items: [], total: 0 }),
+        prisma.product.findMany({
+          where: { orgId },
+          select: { id: true, costPrice: true },
+        }),
+        prisma.purchaseOrder.count({
+          where: { status: { in: ["DRAFT", "ORDERED"] }, store: { orgId } },
+        }),
+        prisma.product.count({ where: { orgId } }),
+        prisma.sale.findMany({
+          where: {
+            status: "COMPLETED",
+            ...(resolvedStoreId ? { storeId: resolvedStoreId } : { store: { orgId } }),
+          },
+          select: { createdAt: true, total: true },
+          orderBy: { createdAt: "asc" },
+        }),
+      ]);
 
     const allStock = stockResult.items;
     const allMovements = movementsResult.items;
@@ -245,36 +116,12 @@ export const dashboardService = {
     const yearTotals = new Map<string, number>();
     for (const sale of sales) {
       const total = Number(sale.total);
-      const saleDate = new Date(sale.report_date);
-      const dayKey = formatDayKey(saleDate);
-      const monthKey = formatMonthKey(saleDate);
-      const yearKey = formatYearKey(saleDate);
+      const dayKey = formatDayKey(sale.createdAt);
+      const monthKey = formatMonthKey(sale.createdAt);
+      const yearKey = formatYearKey(sale.createdAt);
       dayTotals.set(dayKey, (dayTotals.get(dayKey) ?? 0) + total);
       monthTotals.set(monthKey, (monthTotals.get(monthKey) ?? 0) + total);
       yearTotals.set(yearKey, (yearTotals.get(yearKey) ?? 0) + total);
-      
-    }
-
-    // Add return transaction amounts to revenue tracking
-    // For EXCHANGE: offsetAmount (credit from returned item) + netAmount (additional payment) = total new product value
-    // For RETURN: netAmount (refund adjustment, typically negative)
-    for (const rt of returnTxns) {
-      
-      let revenueAmount = Number(rt.net_amount ?? 0);
-      
-      // For exchange transactions, include the full value of the exchanged product
-      // This properly reflects the new product being sold in place of the old one
-      if (rt.type === "EXCHANGE") {
-        revenueAmount = Number(rt.offset_amount ?? 0) + Number(rt.net_amount ?? 0);
-      }
-      
-      const reportDate = new Date(rt.report_date);
-      const dayKey = formatDayKey(reportDate);
-      const monthKey = formatMonthKey(reportDate);
-      const yearKey = formatYearKey(reportDate);
-      dayTotals.set(dayKey, (dayTotals.get(dayKey) ?? 0) + revenueAmount);
-      monthTotals.set(monthKey, (monthTotals.get(monthKey) ?? 0) + revenueAmount);
-      yearTotals.set(yearKey, (yearTotals.get(yearKey) ?? 0) + revenueAmount);
     }
 
     const now = new Date();
@@ -284,7 +131,7 @@ export const dashboardService = {
         (offset) => formatDayKey(shiftDays(now, offset)),
         (key) => {
           const [year, month, day] = key.split("-").map(Number);
-          return new Date(year, month - 1, day).toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
+          return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
         },
         dayTotals
       ),
@@ -293,13 +140,13 @@ export const dashboardService = {
         (offset) => formatMonthKey(shiftMonths(now, offset)),
         (key) => {
           const [year, month] = key.split("-").map(Number);
-          return new Date(year, month - 1, 1).toLocaleDateString("en-IN", { month: "short", year: "2-digit" });
+          return new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString("en-IN", { month: "short", year: "2-digit" });
         },
         monthTotals
       ),
       year: buildRangePoints(
         5,
-        (offset) => String(now.getFullYear() + offset),
+        (offset) => String(now.getUTCFullYear() + offset),
         (key) => key,
         yearTotals
       ),
@@ -315,7 +162,6 @@ export const dashboardService = {
       quantity: m.quantity,
       reason: m.reason,
       userName: m.userName,
-      movementDate: m.movementDate,
       createdAt: m.createdAt,
     }));
 

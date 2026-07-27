@@ -1,11 +1,5 @@
 -- CreateEnum
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE lower(typname) = lower('ColorSourceType')) THEN
-    EXECUTE 'CREATE TYPE "ColorSourceType" AS ENUM (''PREDEFINED'', ''USER_CREATED'', ''AUTO_GENERATED'')';
-  END IF;
-END
-$$;
+CREATE TYPE "ColorSourceType" AS ENUM ('PREDEFINED', 'USER_CREATED', 'AUTO_GENERATED');
 
 -- AlterTable
 ALTER TABLE "sales" ADD COLUMN     "customerId" TEXT;

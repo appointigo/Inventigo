@@ -60,7 +60,7 @@ export default function RecentMovementsWidget({ movements, loading }: RecentMove
     },
     {
       title: "Time",
-      dataIndex: "movementDate",
+      dataIndex: "createdAt",
       width: 140,
       render: (val: string) => <span style={{ fontSize: 12 }}>{formatDateTime(val)}</span>,
     },

@@ -10,7 +10,6 @@ type SalesKPIs = {
   todayRevenue: number;
   totalSales: number;
   totalRevenue: number;
-  openReceivables: number;
 };
 
 export default function SalesKPIWidget() {
@@ -74,14 +73,6 @@ export default function SalesKPIWidget() {
             title="Total Revenue"
             value={formatCurrency(data.totalRevenue)}
             prefix={<WalletOutlined />}
-          />
-        </Col>
-        <Col span={12}>
-          <Statistic
-            title="Open Receivables"
-            value={formatCurrency(data.openReceivables)}
-            prefix={<WalletOutlined />}
-            valueStyle={{ color: "#fa8c16" }}
           />
         </Col>
       </Row>
