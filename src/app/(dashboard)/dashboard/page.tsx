@@ -400,14 +400,6 @@ const DashboardPage = () => {
     });
   }, [effectiveDateRange, sales]);
 
-  const paymentSales = useMemo(() => {
-    if (period === "daily" && !customDateRange) {
-      const selectedDay = dayjs(effectiveDateRange.to).startOf("day");
-      return sales.filter((sale) => rowDate(sale).isSame(selectedDay, "day"));
-    }
-    return filteredSales;
-  }, [period, customDateRange, effectiveDateRange.to, filteredSales, sales]);
-
   const dayOfWeekPatternData = useMemo(() => {
     const dayOrder = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const totals = new Map<string, number>(dayOrder.map((day) => [day, 0]));
@@ -437,10 +429,11 @@ const DashboardPage = () => {
     let totalProfit = 0;
     let transactionCount = 0;
 
-    // When viewing the built-in daily period, cards should reflect the
-    // most recent day only. When using a custom range, even if the period
-    // tab is still 'daily', we should aggregate across the full selected range.
-    if (period === 'daily' && !customDateRange) {
+    // When viewing daily granularity we want the cards to reflect the
+    // currently selected day (most recent point in the chart). For
+    // weekly/monthly/yearly views we keep the existing behaviour of
+    // showing the aggregated totals across the selected range.
+    if (period === 'daily') {
       const last = salesBreakdownData[salesBreakdownData.length - 1];
       totalRevenueForPeriod = Number(last?.totalRevenue ?? 0);
       totalDiscount = Number(last?.discountGiven ?? 0);
@@ -628,10 +621,10 @@ const DashboardPage = () => {
               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No brand stock data" />
             ) : (
               <ResponsiveContainer width="100%" height={topBrandsChartHeight}>
-                <BarChart layout="vertical" data={topBrands} margin={{ top: 8, right: 12, left: 24, bottom: 8 }}>
+                <BarChart layout="vertical" data={topBrands} margin={{ top: 8, right: 12, left: 12, bottom: 8 }}>
                   <CartesianGrid stroke="#e5e7eb" strokeDasharray="3 3" horizontal={false} vertical />
                   <XAxis type="number" tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} tickFormatter={(value) => formatCurrencyCompactK(Number(value))} />
-                  <YAxis type="category" dataKey="brand" width={180} interval={0} tick={{ fontSize: 11, fill: "#4b5563" }} axisLine={false} tickLine={false} />
+                  <YAxis type="category" dataKey="brand" width={90} tick={{ fontSize: 11, fill: "#4b5563" }} axisLine={false} tickLine={false} />
                   <Tooltip formatter={(value) => formatCurrency(Number(value ?? 0))} labelStyle={{ fontSize: 11, color: "#6b7280" }} contentStyle={{ borderRadius: 8, border: "0.5px solid #e5e7eb" }} />
                   <Bar dataKey="stockValue" radius={[0, 4, 4, 0]} barSize={14}>
                     {topBrands.map((_, index) => (
@@ -919,7 +912,7 @@ const DashboardPage = () => {
             <section style={{ background: "#ffffff", border: "0.5px solid rgba(0, 0, 0, 0.10)", borderRadius: 12, padding: 20 }}>
               <div style={{ fontSize: 15, fontWeight: 500, color: "#111827", marginBottom: 16 }}>Payment method distribution</div>
               <PaymentMethodDistributionChart 
-                sales={paymentSales} 
+                sales={filteredSales} 
                 loading={false} 
                 height={340}
               />
