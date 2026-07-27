@@ -9,6 +9,7 @@ export type AdjustStockInput = {
   reason?: string;
   referenceType?: ReferenceType;
   referenceId?: string;
+  businessDate?: Date;
   userId: string;
 };
 
@@ -53,6 +54,7 @@ export type StockMovementRow = {
   quantity: number;
   reason: string | null;
   userName: string;
+  movementDate: string;
   createdAt: string;
 };
 

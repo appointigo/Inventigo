@@ -67,7 +67,7 @@ const MovementHistoryTable = ({ movements, loading }: MovementHistoryTableProps)
     },
     {
       title: "Date",
-      dataIndex: "createdAt",
+      dataIndex: "movementDate",
       width: 160,
       render: (date: string) => new Date(date).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }),
     },

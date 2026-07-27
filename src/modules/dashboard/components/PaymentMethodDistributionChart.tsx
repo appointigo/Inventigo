@@ -36,11 +36,32 @@ export default function PaymentMethodDistributionChart({
 
   const distributionData = useMemo<PaymentMethodDistribution[]>(() => {
     const methodTotals: Record<string, number> = {};
+    const validMethods = ["CASH", "CARD", "UPI"];
 
     sales.forEach((sale) => {
       if (sale.status === "COMPLETED") {
-        const amount = Number(sale.total) || 0;
-        methodTotals[sale.paymentMethod] = (methodTotals[sale.paymentMethod] ?? 0) + amount;
+        // Check if sale has individual payment entries
+        const paymentEntries = (sale.payments ?? []).filter(
+          (entry) => Number(entry.amount ?? 0) > 0
+        );
+
+        if (paymentEntries.length > 0) {
+          // Use individual payment entries (split payment breakdown)
+          paymentEntries.forEach((entry) => {
+            if (validMethods.includes(entry.method)) {
+              methodTotals[entry.method] =
+                (methodTotals[entry.method] ?? 0) + Number(entry.amount ?? 0);
+            }
+          });
+        } else {
+          // Fallback to sale.paymentMethod only for legacy records with valid methods
+          const method = sale.paymentMethod;
+          if (validMethods.includes(method)) {
+            const amount = Number(sale.total) || 0;
+            methodTotals[method] = (methodTotals[method] ?? 0) + amount;
+          }
+          // If method is "SPLIT" without payment entries, skip (data issue or in-progress)
+        }
       }
     });
 

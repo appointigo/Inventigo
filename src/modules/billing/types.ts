@@ -1,18 +1,41 @@
 export type PaymentMethodType = "CASH" | "CARD" | "UPI";
-export type SaleStatusType = "COMPLETED" | "REFUNDED";
+export type SaleStatusType = "COMPLETED" | "REFUNDED" | "EXCHANGED";
+
+/**
+ * Single payment entry in a split payment
+ */
+export type SplitPaymentEntry = {
+  method: PaymentMethodType;
+  amount: number;
+};
+
+/**
+ * Split payment data with multiple payment methods
+ */
+export type SplitPaymentData = {
+  entries: SplitPaymentEntry[];
+};
 
 /**
  * Input for creating a new sale.
+ * Supports both single payment (paymentMethod) and split payments (splitPayments)
  */
 export type CreateSaleInput = {
   items: CartItem[];
-  paymentMethod: PaymentMethodType;
+  paymentMethod?: PaymentMethodType; // For backward compatibility and single payment
+  splitPayments?: SplitPaymentEntry[]; // For split payment mode
+  discountType?: "PERCENTAGE" | "FLAT";
+  discountPercent?: number;
+  taxRate?: number;
+  taxMode?: "EXCLUSIVE" | "INCLUSIVE";
   discountAmount: number;
   taxAmount: number;
+  amountPaid?: number;
   customerName?: string;
   customerPhone?: string;
   customerEmail?: string;
   promoCodeId?: string;
+  transactionDate?: string;
 };
 
 export type CartItem = {
@@ -35,11 +58,54 @@ export type SaleFilters = {
   status?: SaleStatusType;
   paymentMethod?: PaymentMethodType;
   search?: string;
+  type?: "SALE" | "EXCHANGE" | "RETURN";
+  sizeId?: string;
 };
 
 /**
  * Full sale detail with items.
  */
+export type ReturnTransactionItem = {
+  productId: string;
+  sizeId: string;
+  quantity: number;
+  total: number;
+  productName?: string;
+  sku?: string;
+  sizeLabel?: string;
+};
+
+export type ReturnTransactionHistory = {
+  id: string;
+  type: "RETURN" | "EXCHANGE" | "RETURN_EXCHANGE";
+  referenceNumber?: string;
+  saleInvoiceNumber?: string;
+  returnedItems: ReturnTransactionItem[];
+  exchangedItems: ReturnTransactionItem[];
+  netAmount: number;
+  offsetAmount: number;
+  refundAmount: number;
+  refundMethod?: PaymentMethodType;
+  reason?: string;
+  condition?: string;
+  notes?: string;
+  createdAt: string;
+};
+
+/**
+ * Individual payment record for a sale
+ */
+export type SalePayment = {
+  id: string;
+  saleId: string;
+  amount: number;
+  method: PaymentMethodType;
+  businessDate: string;
+  paidAt: string;
+  note?: string;
+  createdBy: string;
+};
+
 export type Sale = {
   id: string;
   invoiceNumber: string;
@@ -50,10 +116,20 @@ export type Sale = {
   subtotal: number;
   discountAmount: number;
   taxAmount: number;
-  total: number;
-  paymentMethod: PaymentMethodType;
+  total: number; // finalPayableAmount for backward compatibility
+  calculatedTotal?: number;
+  roundOffAmount: number;
+  finalPayableAmount?: number;
+  amountPaid: number;
+  amountDue: number;
+  paymentMethod: PaymentMethodType | "SPLIT"; // SPLIT indicates multiple payment methods
+  paymentStatus: "PAID" | "PARTIAL" | "PENDING";
+  returnStatus: "NONE" | "PARTIAL" | "FULL";
   status: SaleStatusType;
   items: SaleItem[];
+  payments?: SalePayment[]; // Individual payment records
+  returnTransactions: ReturnTransactionHistory[];
+  transactionDate: string;
   createdAt: string;
 };
 
@@ -68,6 +144,18 @@ export type SaleItem = {
   quantity: number;
   unitPrice: number;
   total: number;
+  mrp?: number;
+  sellingPrice?: number;
+  discountType?: "PERCENTAGE" | "FLAT";
+  appliedDiscountPercent?: number;
+  allocatedDiscount?: number;
+  taxableAmount?: number;
+  taxAmount?: number;
+  finalUnitPrice?: number;
+  finalLineAmount?: number;
+  effectiveUnitPrice?: number;
+  costPrice?: number;
+  pricingSnapshotDate?: string;
 };
 
 /**
@@ -99,8 +187,19 @@ export type SaleSummary = {
   invoiceNumber: string;
   customerName: string | null;
   total: number;
-  paymentMethod: PaymentMethodType;
+  amountPaid: number;
+  amountDue: number;
+  paymentMethod: PaymentMethodType | "SPLIT";
+  payments?: Array<{
+    method: PaymentMethodType;
+    amount: number;
+    businessDate?: string;
+    paidAt?: string;
+  }>;
+  paymentStatus: "PAID" | "PARTIAL" | "PENDING";
+  returnStatus: "NONE" | "PARTIAL" | "FULL";
   status: SaleStatusType;
   itemCount: number;
+  transactionDate: string;
   createdAt: string;
 };
