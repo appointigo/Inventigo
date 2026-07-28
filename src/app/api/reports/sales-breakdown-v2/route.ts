@@ -66,6 +66,9 @@ export const GET = async (request: Request) => {
 
     const group: GroupBy = groupParam === "day" || groupParam === "week" || groupParam === "year" ? groupParam : "month";
     const dateTruncUnit = group === "day" ? "day" : group === "week" ? "week" : group === "year" ? "year" : "month";
+    const dateTruncExpr = group === "week"
+      ? Prisma.sql`DATE_TRUNC('week', period_date + INTERVAL '1 day') - INTERVAL '1 day'`
+      : Prisma.sql`DATE_TRUNC(${dateTruncUnit}, period_date)`;
 
     const [hasReturnTransactionsTable, hasReturnBusinessDate, hasReturnTransactionDate, hasReturnNetAmount, hasReturnOffsetAmount, hasReturnType] = await Promise.all([
       hasTable("return_transactions"),
@@ -159,7 +162,7 @@ export const GET = async (request: Request) => {
       ${returnBreakdownCte}
       ${combinedCte}
       SELECT
-        DATE_TRUNC(${dateTruncUnit}, period_date) AS period_start,
+        ${dateTruncExpr} AS period_start,
         COALESCE(SUM(total_amount), 0)::float8 AS total_revenue,
         COALESCE(SUM(discount_amount), 0)::float8 AS total_discount,
         COALESCE(SUM(total_amount - total_cost), 0)::float8 AS net_profit,

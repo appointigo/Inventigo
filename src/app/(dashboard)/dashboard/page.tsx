@@ -286,10 +286,10 @@ const DashboardPage = () => {
         periodType === 'daily'
           ? pointDate.format('DD MMM')
           : periodType === 'weekly'
-          ? `Wk of ${pointDate.format('DD MMM')}`
+          ? `${pointDate.format('DD MMM')} – ${pointDate.add(6, 'day').format('DD MMM')}`
           : periodType === 'yearly'
           ? pointDate.format('YYYY')
-          : pointDate.format('MMM YY');
+          : pointDate.format('MMM YYYY');
 
       return {
         label,
@@ -488,17 +488,17 @@ const DashboardPage = () => {
     let totalProfit = 0;
     let transactionCount = 0;
 
-    // When viewing the built-in daily period, cards should reflect the
-    // most recent day only. When using a custom range, even if the period
-    // tab is still 'daily', we should aggregate across the full selected range.
-    if (period === 'daily' && !customDateRange) {
-      const last = salesBreakdownData[salesBreakdownData.length - 1];
-      totalRevenueForPeriod = Number(last?.totalRevenue ?? 0);
-      totalDiscount = Number(last?.discountGiven ?? 0);
-      totalProfit = Number(last?.netProfit ?? 0);
-      transactionCount = Number(last?.transactionCount ?? 0);
-    } 
-    else {
+    // For built-in period tabs, cards should reflect the latest bucket only.
+    // For custom date ranges, aggregate across the full selected range.
+    const lastBucket = salesBreakdownData[salesBreakdownData.length - 1];
+    const shouldUseLatestBucket = !customDateRange;
+
+    if (shouldUseLatestBucket && lastBucket) {
+      totalRevenueForPeriod = Number(lastBucket.totalRevenue ?? 0);
+      totalDiscount = Number(lastBucket.discountGiven ?? 0);
+      totalProfit = Number(lastBucket.netProfit ?? 0);
+      transactionCount = Number(lastBucket.transactionCount ?? 0);
+    } else {
       totalRevenueForPeriod = salesBreakdownData.reduce((sum, row) => sum + Number(row.totalRevenue ?? 0), 0);
       totalDiscount = salesBreakdownData.reduce((sum, row) => sum + Number(row.discountGiven ?? 0), 0);
       totalProfit = salesBreakdownData.reduce((sum, row) => sum + Number(row.netProfit ?? 0), 0);
