@@ -16,6 +16,7 @@ import type { PaymentMethodDistribution } from "@/modules/dashboard/services/pay
 
 interface PaymentMethodDistributionChartProps {
   sales: SaleSummary[];
+  activeBucketLabel?: string;
   loading?: boolean;
   height?: number;
 }
@@ -30,6 +31,7 @@ const DEFAULT_COLOR_SEQUENCE = Object.values(PAYMENT_METHOD_COLORS);
 
 export default function PaymentMethodDistributionChart({
   sales,
+  activeBucketLabel,
   loading = false,
   height = 300,
 }: PaymentMethodDistributionChartProps) {
@@ -136,6 +138,11 @@ export default function PaymentMethodDistributionChart({
           boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
         }}
       >
+        {activeBucketLabel ? (
+          <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 6 }}>
+            {activeBucketLabel}
+          </div>
+        ) : null}
         <div style={{ fontSize: 12, fontWeight: 600, color: "#111827", marginBottom: 4 }}>
           {name}
         </div>

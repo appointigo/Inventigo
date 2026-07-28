@@ -400,23 +400,44 @@ const DashboardPage = () => {
     });
   }, [effectiveDateRange, sales]);
 
-  const paymentSales = useMemo(() => {
-    if (period === "daily" && !customDateRange) {
-      const selectedDay = dayjs(effectiveDateRange.to).startOf("day");
-      return sales.filter((sale) => rowDate(sale).isSame(selectedDay, "day"));
+  const latestBucketSales = useMemo(() => {
+    if (customDateRange || salesBreakdownData.length === 0) {
+      return filteredSales;
     }
-    return filteredSales;
-  }, [period, customDateRange, effectiveDateRange.to, filteredSales, sales]);
+
+    const lastBucket = salesBreakdownData[salesBreakdownData.length - 1];
+    if (!lastBucket?.period) {
+      return filteredSales;
+    }
+
+    const bucketStart = dayjs(lastBucket.period).startOf("day");
+    const bucketEnd = period === "weekly"
+      ? bucketStart.add(6, "day").endOf("day")
+      : period === "monthly"
+      ? bucketStart.endOf("month")
+      : period === "yearly"
+      ? bucketStart.endOf("year")
+      : bucketStart.endOf("day");
+
+    return sales.filter((sale) => {
+      const saleDate = rowDate(sale);
+      return !saleDate.isBefore(bucketStart) && !saleDate.isAfter(bucketEnd);
+    });
+  }, [customDateRange, salesBreakdownData, period, filteredSales, sales]);
+
+  const paymentSales = useMemo(() => {
+    return latestBucketSales;
+  }, [latestBucketSales]);
 
   const dayOfWeekPatternData = useMemo(() => {
     const dayOrder = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const totals = new Map<string, number>(dayOrder.map((day) => [day, 0]));
-    for (const sale of filteredSales) {
+    for (const sale of latestBucketSales) {
       const key = dayOrder[rowDate(sale).day()];
       totals.set(key, (totals.get(key) ?? 0) + revenueOfRow(sale));
     }
     return dayOrder.map((day) => ({ day, total: totals.get(day) ?? 0 }));
-  }, [filteredSales]);
+  }, [latestBucketSales]);
 
   const salesRangeLabel = useMemo(() => {
     if (filteredSales.length === 0) {
@@ -430,6 +451,28 @@ const DashboardPage = () => {
     }
     return `${minDate.format("MMM DD")} – ${maxDate.format("MMM DD, YYYY")}`;
   }, [filteredSales]);
+
+  const activeBucketLabel = useMemo(() => {
+    if (customDateRange || salesBreakdownData.length === 0) {
+      return salesRangeLabel;
+    }
+
+    const lastBucket = salesBreakdownData[salesBreakdownData.length - 1];
+    if (!lastBucket?.period) {
+      return salesRangeLabel;
+    }
+
+    const bucketStart = dayjs(lastBucket.period).startOf("day");
+    const bucketEnd = period === "weekly"
+      ? bucketStart.add(6, "day").endOf("day")
+      : period === "monthly"
+      ? bucketStart.endOf("month")
+      : period === "yearly"
+      ? bucketStart.endOf("year")
+      : bucketStart.endOf("day");
+
+    return `${bucketStart.format("DD MMM YYYY")} – ${bucketEnd.format("DD MMM YYYY")}`;
+  }, [customDateRange, salesBreakdownData, period, salesRangeLabel]);
 
   const revenueComparison = useMemo(() => {
     const label = customDateRange
@@ -950,6 +993,7 @@ const DashboardPage = () => {
                 sales={paymentSales} 
                 loading={false} 
                 height={340}
+                activeBucketLabel={activeBucketLabel}
               />
             </section>
 
