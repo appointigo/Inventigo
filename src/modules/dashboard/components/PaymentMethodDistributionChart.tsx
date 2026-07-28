@@ -25,6 +25,7 @@ const PAYMENT_METHOD_COLORS: Record<string, string> = {
   Cash: "#1abc9c",
   Card: "#3b82f6",
   UPI: "#f59e0b",
+  Split: "#a855f7",
 };
 
 const DEFAULT_COLOR_SEQUENCE = Object.values(PAYMENT_METHOD_COLORS);
@@ -58,11 +59,13 @@ export default function PaymentMethodDistributionChart({
         } else {
           // Fallback to sale.paymentMethod only for legacy records with valid methods
           const method = sale.paymentMethod;
+          const amount = Number(sale.total) || 0;
           if (validMethods.includes(method)) {
-            const amount = Number(sale.total) || 0;
+            methodTotals[method] = (methodTotals[method] ?? 0) + amount;
+          } else if (method === "SPLIT") {
+            // Preserve split payment sales that do not have detailed payment entries
             methodTotals[method] = (methodTotals[method] ?? 0) + amount;
           }
-          // If method is "SPLIT" without payment entries, skip (data issue or in-progress)
         }
       }
     });
@@ -74,6 +77,7 @@ export default function PaymentMethodDistributionChart({
       CASH: "Cash",
       CARD: "Card",
       UPI: "UPI",
+      SPLIT: "Split",
     };
 
     return Object.entries(methodTotals)
@@ -90,6 +94,14 @@ export default function PaymentMethodDistributionChart({
       .filter((sale) => sale.status === "COMPLETED")
       .reduce((sum, sale) => sum + (Number(sale.total) || 0), 0);
   }, [sales]);
+
+  const paymentDistributionTotal = useMemo(() => {
+    return distributionData.reduce((sum, entry) => sum + entry.value, 0);
+  }, [distributionData]);
+
+  const unallocatedRevenue = useMemo(() => {
+    return Math.max(0, totalRevenue - paymentDistributionTotal);
+  }, [paymentDistributionTotal, totalRevenue]);
 
   const completedSalesCount = useMemo(() => {
     return sales.filter((sale) => sale.status === "COMPLETED").length;
@@ -152,6 +164,9 @@ export default function PaymentMethodDistributionChart({
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
           })}
+        </div>
+        <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 2 }}>
+          Coverage: {percentage}% of chart total
         </div>
         <div style={{ fontSize: 12, color: "#6b7280" }}>Percentage: {percentage}%</div>
       </div>
@@ -234,6 +249,14 @@ export default function PaymentMethodDistributionChart({
                   maximumFractionDigits: 2,
                 })}
               </div>
+              <div style={{ fontSize: 11, color: "#6b7280", marginTop: 4 }}>
+                {paymentDistributionTotal.toLocaleString("en-IN", {
+                  style: "currency",
+                  currency: "INR",
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })} shown in chart
+              </div>
             </div>
 
             <div style={{ textAlign: "center" }}>
@@ -247,10 +270,14 @@ export default function PaymentMethodDistributionChart({
 
             <div style={{ textAlign: "center" }}>
               <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 4 }}>
-                Payment Methods
+                Unallocated Revenue
               </div>
-              <div style={{ fontSize: 18, fontWeight: 600, color: "#111827" }}>
-                {distributionData.length}
+              <div style={{ fontSize: 18, fontWeight: 600, color: "#d97706" }}>
+                ₹
+                {unallocatedRevenue.toLocaleString("en-IN", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
               </div>
             </div>
           </div>
