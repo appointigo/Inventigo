@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Typography, Spin, Button, Space, Card, Skeleton, Empty, DatePicker } from "antd";
+import { Typography, Spin, Button, Space, Card, Skeleton, Empty, DatePicker, Tag, Segmented, Flex } from "antd";
 import {
   AppstoreAddOutlined,
   TagsOutlined,
@@ -431,6 +431,57 @@ const DashboardPage = () => {
     return `${minDate.format("MMM DD")} – ${maxDate.format("MMM DD, YYYY")}`;
   }, [filteredSales]);
 
+  const revenueComparison = useMemo(() => {
+    const label = customDateRange
+      ? "vs previous range"
+      : period === "daily"
+      ? "vs yesterday"
+      : period === "weekly"
+      ? "vs previous week"
+      : period === "monthly"
+      ? "vs previous month"
+      : "vs previous year";
+
+    let currentRevenue = 0;
+    let previousRevenue = 0;
+
+    if (customDateRange?.[0] && customDateRange?.[1]) {
+      const start = customDateRange[0].startOf("day");
+      const end = customDateRange[1].endOf("day");
+      const rangeDays = end.diff(start, "day") + 1;
+
+      currentRevenue = filteredSales.reduce((sum, sale) => sum + revenueOfRow(sale), 0);
+
+      const previousEnd = start.subtract(1, "day").endOf("day");
+      const previousStart = previousEnd.subtract(rangeDays - 1, "day").startOf("day");
+
+      previousRevenue = sales
+        .filter((sale) => {
+          const saleDate = rowDate(sale);
+          return !saleDate.isBefore(previousStart) && !saleDate.isAfter(previousEnd);
+        })
+        .reduce((sum, sale) => sum + revenueOfRow(sale), 0);
+    } else {
+      const last = salesBreakdownData[salesBreakdownData.length - 1];
+      const previous = salesBreakdownData[salesBreakdownData.length - 2];
+      currentRevenue = Number(last?.totalRevenue ?? 0);
+      previousRevenue = Number(previous?.totalRevenue ?? 0);
+    }
+
+    const difference = currentRevenue - previousRevenue;
+    const percentage = previousRevenue !== 0
+      ? Math.round((difference / previousRevenue) * 100)
+      : difference > 0
+      ? 100
+      : 0;
+
+    return {
+      label,
+      percentage: Math.abs(percentage),
+      isPositive: difference >= 0,
+    };
+  }, [period, customDateRange, filteredSales, sales, salesBreakdownData]);
+
   const salesPeriodMetrics = useMemo(() => {
     let totalRevenueForPeriod = 0;
     let totalDiscount = 0;
@@ -731,48 +782,29 @@ const DashboardPage = () => {
       {activeTab === "sales" ? (
         <div className="grid gap-4" style={{ display: "grid", gap: 16 }}>
           {/* PAGE HEADER ROW: Period filter tabs (top right) + current date (left) */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+          <Flex align="center" justify="space-between" gap={16}>
             <div style={{ fontSize: 13, fontWeight: 500, color: "#6b7280 " }}>
               {dayjs().format("DD MMM YYYY")}
             </div>
-            <div style={{ display: "inline-flex", gap: 6, borderRadius: 8, background: "#f3f4f6", padding: "6px 8px" }}>
-              {([
-                { label: "Daily", value: "daily" },
-                { label: "Weekly", value: "weekly" },
-                { label: "Monthly", value: "monthly" },
-                { label: "Yearly", value: "yearly" },
-              ] as const).map((option) => {
-                const active = period === option.value;
-                const isCustomRangeActive = !!(customDateRange && customDateRange[0] && customDateRange[1]);
-                
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => setPeriod(option.value)}
-                    disabled={isCustomRangeActive}
-                    style={{
-                      border: "none",
-                      borderRadius: 6,
-                      padding: "6px 12px",
-                      fontSize: 12,
-                      fontWeight: 500,
-                      cursor: isCustomRangeActive ? "not-allowed" : "pointer",
-                      background: active && !isCustomRangeActive ? "#ffffff" : "transparent",
-                      color: isCustomRangeActive ? "#9ca3af" : active ? "#111827" : "#6b7280",
-                      transition: "all 0.2s ease",
-                      opacity: isCustomRangeActive ? 0.5 : 1,
-                    }}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
+            <div style={{ display: "inline-flex", borderRadius: 8, background: "#f3f4f6", padding: "4px" }}>
+              <Segmented
+                options={[
+                  { label: "Daily", value: "daily" },
+                  { label: "Weekly", value: "weekly" },
+                  { label: "Monthly", value: "monthly" },
+                  { label: "Yearly", value: "yearly" },
+                ]}
+                value={period}
+                onChange={(value) => setPeriod(value as "daily" | "weekly" | "monthly" | "yearly")}
+                disabled={!!(customDateRange && customDateRange[0] && customDateRange[1])}
+                size="medium"
+                style={{ background: "transparent", borderRadius: 6 }}
+              />
             </div>
-          </div>
+          </Flex>
 
           {/* CUSTOM DATE RANGE PICKER */}
-          <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 0" }}>
+          <Flex align="center" gap={12} style={{ padding: "12px 0" }}>
             <DatePicker.RangePicker
               value={customDateRange}
               onChange={(dates) => {
@@ -785,7 +817,7 @@ const DashboardPage = () => {
               format="DD MMM YYYY"
               style={{ width: "auto", minWidth: 280 }}
             />
-          </div>
+          </Flex>
 
           {/* METRIC CARDS ROW: 4 white cards with proper styling */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
@@ -823,21 +855,17 @@ const DashboardPage = () => {
                     {metric.value}
                   </div>
                   {isTotalRevenue && (
-                    <div
+                    <Tag
+                      color={revenueComparison.isPositive ? "success" : "error"}
                       style={{
-                        display: "inline-flex",
-                        alignItems: "center",
                         borderRadius: 999,
-                        background: "#ecfdf5",
-                        color: "#059669",
-                        fontSize: 11,
                         fontWeight: 500,
-                        padding: "4px 8px",
+                        padding: "4px 10px",
                         marginTop: 4,
                       }}
                     >
-                      +12.4% vs yesterday
-                    </div>
+                      {`${revenueComparison.isPositive ? "+" : "-"}${revenueComparison.percentage}% ${revenueComparison.label}`}
+                    </Tag>
                   )}
                   {metric.subLabel && isNetProfit && (
                     <div style={{ marginTop: 6, fontSize: 12, color: "#6b7280" }}>
