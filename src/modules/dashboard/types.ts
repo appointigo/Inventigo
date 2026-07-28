@@ -41,6 +41,30 @@ export type RecentMovement = {
   createdAt: string;
 };
 
+export type ExpenseAnalyticsSummary = {
+  totalExpense: number;
+  averageExpense: number;
+  transactionCount: number;
+};
+
+export type ExpenseAnalyticsTrendPoint = {
+  label: string;
+  amount: number;
+  period: string;
+};
+
+export type ExpenseAnalyticsBreakdownPoint = {
+  category: string;
+  amount: number;
+  percentage: number;
+};
+
+export type ExpenseAnalyticsResponse = {
+  summary: ExpenseAnalyticsSummary;
+  trend: ExpenseAnalyticsTrendPoint[];
+  breakdown: ExpenseAnalyticsBreakdownPoint[];
+};
+
 export type DashboardData = {
   kpis: DashboardKPIs;
   stockByCategory: StockByCategory[];
