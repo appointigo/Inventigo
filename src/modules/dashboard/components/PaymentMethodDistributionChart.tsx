@@ -1,15 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import { Empty } from "antd";
-import {
-  Cell,
-  Legend,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-} from "recharts";
+import { Card, Col, Empty, Row, Space, Spin, Typography } from "antd";
+import { Legend, Pie, PieChart, ResponsiveContainer, Sector, Tooltip } from "recharts";
 import type { PieLabelRenderProps } from "recharts";
 import type { SaleSummary } from "@/modules/billing/types";
 import type { PaymentMethodDistribution } from "@/modules/dashboard/services/paymentMethodService";
@@ -112,6 +105,9 @@ export default function PaymentMethodDistributionChart({
       distributionData.map((item) => ({
         ...item,
         displayName: `${item.name} ${item.percentage}%`,
+        fill:
+          PAYMENT_METHOD_COLORS[item.name] ??
+          DEFAULT_COLOR_SEQUENCE[distributionData.findIndex((entry) => entry.name === item.name) % DEFAULT_COLOR_SEQUENCE.length],
       })),
     [distributionData]
   );
@@ -129,63 +125,52 @@ export default function PaymentMethodDistributionChart({
     );
   };
 
-  const renderCustomTooltip = ({
-    active,
-    payload,
-  }: {
-    active?: boolean;
-    payload?: Array<{ payload?: PaymentMethodDistribution }>;
-  }) => {
+  const renderCustomTooltip = ({ active, payload } : { active?: boolean; payload?: Array<{ payload?: PaymentMethodDistribution }>}) => {
     if (!active || !payload?.length || !payload[0].payload) return null;
 
     const { name, value, percentage } = payload[0].payload;
 
     return (
-      <div
-        style={{
-          background: "#ffffff",
-          border: "1px solid #e5e7eb",
-          borderRadius: 8,
-          padding: "10px 12px",
-          boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-        }}
-      >
-        {activeBucketLabel ? (
-          <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 6 }}>
-            {activeBucketLabel}
-          </div>
-        ) : null}
-        <div style={{ fontSize: 12, fontWeight: 600, color: "#111827", marginBottom: 4 }}>
-          {name}
-        </div>
-        <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 2 }}>
-          Amount: ₹
-          {value.toLocaleString("en-IN", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}
-        </div>
-        <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 2 }}>
-          Coverage: {percentage}% of chart total
-        </div>
-        <div style={{ fontSize: 12, color: "#6b7280" }}>Percentage: {percentage}%</div>
-      </div>
+      <Card size="small" variant="borderless" style={{ padding: 12 }}>
+        <Space orientation="vertical" size={2}>
+          {activeBucketLabel ? (
+            <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+              {activeBucketLabel}
+            </Typography.Text>
+          ) : null}
+          <Typography.Text strong style={{ fontSize: 12 }}>
+            {name}
+          </Typography.Text>
+          <Typography.Text style={{ fontSize: 12, color: "#6b7280" }}>
+            Amount: ₹{value.toLocaleString("en-IN", {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
+          </Typography.Text>
+          <Typography.Text style={{ fontSize: 12, color: "#6b7280" }}>
+            Coverage: {percentage}% of chart total
+          </Typography.Text>
+          <Typography.Text style={{ fontSize: 12, color: "#6b7280" }}>
+            Percentage: {percentage}%
+          </Typography.Text>
+        </Space>
+      </Card>
     );
   };
 
   return (
     <div style={{ width: "100%" }}>
       {loading ? (
-        <div style={{ height, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <div style={{ color: "#9ca3af" }}>Loading...</div>
-        </div>
+        <Spin
+          description="Loading..."
+          style={{ height, display: "flex", alignItems: "center", justifyContent: "center" }}
+        />
       ) : distributionData.length === 0 ? (
-        <div style={{ height, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}
             description="No completed sales data available"
+            style={{ height, display: "flex", alignItems: "center", justifyContent: "center" }}
           />
-        </div>
       ) : (
         <div style={{ width: "100%" }}>
           <div style={{ width: "100%", height }}>
@@ -201,17 +186,13 @@ export default function PaymentMethodDistributionChart({
                   dataKey="value"
                   label={renderCustomLabel}
                   labelLine={false}
-                >
-                  {chartData.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={
-                        PAYMENT_METHOD_COLORS[entry.name] ??
-                        DEFAULT_COLOR_SEQUENCE[index % DEFAULT_COLOR_SEQUENCE.length]
-                      }
+                  shape={(props) => (
+                    <Sector
+                      {...props}
+                      fill={props.payload?.fill ?? props.fill}
                     />
-                  ))}
-                </Pie>
+                  )}
+                />
                 <Tooltip content={renderCustomTooltip as any} />
                 <Legend
                   verticalAlign="bottom"
@@ -220,7 +201,6 @@ export default function PaymentMethodDistributionChart({
                     const data = entry.payload as PaymentMethodDistribution & {
                       displayName?: string;
                     };
-
                     return <span style={{ fontSize: 12, color: "#6b7280" }}>{data.name}</span>;
                   }}
                 />
@@ -228,59 +208,56 @@ export default function PaymentMethodDistributionChart({
             </ResponsiveContainer>
           </div>
 
-          <div
-            style={{
-              marginTop: 16,
-              paddingTop: 12,
-              borderTop: "1px solid #e5e7eb",
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-              gap: 12,
-            }}
-          >
-            <div style={{ textAlign: "center" }}>
-              <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 4 }}>
-                Total Revenue
-              </div>
-              <div style={{ fontSize: 18, fontWeight: 600, color: "#111827" }}>
-                ₹
-                {totalRevenue.toLocaleString("en-IN", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-              </div>
-              <div style={{ fontSize: 11, color: "#6b7280", marginTop: 4 }}>
-                {paymentDistributionTotal.toLocaleString("en-IN", {
-                  style: "currency",
-                  currency: "INR",
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })} shown in chart
-              </div>
-            </div>
+          <Row style={{ marginTop: 16, paddingTop: 12, paddingBottom: 16, borderTop: "1px solid #e5e7eb" }}>
+            <Col xs={24} sm={8} style={{ paddingInline: 8 }}>
+              <Space orientation="vertical" align="center" style={{ width: "100%" }}>
+                <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+                  Total Revenue
+                </Typography.Text>
+                <Typography.Text strong style={{ fontSize: 18, color: "#111827" }}>
+                  ₹
+                  {totalRevenue.toLocaleString("en-IN", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </Typography.Text>
+                <Typography.Text style={{ fontSize: 11, color: "#6b7280" }}>
+                  {paymentDistributionTotal.toLocaleString("en-IN", {
+                    style: "currency",
+                    currency: "INR",
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })} shown in chart
+                </Typography.Text>
+              </Space>
+            </Col>
 
-            <div style={{ textAlign: "center" }}>
-              <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 4 }}>
-                Completed Sales
-              </div>
-              <div style={{ fontSize: 18, fontWeight: 600, color: "#111827" }}>
-                {completedSalesCount}
-              </div>
-            </div>
+            <Col xs={24} sm={8} style={{ paddingInline: 8 }}>
+              <Space orientation="vertical" align="center" style={{ width: "100%" }}>
+                <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+                  Completed Sales
+                </Typography.Text>
+                <Typography.Text strong style={{ fontSize: 18, color: "#111827" }}>
+                  {completedSalesCount}
+                </Typography.Text>
+              </Space>
+            </Col>
 
-            <div style={{ textAlign: "center" }}>
-              <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 4 }}>
-                Unallocated Revenue
-              </div>
-              <div style={{ fontSize: 18, fontWeight: 600, color: "#d97706" }}>
-                ₹
-                {unallocatedRevenue.toLocaleString("en-IN", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-              </div>
-            </div>
-          </div>
+            <Col xs={24} sm={8} style={{ paddingInline: 8 }}>
+              <Space orientation="vertical" align="center" style={{ width: "100%" }}>
+                <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+                  Unallocated Revenue
+                </Typography.Text>
+                <Typography.Text strong style={{ fontSize: 18, color: "#d97706" }}>
+                  ₹
+                  {unallocatedRevenue.toLocaleString("en-IN", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </Typography.Text>
+              </Space>
+            </Col>
+          </Row>
         </div>
       )}
     </div>
