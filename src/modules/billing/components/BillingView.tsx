@@ -8,6 +8,7 @@ import dayjs from "dayjs";
 import { useProducts } from "@/modules/products/hooks/useProducts";
 import { useCart } from "@/modules/billing/hooks/useBilling";
 import { sanitizeScannedBarcode } from "@/shared/services/barcodeService";
+import { useDebounce } from "@/shared/hooks/useDebounce";
 import InvoicePreview from "./InvoicePreview";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
 import type { VariantRow, CreateSaleInput, Sale, PaymentMethodType } from "@/modules/billing/types";
@@ -126,6 +127,7 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
 
   // ─── Local UI state ────────────────────────────────────────────────────────
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 300);
   const [lastAdded, setLastAdded] = useState<VariantRow | null>(null);
   const [saleLoading, setSaleLoading] = useState(false);
   const [completedSale, setCompletedSale] = useState<Sale | null>(null);
@@ -169,8 +171,9 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
   // ─── Cart + products ───────────────────────────────────────────────────────
   const cart = useCart();
   const { promos } = usePromoCodes();
+  const debouncedSearchTrimmed = debouncedSearch.trim();
   const { products, loading: productsLoading } = useProducts(
-    search.trim() ? { search: search.trim() } : undefined
+    debouncedSearchTrimmed ? { search: debouncedSearchTrimmed } : undefined
   );
 
   // Auto-apply default tax rate on first load
