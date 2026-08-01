@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useState, useCallback } from "react";
 import { Typography, Tabs, App } from "antd";
 import StockTable from "@/modules/stock/components/StockTable";
+import { useDebounce } from "@/shared/hooks/useDebounce";
 import StockAdjustmentModal from "@/modules/stock/components/StockAdjustmentModal";
 import MovementHistoryTable from "@/modules/stock/components/MovementHistoryTable";
 import { useMobileViewport } from "@/modules/mobile-dashboard/hooks/useMobileViewport";
@@ -18,12 +19,13 @@ export default function StockPage() {
   const { isMobile, isReady } = useMobileViewport();
   const { storeId } = useStore();
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 300);
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
   const [adjustingRow, setAdjustingRow] = useState<StockLevelRow | null>(null);
 
   const { stockLevels, loading, refresh } = useStockLevels({
     storeId: storeId ?? undefined,
-    search: search || undefined,
+    search: debouncedSearch || undefined,
     lowStockOnly: statusFilter === "low" || undefined,
     outOfStockOnly: statusFilter === "out" || undefined,
   });
