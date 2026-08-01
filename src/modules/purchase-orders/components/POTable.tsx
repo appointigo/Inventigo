@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Table, Button, Space, Tag, Input, Select, Flex, Empty } from "antd";
 import { PlusOutlined, SearchOutlined, EyeOutlined } from "@ant-design/icons";
+import { useDebounce } from "@/shared/hooks/useDebounce";
 import type { ColumnsType } from "antd/es/table";
 import type { PurchaseOrderStatus } from "@prisma/client";
 import type { PurchaseOrder } from "../types";
@@ -25,11 +26,12 @@ interface POTableProps {
 
 const POTable = ({ purchaseOrders, suppliers, loading, statusFilter, onStatusChange, supplierFilter, onSupplierChange, onAdd, onView }: POTableProps) => {
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 300);
 
   const filtered = purchaseOrders.filter(
     (po) =>
-      po.supplierName.toLowerCase().includes(search.toLowerCase()) ||
-      po.id.toLowerCase().includes(search.toLowerCase())
+      po.supplierName.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+      po.id.toLowerCase().includes(debouncedSearch.toLowerCase())
   );
 
   const columns: ColumnsType<PurchaseOrder> = [

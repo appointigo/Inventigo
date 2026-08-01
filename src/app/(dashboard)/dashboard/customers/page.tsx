@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { App, Col, Modal, Row, Typography } from "antd";
 import CustomerList from "@/modules/customers/components/CustomerList";
+import { useDebounce } from "@/shared/hooks/useDebounce";
 import CustomerForm from "@/modules/customers/components/CustomerForm";
 import CustomerDetailView from "@/modules/customers/components/CustomerDetailView";
 import type {
@@ -26,6 +27,7 @@ export default function CustomersPage() {
   const [loadingList, setLoadingList] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 300);
   const [activeType, setActiveType] = useState<CustomerListType>("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -44,7 +46,7 @@ export default function CustomersPage() {
     setLoadingList(true);
     try {
       const params = new URLSearchParams();
-      if (search.trim()) params.set("search", search.trim());
+      if (debouncedSearch.trim()) params.set("search", debouncedSearch.trim());
       params.set("type", activeType);
       params.set("highSpenderThreshold", "10000");
       params.set("page", String(page));
@@ -67,7 +69,7 @@ export default function CustomersPage() {
     } finally {
       setLoadingList(false);
     }
-  }, [activeType, message, page, pageSize, search, selectedCustomerId]);
+  }, [activeType, message, page, pageSize, debouncedSearch, selectedCustomerId]);
 
   const fetchCustomerDetail = useCallback(
     async (id: string) => {
