@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { Typography, App } from "antd";
 import ProductTable from "@/modules/products/components/ProductTable";
+import { useDebounce } from "@/shared/hooks/useDebounce";
 import ProductBulkUploadDrawer from "@/modules/products/components/BulkUploadDrawer";
 import type { Product } from "@/modules/products/types";
 import type { Category } from "@/modules/categories/types";
@@ -57,6 +58,8 @@ export default function ProductsPage() {
   const currentSearch = searchParams.get("search") ?? "";
   const currentCategoryId = searchParams.get("categoryId") ?? searchParams.get("category") ?? undefined;
   const currentBrandId = searchParams.get("brandId") ?? searchParams.get("brand") ?? undefined;
+  const [searchInput, setSearchInput] = useState(currentSearch);
+  const debouncedSearchInput = useDebounce(searchInput, 300);
   const currentCategory = useMemo(
     () => (currentCategoryId ? categories.find((c) => c.id === currentCategoryId) : undefined),
     [currentCategoryId, categories]
@@ -72,6 +75,10 @@ export default function ProductsPage() {
     setLocalPage(currentPage);
     setLocalPageSize(currentPageSize);
   }, [currentPage, currentPageSize]);
+
+  useEffect(() => {
+    setSearchInput(currentSearch);
+  }, [currentSearch]);
 
   const attributeFilters = useMemo(() => {
     const result: Record<string, string | string[]> = {};
@@ -146,9 +153,18 @@ export default function ProductsPage() {
   );
 
   const handleSearchChange = useCallback(
-    (value: string) => updateQuery({ search: value || undefined, page: "1" }),
-    [updateQuery]
+    (value: string) => {
+      setSearchInput(value);
+    },
+    []
   );
+
+  useEffect(() => {
+    if (debouncedSearchInput !== currentSearch) {
+      updateQuery({ search: debouncedSearchInput || undefined, page: "1" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearchInput]);
 
   const handleCategoryChange = useCallback(
     (value: string | undefined) => updateQuery({ categoryId: value || undefined, page: "1" }, true),
