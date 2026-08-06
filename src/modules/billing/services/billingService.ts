@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import type { CreateSaleInput, Sale, SaleItem, SaleFilters, SaleSummary } from "../types";
 import { customerService } from "@/modules/customers/services/customerService";
+import { whatsappInvoiceService } from "./whatsappInvoiceService";
 import { allocatePricingSnapshots } from "../utils/pricingEngine";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -531,7 +532,13 @@ export const billingService = {
     userId: string,
     input: CreateSaleInput
   ): Promise<Sale> {
+    const startedAt = Date.now();
+    // TODO: Remove temporary debug logs before production
+    console.log(`[WHATSAPP_DEBUG] Billing flow started. OrgId=${orgId} StoreId=${storeId} UserId=${userId} CustomerPhone=${input.customerPhone ? "***masked***" : "missing"}`);
+
     if (!input.customerPhone?.trim()) {
+      // TODO: Remove temporary debug logs before production
+      console.error(`[WHATSAPP_DEBUG] Billing flow validation failed. Stage=CustomerMobileRequired OrgId=${orgId} StoreId=${storeId} Error=Customer mobile number is required`);
       throw new Error("Customer mobile number is required");
     }
 
@@ -543,6 +550,9 @@ export const billingService = {
       input.customerName,
       input.customerEmail
     );
+
+    // TODO: Remove temporary debug logs before production
+    console.log(`[WHATSAPP_DEBUG] Sale creation in progress. OrgId=${orgId} StoreId=${storeId} CustomerId=${customer.id} CustomerMobile=${input.customerPhone ? "***masked***" : "missing"}`);
 
     // Server-side promo validation — never trust client discountAmount when a promo is applied
     let discountAmount = input.discountAmount;
@@ -758,8 +768,44 @@ export const billingService = {
           return created;
         });
 
+        // TODO: Remove temporary debug logs before production
+        console.log(`[WHATSAPP_DEBUG] Sale created successfully. SaleId=${sale.id} InvoiceNumber=${sale.invoiceNumber} CustomerId=${sale.customerId ?? customer.id} OrgId=${orgId} CustomerMobile=${sale.customerPhone ? "***masked***" : "missing"}`);
+
+        // TODO: Remove temporary debug logs before production
+        console.log(`[WHATSAPP_DEBUG] WhatsApp queue initiated. SaleId=${sale.id} InvoiceNumber=${sale.invoiceNumber} OrgId=${orgId} CustomerMobile=${sale.customerPhone ? "***masked***" : "missing"}`);
+
+        if (process.env.NODE_ENV !== "development") {
+          setTimeout(() => {
+            // TODO: Remove temporary debug logs before production
+            console.log(`[WHATSAPP_DEBUG] Background task started. SaleId=${sale.id} InvoiceNumber=${sale.invoiceNumber} OrgId=${orgId}`);
+            const backgroundStartedAt = Date.now();
+            void whatsappInvoiceService.queueInvoiceDelivery({
+              orgId,
+              storeId,
+              saleId: sale.id,
+              invoiceNumber: sale.invoiceNumber,
+              customerName: sale.customerName,
+              customerPhone: sale.customerPhone,
+              customerEmail: sale.customerEmail,
+              amount: Number(sale.finalPayableAmount ?? sale.total ?? 0),
+              currency: "INR",
+              saleDate: sale.transactionDate ?? sale.createdAt,
+            }).catch((error) => {
+              // TODO: Remove temporary debug logs before production
+              console.error(`[WHATSAPP_DEBUG] Background task exception. Stage=QueueInvoiceDelivery SaleId=${sale.id} InvoiceNumber=${sale.invoiceNumber} OrgId=${orgId} CustomerMobile=${sale.customerPhone ? "***masked***" : "missing"} Error=${error instanceof Error ? error.message : String(error)} Stack=${error instanceof Error ? error.stack : ""}`);
+            }).finally(() => {
+              // TODO: Remove temporary debug logs before production
+              console.log(`[WHATSAPP_DEBUG] Background task completed. SaleId=${sale.id} InvoiceNumber=${sale.invoiceNumber} OrgId=${orgId} DurationMs=${Date.now() - backgroundStartedAt}`);
+            });
+          }, 0);
+        } else {
+          console.log(`[WHATSAPP_DEBUG] WhatsApp background queue suppressed in development. SaleId=${sale.id} InvoiceNumber=${sale.invoiceNumber} OrgId=${orgId}`);
+        }
+
         return toSaleDto(sale);
       } catch (error) {
+        // TODO: Remove temporary debug logs before production
+        console.error(`[WHATSAPP_DEBUG] Billing flow exception. Stage=CreateSaleAttempt SaleId=unknown InvoiceNumber=${invoiceNumber} OrgId=${orgId} CustomerMobile=${input.customerPhone ? "***masked***" : "missing"} Error=${error instanceof Error ? error.message : String(error)} Stack=${error instanceof Error ? error.stack : ""}`);
         if (attempt < 5 && isInvoiceNumberConflict(error)) {
           continue;
         }

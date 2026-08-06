@@ -10,6 +10,7 @@ import { useCart } from "@/modules/billing/hooks/useBilling";
 import { sanitizeScannedBarcode } from "@/shared/services/barcodeService";
 import InvoicePreview from "./InvoicePreview";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
+import { useStore } from "@/providers/StoreProvider";
 import type { VariantRow, CreateSaleInput, Sale, PaymentMethodType } from "@/modules/billing/types";
 import { PAYMENT_OPTIONS } from "@/modules/billing/constants";
 import { usePromoCodes } from "@/modules/promo-codes/hooks/usePromoCodes";
@@ -130,6 +131,17 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
   const [saleLoading, setSaleLoading] = useState(false);
   const [completedSale, setCompletedSale] = useState<Sale | null>(null);
   const [invoiceOpen, setInvoiceOpen] = useState(false);
+  const [whatsappDebugSteps, setWhatsappDebugSteps] = useState<null | {
+    pdfGenerated: boolean;
+    pdfSize?: number;
+    mediaUploaded: boolean;
+    mediaId?: string;
+    messageSent: boolean;
+    messageId?: string | null;
+    failedStep?: string;
+    error?: string;
+  }>(null);
+  const [whatsappDebugLoading, setWhatsappDebugLoading] = useState(false);
 
   // ─── Camera scanner state ─────────────────────────────────────────────────
   const [cameraScanOpen, setCameraScanOpen] = useState(false);
@@ -310,6 +322,64 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
   }, [search, variantRows, productsLoading, handleAddToCart]);
 
   // ─── Sale creation ─────────────────────────────────────────────────────────
+  const handleDebugWhatsappInvoice = async (sale: Sale) => {
+    if (process.env.NODE_ENV !== "development") {
+      return;
+    }
+
+    setWhatsappDebugLoading(true);
+    setWhatsappDebugSteps(null);
+
+    try {
+      const response = await fetch("/api/whatsapp/send-invoice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          saleId: sale.id,
+        }),
+      });
+
+      const payload = await response.json().catch(() => null);
+      console.group("WhatsApp Invoice Flow");
+      console.log("Billing Response", sale);
+      console.log("WhatsApp Response", payload);
+      console.groupEnd();
+
+      if (!response.ok || !payload) {
+        setWhatsappDebugSteps({
+          pdfGenerated: false,
+          mediaUploaded: false,
+          messageSent: false,
+          failedStep: "unknown",
+          error: payload?.error ?? "Failed to send invoice debug request",
+        });
+        return;
+      }
+
+      setWhatsappDebugSteps({
+        pdfGenerated: payload.steps?.pdfGenerated ?? false,
+        pdfSize: payload.steps?.pdfSize,
+        mediaUploaded: payload.steps?.mediaUploaded ?? false,
+        mediaId: payload.steps?.mediaId,
+        messageSent: payload.steps?.messageSent ?? false,
+        messageId: payload.steps?.messageId,
+        failedStep: payload.steps?.failedStep,
+        error: payload.steps?.error?.message,
+      });
+    } catch (error) {
+      setWhatsappDebugSteps({
+        pdfGenerated: false,
+        mediaUploaded: false,
+        messageSent: false,
+        failedStep: "unknown",
+        error: error instanceof Error ? error.message : "Unexpected error",
+      });
+      console.error("WhatsApp debug request failed", error);
+    } finally {
+      setWhatsappDebugLoading(false);
+    }
+  };
+
   const handleConfirmSale = async () => {
     if (cart.items.length === 0) {
       message.warning("Cart is empty");
@@ -323,6 +393,9 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
       setInvoiceOpen(true);
       cart.clearCart();
       message.success(`Sale created: ${sale.invoiceNumber}`);
+      if (process.env.NODE_ENV === "development") {
+        void handleDebugWhatsappInvoice(sale);
+      }
     } 
     catch (error) {
       console.error(error);

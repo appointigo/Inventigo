@@ -598,6 +598,14 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
             Print Invoice
           </PrintButton>
         </FooterActions>
+          {process.env.NODE_ENV === "development" && (
+            <div style={{ marginTop: 16, padding: 12, border: "1px dashed #e5e7eb", borderRadius: 8 }}>
+              <div style={{ fontWeight: 700, marginBottom: 8 }}>WhatsApp Debug</div>
+              <div style={{ fontSize: 13, color: "#374151" }}>
+                Debug mode: after creating a sale the client will call the WhatsApp debug endpoint and log results to the console.
+              </div>
+            </div>
+          )}
       </InvoiceBodyContent>
     </Modal>
   );
