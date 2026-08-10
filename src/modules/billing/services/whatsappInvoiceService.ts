@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import puppeteer from "puppeteer";
 import type { Sale, SaleItem, ReturnTransactionHistory } from "../types";
 import { buildPrintableInvoiceHtml } from "./invoiceHtmlBuilder";
+import { normalizePhone } from "./whatsappInvoiceUtils";
 
 export type NotificationDeliveryStatus = "PENDING" | "SENT" | "FAILED" | "SKIPPED";
 
@@ -107,14 +108,6 @@ type WhatsAppDeliveryExecutionResult = {
 
 const DEFAULT_TEMPLATE_NAME = "invoice_delivery";
 const DEFAULT_API_URL = "https://graph.facebook.com/v22.0";
-const DEBUG_RECIPIENT_PHONE = "+917007785178";
-
-const normalizePhone = (value?: string | null): string | null => {
-  if (!value) return null;
-  const digits = value.replace(/\D/g, "");
-  if (!digits) return null;
-  return `+${digits}`;
-};
 
 const parseScopedConfig = (raw: string | undefined, orgId: string, storeId: string): Partial<WhatsAppConfig> | null => {
   if (!raw) return null;
@@ -132,7 +125,7 @@ const parseScopedConfig = (raw: string | undefined, orgId: string, storeId: stri
 const getWhatsAppConfig = (orgId: string, storeId: string): WhatsAppConfig => {
   const scoped = parseScopedConfig(process.env.WHATSAPP_CONFIG_JSON, orgId, storeId);
   const enabled = (scoped?.enabled ?? process.env.WHATSAPP_ENABLED) === true || ["1", "true", "yes"].includes(String(scoped?.enabled ?? process.env.WHATSAPP_ENABLED ?? "").toLowerCase());
-  const phoneNumberId = scoped?.phoneNumberId ?? process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const phoneNumberId = scoped?.phoneNumberId ?? process.env.WHATSAPP_PHONE_NUMBER_ID ?? process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
   const accessToken = scoped?.accessToken ?? process.env.WHATSAPP_ACCESS_TOKEN;
   const provider = scoped?.provider ?? process.env.WHATSAPP_PROVIDER ?? "meta";
   const apiUrl = scoped?.apiUrl ?? process.env.WHATSAPP_API_URL ?? DEFAULT_API_URL;
@@ -196,6 +189,26 @@ const getTemplateBodyParamValues = (payload: InvoiceNotificationPayload): Record
     order_id: orderId,
     order_date: orderDate,
   };
+};
+
+const resolveCustomerRecipient = async (payload: InvoiceNotificationPayload): Promise<{ customerId: string; phone: string } | null> => {
+  const sale = await prisma.sale.findFirst({
+    where: {
+      id: payload.saleId,
+      storeId: payload.storeId,
+      store: { orgId: payload.orgId },
+    },
+    select: { customer: { select: { id: true, mobile: true } } },
+  });
+  const phone = normalizePhone(sale?.customer?.mobile);
+
+  if (!sale?.customer?.id || !phone) {
+    console.warn(`[WHATSAPP_DEBUG] Customer mobile number is missing. WhatsApp invoice delivery skipped. SaleId=${payload.saleId} CustomerId=${sale?.customer?.id ?? "missing"}`);
+    return null;
+  }
+
+  console.log(`[WHATSAPP_DEBUG] Resolved customer WhatsApp recipient. SaleId=${payload.saleId} CustomerId=${sale.customer.id} CustomerMobile=***masked*** Source=customer_record`);
+  return { customerId: sale.customer.id, phone };
 };
 
 const buildWhatsAppTemplatePayload = (
@@ -266,7 +279,7 @@ const buildWhatsAppTemplatePayload = (
     },
   };
 
-  console.log(`[WHATSAPP_DEBUG] Final WhatsApp template payload: ${JSON.stringify(messagePayload)}`);
+  console.log(`[WHATSAPP_DEBUG] Final WhatsApp template payload: ${JSON.stringify({ ...messagePayload, to: "***masked***" })}`);
   return messagePayload;
 };
 
@@ -274,6 +287,7 @@ const executeInvoiceDelivery = async (
   payload: InvoiceNotificationPayload,
   config: WhatsAppConfig,
   recipientPhone: string,
+  customerId: string,
   record: DeliveryRecord
 ): Promise<WhatsAppDeliveryExecutionResult> => {
   const steps: WhatsAppInvoiceDebugSteps = {
@@ -282,7 +296,7 @@ const executeInvoiceDelivery = async (
     messageSent: false,
   };
 
-  console.log(`[WHATSAPP_DEBUG] Recipient selected. Phone=${recipientPhone}`);
+  console.log(`[WHATSAPP_DEBUG] Sending WhatsApp invoice. SaleId=${payload.saleId} InvoiceNumber=${payload.invoiceNumber} CustomerId=${customerId} Recipient=***masked*** RecipientSource=customer_record`);
   console.log(`[WHATSAPP_DEBUG] Phone Number ID loaded. Present=${Boolean(config.phoneNumberId)} Masked=${config.phoneNumberId ? "***masked***" : "missing"}`);
   console.log(`[WHATSAPP_DEBUG] Template selected. Name=${config.templateName} Language=${config.templateLanguage}`);
 
@@ -391,10 +405,15 @@ export const sendInvoiceDeliveryDebug = async (payload: InvoiceNotificationPaylo
     };
   }
 
-  const recipientPhone = DEBUG_RECIPIENT_PHONE;
-  console.log(`[WHATSAPP_DEBUG] Debug recipient selected. Phone=${recipientPhone}`);
-  const record = await upsertDeliveryRecord(payload, "PENDING", config.provider, { metadata: { phone: recipientPhone, originalPhone: normalizePhone(payload.customerPhone) } });
-  const result = await executeInvoiceDelivery(payload, config, recipientPhone, record);
+  const resolvedRecipient = await resolveCustomerRecipient(payload);
+  if (!resolvedRecipient) {
+    const error = "Customer mobile number is missing. WhatsApp invoice delivery skipped.";
+    const record = await upsertDeliveryRecord(payload, "SKIPPED", config.provider, { error, metadata: { reason: "missing-customer-mobile" } });
+    return { success: false, steps: { pdfGenerated: false, mediaUploaded: false, messageSent: false, failedStep: "validateRecipient", error: { message: error } }, deliveryRecord: record };
+  }
+
+  const record = await upsertDeliveryRecord(payload, "PENDING", config.provider, { metadata: { phone: resolvedRecipient.phone, customerId: resolvedRecipient.customerId, source: "customer_record" } });
+  const result = await executeInvoiceDelivery(payload, config, resolvedRecipient.phone, resolvedRecipient.customerId, record);
 
   return {
     success: result.success,
@@ -410,6 +429,7 @@ const sendWhatsappTemplate = async (
   messageType: "document_template" | "template"
 ): Promise<Response> => {
   const startedAt = Date.now();
+  const requestBody = JSON.stringify(messagePayload);
   const requestConfig = {
     url: requestUrl,
     method: "POST",
@@ -417,7 +437,7 @@ const sendWhatsappTemplate = async (
       Authorization: `Bearer ${maskToken(config.accessToken)}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(messagePayload),
+    body: JSON.stringify({ ...messagePayload, to: "***masked***" }),
   };
 
   console.log(`[WHATSAPP_DEBUG] Step 8 - Sending template. RequestUrl=${requestUrl} Method=POST MessageType=${messageType}`);
@@ -430,7 +450,7 @@ const sendWhatsappTemplate = async (
         Authorization: `Bearer ${config.accessToken}`,
         "Content-Type": "application/json",
       },
-      body: requestConfig.body,
+      body: requestBody,
     });
 
     const responseHeaders: Record<string, string> = {};
@@ -657,13 +677,19 @@ export const whatsappInvoiceService = {
       return upsertDeliveryRecord(payload, "SKIPPED", config.provider, { error: "Missing WhatsApp credentials", metadata: { reason: "missing-config" } });
     }
 
-    const normalizedPhone = normalizePhone(payload.customerPhone);
-    const recipientPhone = DEBUG_RECIPIENT_PHONE; // TODO: Remove hardcoded recipient and use customer's mobile number.
+    const resolvedRecipient = await resolveCustomerRecipient(payload);
+    if (!resolvedRecipient) {
+      const error = "Customer mobile number is missing. WhatsApp invoice delivery skipped.";
+      console.warn(`[WHATSAPP_DEBUG] ${error} SaleId=${payload.saleId} InvoiceNumber=${payload.invoiceNumber} OrgId=${payload.orgId}`);
+      return upsertDeliveryRecord(payload, "SKIPPED", config.provider, { error, metadata: { reason: "missing-customer-mobile" } });
+    }
+
+    const recipientPhone = resolvedRecipient.phone;
 
     // TODO: Remove temporary debug logs before production
-    console.log(`[WHATSAPP_DEBUG] Validation passed. SaleId=${payload.saleId} InvoiceNumber=${payload.invoiceNumber} OrgId=${payload.orgId} CustomerMobile=${normalizedPhone ?? "missing"} DebugRecipient=${recipientPhone}`);
+    console.log(`[WHATSAPP_DEBUG] Validation passed. SaleId=${payload.saleId} InvoiceNumber=${payload.invoiceNumber} OrgId=${payload.orgId} CustomerMobile=***masked*** RecipientSource=customer_record`);
 
-    const record = await upsertDeliveryRecord(payload, "PENDING", config.provider, { metadata: { phone: recipientPhone, originalPhone: normalizedPhone } });
+    const record = await upsertDeliveryRecord(payload, "PENDING", config.provider, { metadata: { phone: recipientPhone, customerId: resolvedRecipient.customerId, source: "customer_record" } });
 
     try {
       const pdfBuffer = await renderPdfBuffer(payload);

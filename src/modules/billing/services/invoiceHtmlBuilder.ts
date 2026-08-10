@@ -39,6 +39,24 @@ const escapeHtml = (value: string): string =>
 
 const round2 = (value: number): number => Math.round(value * 100) / 100;
 
+const EXCHANGE_WINDOW_DAYS = 7;
+
+const parseInvoiceDate = (value?: string | null): dayjs.Dayjs | null => {
+  if (!value) return null;
+
+  const parsed = dayjs(value);
+  return parsed.isValid() ? parsed : null;
+};
+
+const getExchangeDeadlineLabel = (billingDate?: string | null): string | null => {
+  const parsed = parseInvoiceDate(billingDate);
+  if (!parsed) {
+    return null;
+  }
+
+  return parsed.startOf("day").add(EXCHANGE_WINDOW_DAYS, "day").format("DD MMM YYYY");
+};
+
 const getItemSnapshot = (item: SaleItem) => {
   const unitMrp = item.mrp != null ? Number(item.mrp) : Number(item.unitPrice);
   const finalUnitPrice = item.finalUnitPrice != null
@@ -79,6 +97,14 @@ export const buildPrintableInvoiceHtml = (
   const storeName = options?.storeName?.trim() || "Store Invoice";
   const items = sale.items ?? [];
   const returnTransactions = sale.returnTransactions ?? [];
+  const invoiceDate = parseInvoiceDate(sale.transactionDate);
+  const invoiceDateLabel = invoiceDate?.format("DD MMM YYYY") ?? null;
+  const invoiceDateTimeLabel = invoiceDate ? invoiceDate.format("DD MMM YYYY, hh:mm A") : "N/A";
+  const exchangeValidUntilLabel = getExchangeDeadlineLabel(sale.transactionDate);
+
+  if (sale.transactionDate && !invoiceDateLabel) {
+    console.warn(`[INVOICE_DEBUG] Invalid billing date received for invoice terms. InvoiceNumber=${sale.invoiceNumber}`);
+  }
 
   const mrpSubtotal = round2(
     items.reduce((sum, item) => sum + ((item.mrp != null ? Number(item.mrp) : Number(item.unitPrice)) * item.quantity), 0)
@@ -87,31 +113,32 @@ export const buildPrintableInvoiceHtml = (
 
   const itemRows = items
     .map((item, index) => {
-      const { unitMrp, finalUnitPrice, lineTotal, savings, discountPercent } = getItemSnapshot(item);
-      const attrValues = Object.values(item.attributes ?? {})
-        .filter((value) => {
-          const normalized = String(value).trim().toLowerCase();
-          return normalized !== "" && !["pcs", "pc", "piece", "pieces", "unit", "units"].includes(normalized);
-        })
-        .map((value) => `<span style="display:inline-block;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:3px;font-size:9pt;padding:0 5px;margin-left:3px;">${escapeHtml(String(value))}</span>`)
-        .join("");
+      const { unitMrp, finalUnitPrice, lineTotal, discountPercent } = getItemSnapshot(item);
+      const productName = (item.productName?.trim() || item.sku?.trim() || "Product");
+      const sizeLabel = item.sizeLabel?.trim();
+      const attributes = Object.entries(item.attributes ?? {})
+        .map(([key, value]) => ({
+          key: String(key).trim().toLowerCase(),
+          value: String(value ?? "").trim(),
+        }))
+        .filter(({ value }) => value !== "" && !["pcs", "pc", "piece", "pieces", "unit", "units"].includes(value.toLowerCase()));
+      const colorLabel = attributes.find(({ key }) => key.includes("color") || key.includes("colour"))?.value ?? attributes[0]?.value;
+      const metaLine = [sizeLabel, colorLabel].filter(Boolean).join(" • ");
 
       return `
         <tr>
-          <td>${index + 1}</td>
-          <td>
-            <div style="font-weight:700;margin-bottom:4px;">${escapeHtml(item.productName)}</div>
-            <div style="font-size:10pt;color:#666;line-height:1.4;">
-              ${escapeHtml(item.sku)} · ${escapeHtml(item.sizeLabel)}${attrValues}
-            </div>
-            <div style="margin-top:6px;font-size:10pt;color:#111;">
-              <span style="font-weight:700;">${formatCurrency(finalUnitPrice)}</span>
-              ${unitMrp > finalUnitPrice ? `<span style="margin-left:8px;text-decoration:line-through;color:#888;">${formatCurrency(unitMrp)}</span>` : ""}
-            </div>
-            ${unitMrp > finalUnitPrice ? `<div style="font-size:10pt;color:#15803d;">${discountPercent}% OFF${savings > 0 ? ` • Save ${formatCurrency(savings)}` : ""}</div>` : ""}
+          <td class="cell-index">${index + 1}</td>
+          <td class="cell-product">
+            <div class="product-name">${escapeHtml(productName)}</div>
+            ${metaLine ? `<div class="product-meta">${escapeHtml(metaLine)}</div>` : ""}
           </td>
-          <td style="text-align:center">${item.quantity}</td>
-          <td style="text-align:right">${formatCurrency(lineTotal)}</td>
+          <td class="cell-price">
+            <div class="price-current">${formatCurrency(finalUnitPrice)}</div>
+            ${unitMrp > finalUnitPrice ? `<div class="price-mrp">${formatCurrency(unitMrp)}</div>` : ""}
+            ${unitMrp > finalUnitPrice && discountPercent > 0 ? `<div class="price-discount">${discountPercent}% OFF</div>` : ""}
+          </td>
+          <td class="cell-qty">${item.quantity}</td>
+          <td class="cell-total">${formatCurrency(lineTotal)}</td>
         </tr>
       `;
     })
@@ -215,37 +242,65 @@ export const buildPrintableInvoiceHtml = (
         <style>
           @page { size: A4; margin: 15mm; }
           * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { font-family: Arial, sans-serif; font-size: 12pt; color: #333; padding: 20px; }
-          .header { text-align: center; margin-bottom: 24px; }
-          .header h1 { font-size: 20pt; margin-bottom: 4px; }
-          .header p { color: #666; }
-          .info { display: flex; justify-content: space-between; margin-bottom: 20px; }
-          .info div { font-size: 10pt; }
-          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-          th, td { padding: 8px; border-bottom: 1px solid #ddd; text-align: left; }
-          th { background: #f5f5f5; font-weight: bold; }
-          .totals { text-align: right; }
-          .totals div { margin-bottom: 4px; }
-          .grand-total { font-size: 14pt; font-weight: bold; border-top: 2px solid #333; padding-top: 8px; }
-          .footer { text-align: center; margin-top: 40px; font-size: 10pt; color: #999; }
+          body { font-family: Arial, sans-serif; font-size: 12pt; color: #333; padding: 24px; }
+          .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; gap: 16px; }
+          .header-left { max-width: 65%; }
+          .header-left h1 { font-size: 22pt; margin-bottom: 6px; }
+          .header-left p { color: #555; font-size: 10pt; letter-spacing: 0.02em; }
+          .invoice-badge { text-transform: uppercase; font-size: 10pt; font-weight: 700; color: #111; letter-spacing: 0.12em; }
+          .info { display: flex; justify-content: space-between; gap: 18px; margin-bottom: 24px; }
+          .info-block { flex: 1; min-width: 200px; padding: 16px; border: 1px solid #e5e7eb; border-radius: 10px; background: #fafafa; }
+          .info-block strong { display: inline-block; width: 110px; color: #111; }
+          .info-block div { margin-bottom: 6px; font-size: 10pt; color: #333; line-height: 1.4; }
+          .info-block div:last-child { margin-bottom: 0; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; table-layout: fixed; }
+          th, td { padding: 10px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+          th { background: #f8fafc; color: #111; font-weight: 700; font-size: 10pt; text-align: left; }
+          td { font-size: 10pt; color: #333; word-break: break-word; white-space: normal; }
+          .cell-index { width: 32px; }
+          .cell-product { width: 60%; }
+          .cell-price { width: 18%; text-align: right; }
+          .cell-qty { width: 10%; text-align: center; }
+          .cell-total { width: 12%; text-align: right; }
+          .product-name { font-weight: 700; margin-bottom: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; max-height: 2.4em; }
+          .product-meta { color: #6b7280; font-size: 9pt; line-height: 1.3; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          .price-current { font-weight: 700; font-size: 10pt; }
+          .price-mrp { display: block; margin-top: 4px; color: #6b7280; font-size: 9pt; text-decoration: line-through; }
+          .price-discount { margin-top: 4px; color: #15803d; font-size: 9pt; }
+          .totals { max-width: 360px; margin-left: auto; text-align: right; }
+          .totals div { margin-bottom: 8px; font-size: 10pt; }
+          .grand-total { font-size: 13pt; font-weight: 700; border-top: 2px solid #111; padding-top: 10px; margin-top: 12px; }
+          .terms { margin-top: 14px; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 10px; background: #fcfcfd; break-inside: avoid; page-break-inside: avoid; }
+          .terms-heading { font-size: 9pt; font-weight: 700; letter-spacing: 0.08em; color: #111; margin-bottom: 6px; }
+          .terms-list { margin: 0; padding-left: 18px; }
+          .terms-list li { margin-bottom: 4px; font-size: 9.3pt; line-height: 1.35; color: #333; }
+          .terms-list li:last-child { margin-bottom: 0; }
+          .footer { text-align: center; margin-top: 36px; font-size: 9.5pt; color: #6b7280; }
         </style>
       </head>
       <body>
         <div class="header">
-          <h1>${escapeHtml(storeName)}</h1>
-          <p>Tax Invoice</p>
+          <div class="header-left">
+            <div class="invoice-badge">Tax Invoice</div>
+            <h1>${escapeHtml(storeName)}</h1>
+            <p>Invoice generated for your recent purchase. Please retain this invoice for your records.</p>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size: 10pt; color: #111; margin-bottom: 8px;"><strong>Invoice</strong></div>
+            <div style="font-size: 22pt; font-weight: 700; color: #111;">${escapeHtml(sale.invoiceNumber)}</div>
+            <div style="color:#6b7280; font-size:10pt; margin-top:8px;">${escapeHtml(invoiceDateTimeLabel)}</div>
+          </div>
         </div>
         <div class="info">
-          <div>
-            <strong>Invoice:</strong> ${escapeHtml(sale.invoiceNumber)}<br>
-            <strong>Date:</strong> ${escapeHtml(dayjs(sale.transactionDate).format("DD MMM YYYY, hh:mm A"))}<br>
-            <strong>Payment:</strong> ${escapeHtml(String(sale.paymentMethod ?? "CASH"))}<br>
-            <strong>Payment status:</strong> ${escapeHtml(String(sale.paymentStatus ?? "PAID"))}
+          <div class="info-block">
+            <div><strong>Payment method</strong> ${escapeHtml(String(sale.paymentMethod ?? "CASH"))}</div>
+            <div><strong>Payment status</strong> ${escapeHtml(String(sale.paymentStatus ?? "PAID"))}</div>
+            <div><strong>Status</strong> ${escapeHtml(String(sale.status ?? "COMPLETED"))}</div>
           </div>
-          <div style="text-align:right">
-            ${sale.customerName ? `<strong>Customer:</strong> ${escapeHtml(sale.customerName)}<br>` : ""}
-            ${sale.customerPhone ? `<strong>Phone:</strong> ${escapeHtml(sale.customerPhone)}<br>` : ""}
-            <strong>Status:</strong> ${escapeHtml(String(sale.status ?? "COMPLETED"))}
+          <div class="info-block">
+            ${sale.customerName ? `<div><strong>Customer</strong> ${escapeHtml(sale.customerName)}</div>` : ""}
+            ${sale.customerPhone ? `<div><strong>Phone</strong> ${escapeHtml(sale.customerPhone)}</div>` : ""}
+            ${sale.customerEmail ? `<div><strong>Email</strong> ${escapeHtml(sale.customerEmail)}</div>` : ""}
           </div>
         </div>
         <table>
@@ -253,9 +308,9 @@ export const buildPrintableInvoiceHtml = (
             <tr>
               <th>#</th>
               <th>Product</th>
-              <th style="text-align:right">Price</th>
-              <th style="text-align:center">Qty</th>
-              <th style="text-align:right">Total</th>
+              <th class="cell-price">Price</th>
+              <th class="cell-qty">Qty</th>
+              <th class="cell-total">Total</th>
             </tr>
           </thead>
           <tbody>
@@ -271,6 +326,15 @@ export const buildPrintableInvoiceHtml = (
           <div>Amount paid: ${formatCurrency(Number(sale.amountPaid ?? 0))}</div>
           ${Number(sale.amountDue ?? 0) > 0 ? `<div>Amount due: ${formatCurrency(Number(sale.amountDue ?? 0))}</div>` : ""}
           <div class="grand-total">Final Total: ${formatCurrency(Number(sale.total ?? 0))}</div>
+        </div>
+        <div class="terms">
+          <div class="terms-heading">TERMS AND CONDITIONS</div>
+          <ul class="terms-list">
+            <li>${escapeHtml(exchangeValidUntilLabel
+              ? `Items can be exchanged until ${exchangeValidUntilLabel} with the original bill, provided they are unused, and have all original tags intact.`
+              : "Items can be exchanged with the original bill, provided they are unused, and have all original tags intact.")}</li>
+            <li>Items cannot be returned; they can only be exchanged.</li>
+          </ul>
         </div>
         <div class="footer">Thank you for your purchase!</div>
       </body>

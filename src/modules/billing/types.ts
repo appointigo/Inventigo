@@ -156,6 +156,9 @@ export type SaleItem = {
   effectiveUnitPrice?: number;
   costPrice?: number;
   pricingSnapshotDate?: string;
+  brandName?: string;
+  categoryName?: string;
+  description?: string;
 };
 
 /**
