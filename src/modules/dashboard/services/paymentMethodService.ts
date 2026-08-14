@@ -9,6 +9,34 @@ export interface PaymentMethodDistribution {
 
 export type TimePeriod = "daily" | "weekly" | "monthly" | "yearly";
 
+function getCollectedPaymentEntries(sale: SaleSummary): Array<{ method: string; amount: number }> {
+  const explicitEntries = (sale.payments ?? [])
+    .filter((entry) => Number(entry.amount ?? 0) > 0)
+    .map((entry) => ({
+      method: entry.method,
+      amount: Number(entry.amount ?? 0),
+    }));
+
+  if (explicitEntries.length > 0) {
+    return explicitEntries;
+  }
+
+  const collectedAmount = Number(sale.amountPaid ?? 0);
+  if (collectedAmount <= 0) {
+    return [];
+  }
+
+  if (sale.paymentMethod === "SPLIT") {
+    return [{ method: "SPLIT", amount: collectedAmount }];
+  }
+
+  if (sale.paymentMethod === "CASH" || sale.paymentMethod === "CARD" || sale.paymentMethod === "UPI") {
+    return [{ method: sale.paymentMethod, amount: collectedAmount }];
+  }
+
+  return [];
+}
+
 /**
  * Filter sales by time period
  */
@@ -47,45 +75,28 @@ export function calculatePaymentMethodDistribution(
   period?: TimePeriod
 ): PaymentMethodDistribution[] {
   // Filter by period if provided
-  let filteredSales = period ? filterSalesByPeriod(sales, period) : sales;
+  const filteredSales = period ? filterSalesByPeriod(sales, period) : sales;
 
-  // Filter only completed sales
-  const completedSales = filteredSales.filter((sale) => sale.status === "COMPLETED");
-
-  if (completedSales.length === 0) {
+  if (filteredSales.length === 0) {
     return [];
   }
 
   // Aggregate by payment method. Prefer payment entries (split-aware),
-  // and fall back to sale.paymentMethod for legacy records (only valid methods).
+  // and fall back to amountPaid/paymentMethod for legacy records with collected money.
   const methodTotals: Record<string, number> = {};
-  const validMethods = ["CASH", "CARD", "UPI"];
+  const validMethods = ["CASH", "CARD", "UPI", "SPLIT"];
 
-  completedSales.forEach((sale) => {
-    const paymentEntries = (sale.payments ?? [])
-      .filter((entry) => Number(entry.amount ?? 0) > 0)
-      .map((entry) => ({
-        method: entry.method,
-        amount: Number(entry.amount ?? 0),
-      }));
-
-    if (paymentEntries.length > 0) {
-      // Use individual payment entries (split payment breakdown)
-      paymentEntries.forEach((entry) => {
-        if (validMethods.includes(entry.method)) {
-          methodTotals[entry.method] = (methodTotals[entry.method] ?? 0) + entry.amount;
-        }
-      });
+  filteredSales.forEach((sale) => {
+    const paymentEntries = getCollectedPaymentEntries(sale);
+    if (paymentEntries.length === 0) {
       return;
     }
 
-    // Fallback to sale.paymentMethod only for legacy records with valid methods
-    const fallbackMethod = sale.paymentMethod;
-    if (validMethods.includes(fallbackMethod)) {
-      const fallbackAmount = Number(sale.total) || 0;
-      methodTotals[fallbackMethod] = (methodTotals[fallbackMethod] ?? 0) + fallbackAmount;
-    }
-    // If method is "SPLIT" without payment entries, skip (data issue or in-progress)
+    paymentEntries.forEach((entry) => {
+      if (validMethods.includes(entry.method)) {
+        methodTotals[entry.method] = (methodTotals[entry.method] ?? 0) + entry.amount;
+      }
+    });
   });
 
   // Calculate overall total
@@ -96,42 +107,51 @@ export function calculatePaymentMethodDistribution(
   }
 
   // Map to display format with percentages
-  // Note: SPLIT should never appear here - it's not a reportable payment method
   const methodLabels: Record<string, string> = {
     CASH: "Cash",
     CARD: "Card",
     UPI: "UPI",
+    SPLIT: "Split",
   };
 
   return Object.entries(methodTotals)
     .map(([method, total]) => ({
       name: methodLabels[method] ?? method,
-      value: Number(total.toFixed(2)), // Ensure 2 decimal precision
-      percentage: Number(((total / overallTotal) * 100).toFixed(2)), // Round to 2 decimals
+      value: Number(total.toFixed(2)),
+      percentage: Number(((total / overallTotal) * 100).toFixed(2)),
     }))
-    .sort((a, b) => b.value - a.value); // Sort by value descending
+    .sort((a, b) => b.value - a.value);
 }
 
 /**
- * Get total revenue by payment method
+ * Get collected revenue from sales.
+ */
+export function getCollectedRevenueBySales(
+  sales: SaleSummary[],
+  period?: TimePeriod
+): number {
+  const filteredSales = period ? filterSalesByPeriod(sales, period) : sales;
+
+  return filteredSales.reduce((sum, sale) => {
+    const paymentEntries = getCollectedPaymentEntries(sale);
+    if (paymentEntries.length > 0) {
+      return sum + paymentEntries.reduce((entrySum, entry) => entrySum + entry.amount, 0);
+    }
+
+    return sum + Math.max(0, Number(sale.amountPaid ?? 0));
+  }, 0);
+}
+
+/**
+ * Backward-compatible alias used by older dashboard code.
  */
 export function getTotalRevenueByMethod(
   sales: SaleSummary[],
   period?: TimePeriod
 ): number {
-  // Filter by period if provided
-  let filteredSales = period ? filterSalesByPeriod(sales, period) : sales;
-  
-  const completedSales = filteredSales.filter((sale) => sale.status === "COMPLETED");
-  return completedSales.reduce((sum, sale) => {
-    const hasPayments = Array.isArray(sale.payments) && sale.payments.length > 0;
-    if (!hasPayments) return sum + Number(sale.total || 0);
+  return getCollectedRevenueBySales(sales, period);
+}
 
-    const paid = (sale.payments ?? []).reduce((entrySum, entry) => {
-      const amount = Number(entry.amount ?? 0);
-      return amount > 0 ? entrySum + amount : entrySum;
-    }, 0);
-
-    return sum + paid;
-  }, 0);
+export function getCollectedAmountForSale(sale: SaleSummary): number {
+  return getCollectedRevenueBySales([sale]);
 }

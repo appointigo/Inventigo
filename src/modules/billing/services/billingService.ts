@@ -140,6 +140,12 @@ const derivePresentationPaymentMethod = (
   return (fallbackMethod as Sale["paymentMethod"]) ?? "CASH";
 };
 
+const isOutstandingSale = (sale: { amountDue?: unknown; paymentStatus?: unknown }): boolean => {
+  const amountDue = Number(sale.amountDue ?? 0);
+  const paymentStatus = String(sale.paymentStatus ?? "");
+  return amountDue > 0 || paymentStatus === "PENDING" || paymentStatus === "PARTIAL";
+};
+
 const normalizePaymentEntries = (
   splitPayments: Array<{ method?: string; amount?: number }> | undefined,
   fallbackMethod: string | undefined,
@@ -959,11 +965,15 @@ export const billingService = {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const saleWhere: any = { store: { orgId } };
     if (filters?.status) {
+      if (filters.status === "PENDING") {
+        saleWhere.amountDue = { gt: 0 };
+        saleWhere.paymentStatus = { in: ["PENDING", "PARTIAL"] };
+      }
       if (filters.status === "EXCHANGED" && !supportsExchangedStatus) {
         // Legacy DBs may not have EXCHANGED in SaleStatus enum yet.
         // Degrade gracefully to COMPLETED instead of throwing P2007.
         saleWhere.status = "COMPLETED";
-      } else {
+      } else if (filters.status !== "PENDING") {
         saleWhere.status = filters.status;
       }
     }
@@ -1098,6 +1108,12 @@ export const billingService = {
     // Apply top-level type filter (if user explicitly asked for SALES only)
     if (filters?.type === "SALE") {
       unified = unified.filter((r) => r.rowType === "SALE");
+    }
+
+    if (filters?.status === "PENDING") {
+      unified = unified.filter((r: any) => r.rowType === "SALE" && isOutstandingSale(r));
+    } else if (filters?.status) {
+      unified = unified.filter((r: any) => r.rowType === "SALE" && r.status === filters.status);
     }
 
     // If user asked for only EXCHANGE rows (return transactions of type EXCHANGE)
@@ -1706,12 +1722,12 @@ export const billingService = {
         _sum: { amount: true },
       }),
       prisma.sale.aggregate({
-        where: { store: { orgId }, status: { not: "REFUNDED" }, paymentStatus: "PARTIAL", amountDue: { gt: 0 } },
+        where: { store: { orgId }, status: { not: "REFUNDED" }, amountDue: { gt: 0 } },
         _sum: { amountDue: true },
       }),
       prisma.sale.groupBy({
         by: ["customerId"],
-        where: { store: { orgId }, status: { not: "REFUNDED" }, paymentStatus: "PARTIAL", amountDue: { gt: 0 } },
+        where: { store: { orgId }, status: { not: "REFUNDED" }, amountDue: { gt: 0 } },
       }),
       prisma.returnTransaction.count({
         where: { store: { orgId }, type: { in: ["EXCHANGE", "RETURN_EXCHANGE"] } },
@@ -1781,9 +1797,13 @@ export const billingService = {
     // Build sale query
     const saleWhere: any = { store: { orgId } };
     if (filters?.status) {
+      if (filters.status === "PENDING") {
+        saleWhere.amountDue = { gt: 0 };
+        saleWhere.paymentStatus = { in: ["PENDING", "PARTIAL"] };
+      }
       if (filters.status === "EXCHANGED" && !supportsExchangedStatus) {
         saleWhere.status = "COMPLETED";
-      } else {
+      } else if (filters.status !== "PENDING") {
         saleWhere.status = filters.status;
       }
     }
@@ -1905,6 +1925,13 @@ export const billingService = {
     if (filters?.type === "SALE") {
       unified = unified.filter((r) => r.rowType === "SALE");
     }
+
+    if (filters?.status === "PENDING") {
+      unified = unified.filter((r: any) => r.rowType === "SALE" && isOutstandingSale(r));
+    } else if (filters?.status) {
+      unified = unified.filter((r: any) => r.rowType === "SALE" && r.status === filters.status);
+    }
+
     if (filters?.type === "EXCHANGE") {
       unified = unified.filter((r: any) => r.rowType === "RETURN_TRANSACTION" && r.type === "EXCHANGE");
     }

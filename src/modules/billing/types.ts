@@ -1,5 +1,6 @@
 export type PaymentMethodType = "CASH" | "CARD" | "UPI";
 export type SaleStatusType = "COMPLETED" | "REFUNDED" | "EXCHANGED";
+export type SaleHistoryStatusFilter = SaleStatusType | "PENDING";
 
 /**
  * Single payment entry in a split payment
@@ -55,7 +56,7 @@ export type CartItem = {
 export type SaleFilters = {
   startDate?: string;
   endDate?: string;
-  status?: SaleStatusType;
+  status?: SaleHistoryStatusFilter;
   paymentMethod?: PaymentMethodType;
   search?: string;
   type?: "SALE" | "EXCHANGE" | "RETURN";

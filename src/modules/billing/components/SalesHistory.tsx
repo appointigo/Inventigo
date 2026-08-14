@@ -7,7 +7,7 @@ import type { SaleSummary, Sale, SaleFilters, PaymentMethodType, SaleStatusType 
 import { formatCurrency } from "@/shared/utils/formatCurrency";
 import dayjs from "dayjs";
 import InvoicePreview from "./InvoicePreview";
-import TransactionCard from "./TransactionCard";
+import OrdersTable from "./OrdersTable";
 import StatsStrip from "./StatsStrip";
 import FilterBar from "./FilterBar";
 import TabStrip from "./TabStrip";
@@ -62,14 +62,12 @@ export default function SalesHistory({
     if (sale) {
       setPreviewSale(sale);
       setPreviewOpen(true);
-    } 
-    else {
+    } else {
       message.error("Failed to load sale details");
     }
   };
 
   const handleViewReturn = async (rt: any) => {
-    // unified data already contains items — open local preview
     setPreviewReturn(rt);
     setPreviewReturnOpen(true);
   };
@@ -88,21 +86,23 @@ export default function SalesHistory({
     message.success("Sale refunded successfully");
   };
 
-  
-
   return (
     <>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-        <div>
-          <Typography.Title level={4} style={{ margin: 0 }}>Billing & Order History</Typography.Title>
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div>
+            <Typography.Title level={3} style={{ margin: 0 }}>Sales History</Typography.Title>
+            <Typography.Text type="secondary">View and manage all your billing and order transactions</Typography.Text>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <Button icon={<DownloadOutlined />}>Export</Button>
+            <Button icon={<PrinterOutlined />} />
+            <Button icon={<QuestionCircleOutlined />} />
+          </div>
         </div>
-        <div style={{ flex: 1, margin: "0 16px" }}>
+
+        <div style={{ marginTop: 12 }}>
           <FilterBar filters={filters} onChange={onFiltersChange} />
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <Button icon={<DownloadOutlined />}>Export</Button>
-          <Button icon={<PrinterOutlined />} />
-          <Button icon={<QuestionCircleOutlined />} />
         </div>
       </div>
 
@@ -116,28 +116,26 @@ export default function SalesHistory({
         {(!loading && sales.length === 0) && <Card>No transactions found.</Card>}
 
         <div>
-          {sales.map((rec: any) => (
-            <TransactionCard
-              key={rec.id}
-              record={rec}
-              onViewSale={async (id) => {
-                const sale = await onViewSale(id);
-                if (sale) {
-                  setPreviewSale(sale);
-                  setPreviewOpen(true);
-                }
-              }}
-              onViewReturn={(rt) => {
-                setPreviewReturn(rt);
-                setPreviewReturnOpen(true);
-              }}
-              onCollectBalance={onCollectBalance}
-              onOpenReturnExchange={onOpenReturnExchange}
-            />
-          ))}
-        </div>
+          <OrdersTable
+            sales={sales}
+            loading={loading}
+            onViewSale={async (id: string) => {
+              const sale = await onViewSale(id);
+              if (sale) {
+                setPreviewSale(sale);
+                setPreviewOpen(true);
+              }
+            }}
+            onViewReturn={(rt: any) => {
+              setPreviewReturn(rt);
+              setPreviewReturnOpen(true);
+            }}
+            onCollectBalance={onCollectBalance}
+            onOpenReturnExchange={onOpenReturnExchange}
+          />
 
-        <PaginationBar page={currentPage} totalPages={typeof totalPages === "number" ? totalPages : Math.max(1, Math.ceil((sales?.length ?? 0) / pageSize))} onChange={(p) => changePage(p)} />
+          <PaginationBar page={currentPage} totalPages={typeof totalPages === "number" ? totalPages : Math.max(1, Math.ceil((sales?.length ?? 0) / pageSize))} onChange={(p) => changePage(p)} />
+        </div>
       </div>
 
       <InvoicePreview
@@ -148,6 +146,14 @@ export default function SalesHistory({
           setPreviewSale(null);
         }}
       />
+
+      {previewReturnOpen && (
+        <Modal open={previewReturnOpen} onCancel={() => setPreviewReturnOpen(false)} footer={null} title="Return / Exchange Preview">
+          <div>
+            <pre style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(previewReturn, null, 2)}</pre>
+          </div>
+        </Modal>
+      )}
     </>
   );
 }

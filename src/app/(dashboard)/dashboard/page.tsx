@@ -43,6 +43,7 @@ import { useLowStockAlerts } from "@/modules/alerts/hooks/useAlerts";
 import { useStore } from "@/providers/StoreProvider";
 import { useMobileViewport } from "@/modules/mobile-dashboard/hooks/useMobileViewport";
 import { useSales } from "@/modules/billing/hooks/useBilling";
+import type { SaleSummary } from "@/modules/billing/types";
 import { formatDateTime } from "@/shared/utils/formatDate";
 import CategorySizeHeatmap from "@/modules/dashboard/components/CategorySizeHeatmap";
 import DashboardTabs, { type DashboardTab } from "@/modules/dashboard/components/DashboardTabs";
@@ -73,6 +74,18 @@ type DateRangeWindow = {
   from: string;
   to: string;
 };
+
+type DashboardSaleRow = SaleSummary & { rowType?: "SALE" };
+
+type DashboardReturnRow = {
+  rowType: "RETURN_TRANSACTION";
+  netAmount?: number;
+  businessDate?: string;
+  transactionDate?: string;
+  createdAt: string;
+};
+
+type DashboardTransactionRow = DashboardSaleRow | DashboardReturnRow;
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(value);
@@ -201,25 +214,24 @@ const DashboardPage = () => {
   const [customDateRange, setCustomDateRange] = useState<[dayjs.Dayjs | null, dayjs.Dayjs | null] | null>(null);
 
   const today = dayjs().format("YYYY-MM-DD");
-  const revenueOfRow = (row: any) => {
+  const revenueOfRow = (row: DashboardTransactionRow | null | undefined) => {
     if (!row) return 0;
-    if (row.rowType === "SALE") return Number(row.total ?? 0);
     if (row.rowType === "RETURN_TRANSACTION") return Number(row.netAmount ?? 0);
-    return 0;
+    return Number((row as SaleSummary).total ?? 0);
   };
 
-  const rowDate = (row: any) => {
+  const rowDate = (row: DashboardTransactionRow | null | undefined) => {
     if (!row) return dayjs("");
-    if (row.rowType === "SALE") {
-      return dayjs(row.transactionDate ?? row.createdAt);
-    }
     if (row.rowType === "RETURN_TRANSACTION") {
       return dayjs(row.businessDate ?? row.transactionDate ?? row.createdAt);
+    }
+    if (row.rowType === "SALE") {
+      return dayjs(row.transactionDate ?? row.createdAt);
     }
     return dayjs(row.createdAt);
   };
 
-  const isCountedTransaction = (row: any) => {
+  const isCountedTransaction = (row: DashboardTransactionRow | null | undefined) => {
     if (!row) return false;
     if (row.rowType === "SALE") return true;
     if (row.rowType === "RETURN_TRANSACTION") return Number(row.netAmount ?? 0) > 0; // top-ups count as a sale

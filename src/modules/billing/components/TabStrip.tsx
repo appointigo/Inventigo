@@ -13,7 +13,7 @@ export default function TabStrip({ active, onChange }: Props) {
     { key: "ALL", label: "All Orders" },
     { key: "SALE", label: "Sales" },
     { key: "EXCHANGE", label: "Exchanges" },
-    { key: "RETURN", label: "Refunds" },
+    { key: "RETURN", label: "Returns" },
   ];
 
   return (
@@ -23,7 +23,12 @@ export default function TabStrip({ active, onChange }: Props) {
           <Button
             key={t.key}
             onClick={() => onChange(t.key)}
-            style={t.key === active ? { background: "#111827", color: "#fff", borderRadius: 8 } : { background: "#fff", color: "#374151", border: "1px solid #e5e7eb", borderRadius: 8 }}
+            size="small"
+            style={
+              t.key === active
+                ? { background: "#0f62fe", color: "#fff", borderRadius: 999, height: 40, padding: "0 18px", border: "none", fontWeight: 700, boxShadow: "0 1px 2px rgba(15,99,254,0.12)" }
+                : { background: "#fff", color: "#374151", border: "1px solid #e5e7eb", borderRadius: 999, height: 40, padding: "0 18px" }
+            }
           >
             {t.label}
           </Button>

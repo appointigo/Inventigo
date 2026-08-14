@@ -13,14 +13,15 @@ interface Props {
 
 export default function FilterBar({ filters, onChange }: Props) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-      <div style={{ flex: 1 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12, padding: 14, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12 }}>
+      <div style={{ flex: '0 0 auto' }}>
         <Input
           placeholder="Search orders, invoices..."
           prefix={<SearchOutlined />}
           value={filters.search ?? ""}
           onChange={(e) => onChange({ ...filters, search: e.target.value || undefined })}
           allowClear
+          style={{ height: 44, width: 320 }}
         />
       </div>
 
@@ -28,40 +29,29 @@ export default function FilterBar({ filters, onChange }: Props) {
         <Select
           placeholder="Payment method"
           value={filters.paymentMethod}
-          style={{ width: 140 }}
+          style={{ width: 140, height: 40 }}
           onChange={(v) => onChange({ ...filters, paymentMethod: v as PaymentMethodType | undefined })}
           allowClear
           options={[{ label: "Cash", value: "CASH" }, { label: "Card", value: "CARD" }, { label: "UPI", value: "UPI" }]}
         />
 
-        <Select
-          placeholder="Order type"
-          value={(filters as any).type ?? ""}
-          style={{ width: 140 }}
-          onChange={(v) => onChange({ ...filters, type: v === "" ? undefined : (v as any) })}
-          options={[{ label: "All Types", value: "" }, { label: "Sale", value: "SALE" }, { label: "Exchange", value: "EXCHANGE" }, { label: "Return", value: "RETURN" }]}
-        />
+        {/* Transaction type is handled by the bottom tabs; removed duplicate type dropdown */}
 
         <Select
           placeholder="Status"
           value={filters.status}
           style={{ width: 140 }}
-          onChange={(v) => onChange({ ...filters, status: v as any })}
+          onChange={(v) => onChange({ ...filters, status: v === undefined ? undefined : (v as SaleFilters["status"]) })}
           allowClear
           options={[{ label: "Completed", value: "COMPLETED" }, { label: "Exchanged", value: "EXCHANGED" }, { label: "Refunded", value: "REFUNDED" }, { label: "Pending", value: "PENDING" }]}
         />
 
         <RangePicker
           onChange={(dates) => onChange({ ...filters, startDate: dates?.[0]?.toISOString() ?? undefined, endDate: dates?.[1]?.toISOString() ?? undefined })}
+          style={{ height: 40 }}
         />
 
-        <Button onClick={() => onChange({})}>Clear Filters</Button>
-
-        <Tooltip title="Export">
-          <Button icon={<DownloadOutlined />}>Export</Button>
-        </Tooltip>
-        <Tooltip title="Notifications"><Button icon={<BellOutlined />} /></Tooltip>
-        <Tooltip title="Help"><Button icon={<QuestionCircleOutlined />} /></Tooltip>
+        <Button onClick={() => onChange({})} type="default" size="small">Clear</Button>
       </Space>
     </div>
   );

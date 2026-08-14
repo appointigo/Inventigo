@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { Avatar, Card, Typography, Tag, Space, Button, Divider } from "antd";
 import { DownOutlined, UpOutlined, ShoppingCartOutlined, SwapOutlined, ArrowLeftOutlined, UserOutlined, FileTextOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
+import { formatBusinessDate } from "@/modules/billing/utils/formatBusinessDate";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
 import CollectPaymentSection from "./CollectPaymentSection";
 import PaymentHistorySection from "./PaymentHistorySection";
@@ -30,6 +31,7 @@ const badgeStyle = (type: string) => {
 
 export default function TransactionCard({ record: initialRecord, onViewSale, onViewReturn, onCollectBalance, onOpenReturnExchange, onSaleUpdated }: Props) {
   const [expanded, setExpanded] = useState(false);
+  const [collectOpen, setCollectOpen] = useState(false);
   const [record, setRecord] = useState(initialRecord);
 
   useEffect(() => {
@@ -60,7 +62,7 @@ export default function TransactionCard({ record: initialRecord, onViewSale, onV
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
           <div>
             <Typography.Title level={5} style={{ margin: 0 }}>#{record.referenceNumber}</Typography.Title>
-            <Typography.Text type="secondary">{record.customerName ?? "Walk-in"} • {dayjs(businessDate).format("DD MMM YYYY, h:mm A")}</Typography.Text>
+            <Typography.Text type="secondary">{record.customerName ?? "Walk-in"} {formatBusinessDate(businessDate).time ? `• ${formatBusinessDate(businessDate).date}, ${formatBusinessDate(businessDate).time}` : `• ${formatBusinessDate(businessDate).date}`}</Typography.Text>
             <div style={{ marginTop: 12 }}>
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>Original Invoice</Typography.Text>
               <div><a onClick={(e) => { e.stopPropagation(); onViewSale?.(record.originalSaleId); }}>#{record.saleInvoiceNumber}</a></div>
@@ -103,47 +105,43 @@ export default function TransactionCard({ record: initialRecord, onViewSale, onV
       styles={{ body: { padding: 12 } }}
       onClick={() => setExpanded((s) => !s)}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, width: "100%" }}>
+        {/* Left: Order / Customer */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 2, minWidth: 0 }}>
           <Avatar size={40} style={{ background: avatar.bg, color: avatar.color }}>{avatar.icon}</Avatar>
           <div style={{ minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <Typography.Text strong ellipsis style={{ maxWidth: 420 }}>{title}</Typography.Text>
-              {!isSale && record.saleInvoiceNumber && (
-                <Typography.Text
-                  copyable={{ text: record.saleInvoiceNumber }}
-                  style={{ fontSize: 12, color: "#6b7280" }}
-                >
-                  for{" "}
-                  <a
-                    onClick={(e) => { e.stopPropagation(); onViewSale?.(record.originalSaleId); }}
-                    style={{ color: "#2563eb", fontWeight: 500 }}
-                  >
-                    #{record.saleInvoiceNumber}
-                  </a>
-                </Typography.Text>
-              )}
             </div>
             <div style={{ color: "#6b7280", fontSize: 13 }}>{subtitle}</div>
           </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ textAlign: "right", minWidth: 120 }}>
+        {/* Middle: Date / Type / Payment */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ color: "#6b7280", fontSize: 13 }}>{dayjs(businessDate).format("DD MMM YYYY")}</div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <Tag style={{ background: isSale ? "#dbeafe" : record.type === "EXCHANGE" ? "#f3e8ff" : "#fee2e2", color: isSale ? "#1d4ed8" : record.type === "EXCHANGE" ? "#7c3aed" : "#b91c1c", borderRadius: 8 }}>{isSale ? "SALE" : record.type === "EXCHANGE" ? "EXCHANGE" : "RETURN"}</Tag>
+            <div style={{ color: "#6b7280", fontSize: 13 }}>{record.paymentMethod ?? "CASH"}</div>
+          </div>
+        </div>
+
+        {/* Right: Amount / Status / Actions */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, justifyContent: "flex-end" }}>
+          <div style={{ textAlign: "right", minWidth: 140 }}>
             <div style={{ fontSize: 16, fontWeight: 700 }}>{amountDisplay}</div>
+            <div style={{ color: "#6b7280", fontSize: 12, marginTop: 4 }}>{formatCurrency(record.amountPaid ?? 0)} paid</div>
           </div>
           <div>
-            <Tag style={{ ...badgeStyle(String(paymentBadge)) }}>{String(paymentBadge)}</Tag>
+            <Tag style={{ ...badgeStyle(String(paymentBadge)), padding: "4px 10px", borderRadius: 8 }}>{String(paymentBadge)}</Tag>
           </div>
-          <div>
-            <Tag style={{ background: isSale ? "#dbeafe" : record.type === "EXCHANGE" ? "#f3e8ff" : "#fee2e2", color: isSale ? "#1d4ed8" : record.type === "EXCHANGE" ? "#7c3aed" : "#b91c1c" }}>
-              {isSale ? "SALE" : record.type === "EXCHANGE" ? "EXCHANGE" : "RETURN"}
-            </Tag>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }} onClick={(e) => e.stopPropagation()}>
+            <Button onClick={() => onViewSale?.(record.id)} icon={<FileTextOutlined />}>View</Button>
+            {Number(record.amountDue ?? 0) > 0 && (
+              <Button type="default" onClick={(event) => { event.stopPropagation(); setExpanded(true); setCollectOpen((current) => !current); }}>Collect</Button>
+            )}
+            <div style={{ cursor: "pointer" }}>{expanded ? <UpOutlined /> : <DownOutlined />}</div>
           </div>
-          <div>
-            <Avatar size={32} icon={<UserOutlined />} />
-          </div>
-          <div style={{ cursor: "pointer" }}>{expanded ? <UpOutlined /> : <DownOutlined />}</div>
         </div>
       </div>
 
@@ -195,7 +193,6 @@ export default function TransactionCard({ record: initialRecord, onViewSale, onV
                     <div>{record.userName ?? "—"}</div>
                   </div>
 
-                  {/* Always show payment history for sales */}
                   {isSale && (
                     <PaymentHistorySection
                       paymentHistory={record.payments ?? []}
@@ -204,31 +201,46 @@ export default function TransactionCard({ record: initialRecord, onViewSale, onV
                     />
                   )}
 
-                  {record.paymentStatus === "PARTIAL" && (
-                    <CollectPaymentSection
-                      saleId={record.id}
-                      amountDue={record.amountDue ?? 0}
-                      amountPaid={record.amountPaid ?? 0}
-                      paymentHistory={record.payments ?? []}
-                      defaultMethod={record.paymentMethod ?? "CASH"}
-                      onPaymentCollected={(updatedSale) => {
-                        setRecord((current: any) => ({
-                          ...current,
-                          ...updatedSale,
-                          rowType: current.rowType ?? "SALE",
-                          id: current.id,
-                        }));
-                        onSaleUpdated?.(updatedSale);
-                      }}
-                    />
-                  )}
-
-                  <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+                  <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <Button type="primary" onClick={() => onViewSale?.(record.id)}>View full invoice</Button>
                     {record.status === "COMPLETED" && Date.now() - new Date(record.createdAt).getTime() <= 30 * 24 * 60 * 60 * 1000 && (
                       <Button onClick={() => onOpenReturnExchange?.(record.id)}>Return / Exchange</Button>
                     )}
+                    {Number(record.amountDue ?? 0) > 0 && (
+                      <Button
+                        type="default"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setExpanded(true);
+                          setCollectOpen((current) => !current);
+                        }}
+                      >
+                        Collect Amount
+                      </Button>
+                    )}
                   </div>
+
+                  {collectOpen && Number(record.amountDue ?? 0) > 0 && (
+                    <div style={{ marginTop: 12 }}>
+                      <CollectPaymentSection
+                        saleId={record.id}
+                        amountDue={record.amountDue ?? 0}
+                        amountPaid={record.amountPaid ?? 0}
+                        paymentHistory={record.payments ?? []}
+                        defaultMethod={record.paymentMethod ?? "CASH"}
+                        onCollectPayment={onCollectBalance}
+                        onPaymentCollected={(updatedSale) => {
+                          setRecord((current: any) => ({
+                            ...current,
+                            ...updatedSale,
+                            rowType: current.rowType ?? "SALE",
+                            id: current.id,
+                          }));
+                          onSaleUpdated?.(updatedSale);
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

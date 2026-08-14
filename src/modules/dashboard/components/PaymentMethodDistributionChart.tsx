@@ -12,7 +12,10 @@ import {
 } from "recharts";
 import type { PieLabelRenderProps } from "recharts";
 import type { SaleSummary } from "@/modules/billing/types";
-import type { PaymentMethodDistribution } from "@/modules/dashboard/services/paymentMethodService";
+import {
+  calculatePaymentMethodDistribution,
+  type PaymentMethodDistribution,
+} from "@/modules/dashboard/services/paymentMethodService";
 
 interface PaymentMethodDistributionChartProps {
   sales: SaleSummary[];
@@ -38,55 +41,7 @@ export default function PaymentMethodDistributionChart({
 }: PaymentMethodDistributionChartProps) {
 
   const distributionData = useMemo<PaymentMethodDistribution[]>(() => {
-    const methodTotals: Record<string, number> = {};
-    const validMethods = ["CASH", "CARD", "UPI"];
-
-    sales.forEach((sale) => {
-      if (sale.status === "COMPLETED") {
-        // Check if sale has individual payment entries
-        const paymentEntries = (sale.payments ?? []).filter(
-          (entry) => Number(entry.amount ?? 0) > 0
-        );
-
-        if (paymentEntries.length > 0) {
-          // Use individual payment entries (split payment breakdown)
-          paymentEntries.forEach((entry) => {
-            if (validMethods.includes(entry.method)) {
-              methodTotals[entry.method] =
-                (methodTotals[entry.method] ?? 0) + Number(entry.amount ?? 0);
-            }
-          });
-        } else {
-          // Fallback to sale.paymentMethod only for legacy records with valid methods
-          const method = sale.paymentMethod;
-          const amount = Number(sale.total) || 0;
-          if (validMethods.includes(method)) {
-            methodTotals[method] = (methodTotals[method] ?? 0) + amount;
-          } else if (method === "SPLIT") {
-            // Preserve split payment sales that do not have detailed payment entries
-            methodTotals[method] = (methodTotals[method] ?? 0) + amount;
-          }
-        }
-      }
-    });
-
-    const overallTotal = Object.values(methodTotals).reduce((sum, value) => sum + value, 0);
-    if (overallTotal === 0) return [];
-
-    const methodLabels: Record<string, string> = {
-      CASH: "Cash",
-      CARD: "Card",
-      UPI: "UPI",
-      SPLIT: "Split",
-    };
-
-    return Object.entries(methodTotals)
-      .map(([method, total]) => ({
-        name: methodLabels[method] ?? method,
-        value: Number(total.toFixed(2)),
-        percentage: Number(((total / overallTotal) * 100).toFixed(2)),
-      }))
-      .sort((left, right) => right.value - left.value);
+    return calculatePaymentMethodDistribution(sales);
   }, [sales]);
 
   const totalRevenue = useMemo(() => {
@@ -116,9 +71,9 @@ export default function PaymentMethodDistributionChart({
     [distributionData]
   );
 
-  const renderCustomLabel = (props: PieLabelRenderProps | any) => {
-    const payload = (props && (props.payload ?? props)) as any;
-    const percentage = payload?.percentage ?? (typeof props?.percent === "number" ? Math.round(props.percent * 100) : 0);
+  const renderCustomLabel = (props: PieLabelRenderProps) => {
+    const payload = props.payload as { percentage?: number } | undefined;
+    const percentage = payload?.percentage ?? (typeof props.percent === "number" ? Math.round(props.percent * 100) : 0);
     const x = typeof props?.x === "number" ? props.x : 0;
     const y = typeof props?.y === "number" ? props.y : 0;
 

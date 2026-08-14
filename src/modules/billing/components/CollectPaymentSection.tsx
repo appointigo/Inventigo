@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Button, InputNumber, Input, Space, Typography, Spin, Select, App } from "antd";
+import { Button, InputNumber, Input, Space, Typography, Select, App } from "antd";
+import { useEffect } from "react";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
 
 interface PaymentRecord {
@@ -18,7 +19,14 @@ interface CollectPaymentSectionProps {
   amountPaid: number;
   paymentHistory: PaymentRecord[];
   defaultMethod?: "CASH" | "CARD" | "UPI";
-  onPaymentCollected?: (updatedSale: any) => void;
+  onCollectPayment?: (
+    saleId: string,
+    amount: number,
+    paymentMethod: MethodType,
+    splitPayments?: SplitEntry[],
+    note?: string
+  ) => Promise<unknown>;
+  onPaymentCollected?: (updatedSale: { amountDue?: number }) => void;
 }
 
 type MethodType = "CASH" | "CARD" | "UPI";
@@ -31,9 +39,8 @@ type SplitEntry = {
 export default function CollectPaymentSection({
   saleId,
   amountDue,
-  amountPaid,
-  paymentHistory,
   defaultMethod = "CASH",
+  onCollectPayment,
   onPaymentCollected,
 }: CollectPaymentSectionProps) {
   const { message } = App.useApp();
@@ -44,6 +51,11 @@ export default function CollectPaymentSection({
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setCollectAmount(amountDue);
+    setSplitEntries([{ method: paymentMethod, amount: amountDue }]);
+  }, [amountDue, paymentMethod]);
 
   const splitTotal = splitEntries.reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
   const splitRowsValid = splitEntries.length > 0 && splitEntries.every((entry) => entry.amount > 0);
@@ -63,26 +75,31 @@ export default function CollectPaymentSection({
     setError(null);
 
     try {
-      const response = await fetch(`/api/billing/${saleId}/payments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amount: collectAmount,
-          method: paymentMethod,
-          splitPayments: splitMode ? splitEntries : undefined,
-          note: note || undefined,
-        }),
-      });
+      const updatedSale = onCollectPayment
+        ? await onCollectPayment(saleId, collectAmount, paymentMethod, splitMode ? splitEntries : undefined, note || undefined)
+        : await (async () => {
+            const response = await fetch(`/api/billing/${saleId}/payments`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                amount: collectAmount,
+                method: paymentMethod,
+                splitPayments: splitMode ? splitEntries : undefined,
+                note: note || undefined,
+              }),
+            });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to collect payment");
-      }
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.error || "Failed to collect payment");
+            }
 
-      const updatedSale = await response.json();
+            return response.json();
+          })();
+
       message.success(`Payment of ₹${Number(collectAmount ?? 0).toFixed(2)} collected successfully`);
 
-      const newAmountDue = updatedSale.amountDue ?? 0;
+      const newAmountDue = Number((updatedSale as { amountDue?: number } | undefined)?.amountDue ?? amountDue);
       
       // Reset form with new amount due
       setCollectAmount(newAmountDue);
@@ -90,8 +107,8 @@ export default function CollectPaymentSection({
       setNote("");
       setError(null);
 
-      // Notify parent component
-      if (onPaymentCollected) {
+      // Notify parent component when an updated sale is available.
+      if (onPaymentCollected && updatedSale) {
         onPaymentCollected(updatedSale);
       }
     } catch (err) {
@@ -260,12 +277,12 @@ export default function CollectPaymentSection({
 
         <Button
           type="primary"
-          loading={false}
+          loading={submitting}
           disabled={!isValidAmount || submitting}
           onClick={handleCollectPayment}
           style={{ width: "100%", height: 40 }}
         >
-          {submitting ? <Spin size="small" /> : `Collect ₹${Number(collectAmount ?? 0).toFixed(2)}`}
+          {`Collect ₹${Number(collectAmount ?? 0).toFixed(2)}`}
         </Button>
       </Space>
     </div>
