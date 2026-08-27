@@ -159,11 +159,12 @@ export const dashboardService = {
     let returnTxns: Array<{ report_date: Date; net_amount: number; offset_amount: number; type: string }> = [];
     try {
       if (await hasTable("return_transactions")) {
-        const [hasBusinessDate, hasTransactionDate, hasNetAmount, hasOffsetAmount, hasType] = await Promise.all([
+        const [hasBusinessDate, hasTransactionDate, hasNetAmount, hasOffsetAmount, hasRefundAmount, hasType] = await Promise.all([
           hasColumn("return_transactions", "businessDate"),
           hasColumn("return_transactions", "transactionDate"),
           hasColumn("return_transactions", "netAmount"),
           hasColumn("return_transactions", "offsetAmount"),
+          hasColumn("return_transactions", "refundAmount"),
           hasColumn("return_transactions", "type"),
         ]);
 
@@ -181,6 +182,10 @@ export const dashboardService = {
           ? Prisma.sql`rt."offsetAmount"::float8`
           : Prisma.sql`0::float8`;
 
+        const refundAmountExpr = hasRefundAmount
+          ? Prisma.sql`rt."refundAmount"::float8`
+          : Prisma.sql`0::float8`;
+
         const typeExpr = hasType
           ? Prisma.sql`rt.type::text`
           : Prisma.sql`'RETURN'::text`;
@@ -190,6 +195,7 @@ export const dashboardService = {
             ${returnDateExpr} AS report_date,
             ${netAmountExpr} AS net_amount,
             ${offsetAmountExpr} AS offset_amount,
+            ${refundAmountExpr} AS refund_amount,
             ${typeExpr} AS type
           FROM return_transactions rt
           JOIN stores st ON st.id = rt."storeId"
@@ -259,14 +265,11 @@ export const dashboardService = {
     // For EXCHANGE: offsetAmount (credit from returned item) + netAmount (additional payment) = total new product value
     // For RETURN: netAmount (refund adjustment, typically negative)
     for (const rt of returnTxns) {
-      
-      let revenueAmount = Number(rt.net_amount ?? 0);
-      
-      // For exchange transactions, include the full value of the exchanged product
-      // This properly reflects the new product being sold in place of the old one
-      if (rt.type === "EXCHANGE") {
-        revenueAmount = Number(rt.offset_amount ?? 0) + Number(rt.net_amount ?? 0);
-      }
+      // Compute net revenue impact of return/exchange transactions.
+      // - Exchange: customer pays the `net_amount` extra (increase in revenue).
+      // - Return: refunds reduce revenue by `refund_amount`.
+      // - Return+Exchange: net impact = `net_amount - refund_amount`.
+      let revenueAmount = Number(rt.net_amount ?? 0) - Number(rt.refund_amount ?? 0);
       
       const reportDate = new Date(rt.report_date);
       const dayKey = formatDayKey(reportDate);

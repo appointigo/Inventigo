@@ -1074,6 +1074,19 @@ export const billingService = {
       }),
     ]);
 
+    // For each return transaction, fetch any sale payments that reference it
+    // (notes use `Exchange top-up payment for ${returnTransaction.id}` / `Refund for return ${returnTransaction.id}`)
+    const returnPaymentsByRt: Record<string, { payments: any[]; sum: number; primaryMethod?: string }> = {};
+    if (returnTxns.length > 0) {
+      await Promise.all(returnTxns.map(async (r: any) => {
+        const payments = await prisma.salePayment.findMany({ where: { note: { contains: String(r.id) } }, orderBy: { paidAt: "desc" } });
+        const sum = round2((payments ?? []).reduce((s, p) => s + Number(p.amount ?? 0), 0));
+        const nonZero = (payments ?? []).filter((p) => Number(p.amount ?? 0) !== 0).map((p) => String(p.method ?? "").toUpperCase()).filter((m) => VALID_PAYMENT_METHODS.has(m));
+        const primary = nonZero.length > 0 ? getPrimaryPaymentMethod(nonZero.map((m) => ({ method: m as any, amount: (payments.find((p) => String(p.method ?? "").toUpperCase() === m)?.amount ?? 0) } as NormalizedPaymentEntry)), r.refundMethod) : undefined;
+        returnPaymentsByRt[String(r.id)] = { payments, sum, primaryMethod: primary };
+      }));
+    }
+
     // Map to unified rows
     const salesRows = sales.map((s) => ({
       ...s,
@@ -1090,14 +1103,72 @@ export const billingService = {
       userName: s.user?.name ?? null,
     }));
 
-    const rtRows = returnTxns.map((r) => ({
-      ...r,
-      rowType: "RETURN_TRANSACTION",
-      businessDate: r.businessDate instanceof Date ? r.businessDate.toISOString() : r.businessDate,
-      createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
-      saleInvoiceNumber: r.sale?.invoiceNumber ?? undefined,
-      customerName: r.customer?.name ?? null,
-      userName: r.user?.name ?? null,
+    const rtRows = await Promise.all(returnTxns.map(async (r: any) => {
+      const paymentsInfo = returnPaymentsByRt[String(r.id)] ?? { payments: [], sum: 0, primaryMethod: undefined };
+      const amountPaid = Number(paymentsInfo.sum ?? 0);
+      const netAmountVal = Number(r.netAmount ?? 0);
+      const amountDue = Math.max(netAmountVal - amountPaid, 0);
+      const paymentStatus = amountDue <= 0 ? "PAID" : amountPaid > 0 ? "PARTIAL" : "PENDING";
+
+      // Normalize items for UI consumption: returned items and new/exchanged items
+      const items: any[] = [];
+      if (Array.isArray(r.items) && r.items.length > 0) {
+        for (const it of r.items) {
+          if (it.returnedProductId) {
+            items.push({
+              type: "RETURNED",
+              productName: it.returnedProduct?.name ?? it.productName ?? undefined,
+              sku: it.returnedProduct?.sku ?? it.sku ?? undefined,
+              sizeLabel: it.returnedSize?.label ?? it.sizeLabel ?? undefined,
+              quantity: Number(it.returnedQuantity ?? 0),
+              unitPrice: Number(it.returnedUnitPrice ?? 0),
+              total: round2(Number(it.returnedUnitPrice ?? 0) * Number(it.returnedQuantity ?? 0)),
+            });
+          }
+          if (it.newProductId) {
+            items.push({
+              type: "NEW",
+              productName: it.newProduct?.name ?? it.productName ?? undefined,
+              sku: it.newProduct?.sku ?? it.sku ?? undefined,
+              sizeLabel: it.newSize?.label ?? it.sizeLabel ?? undefined,
+              quantity: Number(it.newQuantity ?? 0),
+              unitPrice: Number(it.newUnitPrice ?? 0),
+              total: round2(Number(it.newUnitPrice ?? 0) * Number(it.newQuantity ?? 0)),
+            });
+          }
+        }
+      } else {
+        // Fallback to legacy JSON columns if present
+        const legacyReturned = normalizeLegacyTransactionItems((r as any).returnedItems ?? []);
+        const legacyExchanged = normalizeLegacyTransactionItems((r as any).exchangedItems ?? []);
+        for (const it of legacyReturned) {
+          items.push({ type: "RETURNED", productName: it.productName, sku: it.sku, sizeLabel: it.sizeLabel, quantity: it.quantity, unitPrice: round2(it.total / Math.max(1, it.quantity)), total: it.total });
+        }
+        for (const it of legacyExchanged) {
+          items.push({ type: "NEW", productName: it.productName, sku: it.sku, sizeLabel: it.sizeLabel, quantity: it.quantity, unitPrice: round2(it.total / Math.max(1, it.quantity)), total: it.total });
+        }
+      }
+
+      return {
+        ...r,
+        rowType: "RETURN_TRANSACTION",
+        businessDate: r.businessDate instanceof Date ? r.businessDate.toISOString() : r.businessDate,
+        createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
+        saleInvoiceNumber: r.sale?.invoiceNumber ?? undefined,
+        customerName: r.customer?.name ?? null,
+        userName: r.user?.name ?? null,
+        amountPaid,
+        amountDue,
+        paymentStatus,
+        paymentMethod: derivePresentationPaymentMethod(r.refundMethod ?? undefined, paymentsInfo.payments),
+        payments: (paymentsInfo.payments ?? []).map((p: any) => ({
+          ...p,
+          amount: Number(p.amount ?? 0),
+          businessDate: p.businessDate instanceof Date ? p.businessDate.toISOString() : p.businessDate,
+          paidAt: p.paidAt instanceof Date ? p.paidAt.toISOString() : p.paidAt,
+        })),
+        items,
+      };
     }));
 
     let unified = [
@@ -1513,9 +1584,15 @@ export const billingService = {
             `;
           }
 
+          // Normalize and persist top-up (customer pays) and refund payments
+          let topUpEntries: NormalizedPaymentEntry[] = [];
+          let topUpTotal = 0;
+          let refundEntries: NormalizedPaymentEntry[] = [];
+          let refundTotal = 0;
+
           if (netAmount > 0) {
-            const topUpEntries = normalizePaymentEntries(input.topUpPayments, input.refundMethod, netAmount);
-            const topUpTotal = round2(topUpEntries.reduce((sum, entry) => sum + entry.amount, 0));
+            topUpEntries = normalizePaymentEntries(input.topUpPayments, input.refundMethod, netAmount);
+            topUpTotal = round2(topUpEntries.reduce((sum, entry) => sum + entry.amount, 0));
             if (topUpTotal - netAmount > EPSILON) {
               throw new Error("Top-up split payment total cannot exceed exchange payable amount");
             }
@@ -1533,8 +1610,8 @@ export const billingService = {
           }
 
           if (refundAmount > 0) {
-            const refundEntries = normalizePaymentEntries(input.refundPayments, input.refundMethod, refundAmount);
-            const refundTotal = round2(refundEntries.reduce((sum, entry) => sum + entry.amount, 0));
+            refundEntries = normalizePaymentEntries(input.refundPayments, input.refundMethod, refundAmount);
+            refundTotal = round2(refundEntries.reduce((sum, entry) => sum + entry.amount, 0));
             if (refundTotal - refundAmount > EPSILON) {
               throw new Error("Refund split payment total cannot exceed refund amount");
             }
@@ -1647,6 +1724,19 @@ export const billingService = {
             });
           }
 
+          // Compute payment delta from top-ups and refunds and update sale payment aggregates
+          const paymentDelta = round2(topUpTotal - refundTotal);
+          const currentAmountPaid = Number(sale.amountPaid ?? 0);
+          const finalPayableAmount = Number(sale.finalPayableAmount ?? sale.total);
+          const newAmountPaid = round2(currentAmountPaid + paymentDelta);
+          const newAmountDue = Math.max(finalPayableAmount - newAmountPaid, 0);
+          const newPaymentStatus = newAmountPaid >= finalPayableAmount ? "PAID" : newAmountPaid > 0 ? "PARTIAL" : "PENDING";
+
+          // Determine primary payment method from top-up entries if present
+          const primaryMethodForSale = topUpEntries.length > 0
+            ? getPrimaryPaymentMethod(topUpEntries, input.refundMethod ?? undefined)
+            : (sale.paymentMethod as any) ?? undefined;
+
           const saleStatus =
             input.type === "RETURN"
               ? returnStatus === "FULL"
@@ -1661,6 +1751,10 @@ export const billingService = {
             data: {
               returnStatus,
               status: saleStatus,
+              ...(Math.abs(paymentDelta) > EPSILON ? { amountPaid: { increment: paymentDelta } } : {}),
+              amountDue: newAmountDue,
+              paymentStatus: newPaymentStatus,
+              ...(primaryMethodForSale ? { paymentMethod: primaryMethodForSale } : {}),
             },
           });
 
@@ -1911,14 +2005,44 @@ export const billingService = {
       businessDate: s.transactionDate instanceof Date ? s.transactionDate.toISOString() : s.transactionDate ?? (s.createdAt instanceof Date ? s.createdAt.toISOString() : s.createdAt),
     }));
 
-    const rtRows = returnTxns.map((r) => ({
-      ...r,
-      rowType: "RETURN_TRANSACTION",
-      businessDate: r.businessDate instanceof Date ? r.businessDate.toISOString() : r.businessDate,
-      createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
-      saleInvoiceNumber: r.sale?.invoiceNumber ?? undefined,
-      customerName: r.customer?.name ?? null,
-    }));
+    // For paged requests, also attach any sale payments that reference return transactions
+    const returnPaymentsByRt: Record<string, { payments: any[]; sum: number; primaryMethod?: string }> = {};
+    if (returnTxns.length > 0) {
+      await Promise.all(returnTxns.map(async (r: any) => {
+        const payments = await prisma.salePayment.findMany({ where: { note: { contains: String(r.id) } }, orderBy: { paidAt: "desc" } });
+        const sum = round2((payments ?? []).reduce((s, p) => s + Number(p.amount ?? 0), 0));
+        const nonZero = (payments ?? []).filter((p) => Number(p.amount ?? 0) !== 0).map((p) => String(p.method ?? "").toUpperCase()).filter((m) => VALID_PAYMENT_METHODS.has(m));
+        const primary = nonZero.length > 0 ? getPrimaryPaymentMethod(nonZero.map((m) => ({ method: m as any, amount: (payments.find((p) => String(p.method ?? "").toUpperCase() === m)?.amount ?? 0) } as NormalizedPaymentEntry)), r.refundMethod) : undefined;
+        returnPaymentsByRt[String(r.id)] = { payments, sum, primaryMethod: primary };
+      }));
+    }
+
+    const rtRows = returnTxns.map((r) => {
+      const paymentsInfo = returnPaymentsByRt[String(r.id)] ?? { payments: [], sum: 0, primaryMethod: undefined };
+      const amountPaid = Number(paymentsInfo.sum ?? 0);
+      const netAmountVal = Number(r.netAmount ?? 0);
+      const amountDue = Math.max(netAmountVal - amountPaid, 0);
+      const paymentStatus = amountDue <= 0 ? "PAID" : amountPaid > 0 ? "PARTIAL" : "PENDING";
+
+      return {
+        ...r,
+        rowType: "RETURN_TRANSACTION",
+        businessDate: r.businessDate instanceof Date ? r.businessDate.toISOString() : r.businessDate,
+        createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
+        saleInvoiceNumber: r.sale?.invoiceNumber ?? undefined,
+        customerName: r.customer?.name ?? null,
+        amountPaid,
+        amountDue,
+        paymentStatus,
+        paymentMethod: derivePresentationPaymentMethod(r.refundMethod ?? undefined, paymentsInfo.payments),
+        payments: (paymentsInfo.payments ?? []).map((p: any) => ({
+          ...p,
+          amount: Number(p.amount ?? 0),
+          businessDate: p.businessDate instanceof Date ? p.businessDate.toISOString() : p.businessDate,
+          paidAt: p.paidAt instanceof Date ? p.paidAt.toISOString() : p.paidAt,
+        })),
+      } as any;
+    });
 
     let unified = [...salesRows, ...rtRows];
 

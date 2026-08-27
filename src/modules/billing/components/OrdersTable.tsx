@@ -32,6 +32,30 @@ const badgeStyle = (type: string) => {
 export default function OrdersTable({ sales, loading = false, onViewSale, onViewReturn, onCollectBalance, onOpenReturnExchange }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  const isExchangeRecord = (rec: any) => rec.type === "RETURN_EXCHANGE" || rec.type === "EXCHANGE" || rec.rowType === "RETURN_TRANSACTION";
+
+  const itemDisplayName = (it: any) => {
+    return it.returnedProduct?.name ?? it.newProduct?.name ?? it.product?.name ?? it.productName ?? undefined;
+  };
+
+  const itemQuantity = (it: any) => {
+    return it.returnedQuantity ?? it.newQuantity ?? it.quantity ?? undefined;
+  };
+
+  const itemUnitPrice = (it: any) => {
+    if (it.returnedUnitPrice != null) return Number(it.returnedUnitPrice);
+    if (it.newUnitPrice != null) return Number(it.newUnitPrice);
+    if (it.unitPrice != null) return Number(it.unitPrice);
+    if (it.total != null && (it.quantity ?? it.returnedQuantity ?? it.newQuantity)) {
+      const q = Number(it.returnedQuantity ?? it.newQuantity ?? it.quantity);
+      if (q > 0) return Number(it.total) / q;
+    }
+    // If no suitable price field is present, return undefined so caller won't format it.
+    return undefined;
+  };
+
+  const round2 = (v: number) => Math.round(v * 100) / 100;
+
   return (
     <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, overflow: "hidden" }}>
       <div style={{ overflowX: "auto" }}>
@@ -79,7 +103,16 @@ export default function OrdersTable({ sales, loading = false, onViewSale, onView
             const businessDate = rec.businessDate ?? rec.transactionDate ?? rec.createdAt;
             const { date, time } = formatBusinessDate(businessDate);
             const isSale = rec.rowType === "SALE" || rec.rowType === undefined;
-            const avatar = isSale ? { bg: "#dbeafe", icon: <ShoppingCartOutlined />, color: "#2563eb" } : rec.type === "EXCHANGE" ? { bg: "#fef3c7", icon: <SwapOutlined />, color: "#d97706" } : { bg: "#fee2e2", icon: <ArrowLeftOutlined />, color: "#dc2626" };
+
+            // Summary-level payment fallback (prefer explicit recorded payments, else offset)
+            let summaryPaid = Number(rec.amountPaid ?? 0);
+            const summaryNet = Number(rec.netAmount ?? 0);
+            const summaryOffset = Number(rec.offsetAmount ?? 0);
+            if (summaryPaid <= 0 && summaryOffset > 0 && summaryNet > 0) summaryPaid = summaryOffset;
+            const summaryDue = Number(rec.amountDue ?? Math.max(summaryNet - summaryPaid, 0));
+            const summaryPaymentMethod = rec.paymentMethod ?? rec.refundMethod ?? "—";
+            const summaryStatus = String(rec.paymentStatus ?? rec.status ?? (summaryDue <= 0 ? "PAID" : (summaryPaid > 0 ? "PARTIAL" : "PENDING")));
+            const avatar = isSale ? { bg: "#dbeafe", icon: <ShoppingCartOutlined />, color: "#2563eb" } : (rec.type === "EXCHANGE" || rec.type === "RETURN_EXCHANGE") ? { bg: "#fef3c7", icon: <SwapOutlined />, color: "#d97706" } : { bg: "#fee2e2", icon: <ArrowLeftOutlined />, color: "#dc2626" };
 
             return (
               <div key={rec.id}>
@@ -99,19 +132,19 @@ export default function OrdersTable({ sales, loading = false, onViewSale, onView
                   </div>
 
                   <div style={{ textAlign: "left" }}>
-                    <Tag style={{ borderRadius: 8, padding: "4px 8px", background: isSale ? "#dbeafe" : "#f3e8ff", color: isSale ? "#1d4ed8" : "#7c3aed" }}>{isSale ? "SALE" : rec.type === "EXCHANGE" ? "EXCHANGE" : "RETURN"}</Tag>
+                    <Tag style={{ borderRadius: 8, padding: "4px 8px", background: isSale ? "#dbeafe" : "#f3e8ff", color: isSale ? "#1d4ed8" : "#7c3aed" }}>{isSale ? "SALE" : (rec.type === "EXCHANGE" || rec.type === "RETURN_EXCHANGE") ? "EXCHANGE" : "RETURN"}</Tag>
                   </div>
 
-                  <div style={{ color: "#6b7280", fontSize: 13, textAlign: "left" }}>{rec.paymentMethod ?? "CASH"}</div>
+                  <div style={{ color: "#6b7280", fontSize: 13, textAlign: "left" }}>{summaryPaymentMethod}</div>
 
                   <div style={{ textAlign: "left" }}>
                     <div style={{ fontWeight: 700 }}>{formatCurrency(rec.total ?? rec.netAmount ?? 0)}</div>
-                    <div style={{ color: "#6b7280", fontSize: 12, marginTop: 4 }}>Paid: {formatCurrency(rec.amountPaid ?? 0)}</div>
+                    <div style={{ color: "#6b7280", fontSize: 12, marginTop: 4 }}>Paid: {formatCurrency(summaryPaid ?? 0)}</div>
                     {Number(rec.amountDue ?? 0) > 0 && <div style={{ color: "#b91c1c", fontSize: 12 }}>Due: {formatCurrency(rec.amountDue)}</div>}
                   </div>
 
                   <div style={{ textAlign: "left" }}>
-                    <Tag style={{ ...badgeStyle(String(rec.paymentStatus ?? rec.status ?? "PENDING")), padding: "4px 10px", borderRadius: 8 }}>{String(rec.paymentStatus ?? rec.status ?? "PENDING")}</Tag>
+                    <Tag style={{ ...badgeStyle(summaryStatus), padding: "4px 10px", borderRadius: 8 }}>{summaryStatus}</Tag>
                   </div>
 
                   <div style={{ textAlign: "right" }}>
@@ -129,29 +162,176 @@ export default function OrdersTable({ sales, loading = false, onViewSale, onView
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: 12, color: "#6b7280", fontWeight: 600, textTransform: "uppercase" }}>Items</div>
                         <div style={{ marginTop: 8 }}>
-                          {(rec.items ?? []).map((it: any, i: number) => (
-                            <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}>
-                              <div style={{ fontSize: 14 }}>{it.product?.name ?? it.productName}</div>
-                              <div style={{ color: "#6b7280" }}>{it.quantity} × {formatCurrency(it.unitPrice ?? it.unitPrice)}</div>
-                            </div>
-                          ))}
+                          {isExchangeRecord(rec) ? (
+                            (() => {
+                              // Group returned and new items separately for a clear exchange summary
+                              const returned = [] as any[];
+                              const replacement = [] as any[];
 
-                          <div style={{ marginTop: 12, borderTop: "1px dashed #e5e7eb", paddingTop: 8 }}>
-                            <div style={{ display: "flex", justifyContent: "space-between" }}>
-                              <div style={{ color: "#6b7280" }}>Payment</div>
-                              <div>{rec.paymentMethod ?? "CASH"}</div>
-                            </div>
-                            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
-                              <div style={{ color: "#6b7280" }}>Amount paid</div>
-                              <div>{formatCurrency(rec.amountPaid ?? 0)}</div>
-                            </div>
-                            {rec.amountDue > 0 && (
-                              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
-                                <div style={{ color: "#6b7280" }}>Amount due</div>
-                                <div style={{ color: "#b91c1c" }}>{formatCurrency(rec.amountDue)}</div>
+                              const sourceItems = Array.isArray(rec.items) && rec.items.length > 0 ? rec.items
+                                : ([] as any[]);
+
+                              // If API returns legacy returnedItems/exchangedItems arrays, prefer those
+                              const legacyReturned = Array.isArray(rec.returnedItems) ? rec.returnedItems : [];
+                              const legacyExchanged = Array.isArray(rec.exchangedItems) ? rec.exchangedItems : [];
+
+                              if (sourceItems.length === 0 && (legacyReturned.length > 0 || legacyExchanged.length > 0)) {
+                                // Map legacy shapes into unified objects
+                                for (const it of legacyReturned) {
+                                  returned.push({ ...it });
+                                }
+                                for (const it of legacyExchanged) {
+                                  replacement.push({ ...it });
+                                }
+                              } else {
+                                for (const it of sourceItems) {
+                                  if (it.type === "RETURNED" || it.returnedProduct || it.returnedQuantity != null) {
+                                    returned.push(it);
+                                    continue;
+                                  }
+                                  if (it.type === "NEW" || it.newProduct || it.newQuantity != null) {
+                                    replacement.push(it);
+                                    continue;
+                                  }
+                                  // Fallback: if it has returned-like keys, treat as returned, else replacement
+                                  if (it.returnedProductId || it.returnedQuantity) returned.push(it);
+                                  else replacement.push(it);
+                                }
+                              }
+
+                              const sumItems = (arr: any[]) => {
+                                return arr.reduce((s, it) => {
+                                  const q = Number(itemQuantity(it) ?? 0);
+                                  const u = itemUnitPrice(it);
+                                  if (!Number.isFinite(u) || q <= 0) return s;
+                                  return s + (u! * q);
+                                }, 0);
+                              };
+
+                              const returnedValue = round2(sumItems(returned));
+                              const replacementValue = round2(sumItems(replacement));
+                              const difference = round2(replacementValue - returnedValue);
+
+                              // Determine payment display values. Prefer explicit recorded payments
+                              // (rec.amountPaid / rec.amountDue). If backend did not attach payment
+                              // rows to the return transaction but offsetAmount exists, use offsetAmount
+                              // as a pragmatic fallback to show the customer's additional payment.
+                              let recordedPaid = Number(rec.amountPaid ?? 0);
+                              const netAmt = Number(rec.netAmount ?? difference);
+                              const offsetAmt = Number(rec.offsetAmount ?? 0);
+                              if (recordedPaid <= 0 && offsetAmt > 0 && netAmt > 0) {
+                                recordedPaid = offsetAmt;
+                              }
+                              const recordedDue = Number(rec.amountDue ?? Math.max(netAmt - recordedPaid, 0));
+                              const displayStatus = String(rec.paymentStatus ?? rec.status ?? (recordedDue <= 0 ? "PAID" : (recordedPaid > 0 ? "PARTIAL" : "PENDING")));
+                              const displayPaymentMethod = rec.paymentMethod ?? rec.refundMethod ?? "—";
+
+                              return (
+                                <div>
+                                  <div style={{ marginBottom: 8 }}>
+                                    <div style={{ fontSize: 12, color: "#6b7280", fontWeight: 600 }}>RETURNED</div>
+                                    {returned.map((it: any, i: number) => (
+                                      <div key={`r-${i}`} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}>
+                                        <div style={{ minWidth: 0 }}>
+                                          <div style={{ fontSize: 14 }}>{itemDisplayName(it)}</div>
+                                          <div style={{ color: "#9ca3af", fontSize: 12 }}>{it.returnedSize?.label ?? it.sizeLabel ?? ""}</div>
+                                        </div>
+                                        <div style={{ color: "#6b7280" }}>{itemQuantity(it) ?? "—"} × {(() => {
+                                          const p = itemUnitPrice(it);
+                                          if (Number.isFinite(p)) return formatCurrency(p as number);
+                                          return "—";
+                                        })()}</div>
+                                      </div>
+                                    ))}
+                                  </div>
+
+                                  <div style={{ marginBottom: 8 }}>
+                                    <div style={{ fontSize: 12, color: "#6b7280", fontWeight: 600 }}>REPLACEMENT</div>
+                                    {replacement.map((it: any, i: number) => (
+                                      <div key={`n-${i}`} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}>
+                                        <div style={{ minWidth: 0 }}>
+                                          <div style={{ fontSize: 14 }}>{itemDisplayName(it)}</div>
+                                          <div style={{ color: "#9ca3af", fontSize: 12 }}>{it.newSize?.label ?? it.sizeLabel ?? ""}</div>
+                                        </div>
+                                        <div style={{ color: "#6b7280" }}>{itemQuantity(it) ?? "—"} × {(() => {
+                                          const p = itemUnitPrice(it);
+                                          if (Number.isFinite(p)) return formatCurrency(p as number);
+                                          return "—";
+                                        })()}</div>
+                                      </div>
+                                    ))}
+                                  </div>
+
+                                  <div style={{ marginTop: 12, borderTop: "1px dashed #e5e7eb", paddingTop: 8 }}>
+                                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                      <div style={{ color: "#6b7280" }}>Returned value</div>
+                                      <div>{formatCurrency(returnedValue)}</div>
+                                    </div>
+                                    <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
+                                      <div style={{ color: "#6b7280" }}>Replacement value</div>
+                                      <div>{formatCurrency(replacementValue)}</div>
+                                    </div>
+                                    <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, fontWeight: 700 }}>
+                                      <div>Difference</div>
+                                      <div>{formatCurrency(difference)}</div>
+                                    </div>
+
+                                    <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
+                                      <div style={{ color: "#6b7280" }}>Offset amount</div>
+                                      <div>{typeof rec.offsetAmount !== 'undefined' ? formatCurrency(rec.offsetAmount) : "—"}</div>
+                                    </div>
+                                    <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
+                                      <div style={{ color: "#6b7280" }}>Refund amount</div>
+                                      <div>{typeof rec.refundAmount !== 'undefined' ? formatCurrency(rec.refundAmount) : "—"}</div>
+                                    </div>
+
+                                    <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12 }}>
+                                      <div style={{ color: "#6b7280" }}>Payment</div>
+                                      <div>{displayPaymentMethod}</div>
+                                    </div>
+                                    <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
+                                      <div style={{ color: "#6b7280" }}>Amount paid</div>
+                                      <div>{formatCurrency(recordedPaid)}</div>
+                                    </div>
+                                    <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
+                                      <div style={{ color: "#6b7280" }}>Outstanding</div>
+                                      <div style={{ color: "#b91c1c" }}>{formatCurrency(recordedDue)}</div>
+                                    </div>
+                                    <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
+                                      <div style={{ color: "#6b7280" }}>Status</div>
+                                      <div>{displayStatus}</div>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })()
+                          ) : (
+                            (rec.items ?? []).map((it: any, i: number) => (
+                              <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}>
+                                <div style={{ fontSize: 14 }}>{it.product?.name ?? it.productName}</div>
+                                <div style={{ color: "#6b7280" }}>{it.quantity} × {formatCurrency(it.unitPrice ?? it.unitPrice)}</div>
                               </div>
-                            )}
-                          </div>
+                            ))
+                          )}
+
+                          {!isExchangeRecord(rec) && (
+                            <div style={{ marginTop: 12, borderTop: "1px dashed #e5e7eb", paddingTop: 8 }}>
+                              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                <div style={{ color: "#6b7280" }}>Payment</div>
+                                <div>{rec.paymentMethod ?? "CASH"}</div>
+                              </div>
+                              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
+                                <div style={{ color: "#6b7280" }}>Amount paid</div>
+                                <div>{formatCurrency(rec.amountPaid ?? 0)}</div>
+                              </div>
+                              {rec.amountDue > 0 && (
+                                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
+                                  <div style={{ color: "#6b7280" }}>Amount due</div>
+                                  <div style={{ color: "#b91c1c" }}>{formatCurrency(rec.amountDue)}</div>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
 
