@@ -156,7 +156,7 @@ export const dashboardService = {
       console.error("[dashboardService] failed to load sales history", error);
     }
 
-    let returnTxns: Array<{ report_date: Date; net_amount: number; offset_amount: number; type: string }> = [];
+    let returnTxns: Array<{ report_date: Date; net_amount: number; offset_amount: number; refund_amount: number; type: string }> = [];
     try {
       if (await hasTable("return_transactions")) {
         const [hasBusinessDate, hasTransactionDate, hasNetAmount, hasOffsetAmount, hasRefundAmount, hasType] = await Promise.all([
@@ -190,7 +190,7 @@ export const dashboardService = {
           ? Prisma.sql`rt.type::text`
           : Prisma.sql`'RETURN'::text`;
 
-        returnTxns = await prisma.$queryRaw<Array<{ report_date: Date; net_amount: number; offset_amount: number; type: string }>>`
+        returnTxns = await prisma.$queryRaw<Array<{ report_date: Date; net_amount: number; offset_amount: number; refund_amount: number; type: string }>>`
           SELECT
             ${returnDateExpr} AS report_date,
             ${netAmountExpr} AS net_amount,
