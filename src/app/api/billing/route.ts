@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { billingService } from "@/modules/billing/services/billingService";
 import { requireOrgAuth } from "@/lib/auth.middleware";
+import type { SaleHistoryStatusFilter } from "@/modules/billing/types";
 
 export const GET = async (request: NextRequest) => {
   let user;
@@ -16,14 +17,16 @@ export const GET = async (request: NextRequest) => {
     const filters = {
       startDate: sp.get("startDate") ?? undefined,
       endDate: sp.get("endDate") ?? undefined,
-      status: (sp.get("status") as "COMPLETED" | "REFUNDED") ?? undefined,
+      status: (sp.get("status") as SaleHistoryStatusFilter) ?? undefined,
       paymentMethod: (sp.get("paymentMethod") as "CASH" | "CARD" | "UPI") ?? undefined,
+      type: (sp.get("type") as "SALE" | "EXCHANGE" | "RETURN") ?? undefined,
       search: sp.get("search") ?? undefined,
     };
     const sales = await billingService.getSales(user.orgId!, filters);
     return NextResponse.json(sales);
   } 
-  catch {
+  catch (error) {
+    console.error("/api/billing GET error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

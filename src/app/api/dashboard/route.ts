@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { dashboardService } from "@/modules/dashboard/services/dashboardService";
+import { dashboardServiceCompat } from "@/modules/dashboard/services/dashboardServiceCompat";
 import { requireOrgAuth } from "@/lib/auth.middleware";
 
 export const GET = async (request: Request) => {
@@ -19,7 +19,7 @@ export const GET = async (request: Request) => {
     const validStartDate = startDate && !Number.isNaN(startDate.getTime()) ? startDate : undefined;
     const validEndDate = endDate && !Number.isNaN(endDate.getTime()) ? endDate : undefined;
 
-    const data = await dashboardService.getData(user.orgId, storeId, validStartDate, validEndDate);
+    const data = await dashboardServiceCompat.getData(user.orgId, storeId, validStartDate, validEndDate);
     return NextResponse.json(data);
   } 
   catch (err) {

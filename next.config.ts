@@ -2,10 +2,6 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   transpilePackages: ["antd", "@ant-design/icons"],
-  serverExternalPackages: ["@sparticuz/chromium"],
-  outputFileTracingIncludes: {
-    "/api/barcode/export-pdf": ["node_modules/@sparticuz/chromium/bin/**/*"],
-  },
   poweredByHeader: false,
   async headers() {
     return [

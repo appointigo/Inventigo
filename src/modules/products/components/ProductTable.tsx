@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useRef } from "react";
-import type { Key } from "react";
-import { Table, Button, Space, Tag, Input, InputNumber, Select, Popconfirm, Tooltip, Badge, Flex, Empty, Modal, Switch, App, Dropdown } from "antd";
+import { Table, Button, Space, Tag, Input, InputNumber, Select, Popconfirm, Tooltip, Badge, Flex, Empty, Modal, Card, Switch, App, Dropdown } from "antd";
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, EyeOutlined, UploadOutlined, CopyOutlined, PrinterOutlined, CloseOutlined, DownloadOutlined } from "@ant-design/icons";
 import type { MenuProps } from "antd";
 import type { ColumnsType } from "antd/es/table";
@@ -68,34 +67,17 @@ const ProductTable = ({
   attributeSchema,
   attributeFilters,
   onAttributeChange,
+  onClearAttributeFilters,
   onClearAllFilters,
   currentCategory,
 }: ProductTableProps) => {
   const { message } = App.useApp();
   const [barcodePrintOpen, setBarcodePrintOpen] = useState(false);
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
-  const [selectedProductsById, setSelectedProductsById] = useState<Record<string, Product>>({});
   const [copiesMap, setCopiesMap] = useState<Record<string, number>>({});
   const [exportLoading, setExportLoading] = useState(false);
   const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
-  const [searchText, setSearchText] = useState(search);
   const moreFiltersRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    setSearchText(search);
-  }, [search]);
-
-  useEffect(() => {
-    if (searchText === search) {
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      onSearchChange(searchText);
-    }, 200);
-
-    return () => window.clearTimeout(timer);
-  }, [onSearchChange, search, searchText]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -112,19 +94,11 @@ const ProductTable = ({
     };
   }, [moreFiltersOpen]);
 
-  const isMeaningfulFilterValue = (value: unknown) => {
-    if (value === undefined || value === null || value === "" || value === "undefined" || value === "null") {
-      return false;
-    }
-
-    return !(Array.isArray(value) && value.length === 0);
-  };
-
   const sizeOptions = currentCategory?.sizes?.map((size) => ({ label: size.label, value: size.id })) ?? [];
   const visibleAttributeFields = useMemo(() => attributeSchema?.fields?.slice(0, 3) ?? [], [attributeSchema]);
   const hiddenAttributeFields = useMemo(() => attributeSchema?.fields?.slice(3) ?? [], [attributeSchema]);
 
-  const sizeFilterValue = isMeaningfulFilterValue(attributeFilters.sizeId) ? attributeFilters.sizeId : undefined;
+  const sizeFilterValue = attributeFilters.sizeId;
   const sizeFilterLabel = typeof sizeFilterValue === "string"
     ? currentCategory?.sizes?.find((size) => size.id === sizeFilterValue)?.label ?? sizeFilterValue
     : Array.isArray(sizeFilterValue)
@@ -136,7 +110,7 @@ const ProductTable = ({
   const activeAttributeFilters = useMemo(() => {
     const active: Array<{ key: string; label: string; value: string | string[] | boolean }> = [];
 
-    if (isMeaningfulFilterValue(sizeFilterValue)) {
+    if (sizeFilterValue !== undefined && sizeFilterValue !== null && sizeFilterValue !== "" && (!Array.isArray(sizeFilterValue) || sizeFilterValue.length > 0)) {
       active.push({ key: "sizeId", label: "Size", value: sizeFilterLabel ?? String(sizeFilterValue) });
     }
 
@@ -144,7 +118,7 @@ const ProductTable = ({
       attributeSchema.fields.forEach((field) => {
         if (field.name === "sizeId") return;
         const value = attributeFilters[field.name];
-        if (isMeaningfulFilterValue(value)) {
+        if (value !== undefined && value !== null && value !== "" && (!Array.isArray(value) || value.length > 0)) {
           active.push({ key: field.name, label: field.name, value });
         }
       });
@@ -157,14 +131,19 @@ const ProductTable = ({
     () =>
       hiddenAttributeFields.filter((field) => {
         const value = attributeFilters[field.name];
-        return isMeaningfulFilterValue(value);
+        return value !== undefined && value !== null && value !== "";
       }).length,
     [hiddenAttributeFields, attributeFilters]
   );
 
+  useEffect(() => {
+    const pageIds = new Set(products.map((product) => product.id));
+    setSelectedProductIds((prev) => prev.filter((id) => pageIds.has(id)));
+  }, [products]);
+
   const selectedProducts = useMemo(
-    () => selectedProductIds.map((id) => selectedProductsById[id]).filter((product): product is Product => Boolean(product)),
-    [selectedProductIds, selectedProductsById]
+    () => products.filter((product) => selectedProductIds.includes(product.id)),
+    [products, selectedProductIds]
   );
 
   const barcodeRows = useMemo(
@@ -185,39 +164,6 @@ const ProductTable = ({
   );
 
   const totalLabels = barcodeRows.reduce((sum, row) => sum + (copiesMap[row.key] ?? row.quantity), 0);
-
-  const clearBarcodeSelection = () => {
-    setSelectedProductIds([]);
-    setSelectedProductsById({});
-    setCopiesMap({});
-  };
-
-  const handleSelectionChange = (nextKeys: Key[]) => {
-    const nextVisibleSelectedIds = new Set(nextKeys.map(String));
-    const visibleProductIds = new Set(products.map((product) => product.id));
-    const visibleSelectedProducts = products.filter((product) => nextVisibleSelectedIds.has(product.id));
-
-    setSelectedProductIds((prev) => {
-      const hiddenSelectedIds = prev.filter((id) => !visibleProductIds.has(id));
-      return [...hiddenSelectedIds, ...visibleSelectedProducts.map((product) => product.id)];
-    });
-
-    setSelectedProductsById((prev) => {
-      const next = { ...prev };
-
-      products.forEach((product) => {
-        if (!nextVisibleSelectedIds.has(product.id)) {
-          delete next[product.id];
-        }
-      });
-
-      visibleSelectedProducts.forEach((product) => {
-        next[product.id] = product;
-      });
-
-      return next;
-    });
-  };
 
   const handleOpenBarcodePrint = () => {
     setCopiesMap(
@@ -262,7 +208,6 @@ const ProductTable = ({
 
     printWindow.document.close();
     setBarcodePrintOpen(false);
-    clearBarcodeSelection();
   };
 
   const handleExportPdf = async (format: "download" | "preview" | "coreldraw" = "download") => {
@@ -290,7 +235,6 @@ const ProductTable = ({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          productIds: selectedProductIds,
           labels,
           format: format === "coreldraw" ? "coreldraw" : "13x19",
         }),
@@ -319,7 +263,6 @@ const ProductTable = ({
 
       message.success(`${format === "preview" ? "Preview opened" : "PDF exported successfully"}`);
       setBarcodePrintOpen(false);
-      clearBarcodeSelection();
     } catch (error) {
       console.error("[ProductTable PDF export]", error);
       message.error(error instanceof Error ? error.message : "PDF export failed");
@@ -506,9 +449,8 @@ const ProductTable = ({
           <Input
             placeholder="Search products..."
             prefix={<SearchOutlined />}
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-            onPressEnter={() => onSearchChange(searchText)}
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
             allowClear
             style={{ width: 220 }}
           />
@@ -546,11 +488,6 @@ const ProductTable = ({
         )}
         </Space>
         <Space>
-          {selectedProductIds.length > 0 && (
-            <Button icon={<CloseOutlined />} onClick={clearBarcodeSelection}>
-              Clear Selection
-            </Button>
-          )}
           <Button
             icon={<PrinterOutlined />}
             disabled={selectedProductIds.length === 0 || barcodeRows.length === 0}
@@ -722,8 +659,7 @@ const ProductTable = ({
         rowKey="id"
         rowSelection={{
           selectedRowKeys: selectedProductIds,
-          preserveSelectedRowKeys: true,
-          onChange: handleSelectionChange,
+          onChange: (selectedRowKeys) => setSelectedProductIds(selectedRowKeys.map(String)),
         }}
         loading={loading}
         pagination={{

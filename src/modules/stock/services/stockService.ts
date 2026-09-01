@@ -13,7 +13,7 @@ export const stockService = {
    * Creates a StockMovement audit record and updates the StockEntry atomically.
    */
   async adjustStock(input: AdjustStockInput) {
-    const { productId, sizeId, storeId, quantity, type, reason, referenceType, referenceId, userId } = input;
+    const { productId, sizeId, storeId, quantity, type, reason, referenceType, referenceId, businessDate, userId } = input;
 
     return prisma.$transaction(async (tx) => {
       // Determine quantity change: IN/RETURN add stock, OUT/SALE/ADJUSTMENT can be +/-
@@ -67,6 +67,7 @@ export const stockService = {
           reason,
           referenceType: referenceType ?? "MANUAL",
           referenceId,
+          movementDate: businessDate ?? new Date(),
           createdBy: userId,
         },
       });
@@ -167,9 +168,9 @@ export const stockService = {
     if (productId) where.productId = productId;
     if (type) where.type = type;
     if (startDate || endDate) {
-      where.createdAt = {};
-      if (startDate) (where.createdAt as Record<string, unknown>).gte = startDate;
-      if (endDate) (where.createdAt as Record<string, unknown>).lte = endDate;
+      where.movementDate = {};
+      if (startDate) (where.movementDate as Record<string, unknown>).gte = startDate;
+      if (endDate) (where.movementDate as Record<string, unknown>).lte = endDate;
     }
 
     const [movements, total] = await Promise.all([
@@ -178,14 +179,21 @@ export const stockService = {
         include: {
           product: { select: { name: true, sku: true, category: { select: { name: true } } } },
           size: { select: { label: true } },
-          user: { select: { name: true } },
         },
         skip: (page - 1) * pageSize,
         take: pageSize,
-        orderBy: { createdAt: "desc" },
+        orderBy: { movementDate: "desc" },
       }),
       prisma.stockMovement.count({ where }),
     ]);
+
+    // Resolve user names in a separate query so orphaned historical rows don't
+    // break dashboard APIs due to strict relation hydration.
+    const creatorIds = Array.from(new Set(movements.map((m) => m.createdBy).filter(Boolean)));
+    const users = creatorIds.length
+      ? await prisma.user.findMany({ where: { id: { in: creatorIds } }, select: { id: true, name: true } })
+      : [];
+    const userNameById = new Map(users.map((u) => [u.id, u.name]));
 
     return {
       items: movements.map((m) => ({
@@ -197,7 +205,8 @@ export const stockService = {
         type: m.type,
         quantity: m.quantity,
         reason: m.reason ?? null,
-        userName: m.user.name,
+        userName: userNameById.get(m.createdBy) ?? "Unknown",
+        movementDate: m.movementDate.toISOString(),
         createdAt: m.createdAt.toISOString(),
       })),
       total,

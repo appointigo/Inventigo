@@ -1,23 +1,33 @@
 "use client";
 
 import { useState } from "react";
-import { Table, Tag, Button, Space, Input, Select, DatePicker, Popconfirm, App, Typography, Card } from "antd";
-import { EyeOutlined, RollbackOutlined, SearchOutlined } from "@ant-design/icons";
-import type { ColumnsType } from "antd/es/table";
+import { Tag, Button, Space, Input, Select, DatePicker, Popconfirm, App, Typography, Card, Modal, Divider } from "antd";
+import { EyeOutlined, RollbackOutlined, SearchOutlined, FileTextOutlined, SwapOutlined, ArrowLeftOutlined, PrinterOutlined, DownloadOutlined, QuestionCircleOutlined } from "@ant-design/icons";
 import type { SaleSummary, Sale, SaleFilters, PaymentMethodType, SaleStatusType } from "../types";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
 import dayjs from "dayjs";
 import InvoicePreview from "./InvoicePreview";
+import OrdersTable from "./OrdersTable";
+import StatsStrip from "./StatsStrip";
+import FilterBar from "./FilterBar";
+import TabStrip from "./TabStrip";
+import PaginationBar from "./PaginationBar";
 
 const { RangePicker } = DatePicker;
 
 interface SalesHistoryProps {
-  sales: SaleSummary[];
+  sales: any[]; // unified rows: SALE | RETURN_TRANSACTION
   loading: boolean;
   filters: SaleFilters;
   onFiltersChange: (filters: SaleFilters) => void;
   onRefund: (saleId: string) => Promise<void>;
+  onCollectBalance: (saleId: string, amount: number, paymentMethod: PaymentMethodType) => Promise<void>;
   onViewSale: (saleId: string) => Promise<Sale | null>;
+  onOpenReturnExchange?: (saleId: string) => void;
+  page?: number;
+  setPage?: (p: number) => void;
+  totalPages?: number;
+  stats?: any;
 }
 
 export default function SalesHistory({
@@ -26,20 +36,48 @@ export default function SalesHistory({
   filters,
   onFiltersChange,
   onRefund,
+  onCollectBalance,
   onViewSale,
+  onOpenReturnExchange,
+  page,
+  setPage,
+  totalPages,
+  stats,
 }: SalesHistoryProps) {
   const { message } = App.useApp();
   const [previewSale, setPreviewSale] = useState<Sale | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewReturn, setPreviewReturn] = useState<any | null>(null);
+  const [previewReturnOpen, setPreviewReturnOpen] = useState(false);
+  const [localPage, setLocalPage] = useState(1);
+  const pageSize = 10;
+  const currentPage = typeof page !== "undefined" ? page : localPage;
+  const changePage = (p: number) => {
+    if (typeof setPage === "function") setPage(p);
+    else setLocalPage(p);
+  };
 
   const handleView = async (saleId: string) => {
     const sale = await onViewSale(saleId);
     if (sale) {
       setPreviewSale(sale);
       setPreviewOpen(true);
-    } 
-    else {
+    } else {
       message.error("Failed to load sale details");
+    }
+  };
+
+  const handleViewReturn = async (rt: any) => {
+    setPreviewReturn(rt);
+    setPreviewReturnOpen(true);
+  };
+
+  const handleCollectBalance = async (saleId: string, amount: number, paymentMethod: PaymentMethodType) => {
+    try {
+      await onCollectBalance(saleId, amount, paymentMethod);
+      message.success("Balance collected successfully");
+    } catch (error) {
+      message.error("Failed to collect remaining balance");
     }
   };
 
@@ -48,140 +86,57 @@ export default function SalesHistory({
     message.success("Sale refunded successfully");
   };
 
-  const columns: ColumnsType<SaleSummary> = [
-    {
-      title: "Invoice",
-      dataIndex: "invoiceNumber",
-      width: 180,
-      render: (inv: string) => <Typography.Text copyable>{inv}</Typography.Text>,
-    },
-    {
-      title: "Customer",
-      dataIndex: "customerName",
-      width: 150,
-      render: (name: string | null) => name ?? <Typography.Text type="secondary">Walk-in</Typography.Text>,
-    },
-    {
-      title: "Items",
-      dataIndex: "itemCount",
-      width: 60,
-      align: "center",
-    },
-    {
-      title: "Total",
-      dataIndex: "total",
-      width: 110,
-      align: "right",
-      render: (total: number) => <Typography.Text strong>{formatCurrency(total)}</Typography.Text>,
-    },
-    {
-      title: "Payment",
-      dataIndex: "paymentMethod",
-      width: 80,
-      align: "center",
-      render: (method: string) => <Tag>{method}</Tag>,
-    },
-    {
-      title: "Status",
-      dataIndex: "status",
-      width: 100,
-      align: "center",
-      render: (status: string) => (
-        <Tag color={status === "COMPLETED" ? "green" : "red"}>{status}</Tag>
-      ),
-    },
-    {
-      title: "Date",
-      dataIndex: "createdAt",
-      width: 150,
-      render: (date: string) => dayjs(date).format("DD MMM YYYY, hh:mm A"),
-    },
-    {
-      title: "Actions",
-      key: "actions",
-      width: 120,
-      render: (_, record) => (
-        <Space>
-          <Button
-            type="link"
-            size="small"
-            icon={<EyeOutlined />}
-            onClick={() => handleView(record.id)}
-          >
-            View
-          </Button>
-          {record.status === "COMPLETED" && (
-            <Popconfirm
-              title="Refund this sale?"
-              description="Stock will be restored for all items."
-              onConfirm={() => handleRefund(record.id)}
-            >
-              <Button type="link" size="small" danger icon={<RollbackOutlined />}>
-                Refund
-              </Button>
-            </Popconfirm>
-          )}
-        </Space>
-      ),
-    },
-  ];
-
   return (
     <>
-      <Card size="small" style={{ marginBottom: 16 }}>
-        <Space wrap>
-          <Input
-            placeholder="Search invoice or customer"
-            prefix={<SearchOutlined />}
-            value={filters.search ?? ""}
-            onChange={(e) => onFiltersChange({ ...filters, search: e.target.value || undefined })}
-            allowClear
-            style={{ width: 220 }}
-          />
-          <Select
-            placeholder="Payment method"
-            value={filters.paymentMethod}
-            onChange={(val) => onFiltersChange({ ...filters, paymentMethod: val as PaymentMethodType | undefined })}
-            allowClear
-            style={{ width: 140 }}
-            options={[
-              { label: "Cash", value: "CASH" },
-              { label: "Card", value: "CARD" },
-              { label: "UPI", value: "UPI" },
-            ]}
-          />
-          <Select
-            placeholder="Status"
-            value={filters.status}
-            onChange={(val) => onFiltersChange({ ...filters, status: val as SaleStatusType | undefined })}
-            allowClear
-            style={{ width: 130 }}
-            options={[
-              { label: "Completed", value: "COMPLETED" },
-              { label: "Refunded", value: "REFUNDED" },
-            ]}
-          />
-          <RangePicker
-            onChange={(dates) => {
-              onFiltersChange({
-                ...filters,
-                startDate: dates?.[0]?.toISOString() ?? undefined,
-                endDate: dates?.[1]?.toISOString() ?? undefined,
-              });
-            }}
-          />
-        </Space>
-      </Card>
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div>
+            <Typography.Title level={3} style={{ margin: 0 }}>Sales History</Typography.Title>
+            <Typography.Text type="secondary">View and manage all your billing and order transactions</Typography.Text>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <Button icon={<DownloadOutlined />}>Export</Button>
+            <Button icon={<PrinterOutlined />} />
+            <Button icon={<QuestionCircleOutlined />} />
+          </div>
+        </div>
 
-      <Table
-        columns={columns}
-        dataSource={sales}
-        rowKey="id"
-        loading={loading}
-        size="small"
-        scroll={{ x: 900 }}
-        pagination={{ pageSize: 10 }}
-      />
+        <div style={{ marginTop: 12 }}>
+          <FilterBar filters={filters} onChange={onFiltersChange} />
+        </div>
+      </div>
+
+      <StatsStrip sales={sales} kpis={stats} />
+
+      <TabStrip active={(filters as any).type ?? "ALL"} onChange={(k) => onFiltersChange({ ...filters, type: k === "ALL" ? undefined : (k as any) })} />
+
+      <div>
+        {loading && <div style={{ color: "#6b7280" }}>Loading...</div>}
+
+        {(!loading && sales.length === 0) && <Card>No transactions found.</Card>}
+
+        <div>
+          <OrdersTable
+            sales={sales}
+            loading={loading}
+            onViewSale={async (id: string) => {
+              const sale = await onViewSale(id);
+              if (sale) {
+                setPreviewSale(sale);
+                setPreviewOpen(true);
+              }
+            }}
+            onViewReturn={(rt: any) => {
+              setPreviewReturn(rt);
+              setPreviewReturnOpen(true);
+            }}
+            onCollectBalance={onCollectBalance}
+            onOpenReturnExchange={onOpenReturnExchange}
+          />
+
+          <PaginationBar page={currentPage} totalPages={typeof totalPages === "number" ? totalPages : Math.max(1, Math.ceil((sales?.length ?? 0) / pageSize))} onChange={(p) => changePage(p)} />
+        </div>
+      </div>
 
       <InvoicePreview
         sale={previewSale}
@@ -191,6 +146,14 @@ export default function SalesHistory({
           setPreviewSale(null);
         }}
       />
+
+      {previewReturnOpen && (
+        <Modal open={previewReturnOpen} onCancel={() => setPreviewReturnOpen(false)} footer={null} title="Return / Exchange Preview">
+          <div>
+            <pre style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(previewReturn, null, 2)}</pre>
+          </div>
+        </Modal>
+      )}
     </>
   );
 }

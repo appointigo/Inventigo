@@ -2,10 +2,12 @@
 
 import { useState, useCallback, useMemo, useEffect, useRef, type KeyboardEvent } from "react";
 import dynamic from "next/dynamic";
-import { App, Input, Select, Spin } from "antd";
+import { App, DatePicker, Input, Select, Spin } from "antd";
 import { SearchOutlined, CheckOutlined, CloseOutlined, TagOutlined, LockOutlined, CameraOutlined } from "@ant-design/icons";
+import dayjs from "dayjs";
 import { useProducts } from "@/modules/products/hooks/useProducts";
 import { useCart } from "@/modules/billing/hooks/useBilling";
+import { useBillingProductSearch } from "@/modules/billing/hooks/useBillingProductSearch";
 import { sanitizeScannedBarcode } from "@/shared/services/barcodeService";
 import InvoicePreview from "./InvoicePreview";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
@@ -124,7 +126,14 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
   const { message } = App.useApp();
 
   // ─── Local UI state ────────────────────────────────────────────────────────
-  const [search, setSearch] = useState("");
+  const {
+    search,
+    productQuery,
+    pendingExactSearchRef,
+    changeSearch,
+    submitExactSearch,
+    clearSearch: clearProductSearch,
+  } = useBillingProductSearch();
   const [lastAdded, setLastAdded] = useState<VariantRow | null>(null);
   const [saleLoading, setSaleLoading] = useState(false);
   const [completedSale, setCompletedSale] = useState<Sale | null>(null);
@@ -168,8 +177,9 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
   // ─── Cart + products ───────────────────────────────────────────────────────
   const cart = useCart();
   const { promos } = usePromoCodes();
-  const { products, loading: productsLoading } = useProducts(
-    search.trim() ? { search: search.trim() } : undefined
+  const { products, loading: productsLoading, resolvedSearch: resolvedProductQuery } = useProducts(
+    productQuery ? { search: productQuery } : undefined,
+    { enabled: productQuery.length > 0 },
   );
 
   // Auto-apply default tax rate on first load
@@ -204,7 +214,10 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
     if (search.trim()) {
       const s = search.toLowerCase().trim();
       const exactMatches = rows.filter(
-        (r) => r.variantSku?.toLowerCase() === s || r.externalBarcode?.toLowerCase() === s
+        (r) =>
+          r.variantSku?.toLowerCase() === s ||
+          r.externalBarcode?.toLowerCase() === s ||
+          r.sku.toLowerCase() === s
       );
       if (exactMatches.length === 1) return exactMatches;
       if (exactMatches.length > 1) return exactMatches;
@@ -258,10 +271,6 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
     [cart, message]
   );
 
-  // pendingCameraScan holds the raw SKU string after a camera scan until we can
-  // attempt an auto-add (we need variantRows to re-derive first).
-  const pendingCameraScanRef = useRef<string | null>(null);
-
   // Called when barcode is scanned via camera
   // Sanitizes the scanned barcode to remove noise and validate format
   const handleCameraScan = useCallback((decodedText: string) => {
@@ -270,43 +279,55 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
       message.error("Invalid barcode format. Please try scanning again.");
       return;
     }
-    pendingCameraScanRef.current = sanitized;
-    setSearch(sanitized);
+    submitExactSearch(sanitized);
     setCameraScanOpen(false);
-  }, [message]);
+  }, [message, submitExactSearch]);
 
   // After a camera scan the search query changes → useProducts fetches data →
   // variantRows re-derives. Once it settles, try an exact-match auto-add.
   useEffect(() => {
-    const pending = pendingCameraScanRef.current;
-    if (!pending || productsLoading) return;
+    const pending = pendingExactSearchRef.current;
+    if (!pending || productsLoading || resolvedProductQuery.toUpperCase() !== pending.toUpperCase()) return;
 
     const s = pending.toUpperCase();
     const exactMatches = variantRows.filter(
-      (r) => r.variantSku?.toUpperCase() === s || r.externalBarcode?.toUpperCase() === s
+      (r) =>
+        r.variantSku?.toUpperCase() === s ||
+        r.externalBarcode?.toUpperCase() === s ||
+        r.sku.toUpperCase() === s
     );
     if (exactMatches.length === 1) {
-      pendingCameraScanRef.current = null;
+      pendingExactSearchRef.current = null;
       handleAddToCart(exactMatches[0]);
-      setSearch("");
+      clearProductSearch();
+      return;
     }
+    pendingExactSearchRef.current = null;
     // If multiple or zero exact matches, show the list for user selection.
-  }, [variantRows, productsLoading, handleAddToCart]);
+  }, [variantRows, productsLoading, resolvedProductQuery, handleAddToCart, clearProductSearch, pendingExactSearchRef]);
 
   // Called when user presses Enter in the scan input (barcode scanner sends Enter)
   const handleScanEnter = useCallback(() => {
-    const s = search.trim().toUpperCase();
-    if (!s || productsLoading) return;
-    
-    const exact = variantRows.find(
-      (r) => r.variantSku?.toUpperCase() === s || r.externalBarcode?.toUpperCase() === s
-    );
-    if (exact) {
-      handleAddToCart(exact);
-      setSearch("");
+    const term = search.trim();
+    if (!term) return;
+
+    const normalizedTerm = term.toUpperCase();
+    if (productQuery.toUpperCase() === normalizedTerm && !productsLoading) {
+      const exactMatches = variantRows.filter(
+        (row) =>
+          row.variantSku?.toUpperCase() === normalizedTerm ||
+          row.externalBarcode?.toUpperCase() === normalizedTerm ||
+          row.sku.toUpperCase() === normalizedTerm
+      );
+      if (exactMatches.length === 1) {
+        handleAddToCart(exactMatches[0]);
+        clearProductSearch();
+      }
+      return;
     }
-    // No exact match → keep search results visible for manual selection
-  }, [search, variantRows, productsLoading, handleAddToCart]);
+
+    submitExactSearch(term);
+  }, [search, productQuery, variantRows, productsLoading, handleAddToCart, clearProductSearch, submitExactSearch]);
 
   // ─── Sale creation ─────────────────────────────────────────────────────────
   const handleConfirmSale = async () => {
@@ -341,6 +362,10 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
       cart.setDiscountPct(normalized);
     }
   }, [cart, discountMode, discountValue]);
+
+  useEffect(() => {
+    cart.setDiscountMode(discountMode === "RUPEE" ? "FLAT" : "PERCENTAGE");
+  }, [cart, discountMode]);
 
   // ─── Promo handlers ────────────────────────────────────────────────────────
   const handleApplyPromo = () => {
@@ -579,10 +604,29 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
   const taxAmount = Math.round((cart.subtotal * cart.taxPct) / 100);
   const total = cart.subtotal - discountAmount + taxAmount;
   const totalItems = cart.items.reduce((s, i) => s + i.quantity, 0);
+  const splitTotalEntered = cart.splitPayments.reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+  const splitMatchesTotal = Math.abs(splitTotalEntered - total) < 0.01;
   const canConfirm =
     cart.items.length > 0 &&
     cart.customerName.trim().length > 0 &&
-    cart.customerPhone.length >= 10;
+    cart.customerPhone.length >= 10 &&
+    (!cart.splitMode || splitMatchesTotal);
+
+  useEffect(() => {
+    if (cart.items.length === 0) {
+      cart.setIsAmountPaidManual(false);
+      cart.setAmountPaid(0);
+      return;
+    }
+    if (!cart.isAmountPaidManual) {
+      cart.setAmountPaid(total);
+    }
+  }, [cart, cart.amountPaid, cart.isAmountPaidManual, cart.items.length, cart.setAmountPaid, cart.setIsAmountPaidManual, total]);
+
+  useEffect(() => {
+    if (!cart.splitMode) return;
+    cart.setAmountPaid(splitTotalEntered);
+  }, [cart, splitTotalEntered]);
 
   // ─── Render ────────────────────────────────────────────────────────────────
   return (
@@ -600,7 +644,7 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
               prefix={<SearchOutlined />}
               placeholder="Scan barcode or search by name / SKU…"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => changeSearch(e.target.value)}
               onPressEnter={handleScanEnter}
               allowClear
               size="large"
@@ -684,7 +728,7 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
                       size="small"
                       onClick={() => {
                         handleAddToCart(row);
-                        setSearch("");
+                        clearProductSearch();
                       }}
                       disabled={row.stockQty === 0 || !row.isActive}
                       style={{ borderRadius: 7, fontSize: 12, fontWeight: 600 }}
@@ -946,6 +990,18 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
                 />
               </CustomerFieldFull>
             </CustomerGrid>
+            <div style={{ marginTop: 16 }}>
+              <FieldLabel style={{ marginBottom: 8, display: "block" }}>
+                Transaction Date
+              </FieldLabel>
+              <DatePicker
+                value={dayjs(cart.transactionDate)}
+                onChange={(date) => cart.setTransactionDate(date?.format("YYYY-MM-DD") ?? new Date().toISOString().slice(0, 10))}
+                disabledDate={(current) => current && current.isAfter(dayjs().endOf("day"))}
+                size="small"
+                style={{ width: "100%" }}
+              />
+            </div>
             {cart.items.length > 0 &&
               (!cart.customerName.trim() || cart.customerPhone.length < 10) && (
                 <CustWarning>⚠ Enter name &amp; phone to confirm sale</CustWarning>
@@ -959,14 +1015,114 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
               {PAYMENT_OPTIONS.map((opt) => (
                 <APayPill
                   key={opt.value}
-                  $active={cart.paymentMethod === opt.value}
-                  onClick={() => cart.setPaymentMethod(opt.value as PaymentMethodType)}
+                  $active={!cart.splitMode && cart.paymentMethod === opt.value}
+                  onClick={() => {
+                    cart.setSplitMode(false);
+                    cart.setPaymentMethod(opt.value as PaymentMethodType);
+                  }}
                 >
                   <PayPillEmoji>{opt.icon}</PayPillEmoji>
                   {opt.label}
                 </APayPill>
               ))}
+              <APayPill
+                $active={cart.splitMode}
+                onClick={() => {
+                  cart.setSplitMode(true);
+                  cart.setIsAmountPaidManual(true);
+                  if (cart.splitPayments.length === 0) {
+                    cart.setSplitPayments([{ method: cart.paymentMethod, amount: total }]);
+                  }
+                }}
+              >
+                <PayPillEmoji>🧾</PayPillEmoji>
+                Split
+              </APayPill>
             </PayPillsGrid>
+
+            {cart.splitMode ? (
+              <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+                {cart.splitPayments.map((entry, index) => (
+                  <div key={index} style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8 }}>
+                    <Select
+                      size="small"
+                      value={entry.method}
+                      options={PAYMENT_OPTIONS.map((opt) => ({ value: opt.value, label: opt.label }))}
+                      onChange={(value) => {
+                        const next = [...cart.splitPayments];
+                        next[index] = { ...next[index], method: value as PaymentMethodType };
+                        cart.setSplitPayments(next);
+                      }}
+                    />
+                    <Input
+                      size="small"
+                      type="number"
+                      min={0}
+                      value={entry.amount}
+                      onChange={(e) => {
+                        const next = [...cart.splitPayments];
+                        const amt = Number(e.target.value);
+                        next[index] = { ...next[index], amount: Number.isNaN(amt) ? 0 : Math.max(0, amt) };
+                        cart.setSplitPayments(next);
+                      }}
+                      placeholder="Amount"
+                    />
+                    <Button
+                      size="small"
+                      danger
+                      disabled={cart.splitPayments.length <= 1}
+                      onClick={() => {
+                        cart.setSplitPayments(cart.splitPayments.filter((_, i) => i !== index));
+                      }}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ))}
+
+                <Button
+                  size="small"
+                  onClick={() => {
+                    cart.setSplitPayments([...cart.splitPayments, { method: "CASH", amount: 0 }]);
+                  }}
+                >
+                  + Add Payment Method
+                </Button>
+
+                <div style={{ fontSize: 12, color: splitMatchesTotal ? "#15803d" : "#b45309" }}>
+                  Entered: {formatCurrency(splitTotalEntered)} · Remaining: {formatCurrency(Math.max(0, total - splitTotalEntered))}
+                </div>
+              </div>
+            ) : null}
+          </CheckoutSection>
+
+          <CheckoutSection>
+            <CheckoutSectionLabel>Amount received</CheckoutSectionLabel>
+            <Input
+              type="number"
+              min={0}
+              value={cart.amountPaid}
+              onChange={(e) => {
+                if (cart.splitMode) return;
+                const next = Number(e.target.value);
+                cart.setIsAmountPaidManual(true);
+                cart.setAmountPaid(clampNumber(Number.isNaN(next) ? 0 : next, 0, Math.max(0, total)));
+              }}
+              size="small"
+              prefix="₹"
+              placeholder={String(total)}
+              disabled={cart.splitMode}
+            />
+            {cart.amountDue > 0 && (
+              <div style={{ marginTop: 8, color: "#b45309", fontSize: 12 }}>
+                {formatCurrency(cart.amountDue)} due after this payment
+              </div>
+            )}
+            {cart.splitMode && !splitMatchesTotal && (
+              <div style={{ marginTop: 8, color: "#dc2626", fontSize: 12 }}>
+                Split total must match invoice total to confirm sale
+              </div>
+            )}
           </CheckoutSection>
 
           {/* Available Offers */}
@@ -1157,6 +1313,16 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
                   )}
                 </ASumPctGroup>
               </ASumRow>
+              <ASumRow>
+                <span>Amount received</span>
+                <span>{formatCurrency(cart.amountPaid)}</span>
+              </ASumRow>
+              {cart.amountDue > 0 && (
+                <ASumRow>
+                  <span>Amount due</span>
+                  <span>{formatCurrency(cart.amountDue)}</span>
+                </ASumRow>
+              )}
               <ATotalRow>
                 <span>Total</span>
                 <span>{formatCurrency(total)}</span>

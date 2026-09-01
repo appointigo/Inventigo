@@ -27,6 +27,8 @@ interface ProfitMarginSectionProps {
   formatCurrency: (value: number) => string;
   formatCurrencyCompactK: (value: number) => string;
   period: "daily" | "weekly" | "monthly" | "yearly";
+  from?: string;
+  to?: string;
 }
 
 const PRIMARY_BLUE = "#378ADD";
@@ -37,6 +39,8 @@ export default function ProfitMarginSection({
   formatCurrency,
   formatCurrencyCompactK,
   period,
+  from,
+  to,
 }: ProfitMarginSectionProps) {
   const [profitRows, setProfitRows] = useState<ProfitMarginPoint[]>([]);
   const [discountRows, setDiscountRows] = useState<ProfitMarginPoint[]>([]);
@@ -50,47 +54,27 @@ export default function ProfitMarginSection({
 
     const run = async () => {
       setProfitLoading(true);
+      setDiscountLoading(true);
       try {
-        const res = await fetch(`/api/reports/profit-margin?group=${group}`);
+        const params = new URLSearchParams({ group });
+        if (from) params.set("from", from);
+        if (to) params.set("to", to);
+
+        const res = await fetch(`/api/reports/profit-margin?${params.toString()}`);
         const payload = res.ok ? ((await res.json()) as ProfitMarginPoint[]) : [];
         if (!cancelled) {
-          setProfitRows(Array.isArray(payload) ? payload : []);
+          const rows = Array.isArray(payload) ? payload : [];
+          setProfitRows(rows);
+          setDiscountRows(rows);
         }
       } catch {
         if (!cancelled) {
           setProfitRows([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setProfitLoading(false);
-        }
-      }
-    };
-
-    run();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [group]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const run = async () => {
-      setDiscountLoading(true);
-      try {
-        const res = await fetch(`/api/reports/profit-margin?group=${group}`);
-        const payload = res.ok ? ((await res.json()) as ProfitMarginPoint[]) : [];
-        if (!cancelled) {
-          setDiscountRows(Array.isArray(payload) ? payload : []);
-        }
-      } catch {
-        if (!cancelled) {
           setDiscountRows([]);
         }
       } finally {
         if (!cancelled) {
+          setProfitLoading(false);
           setDiscountLoading(false);
         }
       }
@@ -101,7 +85,7 @@ export default function ProfitMarginSection({
     return () => {
       cancelled = true;
     };
-  }, [group]);
+  }, [from, group, to]);
 
   const profitChartData = useMemo(
     () => profitRows.map((row) => ({ ...row, gross_profit: Number(row.gross_profit) || 0, margin_pct: Number(row.margin_pct) || 0 })),
