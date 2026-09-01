@@ -4,6 +4,7 @@ import type { SaleSummary } from "@/modules/billing/types";
 export interface PaymentMethodDistribution {
   name: string;
   value: number;
+  count?: number;
   percentage: number;
 }
 
@@ -84,17 +85,23 @@ export function calculatePaymentMethodDistribution(
   // Aggregate by payment method. Prefer payment entries (split-aware),
   // and fall back to amountPaid/paymentMethod for legacy records with collected money.
   const methodTotals: Record<string, number> = {};
+  const methodCounts: Record<string, number> = {};
   const validMethods = ["CASH", "CARD", "UPI", "SPLIT"];
 
+  // For each sale, aggregate amounts per method and count a sale once per method
   filteredSales.forEach((sale) => {
     const paymentEntries = getCollectedPaymentEntries(sale);
     if (paymentEntries.length === 0) {
       return;
     }
 
+    const perSaleMethodSeen: Record<string, boolean> = {};
     paymentEntries.forEach((entry) => {
-      if (validMethods.includes(entry.method)) {
-        methodTotals[entry.method] = (methodTotals[entry.method] ?? 0) + entry.amount;
+      if (!validMethods.includes(entry.method)) return;
+      methodTotals[entry.method] = (methodTotals[entry.method] ?? 0) + entry.amount;
+      if (!perSaleMethodSeen[entry.method]) {
+        methodCounts[entry.method] = (methodCounts[entry.method] ?? 0) + 1;
+        perSaleMethodSeen[entry.method] = true;
       }
     });
   });
@@ -118,6 +125,7 @@ export function calculatePaymentMethodDistribution(
     .map(([method, total]) => ({
       name: methodLabels[method] ?? method,
       value: Number(total.toFixed(2)),
+      count: methodCounts[method] ?? 0,
       percentage: Number(((total / overallTotal) * 100).toFixed(2)),
     }))
     .sort((a, b) => b.value - a.value);

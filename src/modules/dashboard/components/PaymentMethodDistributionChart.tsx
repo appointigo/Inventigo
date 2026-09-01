@@ -18,7 +18,8 @@ import {
 } from "@/modules/dashboard/services/paymentMethodService";
 
 interface PaymentMethodDistributionChartProps {
-  sales: SaleSummary[];
+  sales?: SaleSummary[];
+  distributionData?: PaymentMethodDistribution[];
   activeBucketLabel?: string;
   loading?: boolean;
   height?: number;
@@ -35,17 +36,28 @@ const DEFAULT_COLOR_SEQUENCE = Object.values(PAYMENT_METHOD_COLORS);
 
 export default function PaymentMethodDistributionChart({
   sales,
+  distributionData: distributionDataProp,
   activeBucketLabel,
   loading = false,
   height = 300,
 }: PaymentMethodDistributionChartProps) {
 
   const distributionData = useMemo<PaymentMethodDistribution[]>(() => {
+    if (distributionDataProp) {
+      return distributionDataProp;
+    }
+
+    if (!sales) {
+      return [];
+    }
+
     return calculatePaymentMethodDistribution(sales);
-  }, [sales]);
+  }, [distributionDataProp, sales]);
 
   const totalRevenue = useMemo(() => {
-    return sales
+    const sourceSales = sales ?? [];
+
+    return sourceSales
       .filter((sale) => sale.status === "COMPLETED")
       .reduce((sum, sale) => sum + (Number(sale.total) || 0), 0);
   }, [sales]);
@@ -59,7 +71,7 @@ export default function PaymentMethodDistributionChart({
   }, [paymentDistributionTotal, totalRevenue]);
 
   const completedSalesCount = useMemo(() => {
-    return sales.filter((sale) => sale.status === "COMPLETED").length;
+    return (sales ?? []).filter((sale) => sale.status === "COMPLETED").length;
   }, [sales]);
 
   const chartData = useMemo(
@@ -84,16 +96,16 @@ export default function PaymentMethodDistributionChart({
     );
   };
 
-  const renderCustomTooltip = ({
-    active,
-    payload,
-  }: {
-    active?: boolean;
-    payload?: Array<{ payload?: PaymentMethodDistribution }>;
-  }) => {
-    if (!active || !payload?.length || !payload[0].payload) return null;
+  const renderCustomTooltip = ({ active, payload }: { active?: boolean; payload?: any[] }) => {
+    if (!active || !payload?.length) return null;
 
-    const { name, value, percentage } = payload[0].payload;
+    // payload[0] may be { payload: { ... } } or the payload object itself depending on recharts version
+    const raw = payload[0].payload ?? payload[0];
+    if (!raw) return null;
+
+    const { name, value, count } = raw as PaymentMethodDistribution & { count?: number };
+    const activeBucketName = activeBucketLabel ?? null;
+    const percentage = paymentDistributionTotal > 0 ? Number(((value / paymentDistributionTotal) * 100).toFixed(2)) : 0;
 
     return (
       <div
@@ -105,25 +117,15 @@ export default function PaymentMethodDistributionChart({
           boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
         }}
       >
-        {activeBucketLabel ? (
-          <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 6 }}>
-            {activeBucketLabel}
-          </div>
+        {activeBucketName ? (
+          <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 6 }}>{activeBucketName}</div>
         ) : null}
-        <div style={{ fontSize: 12, fontWeight: 600, color: "#111827", marginBottom: 4 }}>
-          {name}
-        </div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: "#111827", marginBottom: 4 }}>{name}</div>
         <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 2 }}>
-          Amount: ₹
-          {value.toLocaleString("en-IN", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}
+          Amount: ₹{value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </div>
-        <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 2 }}>
-          Coverage: {percentage}% of chart total
-        </div>
-        <div style={{ fontSize: 12, color: "#6b7280" }}>Percentage: {percentage}%</div>
+        <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 2 }}>Percentage: {percentage}%</div>
+        <div style={{ fontSize: 12, color: "#6b7280" }}>Count: {count ?? 0}</div>
       </div>
     );
   };
@@ -152,6 +154,7 @@ export default function PaymentMethodDistributionChart({
                   cy="50%"
                   innerRadius={60}
                   outerRadius={90}
+                  isAnimationActive={false}
                   paddingAngle={2}
                   dataKey="value"
                   label={renderCustomLabel}
