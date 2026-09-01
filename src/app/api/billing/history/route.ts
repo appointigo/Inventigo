@@ -28,6 +28,19 @@ export const GET = async (request: NextRequest) => {
     return NextResponse.json(result);
   } catch (error) {
     console.error("/api/billing/history GET error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    const code = error && typeof error === "object" && "code" in error
+      ? String(error.code)
+      : "";
+    const message = error instanceof Error ? error.message : "";
+    const databaseUnavailable = code === "P1001" || /database server|database.*unreachable/i.test(message);
+
+    return NextResponse.json(
+      {
+        error: databaseUnavailable
+          ? "The database is temporarily unavailable. Please try again."
+          : "Failed to load sales history",
+      },
+      { status: databaseUnavailable ? 503 : 500 },
+    );
   }
 };

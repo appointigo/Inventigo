@@ -1,37 +1,43 @@
 import { NextResponse } from "next/server";
 import dayjs from "dayjs";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireOrgAuth } from "@/lib/auth.middleware";
 
-const METHOD_LABELS: Record<string, string> = {
+const METHODS = ["CASH", "UPI", "CARD"] as const;
+
+const METHOD_LABELS: Record<(typeof METHODS)[number], string> = {
   CASH: "Cash",
-  CARD: "Card",
   UPI: "UPI",
-  SPLIT: "Split",
+  CARD: "Card",
 };
 
-type PaymentGroupRow = {
-  method: string;
-  _sum: { amount: number | null };
-  _count: { _all: number };
+type PaymentMethod = (typeof METHODS)[number];
+
+type NormalizedPayment = {
+  source: "SALE_PAYMENT" | "LEGACY_SALE";
+  paymentId?: string;
+  saleId: string;
+  invoiceNumber: string;
+  method: PaymentMethod;
+  amount: number;
+  businessDate: Date;
 };
 
-async function hasColumn(tableName: string, columnName: string) {
-  try {
-    const result = await prisma.$queryRaw<Array<{ has_column: boolean }>>`
-      SELECT EXISTS (
-        SELECT 1
-        FROM information_schema.columns
-        WHERE table_schema = current_schema()
-          AND table_name = ${tableName}
-          AND column_name = ${columnName}
-      ) AS has_column
-    `;
+const isPaymentMethod = (value: string): value is PaymentMethod =>
+  METHODS.includes(value as PaymentMethod);
 
-    return result[0]?.has_column ?? false;
-  } catch {
-    return false;
-  }
+async function getPaymentLedgerCutoverDate(): Promise<Date | null> {
+  const rows = await prisma.$queryRaw<Array<{ finished_at: Date | null }>>(Prisma.sql`
+    SELECT finished_at
+    FROM _prisma_migrations
+    WHERE migration_name = '20260505120000_add_returns_and_partial_payments'
+      AND finished_at IS NOT NULL
+    ORDER BY finished_at ASC
+    LIMIT 1
+  `);
+
+  return rows[0]?.finished_at ?? null;
 }
 
 export const GET = async (request: Request) => {
@@ -44,88 +50,162 @@ export const GET = async (request: Request) => {
 
   try {
     const { searchParams } = new URL(request.url);
-    const from = searchParams.get("from");
-    const to = searchParams.get("to");
+    const from = dayjs(searchParams.get("from"));
+    const to = dayjs(searchParams.get("to"));
+    const storeId = searchParams.get("storeId") ?? user.storeId ?? undefined;
 
-    const hasSalesTransactionDate = await hasColumn("sales", "transactionDate");
-
-    const businessDateFilter: Record<string, Date> = {};
-    if (from) {
-      const fromDate = dayjs(from).startOf("day");
-      if (fromDate.isValid()) {
-        businessDateFilter.gte = fromDate.toDate();
-      }
-    }
-    if (to) {
-      const toDate = dayjs(to).endOf("day");
-      if (toDate.isValid()) {
-        businessDateFilter.lte = toDate.toDate();
-      }
+    if (!from.isValid() || !to.isValid() || from.isAfter(to, "day")) {
+      return NextResponse.json(
+        { error: "A valid from/to accounting period is required" },
+        { status: 400 },
+      );
     }
 
-    const paymentGroups = (await prisma.salePayment.groupBy({
-      by: ["method"],
-      where: {
-        sale: {
-          store: { orgId: user.orgId },
-          ...(user.storeId ? { storeId: user.storeId } : {}),
+    const rangeStart = from.startOf("day").toDate();
+    const rangeEnd = to.endOf("day").toDate();
+    const storeFilter = {
+      store: { orgId: user.orgId },
+      ...(storeId ? { storeId } : {}),
+    };
+
+    const [ledgerCutoverDate, modernPayments, salesWithoutLedger, receivableAggregate] = await Promise.all([
+      getPaymentLedgerCutoverDate(),
+      prisma.salePayment.findMany({
+        where: {
+          method: { in: [...METHODS] },
+          businessDate: { gte: rangeStart, lte: rangeEnd },
+          sale: storeFilter,
         },
-        ...(Object.keys(businessDateFilter).length > 0 ? { businessDate: businessDateFilter } : {}),
-      },
-      _sum: { amount: true },
-      _count: { _all: true },
-    })) as unknown as PaymentGroupRow[];
+        select: {
+          id: true,
+          saleId: true,
+          method: true,
+          amount: true,
+          businessDate: true,
+          sale: { select: { invoiceNumber: true } },
+        },
+      }),
+      prisma.sale.findMany({
+        where: {
+          ...storeFilter,
+          transactionDate: { gte: rangeStart, lte: rangeEnd },
+          payments: { none: {} },
+        },
+        select: {
+          id: true,
+          invoiceNumber: true,
+          paymentMethod: true,
+          paymentStatus: true,
+          amountPaid: true,
+          amountDue: true,
+          finalPayableAmount: true,
+          total: true,
+          transactionDate: true,
+          createdAt: true,
+        },
+      }),
+      prisma.sale.aggregate({
+        where: {
+          ...storeFilter,
+          transactionDate: { gte: rangeStart, lte: rangeEnd },
+          status: { not: "REFUNDED" },
+          paymentStatus: "PARTIAL",
+          amountDue: { gt: 0 },
+        },
+        _sum: { amountDue: true },
+      }),
+    ]);
 
-    // Backward-compatible fallback for legacy sales that never recorded sale_payment rows.
-    const legacySales = await prisma.sale.findMany({
-      where: {
-        store: { orgId: user.orgId },
-        ...(user.storeId ? { storeId: user.storeId } : {}),
-        payments: { none: {} },
-        amountPaid: { gt: 0 },
-        status: { in: ["COMPLETED", "EXCHANGED", "REFUNDED"] },
-        ...(Object.keys(businessDateFilter).length > 0
-          ? {
-              [hasSalesTransactionDate ? "transactionDate" : "createdAt"]: businessDateFilter,
-            }
-          : {}),
-      },
-      select: {
-        amountPaid: true,
-        paymentMethod: true,
-      },
+    const normalizedPayments: NormalizedPayment[] = modernPayments.map((payment) => ({
+      source: "SALE_PAYMENT",
+      paymentId: payment.id,
+      saleId: payment.saleId,
+      invoiceNumber: payment.sale.invoiceNumber,
+      method: payment.method,
+      amount: Number(payment.amount),
+      businessDate: payment.businessDate,
+    }));
+
+    for (const sale of salesWithoutLedger) {
+      const method = String(sale.paymentMethod);
+      const isLegacy = ledgerCutoverDate !== null && sale.createdAt < ledgerCutoverDate;
+      const isConfirmedPaid = sale.paymentStatus === "PAID" && Number(sale.amountDue) === 0;
+
+      if (!isLegacy) {
+        console.warn("[payment-method-distribution] Sale after ledger cutover has no SalePayment rows", {
+          saleId: sale.id,
+          invoiceNumber: sale.invoiceNumber,
+          transactionDate: sale.transactionDate,
+          createdAt: sale.createdAt,
+          paymentStatus: sale.paymentStatus,
+          amountPaid: Number(sale.amountPaid),
+          amountDue: Number(sale.amountDue),
+        });
+        continue;
+      }
+
+      if (!isConfirmedPaid || !isPaymentMethod(method)) {
+        console.warn("[payment-method-distribution] Legacy sale cannot be safely reconstructed", {
+          saleId: sale.id,
+          invoiceNumber: sale.invoiceNumber,
+          paymentStatus: sale.paymentStatus,
+          amountDue: Number(sale.amountDue),
+          paymentMethod: method,
+        });
+        continue;
+      }
+
+      const amountPaid = Number(sale.amountPaid);
+      const finalPayableAmount = Number(sale.finalPayableAmount ?? 0);
+      const amount = amountPaid > 0
+        ? amountPaid
+        : finalPayableAmount > 0
+          ? finalPayableAmount
+          : Number(sale.total);
+
+      if (amount <= 0) continue;
+
+      normalizedPayments.push({
+        source: "LEGACY_SALE",
+        saleId: sale.id,
+        invoiceNumber: sale.invoiceNumber,
+        method,
+        amount,
+        businessDate: sale.transactionDate,
+      });
+    }
+
+    const totals = new Map<PaymentMethod, { value: number; count: number }>(
+      METHODS.map((method) => [method, { value: 0, count: 0 }]),
+    );
+    for (const payment of normalizedPayments) {
+      const entry = totals.get(payment.method)!;
+      entry.value += payment.amount;
+      entry.count += 1;
+    }
+
+    const totalReceived = METHODS.reduce(
+      (sum, method) => sum + totals.get(method)!.value,
+      0,
+    );
+
+    const methods = totalReceived === 0
+      ? []
+      : METHODS.map((method) => {
+        const entry = totals.get(method)!;
+        return {
+          name: METHOD_LABELS[method],
+          value: Number(entry.value.toFixed(2)),
+          count: entry.count,
+          percentage: Number(((entry.value / totalReceived) * 100).toFixed(2)),
+        };
+      });
+
+    return NextResponse.json({
+      methods,
+      totalReceived: Number(totalReceived.toFixed(2)),
+      amountReceivable: Number(Number(receivableAggregate._sum.amountDue ?? 0).toFixed(2)),
     });
-
-    const methodTotals = new Map<string, { amount: number; count: number }>();
-
-    for (const row of paymentGroups) {
-      const key = String(row.method ?? "").toUpperCase();
-      const current = methodTotals.get(key) ?? { amount: 0, count: 0 };
-      current.amount += Number(row._sum.amount ?? 0);
-      current.count += Number(row._count._all ?? 0);
-      methodTotals.set(key, current);
-    }
-
-    for (const sale of legacySales) {
-      const key = String(sale.paymentMethod ?? "CASH").toUpperCase();
-      const current = methodTotals.get(key) ?? { amount: 0, count: 0 };
-      current.amount += Number(sale.amountPaid ?? 0);
-      current.count += 1;
-      methodTotals.set(key, current);
-    }
-
-    const totalAmount = Array.from(methodTotals.values()).reduce((sum, entry) => sum + entry.amount, 0);
-
-    const result = Array.from(methodTotals.entries())
-      .map(([method, entry]) => ({
-        name: METHOD_LABELS[method] ?? method,
-        value: Number(entry.amount.toFixed(2)),
-        count: entry.count,
-        percentage: totalAmount > 0 ? Number(((entry.amount / totalAmount) * 100).toFixed(2)) : 0,
-      }))
-      .sort((a, b) => b.value - a.value);
-
-    return NextResponse.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });

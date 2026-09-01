@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import type { CreateSaleInput, Sale, SaleItem, SaleFilters, SaleSummary } from "../types";
 import { customerService } from "@/modules/customers/services/customerService";
 import { allocatePricingSnapshots } from "../utils/pricingEngine";
+import { normalizeSaleCompatibility } from "../utils/saleCompatibility";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -395,8 +396,10 @@ const toReturnTransactionDto = (
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const toSaleDto = (s: any): Sale => ({
-  id: s.id,
+const toSaleDto = (rawSale: any): Sale => {
+  const s = normalizeSaleCompatibility(rawSale);
+  return {
+    id: s.id,
   invoiceNumber: s.invoiceNumber,
   customerId: s.customerId ?? null,
   customerName: s.customerName ?? null,
@@ -514,7 +517,8 @@ const toSaleDto = (s: any): Sale => ({
   }),
   transactionDate: s.transactionDate instanceof Date ? s.transactionDate.toISOString() : s.transactionDate,
   createdAt: s.createdAt instanceof Date ? s.createdAt.toISOString() : s.createdAt,
-});
+  };
+};
 
 const saleInclude = {
   items: {
@@ -1088,20 +1092,23 @@ export const billingService = {
     }
 
     // Map to unified rows
-    const salesRows = sales.map((s) => ({
-      ...s,
-      rowType: "SALE",
-      paymentMethod: derivePresentationPaymentMethod(s.paymentMethod, s.payments),
-      payments: (s.payments ?? []).map((p: any) => ({
-        ...p,
-        amount: Number(p.amount ?? 0),
-        businessDate: p.businessDate instanceof Date ? p.businessDate.toISOString() : p.businessDate,
-        paidAt: p.paidAt instanceof Date ? p.paidAt.toISOString() : p.paidAt,
-      })),
-      transactionDate: s.transactionDate instanceof Date ? s.transactionDate.toISOString() : s.transactionDate,
-      createdAt: s.createdAt instanceof Date ? s.createdAt.toISOString() : s.createdAt,
-      userName: s.user?.name ?? null,
-    }));
+    const salesRows = sales.map((rawSale) => {
+      const s = normalizeSaleCompatibility(rawSale);
+      return {
+        ...s,
+        rowType: "SALE",
+        paymentMethod: derivePresentationPaymentMethod(s.paymentMethod, s.payments),
+        payments: (s.payments ?? []).map((p: any) => ({
+          ...p,
+          amount: Number(p.amount ?? 0),
+          businessDate: p.businessDate instanceof Date ? p.businessDate.toISOString() : p.businessDate,
+          paidAt: p.paidAt instanceof Date ? p.paidAt.toISOString() : p.paidAt,
+        })),
+        transactionDate: s.transactionDate instanceof Date ? s.transactionDate.toISOString() : s.transactionDate,
+        createdAt: s.createdAt instanceof Date ? s.createdAt.toISOString() : s.createdAt,
+        userName: (rawSale as any).user?.name ?? null,
+      };
+    });
 
     const rtRows = await Promise.all(returnTxns.map(async (r: any) => {
       const paymentsInfo = returnPaymentsByRt[String(r.id)] ?? { payments: [], sum: 0, primaryMethod: undefined };
@@ -1414,8 +1421,11 @@ export const billingService = {
       throw new Error("Exchange/return window has expired for this sale");
     }
 
-    const saleItemsByKey = new Map<string, typeof sale.items[number]>();
-    for (const item of sale.items) {
+    // Return valuation must use the same schema-aware historical interpretation
+    // as invoices. Raw legacy rows contain migration-generated zero snapshots.
+    const compatibleSale = normalizeSaleCompatibility(sale);
+    const saleItemsByKey = new Map<string, (typeof compatibleSale.items)[number]>();
+    for (const item of compatibleSale.items) {
       saleItemsByKey.set(`${item.productId}:${item.sizeId}`, item);
     }
 
@@ -1726,7 +1736,7 @@ export const billingService = {
 
           // Compute payment delta from top-ups and refunds and update sale payment aggregates
           const paymentDelta = round2(topUpTotal - refundTotal);
-          const currentAmountPaid = Number(sale.amountPaid ?? 0);
+          const currentAmountPaid = Number(compatibleSale.amountPaid ?? 0);
           const finalPayableAmount = Number(sale.finalPayableAmount ?? sale.total);
           const newAmountPaid = round2(currentAmountPaid + paymentDelta);
           const newAmountDue = Math.max(finalPayableAmount - newAmountPaid, 0);
@@ -1990,20 +2000,23 @@ export const billingService = {
       }),
     ]);
 
-    const salesRows = sales.map((s) => ({
-      ...s,
-      rowType: "SALE",
-      paymentMethod: derivePresentationPaymentMethod(s.paymentMethod, s.payments),
-      payments: (s.payments ?? []).map((p: any) => ({
-        ...p,
-        amount: Number(p.amount ?? 0),
-        businessDate: p.businessDate instanceof Date ? p.businessDate.toISOString() : p.businessDate,
-        paidAt: p.paidAt instanceof Date ? p.paidAt.toISOString() : p.paidAt,
-      })),
-      transactionDate: s.transactionDate instanceof Date ? s.transactionDate.toISOString() : s.transactionDate,
-      createdAt: s.createdAt instanceof Date ? s.createdAt.toISOString() : s.createdAt,
-      businessDate: s.transactionDate instanceof Date ? s.transactionDate.toISOString() : s.transactionDate ?? (s.createdAt instanceof Date ? s.createdAt.toISOString() : s.createdAt),
-    }));
+    const salesRows = sales.map((rawSale) => {
+      const s = normalizeSaleCompatibility(rawSale);
+      return {
+        ...s,
+        rowType: "SALE",
+        paymentMethod: derivePresentationPaymentMethod(s.paymentMethod, s.payments),
+        payments: (s.payments ?? []).map((p: any) => ({
+          ...p,
+          amount: Number(p.amount ?? 0),
+          businessDate: p.businessDate instanceof Date ? p.businessDate.toISOString() : p.businessDate,
+          paidAt: p.paidAt instanceof Date ? p.paidAt.toISOString() : p.paidAt,
+        })),
+        transactionDate: s.transactionDate instanceof Date ? s.transactionDate.toISOString() : s.transactionDate,
+        createdAt: s.createdAt instanceof Date ? s.createdAt.toISOString() : s.createdAt,
+        businessDate: s.transactionDate instanceof Date ? s.transactionDate.toISOString() : s.transactionDate ?? (s.createdAt instanceof Date ? s.createdAt.toISOString() : s.createdAt),
+      };
+    });
 
     // For paged requests, also attach any sale payments that reference return transactions
     const returnPaymentsByRt: Record<string, { payments: any[]; sum: number; primaryMethod?: string }> = {};

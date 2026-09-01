@@ -10,16 +10,12 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from "recharts";
-import type { PieLabelRenderProps } from "recharts";
-import type { SaleSummary } from "@/modules/billing/types";
-import {
-  calculatePaymentMethodDistribution,
-  type PaymentMethodDistribution,
-} from "@/modules/dashboard/services/paymentMethodService";
+import type { PieLabelRenderProps, TooltipContentProps } from "recharts";
+import type { PaymentMethodDistribution } from "@/modules/dashboard/services/paymentMethodService";
 
 interface PaymentMethodDistributionChartProps {
-  sales?: SaleSummary[];
   distributionData?: PaymentMethodDistribution[];
+  amountReceivable?: number;
   activeBucketLabel?: string;
   loading?: boolean;
   height?: number;
@@ -35,44 +31,20 @@ const PAYMENT_METHOD_COLORS: Record<string, string> = {
 const DEFAULT_COLOR_SEQUENCE = Object.values(PAYMENT_METHOD_COLORS);
 
 export default function PaymentMethodDistributionChart({
-  sales,
   distributionData: distributionDataProp,
+  amountReceivable = 0,
   activeBucketLabel,
   loading = false,
   height = 300,
 }: PaymentMethodDistributionChartProps) {
-
-  const distributionData = useMemo<PaymentMethodDistribution[]>(() => {
-    if (distributionDataProp) {
-      return distributionDataProp;
-    }
-
-    if (!sales) {
-      return [];
-    }
-
-    return calculatePaymentMethodDistribution(sales);
-  }, [distributionDataProp, sales]);
-
-  const totalRevenue = useMemo(() => {
-    const sourceSales = sales ?? [];
-
-    return sourceSales
-      .filter((sale) => sale.status === "COMPLETED")
-      .reduce((sum, sale) => sum + (Number(sale.total) || 0), 0);
-  }, [sales]);
+  const distributionData = useMemo(
+    () => distributionDataProp ?? [],
+    [distributionDataProp],
+  );
 
   const paymentDistributionTotal = useMemo(() => {
     return distributionData.reduce((sum, entry) => sum + entry.value, 0);
   }, [distributionData]);
-
-  const unallocatedRevenue = useMemo(() => {
-    return Math.max(0, totalRevenue - paymentDistributionTotal);
-  }, [paymentDistributionTotal, totalRevenue]);
-
-  const completedSalesCount = useMemo(() => {
-    return (sales ?? []).filter((sale) => sale.status === "COMPLETED").length;
-  }, [sales]);
 
   const chartData = useMemo(
     () =>
@@ -84,10 +56,12 @@ export default function PaymentMethodDistributionChart({
   );
 
   const renderCustomLabel = (props: PieLabelRenderProps) => {
-    const payload = props.payload as { percentage?: number } | undefined;
-    const percentage = payload?.percentage ?? (typeof props.percent === "number" ? Math.round(props.percent * 100) : 0);
+    const payload = (props.payload ?? props) as Partial<PaymentMethodDistribution>;
+    const percentage = payload?.percentage ?? (typeof props?.percent === "number" ? Math.round(props.percent * 100) : 0);
     const x = typeof props?.x === "number" ? props.x : 0;
     const y = typeof props?.y === "number" ? props.y : 0;
+
+    if (Number(payload?.value ?? 0) === 0) return null;
 
     return (
       <text x={x} y={y} fill="#ffffff" fontSize={12} fontWeight={600} textAnchor="middle">
@@ -96,16 +70,11 @@ export default function PaymentMethodDistributionChart({
     );
   };
 
-  const renderCustomTooltip = ({ active, payload }: { active?: boolean; payload?: any[] }) => {
-    if (!active || !payload?.length) return null;
+  const renderCustomTooltip = ({ active, payload }: TooltipContentProps) => {
+    const data = payload?.[0]?.payload as PaymentMethodDistribution | undefined;
+    if (!active || !data) return null;
 
-    // payload[0] may be { payload: { ... } } or the payload object itself depending on recharts version
-    const raw = payload[0].payload ?? payload[0];
-    if (!raw) return null;
-
-    const { name, value, count } = raw as PaymentMethodDistribution & { count?: number };
-    const activeBucketName = activeBucketLabel ?? null;
-    const percentage = paymentDistributionTotal > 0 ? Number(((value / paymentDistributionTotal) * 100).toFixed(2)) : 0;
+    const { name, value, percentage, count } = data;
 
     return (
       <div
@@ -117,12 +86,23 @@ export default function PaymentMethodDistributionChart({
           boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
         }}
       >
-        {activeBucketName ? (
-          <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 6 }}>{activeBucketName}</div>
+        {activeBucketLabel ? (
+          <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 6 }}>
+            {activeBucketLabel}
+          </div>
         ) : null}
-        <div style={{ fontSize: 12, fontWeight: 600, color: "#111827", marginBottom: 4 }}>{name}</div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: "#111827", marginBottom: 4 }}>
+          {name}
+        </div>
         <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 2 }}>
-          Amount: ₹{value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          Amount: ₹
+          {value.toLocaleString("en-IN", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}
+        </div>
+        <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 2 }}>
+          Coverage: {percentage}% of chart total
         </div>
         <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 2 }}>Percentage: {percentage}%</div>
         <div style={{ fontSize: 12, color: "#6b7280" }}>Count: {count ?? 0}</div>
@@ -136,11 +116,11 @@ export default function PaymentMethodDistributionChart({
         <div style={{ height, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <div style={{ color: "#9ca3af" }}>Loading...</div>
         </div>
-      ) : distributionData.length === 0 ? (
+      ) : distributionData.length === 0 && amountReceivable === 0 ? (
         <div style={{ height, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description="No completed sales data available"
+            description="No payment data available for this period"
           />
         </div>
       ) : (
@@ -154,7 +134,6 @@ export default function PaymentMethodDistributionChart({
                   cy="50%"
                   innerRadius={60}
                   outerRadius={90}
-                  isAnimationActive={false}
                   paddingAngle={2}
                   dataKey="value"
                   label={renderCustomLabel}
@@ -170,7 +149,7 @@ export default function PaymentMethodDistributionChart({
                     />
                   ))}
                 </Pie>
-                <Tooltip content={renderCustomTooltip as any} />
+                <Tooltip content={renderCustomTooltip} />
                 <Legend
                   verticalAlign="bottom"
                   height={36}
@@ -179,7 +158,11 @@ export default function PaymentMethodDistributionChart({
                       displayName?: string;
                     };
 
-                    return <span style={{ fontSize: 12, color: "#6b7280" }}>{data.name}</span>;
+                    return (
+                      <span style={{ fontSize: 12, color: "#6b7280" }}>
+                        {data.name}: {data.value.toLocaleString("en-IN", { style: "currency", currency: "INR" })}
+                      </span>
+                    );
                   }}
                 />
               </PieChart>
@@ -192,47 +175,29 @@ export default function PaymentMethodDistributionChart({
               paddingTop: 12,
               borderTop: "1px solid #e5e7eb",
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-              gap: 12,
+              gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+              gap: 16,
             }}
           >
             <div style={{ textAlign: "center" }}>
               <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 4 }}>
-                Total Revenue
+                Total Received
               </div>
               <div style={{ fontSize: 18, fontWeight: 600, color: "#111827" }}>
                 ₹
-                {totalRevenue.toLocaleString("en-IN", {
+                {paymentDistributionTotal.toLocaleString("en-IN", {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2,
                 })}
               </div>
-              <div style={{ fontSize: 11, color: "#6b7280", marginTop: 4 }}>
-                {paymentDistributionTotal.toLocaleString("en-IN", {
-                  style: "currency",
-                  currency: "INR",
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })} shown in chart
-              </div>
             </div>
-
             <div style={{ textAlign: "center" }}>
               <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 4 }}>
-                Completed Sales
-              </div>
-              <div style={{ fontSize: 18, fontWeight: 600, color: "#111827" }}>
-                {completedSalesCount}
-              </div>
-            </div>
-
-            <div style={{ textAlign: "center" }}>
-              <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 4 }}>
-                Unallocated Revenue
+                Amount Receivable
               </div>
               <div style={{ fontSize: 18, fontWeight: 600, color: "#d97706" }}>
                 ₹
-                {unallocatedRevenue.toLocaleString("en-IN", {
+                {amountReceivable.toLocaleString("en-IN", {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2,
                 })}

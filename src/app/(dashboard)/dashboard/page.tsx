@@ -15,10 +15,6 @@ import {
 } from "@ant-design/icons";
 import { useSession } from "next-auth/react";
 import dayjs from "dayjs";
-import minMax from "dayjs/plugin/minMax";
-
-dayjs.extend(minMax);
-
 import {
   ResponsiveContainer,
   BarChart,
@@ -48,7 +44,7 @@ import { formatDateTime } from "@/shared/utils/formatDate";
 import CategorySizeHeatmap from "@/modules/dashboard/components/CategorySizeHeatmap";
 import DashboardTabs, { type DashboardTab } from "@/modules/dashboard/components/DashboardTabs";
 import PaymentMethodDistributionChart from "@/modules/dashboard/components/PaymentMethodDistributionChart";
-import type { PaymentMethodDistribution } from "@/modules/dashboard/services/paymentMethodService";
+import type { PaymentMethodDistribution, PaymentMethodDistributionResponse } from "@/modules/dashboard/services/paymentMethodService";
 import { calculateProfitabilityMetrics } from "@/modules/dashboard/services/profitabilityService";
 
 const MobileDashboardPage = dynamic(() => import("@/modules/mobile-dashboard/pages/DashboardPage"));
@@ -194,7 +190,7 @@ const WelcomeGuide = ({ userName }: { userName?: string | null }) => {
 
 const DashboardPage = () => {
   const { isMobile, isReady } = useMobileViewport();
-  const { data: session } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
   const { storeId } = useStore();
   const { data, loading } = useDashboard(storeId ?? undefined);
   const { items: lowStockItems, loading: lowStockLoading } = useLowStockAlerts();
@@ -212,6 +208,7 @@ const DashboardPage = () => {
   const [salesBreakdownData, setSalesBreakdownData] = useState<Array<{ label: string; totalRevenue: number; discountGiven: number; grossProfit: number; transactionCount: number; period: string }>>([]);
   const [salesBreakdownLoading, setSalesBreakdownLoading] = useState(false);
   const [paymentDistributionData, setPaymentDistributionData] = useState<PaymentMethodDistribution[]>([]);
+  const [paymentAmountReceivable, setPaymentAmountReceivable] = useState(0);
   const [paymentDistributionLoading, setPaymentDistributionLoading] = useState(false);
   const [contentVisible, setContentVisible] = useState(true);
   const [customDateRange, setCustomDateRange] = useState<[dayjs.Dayjs | null, dayjs.Dayjs | null] | null>(null);
@@ -220,7 +217,7 @@ const DashboardPage = () => {
   const revenueOfRow = (row: DashboardTransactionRow | null | undefined) => {
     if (!row) return 0;
     if (row.rowType === "RETURN_TRANSACTION") return Number(row.netAmount ?? 0);
-    return Number((row as SaleSummary).total ?? 0);
+    return Number(row.total ?? 0);
   };
 
   const rowDate = (row: DashboardTransactionRow | null | undefined) => {
@@ -228,10 +225,7 @@ const DashboardPage = () => {
     if (row.rowType === "RETURN_TRANSACTION") {
       return dayjs(row.businessDate ?? row.transactionDate ?? row.createdAt);
     }
-    if (row.rowType === "SALE") {
-      return dayjs(row.transactionDate ?? row.createdAt);
-    }
-    return dayjs(row.createdAt);
+    return dayjs(row.transactionDate ?? row.createdAt);
   };
 
   const isCountedTransaction = (row: DashboardTransactionRow | null | undefined) => {
@@ -386,6 +380,29 @@ const DashboardPage = () => {
 
   const effectiveDateRange = useMemo<DateRangeWindow>(() => createSalesRange(period, customDateRange), [customDateRange, period]);
 
+  // The payment accounting period is independent of the wider Sales Breakdown trend range.
+  const paymentReportRange = useMemo<DateRangeWindow>(() => {
+    if (customDateRange?.[0] && customDateRange?.[1]) {
+      return {
+        from: customDateRange[0].startOf("day").format("YYYY-MM-DD"),
+        to: customDateRange[1].endOf("day").format("YYYY-MM-DD"),
+      };
+    }
+
+    const selectedDate = dayjs();
+    const unit = period === "daily"
+      ? "day"
+      : period === "weekly"
+        ? "week"
+        : period === "monthly"
+          ? "month"
+          : "year";
+    return {
+      from: selectedDate.startOf(unit).format("YYYY-MM-DD"),
+      to: selectedDate.endOf(unit).format("YYYY-MM-DD"),
+    };
+  }, [customDateRange, period]);
+
   useEffect(() => {
     setSalesLimit(5000);
     setSalesPage(1);
@@ -425,40 +442,51 @@ const DashboardPage = () => {
     return () => { cancelled = true; };
   }, [effectiveDateRange, period]);
 
+  useEffect(() => {
+    if (sessionStatus !== "authenticated") {
+      return;
+    }
 
-      useEffect(() => {
-        let cancelled = false;
+    let cancelled = false;
 
-        const loadPaymentDistribution = async () => {
-          setPaymentDistributionLoading(true);
-          try {
-            const params = new URLSearchParams({
-              from: effectiveDateRange.from,
-              to: effectiveDateRange.to,
-            });
+    const loadPaymentDistribution = async () => {
+      setPaymentDistributionLoading(true);
+      try {
+        const params = new URLSearchParams({
+          from: paymentReportRange.from,
+          to: paymentReportRange.to,
+        });
+        if (storeId) params.set("storeId", storeId);
 
-            const res = await fetch(`/api/reports/payment-method-distribution?${params.toString()}`);
-            const rows = res.ok ? (await res.json()) as PaymentMethodDistribution[] : [];
+        const requestUrl = `/api/reports/payment-method-distribution?${params.toString()}`;
+        if (process.env.NODE_ENV === "development") {
+          console.info("[payment-method-distribution] request", requestUrl);
+        }
+        const res = await fetch(requestUrl);
+        const report = res.ok ? (await res.json()) as PaymentMethodDistributionResponse : null;
+        if (!cancelled) {
+          setPaymentDistributionData(Array.isArray(report?.methods) ? report.methods : []);
+          setPaymentAmountReceivable(Number(report?.amountReceivable ?? 0));
+        }
 
-            if (!cancelled) {
-              setPaymentDistributionData(Array.isArray(rows) ? rows : []);
-            }
-          } catch {
-            if (!cancelled) {
-              setPaymentDistributionData([]);
-            }
-          } finally {
-            if (!cancelled) {
-              setPaymentDistributionLoading(false);
-            }
-          }
-        };
+      } catch {
+        if (!cancelled) {
+          setPaymentDistributionData([]);
+          setPaymentAmountReceivable(0);
+        }
+      } finally {
+        if (!cancelled) {
+          setPaymentDistributionLoading(false);
+        }
+      }
+    };
 
-        loadPaymentDistribution();
-        return () => {
-          cancelled = true;
-        };
-      }, [effectiveDateRange]);
+    loadPaymentDistribution();
+    return () => {
+      cancelled = true;
+    };
+  }, [paymentReportRange, storeId, sessionStatus]);
+
   const filteredSales = useMemo(() => {
     const startDate = dayjs(effectiveDateRange.from).startOf("day");
     const endDate = dayjs(effectiveDateRange.to).endOf("day");
@@ -471,7 +499,6 @@ const DashboardPage = () => {
 
   const latestBucketSales = useMemo(() => {
     if (customDateRange || salesBreakdownData.length === 0) {
-      console.log("filteredSales=====", filteredSales);
       return filteredSales;
     }
 
@@ -495,78 +522,20 @@ const DashboardPage = () => {
     });
   }, [customDateRange, salesBreakdownData, period, filteredSales, sales]);
 
-  const paymentSales = useMemo(() => {
-    // Determine concrete bucket boundaries to match Sales Breakdown
-    let start = dayjs(effectiveDateRange.from).startOf("day");
-    let end = dayjs(effectiveDateRange.to).endOf("day");
-
-    if (!customDateRange && salesBreakdownData.length > 0) {
-      const lastBucket = salesBreakdownData[salesBreakdownData.length - 1];
-      if (lastBucket?.period) {
-        const bucketStart = dayjs(lastBucket.period).startOf("day");
-        const bucketEnd = period === "weekly"
-          ? bucketStart.add(6, "day").endOf("day")
-          : period === "monthly"
-          ? bucketStart.endOf("month")
-          : period === "yearly"
-          ? bucketStart.endOf("year")
-          : bucketStart.endOf("day");
-
-        start = bucketStart;
-        end = bucketEnd;
-      }
-    }
-
-    return sales.filter((sale) => {
-      const saleDate = rowDate(sale);
-      return !saleDate.isBefore(start) && !saleDate.isAfter(end);
-    });
-  }, [sales, effectiveDateRange, customDateRange, salesBreakdownData, period]);
-
   const dayOfWeekPatternData = useMemo(() => {
     const dayOrder = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const totals = new Map<string, number>(dayOrder.map((day) => [day, 0]));
-    for (const sale of paymentSales) {
+    for (const sale of latestBucketSales) {
       const key = dayOrder[rowDate(sale).day()];
       totals.set(key, (totals.get(key) ?? 0) + revenueOfRow(sale));
     }
     return dayOrder.map((day) => ({ day, total: totals.get(day) ?? 0 }));
-  }, [paymentSales]);
+  }, [latestBucketSales]);
 
-  const salesRangeLabel = useMemo(() => {
-    if (filteredSales.length === 0) {
-      return "No data";
-    }
-    const dates = filteredSales.map((sale) => rowDate(sale));
-    const minDate = dayjs.min(dates);
-    const maxDate = dayjs.max(dates);
-    if (!minDate || !maxDate) {
-      return "No data";
-    }
-    return `${minDate.format("MMM DD")} – ${maxDate.format("MMM DD, YYYY")}`;
-  }, [filteredSales]);
-
-  const activeBucketLabel = useMemo(() => {
-    if (customDateRange || salesBreakdownData.length === 0) {
-      return salesRangeLabel;
-    }
-
-    const lastBucket = salesBreakdownData[salesBreakdownData.length - 1];
-    if (!lastBucket?.period) {
-      return salesRangeLabel;
-    }
-
-    const bucketStart = dayjs(lastBucket.period).startOf("day");
-    const bucketEnd = period === "weekly"
-      ? bucketStart.add(6, "day").endOf("day")
-      : period === "monthly"
-      ? bucketStart.endOf("month")
-      : period === "yearly"
-      ? bucketStart.endOf("year")
-      : bucketStart.endOf("day");
-
-    return `${bucketStart.format("DD MMM YYYY")} – ${bucketEnd.format("DD MMM YYYY")}`;
-  }, [customDateRange, salesBreakdownData, period, salesRangeLabel]);
+  const paymentReportLabel = useMemo(
+    () => `${dayjs(paymentReportRange.from).format("DD MMM YYYY")} – ${dayjs(paymentReportRange.to).format("DD MMM YYYY")}`,
+    [paymentReportRange],
+  );
 
   const revenueComparison = useMemo(() => {
     const label = customDateRange
@@ -1218,9 +1187,10 @@ const DashboardPage = () => {
                         <div style={{ fontSize: 15, fontWeight: 500, color: "#111827", marginBottom: 16 }}>Payment method distribution</div>
                         <PaymentMethodDistributionChart
                           distributionData={paymentDistributionData}
+                          amountReceivable={paymentAmountReceivable}
                           loading={paymentDistributionLoading}
                           height={340}
-                          activeBucketLabel={activeBucketLabel}
+                          activeBucketLabel={paymentReportLabel}
                         />
                       </section>
 

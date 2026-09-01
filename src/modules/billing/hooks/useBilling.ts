@@ -1,20 +1,36 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useSession } from "next-auth/react";
 import type { Sale, SaleFilters, SaleSummary, CartItem, CreateSaleInput, PaymentMethodType, SplitPaymentEntry } from "../types";
 
 export function useSales(initialFilters?: SaleFilters) {
+  const { status: sessionStatus } = useSession();
   const [sales, setSales] = useState<SaleSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<SaleFilters>(initialFilters ?? {});
   const [page, setPage] = useState<number>(1);
   const [limit, setLimit] = useState<number>(20);
   const [pagination, setPagination] = useState<{ page: number; limit: number; total: number; totalPages: number }>({ page: 1, limit: 20, total: 0, totalPages: 1 });
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<Record<string, number> | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const activeRequestIdRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const fetchSales = useCallback(async () => {
+    if (sessionStatus === "loading") {
+      return;
+    }
+
+    if (sessionStatus === "unauthenticated") {
+      setSales([]);
+      setPagination({ page: 1, limit, total: 0, totalPages: 1 });
+      setStats(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
     const requestId = activeRequestIdRef.current + 1;
     activeRequestIdRef.current = requestId;
 
@@ -27,23 +43,41 @@ export function useSales(initialFilters?: SaleFilters) {
     abortControllerRef.current = controller;
 
     setLoading(true);
+    setError(null);
     try {
       const params = new URLSearchParams();
       if (filters.search) params.set("search", filters.search);
       if (filters.status) params.set("status", filters.status);
       if (filters.paymentMethod) params.set("paymentMethod", filters.paymentMethod);
-      if ((filters as any).type) params.set("type", (filters as any).type);
+      if (filters.type) params.set("type", filters.type);
       if (filters.startDate) params.set("startDate", filters.startDate);
       if (filters.endDate) params.set("endDate", filters.endDate);
       params.set("page", String(page));
       params.set("limit", String(limit));
       const qs = params.toString();
-      const res = await fetch(`/api/billing/history${qs ? `?${qs}` : ""}`, {
+      const requestUrl = `/api/billing/history${qs ? `?${qs}` : ""}`;
+      let res = await fetch(requestUrl, {
         signal: controller.signal,
         cache: "no-store",
       });
-      if (!res.ok) throw new Error("Failed to fetch sales");
+
+      // A sleeping or briefly unavailable database can return 503 on the first request.
+      if (res.status === 503) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        res = await fetch(requestUrl, {
+          signal: controller.signal,
+          cache: "no-store",
+        });
+      }
+
       const payload = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        if (requestId === activeRequestIdRef.current) {
+          setError(payload?.error || `Failed to fetch sales (${res.status})`);
+        }
+        return;
+      }
 
       // Ignore stale responses that raced with a newer request.
       if (requestId !== activeRequestIdRef.current) {
@@ -68,14 +102,16 @@ export function useSales(initialFilters?: SaleFilters) {
       if (error instanceof Error && error.name === "AbortError") {
         return;
       }
-      console.error("Failed to fetch sales:", error);
+      if (requestId === activeRequestIdRef.current) {
+        setError(error instanceof Error ? error.message : "Failed to fetch sales");
+      }
     } 
     finally {
       if (requestId === activeRequestIdRef.current) {
         setLoading(false);
       }
     }
-  }, [filters, page, limit]);
+  }, [filters, page, limit, sessionStatus]);
 
   useEffect(() => {
     return () => {
@@ -183,6 +219,7 @@ export function useSales(initialFilters?: SaleFilters) {
     setLimit,
     pagination,
     stats,
+    error,
     createSale,
     refundSale,
     collectPayment,

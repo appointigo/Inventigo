@@ -7,6 +7,7 @@ import { SearchOutlined, CheckOutlined, CloseOutlined, TagOutlined, LockOutlined
 import dayjs from "dayjs";
 import { useProducts } from "@/modules/products/hooks/useProducts";
 import { useCart } from "@/modules/billing/hooks/useBilling";
+import { useBillingProductSearch } from "@/modules/billing/hooks/useBillingProductSearch";
 import { sanitizeScannedBarcode } from "@/shared/services/barcodeService";
 import InvoicePreview from "./InvoicePreview";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
@@ -125,7 +126,14 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
   const { message } = App.useApp();
 
   // ─── Local UI state ────────────────────────────────────────────────────────
-  const [search, setSearch] = useState("");
+  const {
+    search,
+    productQuery,
+    pendingExactSearchRef,
+    changeSearch,
+    submitExactSearch,
+    clearSearch: clearProductSearch,
+  } = useBillingProductSearch();
   const [lastAdded, setLastAdded] = useState<VariantRow | null>(null);
   const [saleLoading, setSaleLoading] = useState(false);
   const [completedSale, setCompletedSale] = useState<Sale | null>(null);
@@ -169,8 +177,9 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
   // ─── Cart + products ───────────────────────────────────────────────────────
   const cart = useCart();
   const { promos } = usePromoCodes();
-  const { products, loading: productsLoading } = useProducts(
-    search.trim() ? { search: search.trim() } : undefined
+  const { products, loading: productsLoading, resolvedSearch: resolvedProductQuery } = useProducts(
+    productQuery ? { search: productQuery } : undefined,
+    { enabled: productQuery.length > 0 },
   );
 
   // Auto-apply default tax rate on first load
@@ -205,7 +214,10 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
     if (search.trim()) {
       const s = search.toLowerCase().trim();
       const exactMatches = rows.filter(
-        (r) => r.variantSku?.toLowerCase() === s || r.externalBarcode?.toLowerCase() === s
+        (r) =>
+          r.variantSku?.toLowerCase() === s ||
+          r.externalBarcode?.toLowerCase() === s ||
+          r.sku.toLowerCase() === s
       );
       if (exactMatches.length === 1) return exactMatches;
       if (exactMatches.length > 1) return exactMatches;
@@ -259,10 +271,6 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
     [cart, message]
   );
 
-  // pendingCameraScan holds the raw SKU string after a camera scan until we can
-  // attempt an auto-add (we need variantRows to re-derive first).
-  const pendingCameraScanRef = useRef<string | null>(null);
-
   // Called when barcode is scanned via camera
   // Sanitizes the scanned barcode to remove noise and validate format
   const handleCameraScan = useCallback((decodedText: string) => {
@@ -271,43 +279,55 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
       message.error("Invalid barcode format. Please try scanning again.");
       return;
     }
-    pendingCameraScanRef.current = sanitized;
-    setSearch(sanitized);
+    submitExactSearch(sanitized);
     setCameraScanOpen(false);
-  }, [message]);
+  }, [message, submitExactSearch]);
 
   // After a camera scan the search query changes → useProducts fetches data →
   // variantRows re-derives. Once it settles, try an exact-match auto-add.
   useEffect(() => {
-    const pending = pendingCameraScanRef.current;
-    if (!pending || productsLoading) return;
+    const pending = pendingExactSearchRef.current;
+    if (!pending || productsLoading || resolvedProductQuery.toUpperCase() !== pending.toUpperCase()) return;
 
     const s = pending.toUpperCase();
     const exactMatches = variantRows.filter(
-      (r) => r.variantSku?.toUpperCase() === s || r.externalBarcode?.toUpperCase() === s
+      (r) =>
+        r.variantSku?.toUpperCase() === s ||
+        r.externalBarcode?.toUpperCase() === s ||
+        r.sku.toUpperCase() === s
     );
     if (exactMatches.length === 1) {
-      pendingCameraScanRef.current = null;
+      pendingExactSearchRef.current = null;
       handleAddToCart(exactMatches[0]);
-      setSearch("");
+      clearProductSearch();
+      return;
     }
+    pendingExactSearchRef.current = null;
     // If multiple or zero exact matches, show the list for user selection.
-  }, [variantRows, productsLoading, handleAddToCart]);
+  }, [variantRows, productsLoading, resolvedProductQuery, handleAddToCart, clearProductSearch, pendingExactSearchRef]);
 
   // Called when user presses Enter in the scan input (barcode scanner sends Enter)
   const handleScanEnter = useCallback(() => {
-    const s = search.trim().toUpperCase();
-    if (!s || productsLoading) return;
-    
-    const exact = variantRows.find(
-      (r) => r.variantSku?.toUpperCase() === s || r.externalBarcode?.toUpperCase() === s
-    );
-    if (exact) {
-      handleAddToCart(exact);
-      setSearch("");
+    const term = search.trim();
+    if (!term) return;
+
+    const normalizedTerm = term.toUpperCase();
+    if (productQuery.toUpperCase() === normalizedTerm && !productsLoading) {
+      const exactMatches = variantRows.filter(
+        (row) =>
+          row.variantSku?.toUpperCase() === normalizedTerm ||
+          row.externalBarcode?.toUpperCase() === normalizedTerm ||
+          row.sku.toUpperCase() === normalizedTerm
+      );
+      if (exactMatches.length === 1) {
+        handleAddToCart(exactMatches[0]);
+        clearProductSearch();
+      }
+      return;
     }
-    // No exact match → keep search results visible for manual selection
-  }, [search, variantRows, productsLoading, handleAddToCart]);
+
+    submitExactSearch(term);
+  }, [search, productQuery, variantRows, productsLoading, handleAddToCart, clearProductSearch, submitExactSearch]);
 
   // ─── Sale creation ─────────────────────────────────────────────────────────
   const handleConfirmSale = async () => {
@@ -624,7 +644,7 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
               prefix={<SearchOutlined />}
               placeholder="Scan barcode or search by name / SKU…"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => changeSearch(e.target.value)}
               onPressEnter={handleScanEnter}
               allowClear
               size="large"
@@ -708,7 +728,7 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
                       size="small"
                       onClick={() => {
                         handleAddToCart(row);
-                        setSearch("");
+                        clearProductSearch();
                       }}
                       disabled={row.stockQty === 0 || !row.isActive}
                       style={{ borderRadius: 7, fontSize: 12, fontWeight: 600 }}
