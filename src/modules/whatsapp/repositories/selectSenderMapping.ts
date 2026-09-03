@@ -18,4 +18,3 @@ export function selectSenderMapping<T extends SenderMappingCandidate>(
   const fallback = storeDefaults.find((candidate) => candidate.isDefault) ?? storeDefaults[0];
   return fallback ? { mapping: fallback, resolution: "STORE_DEFAULT" } : null;
 }
-

@@ -9,4 +9,3 @@ export class CommunicationService {
     return { channel: "WHATSAPP", ...result };
   }
 }
-

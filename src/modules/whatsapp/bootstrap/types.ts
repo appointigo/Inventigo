@@ -37,4 +37,3 @@ export type TestTenantBootstrapResult = {
   senderMappingId: string;
   templateInstanceId?: string;
 };
-

@@ -104,4 +104,3 @@ export const RequirementList = styled.ul`
   color: ${({ theme }) => theme.text.secondary};
   li + li { margin-top: 10px; }
 `;
-

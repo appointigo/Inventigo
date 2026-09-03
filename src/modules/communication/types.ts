@@ -11,4 +11,3 @@ export type CommunicationRequest = {
 export type CommunicationResult = SendWhatsAppMessageResult & {
   channel: "WHATSAPP";
 };
-
