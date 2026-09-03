@@ -1,5 +1,8 @@
 import { prisma } from "@/lib/db";
-import type { WhatsAppMessagePurpose as PrismaWhatsAppMessagePurpose } from "@prisma/client";
+import type {
+  Prisma,
+  WhatsAppMessagePurpose as PrismaWhatsAppMessagePurpose,
+} from "@prisma/client";
 import type { WhatsAppRepository } from "./WhatsAppRepository";
 import type {
   CreateWhatsAppMessageInput,
@@ -115,28 +118,58 @@ export class PrismaWhatsAppRepository implements WhatsAppRepository {
   }
 
   async createMessage(input: CreateWhatsAppMessageInput): Promise<WhatsAppMessageRecord> {
-    const message = await prisma.whatsAppMessage.create({
-      data: {
-        organizationId: input.organizationId,
-        storeId: input.storeId ?? null,
-        phoneNumberId: input.phoneNumberId,
-        templateInstanceId: input.templateInstanceId ?? null,
-        campaignRecipientId: input.campaignRecipientId ?? null,
-        automationExecutionId: input.automationExecutionId ?? null,
-        direction: "OUTBOUND",
-        type: input.content.type,
-        purpose: input.purpose as PrismaWhatsAppMessagePurpose,
-        fromPhone: input.fromPhone ?? null,
-        toPhone: input.to,
-        referenceType: input.reference?.type ?? null,
-        referenceId: input.reference?.id ?? null,
-        payload: JSON.parse(JSON.stringify(input.content)),
-        status: "QUEUED",
-        queuedAt: new Date(),
+    const data: Prisma.WhatsAppMessageUncheckedCreateInput = {
+      organizationId: input.organizationId,
+      storeId: input.storeId ?? null,
+      phoneNumberId: input.phoneNumberId,
+      templateInstanceId: input.templateInstanceId ?? null,
+      campaignRecipientId: input.campaignRecipientId ?? null,
+      automationExecutionId: input.automationExecutionId ?? null,
+      idempotencyKey: input.idempotencyKey ?? null,
+      direction: "OUTBOUND",
+      type: input.content.type,
+      purpose: input.purpose as PrismaWhatsAppMessagePurpose,
+      fromPhone: input.fromPhone ?? null,
+      toPhone: input.to,
+      referenceType: input.reference?.type ?? null,
+      referenceId: input.reference?.id ?? null,
+      payload: JSON.parse(JSON.stringify(input.content)),
+      status: "QUEUED",
+      queuedAt: new Date(),
+    };
+    const select = { id: true, status: true, metaMessageId: true } as const;
+    const message = input.idempotencyKey
+      ? await prisma.whatsAppMessage.upsert({
+          where: { idempotencyKey: input.idempotencyKey },
+          create: data,
+          update: {},
+          select,
+        })
+      : await prisma.whatsAppMessage.create({ data, select });
+    return {
+      id: message.id,
+      status: message.status,
+      providerMessageId: message.metaMessageId ?? undefined,
+    };
+  }
+
+  async claimMessage(messageId: string): Promise<boolean> {
+    const result = await prisma.whatsAppMessage.updateMany({
+      where: {
+        id: messageId,
+        metaMessageId: null,
+        dispatchClaimedAt: null,
+        status: { in: ["QUEUED", "FAILED"] },
       },
-      select: { id: true, status: true },
+      data: {
+        dispatchClaimedAt: new Date(),
+        status: "QUEUED",
+        errorCode: null,
+        errorMessage: null,
+        failedAt: null,
+      },
     });
-    return message;
+    return result.count === 1;
   }
 
   async markSubmitted(input: Parameters<WhatsAppRepository["markSubmitted"]>[0]): Promise<void> {
@@ -158,6 +191,7 @@ export class PrismaWhatsAppRepository implements WhatsAppRepository {
         errorCode: input.errorCode,
         errorMessage: input.errorMessage,
         failedAt: input.failedAt,
+        dispatchClaimedAt: null,
       },
     });
   }

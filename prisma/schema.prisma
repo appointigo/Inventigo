@@ -41,6 +41,8 @@ model Organization {
   whatsappContacts            WhatsAppContact[]
   whatsappCampaigns           WhatsAppCampaign[]
   whatsappAutomations         WhatsAppAutomation[]
+  whatsappConversations       WhatsAppConversation[]
+  whatsappWebhookEvents       WhatsAppWebhookEvent[]
 
   @@map("organizations")
 }
@@ -79,6 +81,7 @@ model Store {
   whatsappCampaignStores     WhatsAppCampaignStore[]
   whatsappCampaignRecipients WhatsAppCampaignRecipient[]
   whatsappAutomations        WhatsAppAutomation[]
+  whatsappConversations      WhatsAppConversation[]
 
   @@unique([code, orgId])
   @@index([orgId])
@@ -914,6 +917,16 @@ enum WhatsAppWebhookProcessingStatus {
   FAILED
 }
 
+enum WhatsAppConversationRoutingStatus {
+  RESOLVED
+  UNRESOLVED
+}
+
+enum WhatsAppConversationStatus {
+  OPEN
+  CLOSED
+}
+
 model WhatsAppIntegration {
   id               String                    @id @default(uuid())
   organizationId   String
@@ -988,6 +1001,7 @@ model WhatsAppPhoneNumber {
   waba                  WhatsAppBusinessAccount   @relation(fields: [wabaId], references: [id], onDelete: Cascade)
   storeMappings         StoreWhatsAppSender[]
   messages              WhatsAppMessage[]
+  conversations         WhatsAppConversation[]
 
   @@index([wabaId])
   @@index([status])
@@ -1093,6 +1107,9 @@ model WhatsAppMessage {
   templateInstanceId    String?
   campaignRecipientId   String?
   automationExecutionId String?
+  conversationId        String?
+  idempotencyKey        String?                      @unique
+  dispatchClaimedAt     DateTime?
   metaMessageId         String?                      @unique
   direction             WhatsAppMessageDirection
   type                  WhatsAppMessageType
@@ -1119,6 +1136,7 @@ model WhatsAppMessage {
   templateInstance      WhatsAppTemplateInstance?    @relation(fields: [templateInstanceId], references: [id], onDelete: SetNull)
   campaignRecipient     WhatsAppCampaignRecipient?   @relation(fields: [campaignRecipientId], references: [id], onDelete: SetNull)
   automationExecution   WhatsAppAutomationExecution? @relation(fields: [automationExecutionId], references: [id], onDelete: SetNull)
+  conversation          WhatsAppConversation?        @relation(fields: [conversationId], references: [id], onDelete: SetNull)
   events                WhatsAppMessageEvent[]
 
   @@index([organizationId, createdAt])
@@ -1129,6 +1147,7 @@ model WhatsAppMessage {
   @@index([referenceType, referenceId])
   @@index([campaignRecipientId, createdAt])
   @@index([automationExecutionId, createdAt])
+  @@index([conversationId, createdAt])
   @@map("whatsapp_messages")
 }
 
@@ -1149,6 +1168,7 @@ model WhatsAppMessageEvent {
 
 model WhatsAppWebhookEvent {
   id                 String                          @id @default(uuid())
+  organizationId     String?
   providerEventId    String?
   dedupeKey          String?                         @unique
   eventType          String?
@@ -1159,10 +1179,37 @@ model WhatsAppWebhookEvent {
   lastError          String?
   createdAt          DateTime                        @default(now())
   updatedAt          DateTime                        @updatedAt
+  organization       Organization?                   @relation(fields: [organizationId], references: [id], onDelete: SetNull)
 
   @@index([processingStatus, createdAt])
   @@index([providerEventId])
+  @@index([organizationId, createdAt])
   @@map("whatsapp_webhook_events")
+}
+
+model WhatsAppConversation {
+  id               String                            @id @default(uuid())
+  organizationId   String
+  phoneNumberId    String
+  contactId        String?
+  storeId          String?
+  externalPhone    String
+  routingStatus    WhatsAppConversationRoutingStatus @default(UNRESOLVED)
+  unresolvedReason String?
+  status           WhatsAppConversationStatus        @default(OPEN)
+  lastMessageAt    DateTime
+  createdAt        DateTime                          @default(now())
+  updatedAt        DateTime                          @updatedAt
+  organization     Organization                      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  phoneNumber      WhatsAppPhoneNumber               @relation(fields: [phoneNumberId], references: [id], onDelete: Restrict)
+  contact          WhatsAppContact?                  @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  store            Store?                            @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  messages         WhatsAppMessage[]
+
+  @@index([organizationId, lastMessageAt])
+  @@index([phoneNumberId, externalPhone, status])
+  @@index([storeId, lastMessageAt])
+  @@map("whatsapp_conversations")
 }
 
 enum WhatsAppConsentPurpose {
@@ -1189,6 +1236,7 @@ model WhatsAppContact {
   stores             WhatsAppContactStore[]
   consents           WhatsAppConsent[]
   campaignRecipients WhatsAppCampaignRecipient[]
+  conversations      WhatsAppConversation[]
 
   @@unique([organizationId, normalizedPhone])
   @@index([organizationId, createdAt])

@@ -23,6 +23,7 @@ export interface WhatsAppRepository {
   }): Promise<ResolvedWhatsAppTemplate | null>;
 
   createMessage(input: CreateWhatsAppMessageInput): Promise<WhatsAppMessageRecord>;
+  claimMessage(messageId: string): Promise<boolean>;
 
   markSubmitted(input: {
     messageId: string;

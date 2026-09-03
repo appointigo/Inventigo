@@ -39,6 +39,12 @@ test("WhatsApp shell exposes templates, readiness, test send, and activity", () 
     { key: "readiness", label: "Readiness", href: "/dashboard/whatsapp/readiness", enabled: true },
     { key: "test", label: "Send Test", href: "/dashboard/whatsapp/test-message", enabled: true },
     { key: "messages", label: "Activity", href: "/dashboard/whatsapp/messages", enabled: true },
+    {
+      key: "conversations",
+      label: "Conversations",
+      href: "/dashboard/whatsapp/conversations",
+      enabled: true,
+    },
     { key: "contacts", label: "Contacts", href: "/dashboard/whatsapp/contacts", enabled: true },
     { key: "campaigns", label: "Campaigns", href: "/dashboard/whatsapp/campaigns", enabled: true },
     {
@@ -47,6 +53,7 @@ test("WhatsApp shell exposes templates, readiness, test send, and activity", () 
       href: "/dashboard/whatsapp/automations",
       enabled: true,
     },
+    { key: "health", label: "Health", href: "/dashboard/whatsapp/health", enabled: true },
   ]);
 });
 

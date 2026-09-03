@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { timingSafeEqual } from "node:crypto";
 import {
   createWhatsAppAutomationWorker,
   createWhatsAppCampaignExecutionService,
@@ -6,10 +7,17 @@ import {
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+const validSecret = (expected: string | undefined, authorization: string | null) => {
+  if (!expected || !authorization?.startsWith("Bearer ")) return false;
+  const supplied = authorization.slice(7),
+    a = Buffer.from(expected),
+    b = Buffer.from(supplied);
+  return a.length === b.length && timingSafeEqual(a, b);
+};
 
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
-  if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`)
+  if (!validSecret(secret, request.headers.get("authorization")))
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
     const service = createWhatsAppCampaignExecutionService();
@@ -19,10 +27,7 @@ export async function GET(request: Request) {
     const automationEvents = await automation.scan();
     const automationProcessed = await automation.process();
     return NextResponse.json({ launched, ...processed, automationEvents, automationProcessed });
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Campaign worker failed" },
-      { status: 500 }
-    );
+  } catch {
+    return NextResponse.json({ error: "WhatsApp worker failed" }, { status: 500 });
   }
 }

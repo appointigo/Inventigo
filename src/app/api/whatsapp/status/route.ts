@@ -50,8 +50,7 @@ export async function GET() {
           lastSyncedAt: null,
           businessAccounts: [],
         });
-  } catch (error) {
-    console.error("/api/whatsapp/status GET error:", error);
+  } catch {
     return NextResponse.json({ error: "Unable to load WhatsApp status" }, { status: 500 });
   }
 }
