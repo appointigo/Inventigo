@@ -2,7 +2,18 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 function createPrismaClient() {
-  const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) throw new Error("DATABASE_URL is required");
+
+  const adapter = new PrismaPg({
+    connectionString,
+    // Prisma 7's pg adapter defaults to no connection timeout and evicts idle
+    // connections after 10 seconds. Keep Vercel unchanged, while local dev gets
+    // bounded Neon wake-up time and fewer reconnects after short idle periods.
+    ...(process.env.NODE_ENV === "development"
+      ? { connectionTimeoutMillis: 15_000, idleTimeoutMillis: 300_000 }
+      : {}),
+  });
   return new PrismaClient({ adapter });
 }
 

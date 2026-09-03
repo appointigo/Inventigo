@@ -16,6 +16,7 @@ import {
   Statistic,
   Table,
   Tag,
+  Tooltip,
   Typography,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
@@ -24,6 +25,7 @@ import WhatsAppShell from "./WhatsAppShell";
 import WhatsAppStatusBadge from "./WhatsAppStatusBadge";
 import { Surface } from "./WhatsAppSetupPage.styled";
 import type { WhatsAppUiState } from "../ui";
+import { canSyncWhatsApp } from "../overview";
 const { Title, Text, Paragraph } = Typography;
 type Waba = {
   id: string;
@@ -141,6 +143,7 @@ export default function WhatsAppOverviewPage() {
       : data?.readiness === "ACTION_REQUIRED"
         ? "warning"
         : "processing";
+  const syncDisabled = !canSyncWhatsApp(data?.connection.status);
   return (
     <WhatsAppShell
       activeKey="overview"
@@ -157,14 +160,18 @@ export default function WhatsAppOverviewPage() {
             </Paragraph>
           </div>
           <Space>
-            <Button
-              icon={<ReloadOutlined />}
-              loading={syncing}
-              disabled={!data || data.connection.status === "NOT_CONNECTED"}
-              onClick={() => void sync()}
-            >
-              Sync
-            </Button>
+            <Tooltip title={syncDisabled ? "Connect a WhatsApp account before syncing." : undefined}>
+              <span>
+                <Button
+                  icon={<ReloadOutlined />}
+                  loading={syncing}
+                  disabled={syncDisabled}
+                  onClick={() => void sync()}
+                >
+                  Sync
+                </Button>
+              </span>
+            </Tooltip>
             <Button
               type="primary"
               icon={<PlusOutlined />}

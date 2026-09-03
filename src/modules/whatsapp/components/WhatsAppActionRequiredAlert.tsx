@@ -5,9 +5,8 @@ export default function WhatsAppActionRequiredAlert({ message }: { message?: str
     <Alert
       type="warning"
       showIcon
-      message="Your WhatsApp connection needs attention"
+      title="Your WhatsApp connection needs attention"
       description={message ?? "Review your Meta business account before sending messages."}
     />
   );
 }
-

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildSetupProgress, deriveWhatsAppReadiness, type OverviewEvidence } from "../overview.ts";
+import { buildSetupProgress, canSyncWhatsApp, deriveWhatsAppReadiness, type OverviewEvidence } from "../overview.ts";
 import type { PrismaClient } from "@prisma/client";
 import { WhatsAppOverviewService } from "../services/WhatsAppOverviewService.ts";
 
@@ -22,6 +22,13 @@ test("provider action state overrides otherwise complete configuration", () => {
     deriveWhatsAppReadiness({ ...complete, connectionStatus: "ACTION_REQUIRED" }),
     "ACTION_REQUIRED"
   );
+});
+test("sync is unavailable before connection and available for persisted integration states", () => {
+  assert.equal(canSyncWhatsApp(undefined), false);
+  assert.equal(canSyncWhatsApp("NOT_CONNECTED"), false);
+  assert.equal(canSyncWhatsApp("CONNECTED"), true);
+  assert.equal(canSyncWhatsApp("ACTION_REQUIRED"), true);
+  assert.equal(canSyncWhatsApp("DISCONNECTED"), true);
 });
 test("setup progress is normalized and never inferred from percentages", () => {
   assert.deepEqual(buildSetupProgress(complete), {
