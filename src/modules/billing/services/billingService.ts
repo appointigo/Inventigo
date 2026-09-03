@@ -1,7 +1,9 @@
 import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import type { CreateSaleInput, Sale, SaleItem, SaleFilters, SaleSummary } from "../types";
+import { createWhatsAppAutomationReader } from "@/modules/whatsapp/server";
 import { customerService } from "@/modules/customers/services/customerService";
+import { syncWhatsAppContactForCustomer } from "@/modules/whatsapp/services/WhatsAppContactService";
 import { allocatePricingSnapshots, resolveItemPrice, validateAmount } from "../utils/pricingEngine";
 import {
   getHistoricalReturnAmount,
@@ -633,6 +635,12 @@ export const billingService = {
       input.customerName,
       input.customerEmail
     );
+    await syncWhatsAppContactForCustomer({
+      organizationId: orgId,
+      customerId: customer.id,
+      phone: customer.mobile,
+      storeId,
+    });
 
     // Server-side promo validation — never trust client discountAmount when a promo is applied
     let discountAmount = input.discountAmount;
@@ -852,6 +860,20 @@ export const billingService = {
           return created;
         });
 
+        await createWhatsAppAutomationReader()
+          .emit({
+            organizationId: orgId,
+            storeId,
+            trigger: "SALE_COMPLETED",
+            subjectType: "SALE",
+            subjectId: sale.id,
+            customerId: sale.customerId ?? undefined,
+            phone: sale.customerPhone ?? undefined,
+            amount: Number(sale.total),
+            occurredAt: sale.transactionDate,
+            payload: { invoiceNumber: sale.invoiceNumber, total: Number(sale.total) },
+          })
+          .catch(() => undefined);
         return toSaleDto(sale);
       } catch (error) {
         if (attempt < 5 && isInvoiceNumberConflict(error)) {
@@ -1710,7 +1732,6 @@ export const billingService = {
     const totalQty = sale.items.reduce((sum, item) => sum + item.quantity, 0);
     const returnStatus = returnedQty === 0 ? "NONE" : returnedQty >= totalQty ? "FULL" : "PARTIAL";
     const returnedTotal = returnedLineItems.reduce((sum, item) => sum + item.total, 0);
-
     const discountType = input.discountType ?? "PERCENTAGE";
     const discountPercent = input.discountPercent ?? 0;
     const taxRate = input.taxRate ?? 0;
