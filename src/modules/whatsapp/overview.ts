@@ -11,6 +11,8 @@ export type MessagingReadiness =
   | "ACTION_REQUIRED"
   | "SETUP_IN_PROGRESS"
   | "READY";
+export const canSyncWhatsApp = (connectionStatus?: string) =>
+  Boolean(connectionStatus && connectionStatus !== "NOT_CONNECTED");
 export function deriveWhatsAppReadiness(e: OverviewEvidence): MessagingReadiness {
   if (!e.connectionStatus || e.connectionStatus === "DISCONNECTED") return "NOT_CONNECTED";
   if (["ACTION_REQUIRED", "SUSPENDED", "ERROR"].includes(e.connectionStatus))

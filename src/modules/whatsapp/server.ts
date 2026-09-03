@@ -2,7 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import { HttpMetaWhatsAppClient } from "./clients/HttpMetaWhatsAppClient";
 import { PrismaWhatsAppCredentialStore } from "./credentials/PrismaWhatsAppCredentialStore";
-import { getWhatsAppPlatformConfig } from "./config";
+import { getWhatsAppPlatformConfig, WhatsAppPlatformConfigurationError } from "./config";
 import { WhatsAppEmbeddedSignupService } from "./services/WhatsAppEmbeddedSignupService";
 import { WhatsAppAssetService } from "./services/WhatsAppAssetService";
 import { WhatsAppStoreConfigurationService } from "./services/WhatsAppStoreConfigurationService";
@@ -59,7 +59,11 @@ export function createWhatsAppAutomationWorker() {
 
 export function createMetaBackend() {
   const config = getWhatsAppPlatformConfig();
-  if (!config.enabled || !config.meta) throw new Error("WhatsApp is not enabled");
+  if (!config.enabled || !config.meta)
+    throw new WhatsAppPlatformConfigurationError(
+      "WHATSAPP_SETUP_DISABLED",
+      "WhatsApp is not enabled"
+    );
   const credentials = new PrismaWhatsAppCredentialStore(
     prisma,
     config.meta.credentialEncryptionKey
