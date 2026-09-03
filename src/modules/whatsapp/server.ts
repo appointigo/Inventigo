@@ -22,6 +22,8 @@ import { WhatsAppCampaignExecutionService } from "./services/WhatsAppCampaignExe
 import { PrismaCampaignJobQueue } from "./queue/PrismaCampaignJobQueue";
 import { WhatsAppCampaignMetricsService } from "./services/WhatsAppCampaignMetricsService";
 import { WhatsAppAutomationService } from "./services/WhatsAppAutomationService";
+import { WhatsAppConversationService } from "./services/WhatsAppConversationService";
+import { WhatsAppIntegrationHealthService } from "./services/WhatsAppIntegrationHealthService";
 
 export const createWhatsAppAssetReader = () => new WhatsAppAssetService(prisma);
 export const createWhatsAppStoreConfigurationService = () =>
@@ -39,6 +41,9 @@ export const createWhatsAppCampaignMetricsService = () =>
 export const createWhatsAppCampaignControlService = () =>
   new WhatsAppCampaignExecutionService(prisma, new PrismaCampaignJobQueue(prisma));
 export const createWhatsAppAutomationReader = () => new WhatsAppAutomationService(prisma);
+export const createWhatsAppConversationService = () => new WhatsAppConversationService(prisma);
+export const createWhatsAppIntegrationHealthService = () =>
+  new WhatsAppIntegrationHealthService(prisma);
 
 export function createWhatsAppCampaignExecutionService() {
   const backend = createMetaBackend();

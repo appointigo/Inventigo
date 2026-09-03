@@ -222,9 +222,10 @@ export class WhatsAppAutomationService {
     const stale = new Date(Date.now() - 300000);
     const jobs = await this.db.whatsAppAutomationExecution.findMany({
       where: {
-        status: "QUEUED",
-        availableAt: { lte: new Date() },
-        OR: [{ lockedAt: null }, { lockedAt: { lt: stale } }],
+        OR: [
+          { status: "QUEUED", availableAt: { lte: new Date() } },
+          { status: "PROCESSING", lockedAt: { lt: stale } },
+        ],
       },
       take: limit,
       orderBy: { availableAt: "asc" },
@@ -234,7 +235,10 @@ export class WhatsAppAutomationService {
     for (const job of jobs) {
       const token = randomUUID();
       const claim = await this.db.whatsAppAutomationExecution.updateMany({
-        where: { id: job.id, status: "QUEUED" },
+        where: {
+          id: job.id,
+          OR: [{ status: "QUEUED" }, { status: "PROCESSING", lockedAt: { lt: stale } }],
+        },
         data: {
           status: "PROCESSING",
           lockedAt: new Date(),
@@ -262,6 +266,7 @@ export class WhatsAppAutomationService {
             purpose: marketing ? "MARKETING" : "OTHER",
             senderPurpose: marketing ? "MARKETING" : "TRANSACTIONAL",
             automationExecutionId: job.id,
+            idempotencyKey: `automation-execution:${job.id}`,
             content: {
               type: "TEMPLATE",
               template: {

@@ -40,8 +40,22 @@ export class WhatsAppService {
       templateInstanceId: template?.templateInstanceId,
     });
 
+    if (["SUBMITTED", "SENT", "DELIVERED", "READ"].includes(message.status))
+      return {
+        messageId: message.id,
+        providerMessageId: message.providerMessageId,
+        status: "SUBMITTED",
+      };
+    if (!(await this.repository.claimMessage(message.id)))
+      throw new WhatsAppError(
+        "DUPLICATE_SEND_BLOCKED",
+        "This WhatsApp operation is already being dispatched",
+        { retryable: false }
+      );
+
+    let result;
     try {
-      const result = await this.metaClient.sendMessage({
+      result = await this.metaClient.sendMessage({
         organizationId: request.organizationId,
         credentialRef: sender.credentialRef,
         metaPhoneNumberId: sender.metaPhoneNumberId,
@@ -51,16 +65,6 @@ export class WhatsAppService {
           ? { metaTemplateName: template.metaTemplateName, language: template.language }
           : undefined,
       });
-      await this.repository.markSubmitted({
-        messageId: message.id,
-        providerMessageId: result.providerMessageId,
-        submittedAt: result.acceptedAt,
-      });
-      return {
-        messageId: message.id,
-        providerMessageId: result.providerMessageId,
-        status: "SUBMITTED",
-      };
     } catch (error) {
       const normalized = isWhatsAppError(error)
         ? error
@@ -76,5 +80,18 @@ export class WhatsAppService {
       });
       throw normalized;
     }
+    // Persist acceptance outside the transport catch. If this write fails, the
+    // dispatch claim intentionally remains set so a worker retry cannot submit
+    // the already-accepted provider operation again.
+    await this.repository.markSubmitted({
+      messageId: message.id,
+      providerMessageId: result.providerMessageId,
+      submittedAt: result.acceptedAt,
+    });
+    return {
+      messageId: message.id,
+      providerMessageId: result.providerMessageId,
+      status: "SUBMITTED",
+    };
   }
 }

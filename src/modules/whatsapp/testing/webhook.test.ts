@@ -5,6 +5,7 @@ import type { PrismaClient } from "@prisma/client";
 import { WhatsAppWebhookService } from "../services/WhatsAppWebhookService.ts";
 import {
   parseMetaStatuses,
+  parseMetaInboundMessages,
   verifyMetaSignature,
   verifyWebhookChallenge,
 } from "../webhooks/metaWebhook.ts";
@@ -66,6 +67,40 @@ test("parses status callbacks and ignores inbound messages", () => {
   );
 });
 
+test("parses inbound messages with receiving number, contact profile, and reply context", () => {
+  const parsed = parseMetaInboundMessages({
+    object: "whatsapp_business_account",
+    entry: [
+      {
+        id: "waba-1",
+        changes: [
+          {
+            field: "messages",
+            value: {
+              metadata: { phone_number_id: "phone-1", display_phone_number: "+1 555" },
+              contacts: [{ wa_id: "919999999999", profile: { name: "Asha" } }],
+              messages: [
+                {
+                  id: "wamid.in",
+                  from: "919999999999",
+                  timestamp: "1700000000",
+                  type: "text",
+                  context: { id: "wamid.out" },
+                  text: { body: "Hello" },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  });
+  assert.equal(parsed.length, 1);
+  assert.equal(parsed[0]?.phoneNumberId, "phone-1");
+  assert.equal(parsed[0]?.profileName, "Asha");
+  assert.equal(parsed[0]?.message.context?.id, "wamid.out");
+});
+
 function lifecycleFixture(initialStatus = "SUBMITTED") {
   const webhooks = new Map<
     string,
@@ -115,6 +150,7 @@ function lifecycleFixture(initialStatus = "SUBMITTED") {
           ? null
           : {
               id: "message-1",
+              organizationId: "org-1",
               campaignRecipientId: "recipient-1",
               status: initialStatus,
               sentAt: null,

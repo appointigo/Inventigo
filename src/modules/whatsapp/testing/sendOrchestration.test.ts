@@ -39,38 +39,59 @@ test("sender precedence is exact default, exact priority, then store DEFAULT", (
     { id: "exact-default", purpose: "TRANSACTIONAL" as const, isDefault: true },
   ];
   assert.equal(selectSenderMapping(candidates, "TRANSACTIONAL")?.mapping.id, "exact-default");
-  assert.equal(selectSenderMapping(candidates.slice(0, 2), "TRANSACTIONAL")?.mapping.id, "exact-priority");
-  assert.equal(selectSenderMapping(candidates.slice(1, 2), "TRANSACTIONAL")?.mapping.id, "store-default");
+  assert.equal(
+    selectSenderMapping(candidates.slice(0, 2), "TRANSACTIONAL")?.mapping.id,
+    "exact-priority"
+  );
+  assert.equal(
+    selectSenderMapping(candidates.slice(1, 2), "TRANSACTIONAL")?.mapping.id,
+    "store-default"
+  );
   assert.equal(selectSenderMapping([], "TRANSACTIONAL"), null);
 });
 
 test("shared number resolves independently for multiple stores", async () => {
   const repository = new MockWhatsAppRepository();
-  repository.senderResolver = async ({ organizationId }) => organizationId === "org-1" ? activeSender() : null;
+  repository.senderResolver = async ({ organizationId }) =>
+    organizationId === "org-1" ? activeSender() : null;
   const service = new WhatsAppService(repository, new MockMetaWhatsAppClient());
   await service.sendMessage(request("org-1", "store-1"));
   await service.sendMessage(request("org-1", "store-2"));
-  assert.deepEqual(repository.resolveSenderInputs.map((value) => value.storeId), ["store-1", "store-2"]);
-  assert.deepEqual(repository.createdMessages.map((value) => value.phoneNumberId), ["phone-1", "phone-1"]);
+  assert.deepEqual(
+    repository.resolveSenderInputs.map((value) => value.storeId),
+    ["store-1", "store-2"]
+  );
+  assert.deepEqual(
+    repository.createdMessages.map((value) => value.phoneNumberId),
+    ["phone-1", "phone-1"]
+  );
 });
 
 test("multiple stores can resolve different configured numbers", async () => {
   const repository = new MockWhatsAppRepository();
-  repository.senderResolver = async ({ storeId }) => activeSender({
-    phoneNumberId: storeId === "store-1" ? "phone-1" : "phone-2",
-    metaPhoneNumberId: storeId === "store-1" ? "meta-phone-1" : "meta-phone-2",
-  });
+  repository.senderResolver = async ({ storeId }) =>
+    activeSender({
+      phoneNumberId: storeId === "store-1" ? "phone-1" : "phone-2",
+      metaPhoneNumberId: storeId === "store-1" ? "meta-phone-1" : "meta-phone-2",
+    });
   const service = new WhatsAppService(repository, new MockMetaWhatsAppClient());
   await service.sendMessage(request("org-1", "store-1"));
   await service.sendMessage(request("org-1", "store-2"));
-  assert.deepEqual(repository.createdMessages.map((value) => value.phoneNumberId), ["phone-1", "phone-2"]);
+  assert.deepEqual(
+    repository.createdMessages.map((value) => value.phoneNumberId),
+    ["phone-1", "phone-2"]
+  );
 });
 
 test("wrong organization cannot resolve another tenant's sender", async () => {
   const repository = new MockWhatsAppRepository();
-  repository.senderResolver = async ({ organizationId }) => organizationId === "org-1" ? activeSender() : null;
+  repository.senderResolver = async ({ organizationId }) =>
+    organizationId === "org-1" ? activeSender() : null;
   const service = new WhatsAppService(repository, new MockMetaWhatsAppClient());
-  await assert.rejects(service.sendMessage(request("org-2")), hasCode("NO_WHATSAPP_SENDER_CONFIGURED"));
+  await assert.rejects(
+    service.sendMessage(request("org-2")),
+    hasCode("NO_WHATSAPP_SENDER_CONFIGURED")
+  );
   assert.equal(repository.createdMessages.length, 0);
 });
 
@@ -81,6 +102,22 @@ test("no sender fails before message creation or transport", async () => {
   await assert.rejects(service.sendMessage(request()), hasCode("NO_WHATSAPP_SENDER_CONFIGURED"));
   assert.equal(repository.createdMessages.length, 0);
   assert.equal(transport.requests.length, 0);
+});
+
+test("disconnected WABAs and inactive phone numbers are blocked before transport", async () => {
+  for (const [overrides, code] of [
+    [{ wabaStatus: "DISABLED" as const }, "WABA_NOT_ACTIVE"],
+    [{ phoneNumberStatus: "DISCONNECTED" as const }, "PHONE_NUMBER_NOT_ACTIVE"],
+  ] as const) {
+    const repository = new MockWhatsAppRepository();
+    repository.sender = activeSender(overrides);
+    const transport = new MockMetaWhatsAppClient();
+    await assert.rejects(
+      new WhatsAppService(repository, transport).sendMessage(request()),
+      hasCode(code)
+    );
+    assert.equal(transport.requests.length, 0);
+  }
 });
 
 test("pending and rejected templates are not sent", async () => {
@@ -96,10 +133,13 @@ test("pending and rejected templates are not sent", async () => {
     };
     const transport = new MockMetaWhatsAppClient();
     const service = new WhatsAppService(repository, transport);
-    await assert.rejects(service.sendMessage({
-      ...request(),
-      content: { type: "TEMPLATE", template: { key: "order_update", language: "en" } },
-    }), hasCode("TEMPLATE_NOT_APPROVED"));
+    await assert.rejects(
+      service.sendMessage({
+        ...request(),
+        content: { type: "TEMPLATE", template: { key: "order_update", language: "en" } },
+      }),
+      hasCode("TEMPLATE_NOT_APPROVED")
+    );
     assert.equal(repository.createdMessages.length, 0);
     assert.equal(transport.requests.length, 0);
   }
@@ -131,4 +171,53 @@ test("successful send saves provider id and SUBMITTED state", async () => {
     providerMessageId: "mock-message-id",
     status: "SUBMITTED",
   });
+});
+
+test("an already-claimed idempotent operation is not submitted to Meta twice", async () => {
+  const repository = new MockWhatsAppRepository();
+  repository.sender = activeSender();
+  repository.claimResult = false;
+  const transport = new MockMetaWhatsAppClient();
+  const service = new WhatsAppService(repository, transport);
+  await assert.rejects(
+    service.sendMessage({ ...request(), idempotencyKey: "operation-1" }),
+    hasCode("DUPLICATE_SEND_BLOCKED")
+  );
+  assert.equal(transport.requests.length, 0);
+});
+
+test("provider acceptance persistence failure does not release the duplicate-send claim", async () => {
+  const repository = new MockWhatsAppRepository();
+  repository.sender = activeSender();
+  repository.markSubmittedError = new Error("database unavailable after provider acceptance");
+  const transport = new MockMetaWhatsAppClient();
+  await assert.rejects(
+    new WhatsAppService(repository, transport).sendMessage({
+      ...request(),
+      idempotencyKey: "operation-2",
+    })
+  );
+  assert.equal(transport.requests.length, 1);
+  assert.equal(repository.failedMessages.length, 0);
+});
+
+test("worker retry reuses a previously submitted idempotent message without calling Meta", async () => {
+  const repository = new MockWhatsAppRepository();
+  repository.sender = activeSender();
+  repository.existingMessage = {
+    id: "persisted-1",
+    status: "SUBMITTED",
+    providerMessageId: "wamid.persisted",
+  };
+  const transport = new MockMetaWhatsAppClient();
+  const result = await new WhatsAppService(repository, transport).sendMessage({
+    ...request(),
+    idempotencyKey: "operation-3",
+  });
+  assert.deepEqual(result, {
+    messageId: "persisted-1",
+    providerMessageId: "wamid.persisted",
+    status: "SUBMITTED",
+  });
+  assert.equal(transport.requests.length, 0);
 });

@@ -40,6 +40,8 @@ export type SendWhatsAppMessageRequest = {
   senderMappingId?: string;
   campaignRecipientId?: string;
   automationExecutionId?: string;
+  /** Stable business-operation key used to suppress provider duplicates on worker retries. */
+  idempotencyKey?: string;
   content: WhatsAppContent;
   reference?: {
     type: string;
@@ -95,4 +97,5 @@ export type CreateWhatsAppMessageInput = SendWhatsAppMessageRequest & {
 export type WhatsAppMessageRecord = {
   id: string;
   status: "QUEUED" | "SUBMITTED" | "SENT" | "DELIVERED" | "READ" | "FAILED";
+  providerMessageId?: string;
 };

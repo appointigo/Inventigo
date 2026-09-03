@@ -203,6 +203,7 @@ export class WhatsAppCampaignExecutionService {
           storeId: selected.storeId,
           senderMappingId: selected.senderId,
           campaignRecipientId: recipient.id,
+          idempotencyKey: `campaign-recipient:${recipient.id}`,
           to: snapshot.normalizedPhone,
           purpose: "MARKETING",
           senderPurpose: "MARKETING",

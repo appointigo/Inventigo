@@ -91,9 +91,13 @@ challenge must use that exact value. POST deliveries are accepted only when
 `X-Hub-Signature-256` validates against `META_APP_SECRET`; neither secret is
 stored with webhook payloads or returned to clients.
 
-Status envelopes are persisted before processing. Duplicate deliveries are
+Status and inbound-message envelopes are persisted before processing. Duplicate deliveries are
 deduplicated, failed or stale processing claims can be retried, and message
 history retains out-of-order events without regressing aggregate state.
+
+Inbound routing uses reply context, recent outbound context, and the intersection
+of contact membership with receiving-number Store mappings. A receiving number
+alone is never considered enough evidence; ambiguous messages remain unresolved.
 
 ## Campaign queue
 
@@ -117,3 +121,50 @@ Scheduled payment and inactivity discovery is bounded and runs through the
 existing protected WhatsApp cron worker. Executions record condition, consent,
 readiness, transport, and terminal failure outcomes; all outbound actions use
 `CommunicationService` rather than calling Meta directly.
+
+## Production release checklist
+
+Required application settings are `DATABASE_URL`, the deployment's authentication
+secret/configuration, `WHATSAPP_ENABLED=true`, `META_APP_ID`, `META_APP_SECRET`,
+`META_EMBEDDED_SIGNUP_CONFIG_ID`, `META_WEBHOOK_VERIFY_TOKEN`,
+`WHATSAPP_CREDENTIAL_ENCRYPTION_KEY`, and `CRON_SECRET`.
+`META_GRAPH_API_VERSION` and `META_GRAPH_TIMEOUT_MS` are optional controlled
+overrides. Do not configure tenant WABA IDs, phone-number IDs, or access tokens as
+environment variables. The old `WHATSAPP_ACCESS_TOKEN`,
+`WHATSAPP_BUSINESS_ACCOUNT_ID`, `WHATSAPP_PHONE_NUMBER_ID`,
+`WHATSAPP_TEMPLATE_NAME`, `WHATSAPP_API_URL`, `WHATSAPP_PROVIDER`, and
+`WHATSAPP_TEST_MODE` names are unsupported and should be removed from deployment
+configuration.
+
+Meta App configuration must use the deployed HTTPS Embedded Signup origin and
+redirect flow, the `/api/whatsapp/webhook` callback, the matching verify token,
+the approved Embedded Signup configuration ID, and the permissions/app-review
+access documented for the configured P07 Meta contract. Subscribe the App to each
+connected WABA. Never attach a Stockiva credit line.
+
+Deployment order:
+
+1. Back up the PostgreSQL database and verify all required secrets in the target.
+2. Apply Prisma migrations with `npx prisma migrate deploy` before routing traffic
+   to the new build.
+3. Deploy the production build and confirm the webhook and cron routes use the
+   Node.js runtime.
+4. Connect or sync one explicit test tenant, verify readiness, send one consented
+   test message, process its signed webhook, and inspect Activity and Health.
+5. Enable scheduled workers and then expand tenant availability.
+
+Rollback uses the previous application build while retaining the additive schema.
+Disable `WHATSAPP_ENABLED` and the WhatsApp cron during an incident. Do not roll
+back the database by dropping WhatsApp tables or columns; restore from the
+pre-deploy backup only for a confirmed data-integrity incident. Messages with a
+persisted dispatch claim but no Meta message ID require operator reconciliation
+before retry, because automatically reclaiming that narrow failure window could
+duplicate a customer message.
+
+Monitor webhook authentication failures, webhook age and processing failures,
+Meta auth/rate-limit/timeout error rates, WABA/phone/template status, queue depth
+and oldest available job, abandoned leases, campaign/automation terminal failure
+counts, last successful send, last asset sync, and unresolved inbound-conversation
+volume. Alert on cron authentication failures and repeated worker 5xx responses;
+logs must contain identifiers and normalized error codes only, never tokens,
+authorization codes, registration PINs, app secrets, or raw diagnostic payloads.
