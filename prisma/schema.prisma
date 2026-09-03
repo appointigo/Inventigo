@@ -7,64 +7,78 @@ datasource db {
 }
 
 model Organization {
-  id                     String                  @id @default(uuid())
-  name                   String
-  slug                   String                  @unique
-  logoUrl                String?
-  plan                   OrgPlan                 @default(FREE)
-  isActive               Boolean                 @default(true)
-  createdAt              DateTime                @default(now())
-  updatedAt              DateTime                @updatedAt
-  alertConfigs           AlertConfig[]
-  brands                 Brand[]
-  categories             Category[]
-  customers              Customer[]
-  expenseBudgets         ExpenseBudget[]
-  expenseCategoryOptions ExpenseCategoryOption[]
-  featureFlags           FeatureFlag[]
-  invitations            Invitation[]
-  leaveBalances          LeaveBalance[]
-  leaveRequests          LeaveRequest[]
-  products               Product[]
-  promoCodes             PromoCode[]
-  attendances            StaffAttendance[]
-  storeExpenses          StoreExpense[]
-  leavePolicies          StoreLeavePolicy[]
-  stores                 Store[]
-  suppliers              Supplier[]
-  users                  User[]
-  weeklyOffs             WeeklyOff[]
+  id                          String                       @id @default(uuid())
+  name                        String
+  slug                        String                       @unique
+  logoUrl                     String?
+  plan                        OrgPlan                      @default(FREE)
+  isActive                    Boolean                      @default(true)
+  createdAt                   DateTime                     @default(now())
+  updatedAt                   DateTime                     @updatedAt
+  alertConfigs                AlertConfig[]
+  brands                      Brand[]
+  categories                  Category[]
+  customers                   Customer[]
+  expenseBudgets              ExpenseBudget[]
+  expenseCategoryOptions      ExpenseCategoryOption[]
+  featureFlags                FeatureFlag[]
+  invitations                 Invitation[]
+  leaveBalances               LeaveBalance[]
+  leaveRequests               LeaveRequest[]
+  products                    Product[]
+  promoCodes                  PromoCode[]
+  attendances                 StaffAttendance[]
+  storeExpenses               StoreExpense[]
+  leavePolicies               StoreLeavePolicy[]
+  stores                      Store[]
+  suppliers                   Supplier[]
+  users                       User[]
+  weeklyOffs                  WeeklyOff[]
+  whatsappIntegrations        WhatsAppIntegration[]
+  whatsappCredentials         WhatsAppCredential[]
+  whatsappMessages            WhatsAppMessage[]
+  whatsappTemplateDefinitions WhatsAppTemplateDefinition[]
+  whatsappContacts            WhatsAppContact[]
+  whatsappCampaigns           WhatsAppCampaign[]
+  whatsappAutomations         WhatsAppAutomation[]
 
   @@map("organizations")
 }
 
 model Store {
-  id             String             @id @default(uuid())
-  orgId          String
-  name           String
-  code           String
-  address        String?
-  phone          String?
-  isActive       Boolean            @default(true)
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
-  alertConfigs   AlertConfig[]
-  brands         Brand[]
-  categories     Category[]
-  expenseBudgets ExpenseBudget[]
-  invitations    Invitation[]
-  leaveRequests  LeaveRequest[]
-  purchaseOrders PurchaseOrder[]
-  sales          Sale[]
-  returnTransactions ReturnTransaction[]
-  attendances    StaffAttendance[]
-  stockEntries   StockEntry[]
-  stockMovements StockMovement[]
-  storeExpenses  StoreExpense[]
-  leavePolicies  StoreLeavePolicy[]
-  org            Organization       @relation(fields: [orgId], references: [id])
-  users          User[]
-  weeklyOffs     WeeklyOff[]
+  id                         String                      @id @default(uuid())
+  orgId                      String
+  name                       String
+  code                       String
+  address                    String?
+  phone                      String?
+  isActive                   Boolean                     @default(true)
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @updatedAt
+  alertConfigs               AlertConfig[]
+  brands                     Brand[]
+  categories                 Category[]
+  expenseBudgets             ExpenseBudget[]
+  invitations                Invitation[]
+  leaveRequests              LeaveRequest[]
+  purchaseOrders             PurchaseOrder[]
+  sales                      Sale[]
+  returnTransactions         ReturnTransaction[]
+  attendances                StaffAttendance[]
+  stockEntries               StockEntry[]
+  stockMovements             StockMovement[]
+  storeExpenses              StoreExpense[]
+  leavePolicies              StoreLeavePolicy[]
+  org                        Organization                @relation(fields: [orgId], references: [id])
+  users                      User[]
+  weeklyOffs                 WeeklyOff[]
+  whatsappSenders            StoreWhatsAppSender[]
+  whatsappProfile            StoreWhatsAppProfile?
+  whatsappMessages           WhatsAppMessage[]
+  whatsappContacts           WhatsAppContactStore[]
+  whatsappCampaignStores     WhatsAppCampaignStore[]
+  whatsappCampaignRecipients WhatsAppCampaignRecipient[]
+  whatsappAutomations        WhatsAppAutomation[]
 
   @@unique([code, orgId])
   @@index([orgId])
@@ -72,31 +86,31 @@ model Store {
 }
 
 model User {
-  id              String            @id @default(uuid())
-  orgId           String?
-  name            String
-  email           String            @unique
-  passwordHash    String
-  role            Role              @default(STAFF)
-  storeId         String?
-  isActive        Boolean           @default(true)
-  emailVerified   Boolean           @default(false)
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  createdColors   Color[]
-  sentInvitations Invitation[]      @relation("SentInvitations")
-  leaveBalances   LeaveBalance[]
-  reviewedLeaves  LeaveRequest[]    @relation("LeaveReviewer")
-  leaveRequests   LeaveRequest[]    @relation("LeaveRequester")
-  purchaseOrders  PurchaseOrder[]
-  sales           Sale[]
-  salePayments    SalePayment[]
+  id                 String              @id @default(uuid())
+  orgId              String?
+  name               String
+  email              String              @unique
+  passwordHash       String
+  role               Role                @default(STAFF)
+  storeId            String?
+  isActive           Boolean             @default(true)
+  emailVerified      Boolean             @default(false)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  createdColors      Color[]
+  sentInvitations    Invitation[]        @relation("SentInvitations")
+  leaveBalances      LeaveBalance[]
+  reviewedLeaves     LeaveRequest[]      @relation("LeaveReviewer")
+  leaveRequests      LeaveRequest[]      @relation("LeaveRequester")
+  purchaseOrders     PurchaseOrder[]
+  sales              Sale[]
+  salePayments       SalePayment[]
   returnTransactions ReturnTransaction[]
-  attendances     StaffAttendance[]
-  stockMovements  StockMovement[]
-  storeExpenses   StoreExpense[]
-  org             Organization?     @relation(fields: [orgId], references: [id])
-  store           Store?            @relation(fields: [storeId], references: [id])
+  attendances        StaffAttendance[]
+  stockMovements     StockMovement[]
+  storeExpenses      StoreExpense[]
+  org                Organization?       @relation(fields: [orgId], references: [id])
+  store              Store?              @relation(fields: [storeId], references: [id])
 
   @@index([orgId])
   @@map("users")
@@ -185,24 +199,24 @@ model Brand {
 }
 
 model Product {
-  id                 String              @id @default(uuid())
+  id                 String                  @id @default(uuid())
   orgId              String
   name               String
   sku                String
   externalBarcode    String?
   categoryId         String
   brandId            String
-  basePrice          Decimal             @db.Decimal(10, 2)
-  costPrice          Decimal             @db.Decimal(10, 2)
-  attributes         Json                @default("{}")
+  basePrice          Decimal                 @db.Decimal(10, 2)
+  costPrice          Decimal                 @db.Decimal(10, 2)
+  attributes         Json                    @default("{}")
   imageUrl           String?
-  isActive           Boolean             @default(true)
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
-  mrp                Decimal             @db.Decimal(10, 2)
-  brand              Brand               @relation(fields: [brandId], references: [id])
-  category           Category            @relation(fields: [categoryId], references: [id])
-  org                Organization        @relation(fields: [orgId], references: [id])
+  isActive           Boolean                 @default(true)
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+  mrp                Decimal                 @db.Decimal(10, 2)
+  brand              Brand                   @relation(fields: [brandId], references: [id])
+  category           Category                @relation(fields: [categoryId], references: [id])
+  org                Organization            @relation(fields: [orgId], references: [id])
   purchaseOrderItems PurchaseOrderItem[]
   saleItems          SaleItem[]
   stockEntries       StockEntry[]
@@ -219,14 +233,14 @@ model Product {
 }
 
 model Size {
-  id                 String              @id @default(uuid())
+  id                 String                  @id @default(uuid())
   label              String
-  sortOrder          Int                 @default(0)
+  sortOrder          Int                     @default(0)
   categoryId         String
-  createdAt          DateTime            @default(now())
+  createdAt          DateTime                @default(now())
   purchaseOrderItems PurchaseOrderItem[]
   saleItems          SaleItem[]
-  category           Category            @relation(fields: [categoryId], references: [id])
+  category           Category                @relation(fields: [categoryId], references: [id])
   stockEntries       StockEntry[]
   stockMovements     StockMovement[]
   returnedItems      ReturnTransactionItem[] @relation("ReturnedSize")
@@ -342,39 +356,39 @@ model PurchaseOrderItem {
 }
 
 model Sale {
-  id             String        @id @default(uuid())
-  storeId        String
-  invoiceNumber  String        @unique
-  customerName   String?
-  customerPhone  String?
-  customerEmail  String?
-  subtotal       Decimal       @db.Decimal(10, 2)
-  discountAmount Decimal       @default(0) @db.Decimal(10, 2)
-  taxAmount      Decimal       @default(0) @db.Decimal(10, 2)
-  total          Decimal       @db.Decimal(10, 2)
-  calculatedTotal Decimal?     @db.Decimal(10, 2)
-  roundOffAmount Decimal       @default(0) @db.Decimal(10, 2)
-  finalPayableAmount Decimal?  @db.Decimal(10, 2)
-  paymentMethod  PaymentMethod @default(CASH)
-  status         SaleStatus    @default(COMPLETED)
-  paymentStatus  PaymentStatus @default(PAID)
-  amountPaid     Decimal       @default(0) @db.Decimal(10, 2)
-  amountDue      Decimal       @default(0) @db.Decimal(10, 2)
-  returnStatus   ReturnStatus  @default(NONE)
-  promoVoided    Boolean       @default(false)
-  createdBy      String
-  transactionDate DateTime      @default(now())
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  promoCodeId    String?
-  customerId     String?
-  items          SaleItem[]
-  payments       SalePayment[]
+  id                 String              @id @default(uuid())
+  storeId            String
+  invoiceNumber      String              @unique
+  customerName       String?
+  customerPhone      String?
+  customerEmail      String?
+  subtotal           Decimal             @db.Decimal(10, 2)
+  discountAmount     Decimal             @default(0) @db.Decimal(10, 2)
+  taxAmount          Decimal             @default(0) @db.Decimal(10, 2)
+  total              Decimal             @db.Decimal(10, 2)
+  calculatedTotal    Decimal?            @db.Decimal(10, 2)
+  roundOffAmount     Decimal             @default(0) @db.Decimal(10, 2)
+  finalPayableAmount Decimal?            @db.Decimal(10, 2)
+  paymentMethod      PaymentMethod       @default(CASH)
+  status             SaleStatus          @default(COMPLETED)
+  paymentStatus      PaymentStatus       @default(PAID)
+  amountPaid         Decimal             @default(0) @db.Decimal(10, 2)
+  amountDue          Decimal             @default(0) @db.Decimal(10, 2)
+  returnStatus       ReturnStatus        @default(NONE)
+  promoVoided        Boolean             @default(false)
+  createdBy          String
+  transactionDate    DateTime            @default(now())
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  promoCodeId        String?
+  customerId         String?
+  items              SaleItem[]
+  payments           SalePayment[]
   returnTransactions ReturnTransaction[]
-  user           User          @relation(fields: [createdBy], references: [id])
-  customer       Customer?     @relation(fields: [customerId], references: [id])
-  promoCode      PromoCode?    @relation(fields: [promoCodeId], references: [id])
-  store          Store         @relation(fields: [storeId], references: [id])
+  user               User                @relation(fields: [createdBy], references: [id])
+  customer           Customer?           @relation(fields: [customerId], references: [id])
+  promoCode          PromoCode?          @relation(fields: [promoCodeId], references: [id])
+  store              Store               @relation(fields: [storeId], references: [id])
 
   @@index([storeId])
   @@index([customerId])
@@ -385,44 +399,44 @@ model Sale {
 }
 
 model SaleItem {
-  id        String   @id @default(uuid())
-  saleId    String
-  productId String
-  sizeId    String
-  quantity  Int
-  unitPrice Decimal  @db.Decimal(10, 2)
-  total     Decimal  @db.Decimal(10, 2)
-  mrp       Decimal?  @db.Decimal(10, 2)
-  sellingPrice Decimal? @db.Decimal(10, 2)
-  discountType String?
-  appliedDiscountPercent Decimal? @db.Decimal(10, 2)
-  allocatedDiscount Decimal? @default(0) @db.Decimal(10, 2)
-  taxableAmount Decimal? @default(0) @db.Decimal(10, 2)
-  taxAmount Decimal? @default(0) @db.Decimal(10, 2)
-  finalUnitPrice Decimal? @default(0) @db.Decimal(10, 2)
-  finalLineAmount Decimal? @default(0) @db.Decimal(10, 2)
-  effectiveUnitPrice Decimal? @default(0) @db.Decimal(10, 2)
-  costPrice Decimal? @db.Decimal(10, 2)
-  pricingSnapshotDate DateTime?
-  createdAt DateTime @default(now())
-  product   Product  @relation(fields: [productId], references: [id])
-  sale      Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  size      Size     @relation(fields: [sizeId], references: [id])
+  id                     String    @id @default(uuid())
+  saleId                 String
+  productId              String
+  sizeId                 String
+  quantity               Int
+  unitPrice              Decimal   @db.Decimal(10, 2)
+  total                  Decimal   @db.Decimal(10, 2)
+  mrp                    Decimal?  @db.Decimal(10, 2)
+  sellingPrice           Decimal?  @db.Decimal(10, 2)
+  discountType           String?
+  appliedDiscountPercent Decimal?  @db.Decimal(10, 2)
+  allocatedDiscount      Decimal?  @default(0) @db.Decimal(10, 2)
+  taxableAmount          Decimal?  @default(0) @db.Decimal(10, 2)
+  taxAmount              Decimal?  @default(0) @db.Decimal(10, 2)
+  finalUnitPrice         Decimal?  @default(0) @db.Decimal(10, 2)
+  finalLineAmount        Decimal?  @default(0) @db.Decimal(10, 2)
+  effectiveUnitPrice     Decimal?  @default(0) @db.Decimal(10, 2)
+  costPrice              Decimal?  @db.Decimal(10, 2)
+  pricingSnapshotDate    DateTime?
+  createdAt              DateTime  @default(now())
+  product                Product   @relation(fields: [productId], references: [id])
+  sale                   Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  size                   Size      @relation(fields: [sizeId], references: [id])
 
   @@map("sale_items")
 }
 
 model SalePayment {
-  id        String        @id @default(uuid())
-  saleId    String
-  amount    Decimal       @db.Decimal(10, 2)
-  method    PaymentMethod
-  businessDate DateTime   @default(now())
-  paidAt    DateTime      @default(now())
-  note      String?
-  createdBy String
-  sale      Sale          @relation(fields: [saleId], references: [id])
-  user      User          @relation(fields: [createdBy], references: [id])
+  id           String        @id @default(uuid())
+  saleId       String
+  amount       Decimal       @db.Decimal(10, 2)
+  method       PaymentMethod
+  businessDate DateTime      @default(now())
+  paidAt       DateTime      @default(now())
+  note         String?
+  createdBy    String
+  sale         Sale          @relation(fields: [saleId], references: [id])
+  user         User          @relation(fields: [createdBy], references: [id])
 
   @@index([saleId])
   @@index([businessDate])
@@ -431,36 +445,36 @@ model SalePayment {
 }
 
 model ReturnTransaction {
-  id               String        @id @default(uuid())
-  referenceNumber  String        @unique
+  id               String                  @id @default(uuid())
+  referenceNumber  String                  @unique
   originalSaleId   String
   storeId          String
   customerId       String?
   type             ReturnType
-  netAmount        Decimal       @db.Decimal(10, 2)
-  offsetAmount     Decimal       @default(0) @db.Decimal(10, 2)
-  refundAmount     Decimal       @db.Decimal(10, 2)
+  netAmount        Decimal                 @db.Decimal(10, 2)
+  offsetAmount     Decimal                 @default(0) @db.Decimal(10, 2)
+  refundAmount     Decimal                 @db.Decimal(10, 2)
   discountType     String?
-  discountPercent  Decimal?      @db.Decimal(5, 2)
-  discountAmount   Decimal?      @default(0) @db.Decimal(10, 2)
-  taxRate          Decimal?      @db.Decimal(5, 2)
-  calculatedTotal  Decimal?      @db.Decimal(10, 2)
-  roundOffAmount   Decimal?      @default(0) @db.Decimal(10, 2)
-  finalPayable     Decimal?      @db.Decimal(10, 2)
+  discountPercent  Decimal?                @db.Decimal(5, 2)
+  discountAmount   Decimal?                @default(0) @db.Decimal(10, 2)
+  taxRate          Decimal?                @db.Decimal(5, 2)
+  calculatedTotal  Decimal?                @db.Decimal(10, 2)
+  roundOffAmount   Decimal?                @default(0) @db.Decimal(10, 2)
+  finalPayable     Decimal?                @db.Decimal(10, 2)
   splitPaymentData Json?
   refundMethod     String?
   reason           String?
   condition        String?
   notes            String?
   transactionDate  DateTime?
-  businessDate     DateTime      @default(now())
-  createdAt        DateTime      @default(now())
+  businessDate     DateTime                @default(now())
+  createdAt        DateTime                @default(now())
   createdBy        String
   items            ReturnTransactionItem[]
-  sale             Sale          @relation(fields: [originalSaleId], references: [id])
-  customer         Customer?     @relation(fields: [customerId], references: [id])
-  user             User          @relation(fields: [createdBy], references: [id])
-  store            Store         @relation(fields: [storeId], references: [id])
+  sale             Sale                    @relation(fields: [originalSaleId], references: [id])
+  customer         Customer?               @relation(fields: [customerId], references: [id])
+  user             User                    @relation(fields: [createdBy], references: [id])
+  store            Store                   @relation(fields: [storeId], references: [id])
 
   @@index([originalSaleId])
   @@index([storeId])
@@ -471,22 +485,22 @@ model ReturnTransaction {
 }
 
 model ReturnTransactionItem {
-  id                   String            @id @default(uuid())
-  returnTransactionId  String
-  returnedProductId    String?
-  returnedSizeId       String?
-  returnedQuantity     Int
-  returnedUnitPrice    Decimal           @db.Decimal(10, 2)
-  newProductId         String?
-  newSizeId            String?
-  newQuantity          Int?
-  newUnitPrice         Decimal?          @db.Decimal(10, 2)
-  createdAt            DateTime          @default(now())
-  returnTransaction    ReturnTransaction @relation(fields: [returnTransactionId], references: [id])
-  returnedProduct      Product?          @relation("ReturnedProduct", fields: [returnedProductId], references: [id])
-  returnedSize         Size?             @relation("ReturnedSize", fields: [returnedSizeId], references: [id])
-  newProduct           Product?          @relation("NewProduct", fields: [newProductId], references: [id])
-  newSize              Size?             @relation("NewSize", fields: [newSizeId], references: [id])
+  id                  String            @id @default(uuid())
+  returnTransactionId String
+  returnedProductId   String?
+  returnedSizeId      String?
+  returnedQuantity    Int
+  returnedUnitPrice   Decimal           @db.Decimal(10, 2)
+  newProductId        String?
+  newSizeId           String?
+  newQuantity         Int?
+  newUnitPrice        Decimal?          @db.Decimal(10, 2)
+  createdAt           DateTime          @default(now())
+  returnTransaction   ReturnTransaction @relation(fields: [returnTransactionId], references: [id])
+  returnedProduct     Product?          @relation("ReturnedProduct", fields: [returnedProductId], references: [id])
+  returnedSize        Size?             @relation("ReturnedSize", fields: [returnedSizeId], references: [id])
+  newProduct          Product?          @relation("NewProduct", fields: [newProductId], references: [id])
+  newSize             Size?             @relation("NewSize", fields: [newSizeId], references: [id])
 
   @@index([returnTransactionId])
   @@index([returnedProductId])
@@ -495,22 +509,23 @@ model ReturnTransactionItem {
 }
 
 model Customer {
-  id        String       @id @default(uuid())
-  orgId     String
-  name      String?
-  mobile    String
-  email     String?
-  dateOfBirth DateTime?
-  notes     String?
-  lastVisitAt DateTime?
-  totalSpent Float      @default(0)
-  totalVisits Int       @default(0)
-  tags      String[]    @default([])
-  metadata  Json?
-  createdAt DateTime     @default(now())
-  org       Organization @relation(fields: [orgId], references: [id])
-  sales     Sale[]
+  id                 String              @id @default(uuid())
+  orgId              String
+  name               String?
+  mobile             String
+  email              String?
+  dateOfBirth        DateTime?
+  notes              String?
+  lastVisitAt        DateTime?
+  totalSpent         Float               @default(0)
+  totalVisits        Int                 @default(0)
+  tags               String[]            @default([])
+  metadata           Json?
+  createdAt          DateTime            @default(now())
+  org                Organization        @relation(fields: [orgId], references: [id])
+  sales              Sale[]
   returnTransactions ReturnTransaction[]
+  whatsappContact    WhatsAppContact?
 
   @@unique([orgId, mobile])
   @@index([orgId])
@@ -790,6 +805,585 @@ enum Role {
   ADMIN
   MANAGER
   STAFF
+}
+
+enum WhatsAppProvider {
+  META
+}
+
+enum WhatsAppIntegrationStatus {
+  PENDING
+  CONNECTED
+  ACTION_REQUIRED
+  SUSPENDED
+  DISCONNECTED
+  ERROR
+}
+
+enum WhatsAppBusinessAccountStatus {
+  PENDING
+  ACTIVE
+  RESTRICTED
+  DISABLED
+}
+
+enum WhatsAppPhoneNumberStatus {
+  PENDING
+  ACTIVE
+  RESTRICTED
+  DISCONNECTED
+}
+
+enum WhatsAppSenderPurpose {
+  DEFAULT
+  TRANSACTIONAL
+  MARKETING
+  SUPPORT
+}
+
+enum WhatsAppTemplateScope {
+  PLATFORM
+  ORGANIZATION
+}
+
+enum WhatsAppTemplateCategory {
+  UTILITY
+  MARKETING
+  AUTHENTICATION
+}
+
+enum WhatsAppTemplatePurpose {
+  INVOICE
+  PAYMENT_RECEIPT
+  PAYMENT_REMINDER
+  ORDER_CONFIRMATION
+  ORDER_STATUS
+  MARKETING_PROMOTION
+  PRODUCT_LAUNCH
+  COUPON
+  OTP
+  CUSTOM
+}
+
+enum WhatsAppTemplateStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+  PAUSED
+  DISABLED
+}
+
+enum WhatsAppMessageDirection {
+  OUTBOUND
+  INBOUND
+}
+
+enum WhatsAppMessageType {
+  TEMPLATE
+  TEXT
+  IMAGE
+  DOCUMENT
+  VIDEO
+  INTERACTIVE
+}
+
+enum WhatsAppMessagePurpose {
+  INVOICE
+  PAYMENT
+  MARKETING
+  ORDER
+  SUPPORT
+  OTP
+  OTHER
+}
+
+enum WhatsAppMessageStatus {
+  QUEUED
+  SUBMITTED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+enum WhatsAppWebhookProcessingStatus {
+  RECEIVED
+  PROCESSING
+  PROCESSED
+  FAILED
+}
+
+model WhatsAppIntegration {
+  id               String                    @id @default(uuid())
+  organizationId   String
+  provider         WhatsAppProvider          @default(META)
+  status           WhatsAppIntegrationStatus @default(PENDING)
+  credentialRef    String?
+  metaBusinessId   String?
+  connectedAt      DateTime?
+  disconnectedAt   DateTime?
+  lastSyncedAt     DateTime?
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+  organization     Organization              @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  businessAccounts WhatsAppBusinessAccount[]
+
+  @@unique([organizationId, provider])
+  @@index([organizationId])
+  @@index([status])
+  @@map("whatsapp_integrations")
+}
+
+model WhatsAppCredential {
+  id             String           @id @default(uuid())
+  organizationId String
+  provider       WhatsAppProvider @default(META)
+  ciphertext     String
+  iv             String
+  authTag        String
+  keyVersion     Int              @default(1)
+  expiresAt      DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, provider])
+  @@map("whatsapp_credentials")
+}
+
+model WhatsAppBusinessAccount {
+  id                String                        @id @default(uuid())
+  integrationId     String
+  metaWabaId        String                        @unique
+  businessName      String?
+  status            WhatsAppBusinessAccountStatus @default(PENDING)
+  timezone          String?
+  currency          String?
+  lastSyncedAt      DateTime?
+  createdAt         DateTime                      @default(now())
+  updatedAt         DateTime                      @updatedAt
+  integration       WhatsAppIntegration           @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  phoneNumbers      WhatsAppPhoneNumber[]
+  templateInstances WhatsAppTemplateInstance[]
+
+  @@index([integrationId])
+  @@index([status])
+  @@map("whatsapp_business_accounts")
+}
+
+model WhatsAppPhoneNumber {
+  id                    String                    @id @default(uuid())
+  wabaId                String
+  metaPhoneNumberId     String                    @unique
+  displayPhoneNumber    String
+  normalizedPhoneNumber String?
+  verifiedName          String?
+  qualityRating         String?
+  messagingLimitTier    String?
+  status                WhatsAppPhoneNumberStatus @default(PENDING)
+  lastSyncedAt          DateTime?
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+  waba                  WhatsAppBusinessAccount   @relation(fields: [wabaId], references: [id], onDelete: Cascade)
+  storeMappings         StoreWhatsAppSender[]
+  messages              WhatsAppMessage[]
+
+  @@index([wabaId])
+  @@index([status])
+  @@index([normalizedPhoneNumber])
+  @@map("whatsapp_phone_numbers")
+}
+
+model StoreWhatsAppSender {
+  id                 String                      @id @default(uuid())
+  storeId            String
+  phoneNumberId      String
+  purpose            WhatsAppSenderPurpose
+  isDefault          Boolean                     @default(false)
+  priority           Int                         @default(0)
+  isActive           Boolean                     @default(true)
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+  store              Store                       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  phoneNumber        WhatsAppPhoneNumber         @relation(fields: [phoneNumberId], references: [id], onDelete: Restrict)
+  campaignStores     WhatsAppCampaignStore[]
+  campaignRecipients WhatsAppCampaignRecipient[]
+
+  @@unique([storeId, phoneNumberId, purpose])
+  @@index([storeId, purpose, isActive])
+  @@index([phoneNumberId])
+  @@index([storeId, purpose, priority])
+  @@map("store_whatsapp_senders")
+}
+
+model StoreWhatsAppProfile {
+  id              String   @id @default(uuid())
+  storeId         String   @unique
+  displayName     String
+  signature       String?
+  supportPhone    String?
+  defaultLanguage String   @default("en")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  store           Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@map("store_whatsapp_profiles")
+}
+
+model WhatsAppTemplateDefinition {
+  id             String                     @id @default(uuid())
+  organizationId String?
+  scope          WhatsAppTemplateScope
+  key            String
+  version        Int
+  language       String
+  purpose        WhatsAppTemplatePurpose
+  category       WhatsAppTemplateCategory
+  name           String
+  header         Json?
+  body           String
+  footer         String?
+  buttons        Json?
+  variables      Json?
+  isActive       Boolean                    @default(true)
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+  organization   Organization?              @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  instances      WhatsAppTemplateInstance[]
+  campaigns      WhatsAppCampaign[]
+  automations    WhatsAppAutomation[]
+
+  @@index([scope, key, isActive])
+  @@index([organizationId])
+  @@index([purpose, category])
+  @@map("whatsapp_template_definitions")
+}
+
+model WhatsAppTemplateInstance {
+  id                 String                      @id @default(uuid())
+  definitionId       String
+  wabaId             String
+  metaTemplateId     String?                     @unique
+  metaTemplateName   String
+  status             WhatsAppTemplateStatus      @default(DRAFT)
+  rejectionReason    String?
+  submittedAt        DateTime?
+  approvedAt         DateTime?
+  rejectedAt         DateTime?
+  lastSyncedAt       DateTime?
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+  definition         WhatsAppTemplateDefinition  @relation(fields: [definitionId], references: [id], onDelete: Restrict)
+  waba               WhatsAppBusinessAccount     @relation(fields: [wabaId], references: [id], onDelete: Cascade)
+  messages           WhatsAppMessage[]
+  campaignRecipients WhatsAppCampaignRecipient[]
+
+  @@unique([wabaId, definitionId])
+  @@index([wabaId, status])
+  @@index([definitionId])
+  @@map("whatsapp_template_instances")
+}
+
+model WhatsAppMessage {
+  id                    String                       @id @default(uuid())
+  organizationId        String
+  storeId               String?
+  phoneNumberId         String
+  templateInstanceId    String?
+  campaignRecipientId   String?
+  automationExecutionId String?
+  metaMessageId         String?                      @unique
+  direction             WhatsAppMessageDirection
+  type                  WhatsAppMessageType
+  purpose               WhatsAppMessagePurpose
+  fromPhone             String?
+  toPhone               String?
+  referenceType         String?
+  referenceId           String?
+  payload               Json?
+  status                WhatsAppMessageStatus        @default(QUEUED)
+  errorCode             String?
+  errorMessage          String?
+  queuedAt              DateTime?
+  submittedAt           DateTime?
+  sentAt                DateTime?
+  deliveredAt           DateTime?
+  readAt                DateTime?
+  failedAt              DateTime?
+  createdAt             DateTime                     @default(now())
+  updatedAt             DateTime                     @updatedAt
+  organization          Organization                 @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  store                 Store?                       @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  phoneNumber           WhatsAppPhoneNumber          @relation(fields: [phoneNumberId], references: [id], onDelete: Restrict)
+  templateInstance      WhatsAppTemplateInstance?    @relation(fields: [templateInstanceId], references: [id], onDelete: SetNull)
+  campaignRecipient     WhatsAppCampaignRecipient?   @relation(fields: [campaignRecipientId], references: [id], onDelete: SetNull)
+  automationExecution   WhatsAppAutomationExecution? @relation(fields: [automationExecutionId], references: [id], onDelete: SetNull)
+  events                WhatsAppMessageEvent[]
+
+  @@index([organizationId, createdAt])
+  @@index([storeId, createdAt])
+  @@index([phoneNumberId, createdAt])
+  @@index([status])
+  @@index([metaMessageId])
+  @@index([referenceType, referenceId])
+  @@index([campaignRecipientId, createdAt])
+  @@index([automationExecutionId, createdAt])
+  @@map("whatsapp_messages")
+}
+
+model WhatsAppMessageEvent {
+  id         String          @id @default(uuid())
+  messageId  String
+  eventType  String
+  metaStatus String?
+  payload    Json?
+  occurredAt DateTime
+  receivedAt DateTime        @default(now())
+  message    WhatsAppMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId, occurredAt])
+  @@index([occurredAt])
+  @@map("whatsapp_message_events")
+}
+
+model WhatsAppWebhookEvent {
+  id                 String                          @id @default(uuid())
+  providerEventId    String?
+  dedupeKey          String?                         @unique
+  eventType          String?
+  payload            Json
+  processingStatus   WhatsAppWebhookProcessingStatus @default(RECEIVED)
+  processingAttempts Int                             @default(0)
+  processedAt        DateTime?
+  lastError          String?
+  createdAt          DateTime                        @default(now())
+  updatedAt          DateTime                        @updatedAt
+
+  @@index([processingStatus, createdAt])
+  @@index([providerEventId])
+  @@map("whatsapp_webhook_events")
+}
+
+enum WhatsAppConsentPurpose {
+  TRANSACTIONAL
+  MARKETING
+}
+
+enum WhatsAppConsentStatus {
+  GRANTED
+  REVOKED
+  PENDING
+}
+
+model WhatsAppContact {
+  id                 String                      @id @default(uuid())
+  organizationId     String
+  customerId         String?                     @unique
+  normalizedPhone    String
+  displayPhone       String?
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+  organization       Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer           Customer?                   @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  stores             WhatsAppContactStore[]
+  consents           WhatsAppConsent[]
+  campaignRecipients WhatsAppCampaignRecipient[]
+
+  @@unique([organizationId, normalizedPhone])
+  @@index([organizationId, createdAt])
+  @@map("whatsapp_contacts")
+}
+
+model WhatsAppContactStore {
+  id        String          @id @default(uuid())
+  contactId String
+  storeId   String
+  createdAt DateTime        @default(now())
+  contact   WhatsAppContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  store     Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([contactId, storeId])
+  @@index([storeId])
+  @@map("whatsapp_contact_stores")
+}
+
+model WhatsAppConsent {
+  id         String                 @id @default(uuid())
+  contactId  String
+  purpose    WhatsAppConsentPurpose
+  status     WhatsAppConsentStatus  @default(PENDING)
+  source     String?
+  evidence   Json?
+  grantedAt  DateTime?
+  revokedAt  DateTime?
+  recordedAt DateTime               @default(now())
+  updatedAt  DateTime               @updatedAt
+  contact    WhatsAppContact        @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([contactId, purpose])
+  @@index([status, purpose])
+  @@map("whatsapp_consents")
+}
+
+enum WhatsAppCampaignStatus {
+  DRAFT
+  SCHEDULED
+  QUEUED
+  RUNNING
+  PAUSED
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum WhatsAppCampaignRecipientStatus {
+  ELIGIBLE
+  EXCLUDED
+  QUEUED
+  PROCESSING
+  SUBMITTED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  SKIPPED
+}
+
+model WhatsAppCampaign {
+  id                   String                      @id @default(uuid())
+  organizationId       String
+  templateDefinitionId String
+  name                 String
+  status               WhatsAppCampaignStatus      @default(DRAFT)
+  audienceFilters      Json
+  scheduledAt          DateTime?
+  launchedAt           DateTime?
+  pausedAt             DateTime?
+  cancelledAt          DateTime?
+  completedAt          DateTime?
+  createdAt            DateTime                    @default(now())
+  updatedAt            DateTime                    @updatedAt
+  organization         Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  templateDefinition   WhatsAppTemplateDefinition  @relation(fields: [templateDefinitionId], references: [id], onDelete: Restrict)
+  stores               WhatsAppCampaignStore[]
+  recipients           WhatsAppCampaignRecipient[]
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, status])
+  @@map("whatsapp_campaigns")
+}
+
+model WhatsAppCampaignStore {
+  id         String              @id @default(uuid())
+  campaignId String
+  storeId    String
+  senderId   String
+  campaign   WhatsAppCampaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  store      Store               @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  sender     StoreWhatsAppSender @relation(fields: [senderId], references: [id], onDelete: Restrict)
+
+  @@unique([campaignId, storeId])
+  @@index([senderId])
+  @@map("whatsapp_campaign_stores")
+}
+
+model WhatsAppCampaignRecipient {
+  id                 String                          @id @default(uuid())
+  campaignId         String
+  contactId          String
+  storeId            String?
+  senderId           String?
+  templateInstanceId String?
+  status             WhatsAppCampaignRecipientStatus
+  exclusionReason    String?
+  snapshot           Json?
+  jobId              String?                         @unique
+  attempts           Int                             @default(0)
+  maxAttempts        Int                             @default(5)
+  availableAt        DateTime?
+  lockedAt           DateTime?
+  lockToken          String?
+  lastError          String?
+  finalizedAt        DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime                        @default(now())
+  campaign           WhatsAppCampaign                @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contact            WhatsAppContact                 @relation(fields: [contactId], references: [id], onDelete: Restrict)
+  store              Store?                          @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  sender             StoreWhatsAppSender?            @relation(fields: [senderId], references: [id], onDelete: Restrict)
+  templateInstance   WhatsAppTemplateInstance?       @relation(fields: [templateInstanceId], references: [id], onDelete: Restrict)
+  messages           WhatsAppMessage[]
+
+  @@unique([campaignId, contactId])
+  @@index([campaignId, status])
+  @@index([contactId])
+  @@index([status, availableAt, lockedAt])
+  @@map("whatsapp_campaign_recipients")
+}
+
+enum WhatsAppAutomationTrigger {
+  SALE_COMPLETED
+  PAYMENT_DUE
+  CUSTOMER_INACTIVE
+}
+
+enum WhatsAppAutomationExecutionStatus {
+  QUEUED
+  PROCESSING
+  SUBMITTED
+  SKIPPED
+  FAILED
+}
+
+model WhatsAppAutomation {
+  id                   String                        @id @default(uuid())
+  organizationId       String
+  storeId              String?
+  templateDefinitionId String
+  name                 String
+  trigger              WhatsAppAutomationTrigger
+  isActive             Boolean                       @default(false)
+  conditions           Json
+  createdAt            DateTime                      @default(now())
+  updatedAt            DateTime                      @updatedAt
+  organization         Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  store                Store?                        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  templateDefinition   WhatsAppTemplateDefinition    @relation(fields: [templateDefinitionId], references: [id], onDelete: Restrict)
+  executions           WhatsAppAutomationExecution[]
+
+  @@index([organizationId, trigger, isActive])
+  @@map("whatsapp_automations")
+}
+
+model WhatsAppAutomationExecution {
+  id             String                            @id @default(uuid())
+  automationId   String
+  eventKey       String
+  subjectType    String
+  subjectId      String
+  storeId        String?
+  contactId      String?
+  recipientPhone String?
+  payload        Json
+  status         WhatsAppAutomationExecutionStatus @default(QUEUED)
+  skipReason     String?
+  errorCode      String?
+  errorMessage   String?
+  attempts       Int                               @default(0)
+  availableAt    DateTime                          @default(now())
+  lockedAt       DateTime?
+  lockToken      String?
+  completedAt    DateTime?
+  createdAt      DateTime                          @default(now())
+  updatedAt      DateTime                          @updatedAt
+  automation     WhatsAppAutomation                @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  messages       WhatsAppMessage[]
+
+  @@unique([automationId, eventKey])
+  @@index([status, availableAt, lockedAt])
+  @@index([automationId, createdAt])
+  @@map("whatsapp_automation_executions")
 }
 
 enum OrgPlan {

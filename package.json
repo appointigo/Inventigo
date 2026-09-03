@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "whatsapp:bootstrap:test-tenant": "node --experimental-transform-types scripts/bootstrap-whatsapp-test-tenant.ts",
+    "whatsapp:seed:templates": "node --experimental-transform-types scripts/seed-whatsapp-templates.ts",
     "prisma:fix-exchanged-sales": "node prisma/scripts/fix-exchanged-sales-and-backfill-returns.js",
     "postinstall": "prisma generate"
   },

@@ -1,4 +1,4 @@
-import { DashboardOutlined, ShoppingOutlined, AppstoreOutlined, TagsOutlined, InboxOutlined, FileTextOutlined, ScanOutlined, BarChartOutlined, SettingOutlined, ShopOutlined, AlertOutlined, DollarOutlined, TeamOutlined, AccountBookOutlined, CalendarOutlined, UnorderedListOutlined, LineChartOutlined, PercentageOutlined, ExperimentOutlined, UserOutlined } from "@ant-design/icons";
+import { DashboardOutlined, ShoppingOutlined, AppstoreOutlined, TagsOutlined, InboxOutlined, FileTextOutlined, ScanOutlined, BarChartOutlined, SettingOutlined, ShopOutlined, AlertOutlined, DollarOutlined, TeamOutlined, AccountBookOutlined, CalendarOutlined, UnorderedListOutlined, LineChartOutlined, PercentageOutlined, ExperimentOutlined, UserOutlined, WhatsAppOutlined } from "@ant-design/icons";
 import { Role } from "@prisma/client";
 
 export type MenuItem = {
@@ -105,6 +105,12 @@ export const MENU_ITEMS: MenuItem[] = [
     name: "Customers",
     icon: UserOutlined,
     roles: ALL_ROLES,
+  },
+  {
+    path: "/dashboard/whatsapp",
+    name: "WhatsApp",
+    icon: WhatsAppOutlined,
+    roles: ADMIN_ONLY,
   },
   {
     path: "/dashboard/attendance-leave",

@@ -1,7 +1,9 @@
 import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import type { CreateSaleInput, Sale, SaleItem, SaleFilters, SaleSummary } from "../types";
+import { createWhatsAppAutomationReader } from "@/modules/whatsapp/server";
 import { customerService } from "@/modules/customers/services/customerService";
+import { syncWhatsAppContactForCustomer } from "@/modules/whatsapp/services/WhatsAppContactService";
 import { allocatePricingSnapshots } from "../utils/pricingEngine";
 import { normalizeSaleCompatibility } from "../utils/saleCompatibility";
 
@@ -31,7 +33,7 @@ const generateInvoiceNumber = async (storeId: string, attempt = 0): Promise<stri
   // On retry attempts, add a random suffix to avoid race-condition duplicates
   if (attempt > 0) {
     const randomSuffix = Math.floor(Math.random() * 1000);
-    nextSeq = (nextSeq * 1000) + randomSuffix;
+    nextSeq = nextSeq * 1000 + randomSuffix;
   }
 
   return `${prefix}${String(nextSeq).padStart(4, "0")}`;
@@ -58,7 +60,12 @@ const isInvoiceNumberConflict = (error: unknown, depth = 0): boolean => {
 
   // Check error message for invoiceNumber or unique constraint
   const msg = String(e?.message ?? e ?? "");
-  if (msg.includes("invoiceNumber") || msg.includes("referenceNumber") || msg.includes("Unique constraint failed")) return true;
+  if (
+    msg.includes("invoiceNumber") ||
+    msg.includes("referenceNumber") ||
+    msg.includes("Unique constraint failed")
+  )
+    return true;
 
   // Recursively check nested cause (errors wrapped inside transactions)
   if (e?.cause) {
@@ -102,7 +109,7 @@ const generateReturnReferenceNumber = async (storeId: string, attempt = 0): Prom
 
   if (attempt > 0) {
     const randomSuffix = Math.floor(Math.random() * 1000);
-    nextSeq = (nextSeq * 1000) + randomSuffix;
+    nextSeq = nextSeq * 1000 + randomSuffix;
   }
 
   return `${prefix}${String(nextSeq).padStart(4, "0")}`;
@@ -189,7 +196,9 @@ const normalizePaymentEntries = (
 };
 
 const extractHistoricalUnitAmount = (item: any): number => {
-  const effectiveUnit = Number(item?.effectiveUnitPrice ?? item?.finalUnitPrice ?? item?.sellingPrice ?? item?.unitPrice ?? 0);
+  const effectiveUnit = Number(
+    item?.effectiveUnitPrice ?? item?.finalUnitPrice ?? item?.sellingPrice ?? item?.unitPrice ?? 0
+  );
   if (effectiveUnit > 0) {
     return round2(effectiveUnit);
   }
@@ -199,7 +208,10 @@ const extractHistoricalUnitAmount = (item: any): number => {
   return round2(lineTotal / quantity);
 };
 
-const getPrimaryPaymentMethod = (entries: NormalizedPaymentEntry[], fallbackMethod?: string): "CASH" | "CARD" | "UPI" => {
+const getPrimaryPaymentMethod = (
+  entries: NormalizedPaymentEntry[],
+  fallbackMethod?: string
+): "CASH" | "CARD" | "UPI" => {
   if (entries.length === 0) {
     const method = String(fallbackMethod ?? "CASH").toUpperCase();
     return (VALID_PAYMENT_METHODS.has(method) ? method : "CASH") as "CASH" | "CARD" | "UPI";
@@ -324,7 +336,7 @@ type LegacyReturnTransactionItems = {
 const normalizeLegacyTransactionItems = (items: unknown) =>
   Array.isArray(items)
     ? items.map((item) => {
-        const record = item && typeof item === "object" ? item as Record<string, unknown> : {};
+        const record = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
 
         return {
           productId: String(record.productId ?? ""),
@@ -345,33 +357,35 @@ const toReturnTransactionDto = (
 ) => {
   const relationalItems = rt.items ?? [];
 
-  const returnedItems = relationalItems.length > 0
-    ? relationalItems
-        .filter((item) => item.returnedProductId)
-        .map((item) => ({
-          productId: String(item.returnedProductId),
-          sizeId: String(item.returnedSizeId ?? ""),
-          quantity: Number(item.returnedQuantity ?? 0),
-          total: round2(Number(item.returnedUnitPrice ?? 0) * Number(item.returnedQuantity ?? 0)),
-          productName: item.returnedProduct?.name ?? undefined,
-          sku: item.returnedProduct?.sku ?? undefined,
-          sizeLabel: item.returnedSize?.label ?? undefined,
-        }))
-    : fallbackReturnedItems.map((item) => ({ ...item, total: round2(item.total) }));
+  const returnedItems =
+    relationalItems.length > 0
+      ? relationalItems
+          .filter((item) => item.returnedProductId)
+          .map((item) => ({
+            productId: String(item.returnedProductId),
+            sizeId: String(item.returnedSizeId ?? ""),
+            quantity: Number(item.returnedQuantity ?? 0),
+            total: round2(Number(item.returnedUnitPrice ?? 0) * Number(item.returnedQuantity ?? 0)),
+            productName: item.returnedProduct?.name ?? undefined,
+            sku: item.returnedProduct?.sku ?? undefined,
+            sizeLabel: item.returnedSize?.label ?? undefined,
+          }))
+      : fallbackReturnedItems.map((item) => ({ ...item, total: round2(item.total) }));
 
-  const exchangedItems = relationalItems.length > 0
-    ? relationalItems
-        .filter((item) => item.newProductId)
-        .map((item) => ({
-          productId: String(item.newProductId),
-          sizeId: String(item.newSizeId ?? ""),
-          quantity: Number(item.newQuantity ?? 0),
-          total: round2(Number(item.newUnitPrice ?? 0) * Number(item.newQuantity ?? 0)),
-          productName: item.newProduct?.name ?? undefined,
-          sku: item.newProduct?.sku ?? undefined,
-          sizeLabel: item.newSize?.label ?? undefined,
-        }))
-    : fallbackExchangedItems.map((item) => ({ ...item, total: round2(item.total) }));
+  const exchangedItems =
+    relationalItems.length > 0
+      ? relationalItems
+          .filter((item) => item.newProductId)
+          .map((item) => ({
+            productId: String(item.newProductId),
+            sizeId: String(item.newSizeId ?? ""),
+            quantity: Number(item.newQuantity ?? 0),
+            total: round2(Number(item.newUnitPrice ?? 0) * Number(item.newQuantity ?? 0)),
+            productName: item.newProduct?.name ?? undefined,
+            sku: item.newProduct?.sku ?? undefined,
+            sizeLabel: item.newSize?.label ?? undefined,
+          }))
+      : fallbackExchangedItems.map((item) => ({ ...item, total: round2(item.total) }));
 
   return {
     id: rt.id,
@@ -389,8 +403,14 @@ const toReturnTransactionDto = (
     reason: rt.reason ?? undefined,
     condition: rt.condition ?? undefined,
     notes: rt.notes ?? undefined,
-    transactionDate: rt.transactionDate instanceof Date ? rt.transactionDate.toISOString() : rt.transactionDate ?? undefined,
-    businessDate: rt.businessDate instanceof Date ? rt.businessDate.toISOString() : rt.businessDate ?? undefined,
+    transactionDate:
+      rt.transactionDate instanceof Date
+        ? rt.transactionDate.toISOString()
+        : (rt.transactionDate ?? undefined),
+    businessDate:
+      rt.businessDate instanceof Date
+        ? rt.businessDate.toISOString()
+        : (rt.businessDate ?? undefined),
     createdAt: rt.createdAt instanceof Date ? rt.createdAt.toISOString() : rt.createdAt,
   };
 };
@@ -400,123 +420,136 @@ const toSaleDto = (rawSale: any): Sale => {
   const s = normalizeSaleCompatibility(rawSale);
   return {
     id: s.id,
-  invoiceNumber: s.invoiceNumber,
-  customerId: s.customerId ?? null,
-  customerName: s.customerName ?? null,
-  customerPhone: s.customerPhone ?? null,
-  customerEmail: s.customerEmail ?? null,
-  subtotal: Number(s.subtotal),
-  discountAmount: Number(s.discountAmount),
-  taxAmount: Number(s.taxAmount),
-  total: Number(s.finalPayableAmount ?? s.total),
-  calculatedTotal: s.calculatedTotal != null ? Number(s.calculatedTotal) : undefined,
-  roundOffAmount: Number(s.roundOffAmount ?? 0),
-  finalPayableAmount: s.finalPayableAmount != null ? Number(s.finalPayableAmount) : undefined,
-  amountPaid: Number(s.amountPaid ?? 0),
-  amountDue: Number(s.amountDue ?? 0),
-  paymentMethod: derivePresentationPaymentMethod(s.paymentMethod, s.payments) as Sale["paymentMethod"],
-  paymentStatus: s.paymentStatus as Sale["paymentStatus"],
-  returnStatus: s.returnStatus as Sale["returnStatus"],
-  status: s.status as Sale["status"],
-  items: (s.items ?? []).map((i: any): SaleItem => ({
-    id: i.id,
-    productId: i.productId,
-    productName: i.product?.name ?? "",
-    sku: i.product?.sku ?? "",
-    sizeId: i.sizeId,
-    sizeLabel: i.size?.label ?? "",
-    attributes: (i.product?.attributes as Record<string, unknown>) ?? {},
-    quantity: i.quantity,
-    unitPrice: Number(i.unitPrice),
-    total: Number(i.total),
-    mrp: i.mrp != null ? Number(i.mrp) : Number(i.unitPrice),
-    sellingPrice: i.sellingPrice != null ? Number(i.sellingPrice) : Number(i.unitPrice),
-    discountType: i.discountType ?? undefined,
-    appliedDiscountPercent: i.appliedDiscountPercent != null ? Number(i.appliedDiscountPercent) : undefined,
-    allocatedDiscount: i.allocatedDiscount != null ? Number(i.allocatedDiscount) : undefined,
-    taxableAmount: i.taxableAmount != null ? Number(i.taxableAmount) : undefined,
-    taxAmount: i.taxAmount != null ? Number(i.taxAmount) : undefined,
-    finalUnitPrice: i.finalUnitPrice != null ? Number(i.finalUnitPrice) : Number(i.unitPrice),
-    finalLineAmount: i.finalLineAmount != null ? Number(i.finalLineAmount) : Number(i.total),
-    effectiveUnitPrice: i.effectiveUnitPrice != null ? Number(i.effectiveUnitPrice) : Number(i.unitPrice),
-    costPrice: i.costPrice != null ? Number(i.costPrice) : undefined,
-    pricingSnapshotDate: i.pricingSnapshotDate instanceof Date ? i.pricingSnapshotDate.toISOString() : i.pricingSnapshotDate ?? undefined,
-  })),
-  payments: (s.payments ?? []).map((p: any) => ({
-    id: p.id,
-    saleId: p.saleId,
-    amount: Number(p.amount),
-    method: p.method,
-    businessDate: p.businessDate instanceof Date ? p.businessDate.toISOString() : p.businessDate,
-    paidAt: p.paidAt instanceof Date ? p.paidAt.toISOString() : p.paidAt,
-    note: p.note ?? undefined,
-    createdBy: p.createdBy,
-  })),
-  returnTransactions: (s.returnTransactions ?? []).map((rt: any) => {
-    const relationalItems: any[] = rt.items ?? [];
-    const providedReturnedItems = normalizeLegacyTransactionItems(rt.returnedItems);
-    const providedExchangedItems = normalizeLegacyTransactionItems(rt.exchangedItems);
+    invoiceNumber: s.invoiceNumber,
+    customerId: s.customerId ?? null,
+    customerName: s.customerName ?? null,
+    customerPhone: s.customerPhone ?? null,
+    customerEmail: s.customerEmail ?? null,
+    subtotal: Number(s.subtotal),
+    discountAmount: Number(s.discountAmount),
+    taxAmount: Number(s.taxAmount),
+    total: Number(s.finalPayableAmount ?? s.total),
+    calculatedTotal: s.calculatedTotal != null ? Number(s.calculatedTotal) : undefined,
+    roundOffAmount: Number(s.roundOffAmount ?? 0),
+    finalPayableAmount: s.finalPayableAmount != null ? Number(s.finalPayableAmount) : undefined,
+    amountPaid: Number(s.amountPaid ?? 0),
+    amountDue: Number(s.amountDue ?? 0),
+    paymentMethod: derivePresentationPaymentMethod(
+      s.paymentMethod,
+      s.payments
+    ) as Sale["paymentMethod"],
+    paymentStatus: s.paymentStatus as Sale["paymentStatus"],
+    returnStatus: s.returnStatus as Sale["returnStatus"],
+    status: s.status as Sale["status"],
+    items: (s.items ?? []).map(
+      (i: any): SaleItem => ({
+        id: i.id,
+        productId: i.productId,
+        productName: i.product?.name ?? "",
+        sku: i.product?.sku ?? "",
+        sizeId: i.sizeId,
+        sizeLabel: i.size?.label ?? "",
+        attributes: (i.product?.attributes as Record<string, unknown>) ?? {},
+        quantity: i.quantity,
+        unitPrice: Number(i.unitPrice),
+        total: Number(i.total),
+        mrp: i.mrp != null ? Number(i.mrp) : Number(i.unitPrice),
+        sellingPrice: i.sellingPrice != null ? Number(i.sellingPrice) : Number(i.unitPrice),
+        discountType: i.discountType ?? undefined,
+        appliedDiscountPercent:
+          i.appliedDiscountPercent != null ? Number(i.appliedDiscountPercent) : undefined,
+        allocatedDiscount: i.allocatedDiscount != null ? Number(i.allocatedDiscount) : undefined,
+        taxableAmount: i.taxableAmount != null ? Number(i.taxableAmount) : undefined,
+        taxAmount: i.taxAmount != null ? Number(i.taxAmount) : undefined,
+        finalUnitPrice: i.finalUnitPrice != null ? Number(i.finalUnitPrice) : Number(i.unitPrice),
+        finalLineAmount: i.finalLineAmount != null ? Number(i.finalLineAmount) : Number(i.total),
+        effectiveUnitPrice:
+          i.effectiveUnitPrice != null ? Number(i.effectiveUnitPrice) : Number(i.unitPrice),
+        costPrice: i.costPrice != null ? Number(i.costPrice) : undefined,
+        pricingSnapshotDate:
+          i.pricingSnapshotDate instanceof Date
+            ? i.pricingSnapshotDate.toISOString()
+            : (i.pricingSnapshotDate ?? undefined),
+      })
+    ),
+    payments: (s.payments ?? []).map((p: any) => ({
+      id: p.id,
+      saleId: p.saleId,
+      amount: Number(p.amount),
+      method: p.method,
+      businessDate: p.businessDate instanceof Date ? p.businessDate.toISOString() : p.businessDate,
+      paidAt: p.paidAt instanceof Date ? p.paidAt.toISOString() : p.paidAt,
+      note: p.note ?? undefined,
+      createdBy: p.createdBy,
+    })),
+    returnTransactions: (s.returnTransactions ?? []).map((rt: any) => {
+      const relationalItems: any[] = rt.items ?? [];
+      const providedReturnedItems = normalizeLegacyTransactionItems(rt.returnedItems);
+      const providedExchangedItems = normalizeLegacyTransactionItems(rt.exchangedItems);
 
-    // ── Backward-compatibility: old return transactions (created before the
-    // return_transaction_items relational table was introduced) store their
-    // item lists as JSONB in returnedItems / exchangedItems columns.  When the
-    // relational table is empty we fall back to those JSONB arrays so legacy
-    // records render correctly.
-    const relationalReturnedItems = relationalItems
-      .filter((it: any) => it.returnedProductId)
-      .map((item: any) => ({
-        productId: String(item.returnedProductId),
-        sizeId: String(item.returnedSizeId ?? ""),
-        quantity: Number(item.returnedQuantity),
-        total: Number(item.returnedUnitPrice ?? 0) * Number(item.returnedQuantity ?? 0),
-        productName: item.returnedProduct?.name ?? item.productName ?? undefined,
-        sku: item.returnedProduct?.sku ?? item.sku ?? undefined,
-        sizeLabel: item.returnedSize?.label ?? item.sizeLabel ?? undefined,
-      }));
+      // ── Backward-compatibility: old return transactions (created before the
+      // return_transaction_items relational table was introduced) store their
+      // item lists as JSONB in returnedItems / exchangedItems columns.  When the
+      // relational table is empty we fall back to those JSONB arrays so legacy
+      // records render correctly.
+      const relationalReturnedItems = relationalItems
+        .filter((it: any) => it.returnedProductId)
+        .map((item: any) => ({
+          productId: String(item.returnedProductId),
+          sizeId: String(item.returnedSizeId ?? ""),
+          quantity: Number(item.returnedQuantity),
+          total: Number(item.returnedUnitPrice ?? 0) * Number(item.returnedQuantity ?? 0),
+          productName: item.returnedProduct?.name ?? item.productName ?? undefined,
+          sku: item.returnedProduct?.sku ?? item.sku ?? undefined,
+          sizeLabel: item.returnedSize?.label ?? item.sizeLabel ?? undefined,
+        }));
 
-    const returnedItems = relationalReturnedItems.length > 0
-      ? (providedReturnedItems.length === relationalReturnedItems.length &&
-          providedReturnedItems.some((item) => item.productName || item.sku || item.sizeLabel)
-          ? providedReturnedItems
-          : relationalReturnedItems)
-      : providedReturnedItems;
+      const returnedItems =
+        relationalReturnedItems.length > 0
+          ? providedReturnedItems.length === relationalReturnedItems.length &&
+            providedReturnedItems.some((item) => item.productName || item.sku || item.sizeLabel)
+            ? providedReturnedItems
+            : relationalReturnedItems
+          : providedReturnedItems;
 
-    const relationalExchangedItems = relationalItems
-      .filter((it: any) => it.newProductId)
-      .map((item: any) => ({
-        productId: String(item.newProductId),
-        sizeId: String(item.newSizeId ?? ""),
-        quantity: Number(item.newQuantity ?? 0),
-        total: Number(item.newUnitPrice ?? 0) * Number(item.newQuantity ?? 0),
-        productName: item.newProduct?.name ?? item.productName ?? undefined,
-        sku: item.newProduct?.sku ?? item.sku ?? undefined,
-        sizeLabel: item.newSize?.label ?? item.sizeLabel ?? undefined,
-      }));
+      const relationalExchangedItems = relationalItems
+        .filter((it: any) => it.newProductId)
+        .map((item: any) => ({
+          productId: String(item.newProductId),
+          sizeId: String(item.newSizeId ?? ""),
+          quantity: Number(item.newQuantity ?? 0),
+          total: Number(item.newUnitPrice ?? 0) * Number(item.newQuantity ?? 0),
+          productName: item.newProduct?.name ?? item.productName ?? undefined,
+          sku: item.newProduct?.sku ?? item.sku ?? undefined,
+          sizeLabel: item.newSize?.label ?? item.sizeLabel ?? undefined,
+        }));
 
-    const exchangedItems = relationalExchangedItems.length > 0
-      ? (providedExchangedItems.length === relationalExchangedItems.length &&
-          providedExchangedItems.some((item) => item.productName || item.sku || item.sizeLabel)
-          ? providedExchangedItems
-          : relationalExchangedItems)
-      : providedExchangedItems;
+      const exchangedItems =
+        relationalExchangedItems.length > 0
+          ? providedExchangedItems.length === relationalExchangedItems.length &&
+            providedExchangedItems.some((item) => item.productName || item.sku || item.sizeLabel)
+            ? providedExchangedItems
+            : relationalExchangedItems
+          : providedExchangedItems;
 
-    return {
-      id: rt.id,
-      type: rt.type,
-      returnedItems,
-      exchangedItems,
-      netAmount: Number(rt.netAmount),
-      offsetAmount: Number(rt.offsetAmount),
-      refundAmount: Number(rt.refundAmount),
-      refundMethod: rt.refundMethod ?? undefined,
-      reason: rt.reason ?? undefined,
-      condition: rt.condition ?? undefined,
-      notes: rt.notes ?? undefined,
-      createdAt: rt.createdAt instanceof Date ? rt.createdAt.toISOString() : rt.createdAt,
-    };
-  }),
-  transactionDate: s.transactionDate instanceof Date ? s.transactionDate.toISOString() : s.transactionDate,
-  createdAt: s.createdAt instanceof Date ? s.createdAt.toISOString() : s.createdAt,
+      return {
+        id: rt.id,
+        type: rt.type,
+        returnedItems,
+        exchangedItems,
+        netAmount: Number(rt.netAmount),
+        offsetAmount: Number(rt.offsetAmount),
+        refundAmount: Number(rt.refundAmount),
+        refundMethod: rt.refundMethod ?? undefined,
+        reason: rt.reason ?? undefined,
+        condition: rt.condition ?? undefined,
+        notes: rt.notes ?? undefined,
+        createdAt: rt.createdAt instanceof Date ? rt.createdAt.toISOString() : rt.createdAt,
+      };
+    }),
+    transactionDate:
+      s.transactionDate instanceof Date ? s.transactionDate.toISOString() : s.transactionDate,
+    createdAt: s.createdAt instanceof Date ? s.createdAt.toISOString() : s.createdAt,
   };
 };
 
@@ -553,6 +586,12 @@ export const billingService = {
       input.customerName,
       input.customerEmail
     );
+    await syncWhatsAppContactForCustomer({
+      organizationId: orgId,
+      customerId: customer.id,
+      phone: customer.mobile,
+      storeId,
+    });
 
     // Server-side promo validation — never trust client discountAmount when a promo is applied
     let discountAmount = input.discountAmount;
@@ -583,12 +622,13 @@ export const billingService = {
 
     const transactionDate = input.transactionDate ? new Date(input.transactionDate) : new Date();
     const productIds = [...new Set(input.items.map((item) => item.productId))];
-    const products = productIds.length > 0
-      ? await prisma.product.findMany({
-          where: { id: { in: productIds } },
-          select: { id: true, mrp: true, costPrice: true },
-        })
-      : [];
+    const products =
+      productIds.length > 0
+        ? await prisma.product.findMany({
+            where: { id: { in: productIds } },
+            select: { id: true, mrp: true, costPrice: true },
+          })
+        : [];
     const productMap = new Map(products.map((product) => [product.id, product]));
     const pricing = allocatePricingSnapshots(
       input.items.map((item) => {
@@ -621,11 +661,16 @@ export const billingService = {
     const roundOffAmount = round2(finalPayableAmount - calculatedTotal);
 
     let requestedAmountPaid = round2(Math.max(0, Number(input.amountPaid ?? finalPayableAmount)));
-    const paymentEntries = normalizePaymentEntries(input.splitPayments, input.paymentMethod, requestedAmountPaid);
+    const paymentEntries = normalizePaymentEntries(
+      input.splitPayments,
+      input.paymentMethod,
+      requestedAmountPaid
+    );
     let splitCollected = round2(paymentEntries.reduce((sum, entry) => sum + entry.amount, 0));
 
     const overpayment = round2(splitCollected - finalPayableAmount);
-    const singleCashPaymentEntry = paymentEntries.length === 1 && paymentEntries[0].method === "CASH";
+    const singleCashPaymentEntry =
+      paymentEntries.length === 1 && paymentEntries[0].method === "CASH";
 
     if (overpayment > EPSILON) {
       if (singleCashPaymentEntry && overpayment <= 1) {
@@ -635,7 +680,9 @@ export const billingService = {
         splitCollected = finalPayableAmount;
         requestedAmountPaid = finalPayableAmount;
       } else {
-        throw new Error(`Collected amount cannot exceed total invoice amount of ₹${finalPayableAmount.toFixed(2)}`);
+        throw new Error(
+          `Collected amount cannot exceed total invoice amount of ₹${finalPayableAmount.toFixed(2)}`
+        );
       }
     }
 
@@ -645,7 +692,8 @@ export const billingService = {
 
     const amountPaid = splitCollected;
     const amountDue = Math.max(finalPayableAmount - amountPaid, 0);
-    const paymentStatus = amountPaid >= finalPayableAmount ? "PAID" : amountPaid > 0 ? "PARTIAL" : "PENDING";
+    const paymentStatus =
+      amountPaid >= finalPayableAmount ? "PAID" : amountPaid > 0 ? "PARTIAL" : "PENDING";
     const primaryPaymentMethod = getPrimaryPaymentMethod(paymentEntries, input.paymentMethod);
 
     for (let attempt = 1; attempt <= 5; attempt += 1) {
@@ -700,16 +748,17 @@ export const billingService = {
                   };
                 }),
               },
-              payments: paymentEntries.length > 0
-                ? {
-                    create: paymentEntries.map((entry) => ({
-                      amount: entry.amount,
-                      method: entry.method,
-                      businessDate: transactionDate,
-                      createdBy: userId,
-                    })),
-                  }
-                : undefined,
+              payments:
+                paymentEntries.length > 0
+                  ? {
+                      create: paymentEntries.map((entry) => ({
+                        amount: entry.amount,
+                        method: entry.method,
+                        businessDate: transactionDate,
+                        createdBy: userId,
+                      })),
+                    }
+                  : undefined,
             },
             include: saleInclude,
           });
@@ -725,7 +774,9 @@ export const billingService = {
           // Decrement stock for each sold item (with availability check + audit records)
           for (const it of input.items) {
             const entry = await tx.stockEntry.findUnique({
-              where: { productId_sizeId_storeId: { productId: it.productId, sizeId: it.sizeId, storeId } },
+              where: {
+                productId_sizeId_storeId: { productId: it.productId, sizeId: it.sizeId, storeId },
+              },
             });
 
             if (!entry || entry.quantity < it.quantity) {
@@ -735,7 +786,9 @@ export const billingService = {
             }
 
             await tx.stockEntry.update({
-              where: { productId_sizeId_storeId: { productId: it.productId, sizeId: it.sizeId, storeId } },
+              where: {
+                productId_sizeId_storeId: { productId: it.productId, sizeId: it.sizeId, storeId },
+              },
               data: { quantity: { decrement: it.quantity } },
             });
 
@@ -768,6 +821,20 @@ export const billingService = {
           return created;
         });
 
+        await createWhatsAppAutomationReader()
+          .emit({
+            organizationId: orgId,
+            storeId,
+            trigger: "SALE_COMPLETED",
+            subjectType: "SALE",
+            subjectId: sale.id,
+            customerId: sale.customerId ?? undefined,
+            phone: sale.customerPhone ?? undefined,
+            amount: Number(sale.total),
+            occurredAt: sale.transactionDate,
+            payload: { invoiceNumber: sale.invoiceNumber, total: Number(sale.total) },
+          })
+          .catch(() => undefined);
         return toSaleDto(sale);
       } catch (error) {
         if (attempt < 5 && isInvoiceNumberConflict(error)) {
@@ -814,10 +881,12 @@ export const billingService = {
     }
 
     const returnTransactions = (sale.returnTransactions ?? []) as any[];
-    const historyItems = returnTransactions.flatMap((rt: any) => (rt.items ?? []));
+    const historyItems = returnTransactions.flatMap((rt: any) => rt.items ?? []);
     const returnTransactionIds = returnTransactions.map((rt: any) => String(rt.id)).filter(Boolean);
     const legacyItemsRows =
-      hasLegacyReturnedItemsColumn && hasLegacyExchangedItemsColumn && returnTransactionIds.length > 0
+      hasLegacyReturnedItemsColumn &&
+      hasLegacyExchangedItemsColumn &&
+      returnTransactionIds.length > 0
         ? await prisma.$queryRaw<LegacyReturnTransactionItems[]>`
             SELECT "id", "returnedItems", "exchangedItems"
             FROM "return_transactions"
@@ -850,13 +919,17 @@ export const billingService = {
 
     const productIds = [
       ...new Set([
-        ...historyItems.flatMap((item: any) => [item.returnedProductId, item.newProductId].filter(Boolean).map(String)),
+        ...historyItems.flatMap((item: any) =>
+          [item.returnedProductId, item.newProductId].filter(Boolean).map(String)
+        ),
         ...legacyHistoryItems.map((item) => item.productId).filter(Boolean),
       ]),
     ];
     const sizeIds = [
       ...new Set([
-        ...historyItems.flatMap((item: any) => [item.returnedSizeId, item.newSizeId].filter(Boolean).map(String)),
+        ...historyItems.flatMap((item: any) =>
+          [item.returnedSizeId, item.newSizeId].filter(Boolean).map(String)
+        ),
         ...legacyHistoryItems.map((item) => item.sizeId).filter(Boolean),
       ]),
     ];
@@ -875,20 +948,18 @@ export const billingService = {
           })
         : [],
     ]);
-    const stockEntries = productIds.length > 0
-      ? await prisma.stockEntry.findMany({
-          where: {
-            OR: [
-              { id: { in: productIds } },
-              { productId: { in: productIds } },
-            ],
-          },
-          include: {
-            product: { select: { id: true, name: true, sku: true } },
-            size: { select: { id: true, label: true } },
-          },
-        })
-      : [];
+    const stockEntries =
+      productIds.length > 0
+        ? await prisma.stockEntry.findMany({
+            where: {
+              OR: [{ id: { in: productIds } }, { productId: { in: productIds } }],
+            },
+            include: {
+              product: { select: { id: true, name: true, sku: true } },
+              size: { select: { id: true, label: true } },
+            },
+          })
+        : [];
 
     const productMap = Object.fromEntries(products.map((product) => [product.id, product]));
     const sizeMap = Object.fromEntries(sizes.map((size) => [size.id, size.label]));
@@ -907,9 +978,24 @@ export const billingService = {
           ...item,
           productId: stockEntry?.productId ?? item.productId,
           sizeId: stockEntry?.sizeId ?? item.sizeId,
-          productName: item.productName ?? saleLine?.productName ?? stockEntry?.product?.name ?? productMap[item.productId]?.name ?? item.productId,
-          sku: item.sku ?? saleLine?.sku ?? stockEntry?.product?.sku ?? productMap[item.productId]?.sku ?? item.productId,
-          sizeLabel: item.sizeLabel ?? saleLine?.sizeLabel ?? stockEntry?.size?.label ?? sizeMap[item.sizeId] ?? item.sizeId,
+          productName:
+            item.productName ??
+            saleLine?.productName ??
+            stockEntry?.product?.name ??
+            productMap[item.productId]?.name ??
+            item.productId,
+          sku:
+            item.sku ??
+            saleLine?.sku ??
+            stockEntry?.product?.sku ??
+            productMap[item.productId]?.sku ??
+            item.productId,
+          sizeLabel:
+            item.sizeLabel ??
+            saleLine?.sizeLabel ??
+            stockEntry?.size?.label ??
+            sizeMap[item.sizeId] ??
+            item.sizeId,
         };
       });
 
@@ -918,34 +1004,44 @@ export const billingService = {
       returnTransactions: returnTransactions.map((rt: any) => {
         const items = rt.items ?? [];
         const legacyItems = legacyItemsByTransactionId.get(String(rt.id));
-        const returnedItems = enrichHistoryItems(items
-          .filter((it: any) => it.returnedProductId)
-          .map((item: any) => ({
-            productId: String(item.returnedProductId),
-            sizeId: String(item.returnedSizeId),
-            quantity: Number(item.returnedQuantity),
-            total: Number(item.returnedUnitPrice ?? 0) * Number(item.returnedQuantity ?? 0),
-            productName: productMap[String(item.returnedProductId)]?.name ?? undefined,
-            sku: productMap[String(item.returnedProductId)]?.sku ?? undefined,
-            sizeLabel: sizeMap[String(item.returnedSizeId)] ?? undefined,
-          })));
+        const returnedItems = enrichHistoryItems(
+          items
+            .filter((it: any) => it.returnedProductId)
+            .map((item: any) => ({
+              productId: String(item.returnedProductId),
+              sizeId: String(item.returnedSizeId),
+              quantity: Number(item.returnedQuantity),
+              total: Number(item.returnedUnitPrice ?? 0) * Number(item.returnedQuantity ?? 0),
+              productName: productMap[String(item.returnedProductId)]?.name ?? undefined,
+              sku: productMap[String(item.returnedProductId)]?.sku ?? undefined,
+              sizeLabel: sizeMap[String(item.returnedSizeId)] ?? undefined,
+            }))
+        );
 
-        const exchangedItems = enrichHistoryItems(items
-          .filter((it: any) => it.newProductId)
-          .map((item: any) => ({
-            productId: String(item.newProductId),
-            sizeId: String(item.newSizeId),
-            quantity: Number(item.newQuantity),
-            total: Number(item.newUnitPrice ?? 0) * Number(item.newQuantity ?? 0),
-            productName: productMap[String(item.newProductId)]?.name ?? undefined,
-            sku: productMap[String(item.newProductId)]?.sku ?? undefined,
-            sizeLabel: sizeMap[String(item.newSizeId)] ?? undefined,
-          })));
+        const exchangedItems = enrichHistoryItems(
+          items
+            .filter((it: any) => it.newProductId)
+            .map((item: any) => ({
+              productId: String(item.newProductId),
+              sizeId: String(item.newSizeId),
+              quantity: Number(item.newQuantity),
+              total: Number(item.newUnitPrice ?? 0) * Number(item.newQuantity ?? 0),
+              productName: productMap[String(item.newProductId)]?.name ?? undefined,
+              sku: productMap[String(item.newProductId)]?.sku ?? undefined,
+              sizeLabel: sizeMap[String(item.newSizeId)] ?? undefined,
+            }))
+        );
 
         return {
           ...rt,
-          returnedItems: returnedItems.length > 0 ? returnedItems : enrichHistoryItems(legacyItems?.returnedItems ?? []),
-          exchangedItems: exchangedItems.length > 0 ? exchangedItems : enrichHistoryItems(legacyItems?.exchangedItems ?? []),
+          returnedItems:
+            returnedItems.length > 0
+              ? returnedItems
+              : enrichHistoryItems(legacyItems?.returnedItems ?? []),
+          exchangedItems:
+            exchangedItems.length > 0
+              ? exchangedItems
+              : enrichHistoryItems(legacyItems?.exchangedItems ?? []),
         };
       }),
     };
@@ -1004,17 +1100,11 @@ export const billingService = {
             { createdAt: { gte: from, lt: end } },
           ];
         } else {
-          saleWhere.OR = [
-            { transactionDate: { lt: end } },
-            { createdAt: { lt: end } },
-          ];
+          saleWhere.OR = [{ transactionDate: { lt: end } }, { createdAt: { lt: end } }];
         }
       } else if (filters.startDate) {
         const from = new Date(filters.startDate);
-        saleWhere.OR = [
-          { transactionDate: { gte: from } },
-          { createdAt: { gte: from } },
-        ];
+        saleWhere.OR = [{ transactionDate: { gte: from } }, { createdAt: { gte: from } }];
       }
     }
 
@@ -1027,7 +1117,8 @@ export const billingService = {
 
     // Build return transaction query
     const rtWhere: any = { store: { orgId } };
-    if (filters?.startDate) rtWhere.businessDate = { ...(rtWhere.businessDate ?? {}), gte: new Date(filters.startDate) };
+    if (filters?.startDate)
+      rtWhere.businessDate = { ...(rtWhere.businessDate ?? {}), gte: new Date(filters.startDate) };
     if (filters?.endDate) {
       const end = new Date(filters.endDate);
       end.setDate(end.getDate() + 1);
@@ -1050,7 +1141,12 @@ export const billingService = {
     const [sales, returnTxns] = await Promise.all([
       prisma.sale.findMany({
         where: saleWhere,
-        include: { items: { include: { product: true, size: true } }, customer: true, payments: { include: { user: { select: { name: true } } } }, user: { select: { name: true } } },
+        include: {
+          items: { include: { product: true, size: true } },
+          customer: true,
+          payments: { include: { user: { select: { name: true } } } },
+          user: { select: { name: true } },
+        },
         orderBy: { createdAt: "desc" },
       }),
       prisma.returnTransaction.findMany({
@@ -1080,15 +1176,40 @@ export const billingService = {
 
     // For each return transaction, fetch any sale payments that reference it
     // (notes use `Exchange top-up payment for ${returnTransaction.id}` / `Refund for return ${returnTransaction.id}`)
-    const returnPaymentsByRt: Record<string, { payments: any[]; sum: number; primaryMethod?: string }> = {};
+    const returnPaymentsByRt: Record<
+      string,
+      { payments: any[]; sum: number; primaryMethod?: string }
+    > = {};
     if (returnTxns.length > 0) {
-      await Promise.all(returnTxns.map(async (r: any) => {
-        const payments = await prisma.salePayment.findMany({ where: { note: { contains: String(r.id) } }, orderBy: { paidAt: "desc" } });
-        const sum = round2((payments ?? []).reduce((s, p) => s + Number(p.amount ?? 0), 0));
-        const nonZero = (payments ?? []).filter((p) => Number(p.amount ?? 0) !== 0).map((p) => String(p.method ?? "").toUpperCase()).filter((m) => VALID_PAYMENT_METHODS.has(m));
-        const primary = nonZero.length > 0 ? getPrimaryPaymentMethod(nonZero.map((m) => ({ method: m as any, amount: (payments.find((p) => String(p.method ?? "").toUpperCase() === m)?.amount ?? 0) } as NormalizedPaymentEntry)), r.refundMethod) : undefined;
-        returnPaymentsByRt[String(r.id)] = { payments, sum, primaryMethod: primary };
-      }));
+      await Promise.all(
+        returnTxns.map(async (r: any) => {
+          const payments = await prisma.salePayment.findMany({
+            where: { note: { contains: String(r.id) } },
+            orderBy: { paidAt: "desc" },
+          });
+          const sum = round2((payments ?? []).reduce((s, p) => s + Number(p.amount ?? 0), 0));
+          const nonZero = (payments ?? [])
+            .filter((p) => Number(p.amount ?? 0) !== 0)
+            .map((p) => String(p.method ?? "").toUpperCase())
+            .filter((m) => VALID_PAYMENT_METHODS.has(m));
+          const primary =
+            nonZero.length > 0
+              ? getPrimaryPaymentMethod(
+                  nonZero.map(
+                    (m) =>
+                      ({
+                        method: m as any,
+                        amount:
+                          payments.find((p) => String(p.method ?? "").toUpperCase() === m)
+                            ?.amount ?? 0,
+                      }) as NormalizedPaymentEntry
+                  ),
+                  r.refundMethod
+                )
+              : undefined;
+          returnPaymentsByRt[String(r.id)] = { payments, sum, primaryMethod: primary };
+        })
+      );
     }
 
     // Map to unified rows
@@ -1101,87 +1222,113 @@ export const billingService = {
         payments: (s.payments ?? []).map((p: any) => ({
           ...p,
           amount: Number(p.amount ?? 0),
-          businessDate: p.businessDate instanceof Date ? p.businessDate.toISOString() : p.businessDate,
+          businessDate:
+            p.businessDate instanceof Date ? p.businessDate.toISOString() : p.businessDate,
           paidAt: p.paidAt instanceof Date ? p.paidAt.toISOString() : p.paidAt,
         })),
-        transactionDate: s.transactionDate instanceof Date ? s.transactionDate.toISOString() : s.transactionDate,
+        transactionDate:
+          s.transactionDate instanceof Date ? s.transactionDate.toISOString() : s.transactionDate,
         createdAt: s.createdAt instanceof Date ? s.createdAt.toISOString() : s.createdAt,
         userName: (rawSale as any).user?.name ?? null,
       };
     });
 
-    const rtRows = await Promise.all(returnTxns.map(async (r: any) => {
-      const paymentsInfo = returnPaymentsByRt[String(r.id)] ?? { payments: [], sum: 0, primaryMethod: undefined };
-      const amountPaid = Number(paymentsInfo.sum ?? 0);
-      const netAmountVal = Number(r.netAmount ?? 0);
-      const amountDue = Math.max(netAmountVal - amountPaid, 0);
-      const paymentStatus = amountDue <= 0 ? "PAID" : amountPaid > 0 ? "PARTIAL" : "PENDING";
+    const rtRows = await Promise.all(
+      returnTxns.map(async (r: any) => {
+        const paymentsInfo = returnPaymentsByRt[String(r.id)] ?? {
+          payments: [],
+          sum: 0,
+          primaryMethod: undefined,
+        };
+        const amountPaid = Number(paymentsInfo.sum ?? 0);
+        const netAmountVal = Number(r.netAmount ?? 0);
+        const amountDue = Math.max(netAmountVal - amountPaid, 0);
+        const paymentStatus = amountDue <= 0 ? "PAID" : amountPaid > 0 ? "PARTIAL" : "PENDING";
 
-      // Normalize items for UI consumption: returned items and new/exchanged items
-      const items: any[] = [];
-      if (Array.isArray(r.items) && r.items.length > 0) {
-        for (const it of r.items) {
-          if (it.returnedProductId) {
+        // Normalize items for UI consumption: returned items and new/exchanged items
+        const items: any[] = [];
+        if (Array.isArray(r.items) && r.items.length > 0) {
+          for (const it of r.items) {
+            if (it.returnedProductId) {
+              items.push({
+                type: "RETURNED",
+                productName: it.returnedProduct?.name ?? it.productName ?? undefined,
+                sku: it.returnedProduct?.sku ?? it.sku ?? undefined,
+                sizeLabel: it.returnedSize?.label ?? it.sizeLabel ?? undefined,
+                quantity: Number(it.returnedQuantity ?? 0),
+                unitPrice: Number(it.returnedUnitPrice ?? 0),
+                total: round2(Number(it.returnedUnitPrice ?? 0) * Number(it.returnedQuantity ?? 0)),
+              });
+            }
+            if (it.newProductId) {
+              items.push({
+                type: "NEW",
+                productName: it.newProduct?.name ?? it.productName ?? undefined,
+                sku: it.newProduct?.sku ?? it.sku ?? undefined,
+                sizeLabel: it.newSize?.label ?? it.sizeLabel ?? undefined,
+                quantity: Number(it.newQuantity ?? 0),
+                unitPrice: Number(it.newUnitPrice ?? 0),
+                total: round2(Number(it.newUnitPrice ?? 0) * Number(it.newQuantity ?? 0)),
+              });
+            }
+          }
+        } else {
+          // Fallback to legacy JSON columns if present
+          const legacyReturned = normalizeLegacyTransactionItems((r as any).returnedItems ?? []);
+          const legacyExchanged = normalizeLegacyTransactionItems((r as any).exchangedItems ?? []);
+          for (const it of legacyReturned) {
             items.push({
               type: "RETURNED",
-              productName: it.returnedProduct?.name ?? it.productName ?? undefined,
-              sku: it.returnedProduct?.sku ?? it.sku ?? undefined,
-              sizeLabel: it.returnedSize?.label ?? it.sizeLabel ?? undefined,
-              quantity: Number(it.returnedQuantity ?? 0),
-              unitPrice: Number(it.returnedUnitPrice ?? 0),
-              total: round2(Number(it.returnedUnitPrice ?? 0) * Number(it.returnedQuantity ?? 0)),
+              productName: it.productName,
+              sku: it.sku,
+              sizeLabel: it.sizeLabel,
+              quantity: it.quantity,
+              unitPrice: round2(it.total / Math.max(1, it.quantity)),
+              total: it.total,
             });
           }
-          if (it.newProductId) {
+          for (const it of legacyExchanged) {
             items.push({
               type: "NEW",
-              productName: it.newProduct?.name ?? it.productName ?? undefined,
-              sku: it.newProduct?.sku ?? it.sku ?? undefined,
-              sizeLabel: it.newSize?.label ?? it.sizeLabel ?? undefined,
-              quantity: Number(it.newQuantity ?? 0),
-              unitPrice: Number(it.newUnitPrice ?? 0),
-              total: round2(Number(it.newUnitPrice ?? 0) * Number(it.newQuantity ?? 0)),
+              productName: it.productName,
+              sku: it.sku,
+              sizeLabel: it.sizeLabel,
+              quantity: it.quantity,
+              unitPrice: round2(it.total / Math.max(1, it.quantity)),
+              total: it.total,
             });
           }
         }
-      } else {
-        // Fallback to legacy JSON columns if present
-        const legacyReturned = normalizeLegacyTransactionItems((r as any).returnedItems ?? []);
-        const legacyExchanged = normalizeLegacyTransactionItems((r as any).exchangedItems ?? []);
-        for (const it of legacyReturned) {
-          items.push({ type: "RETURNED", productName: it.productName, sku: it.sku, sizeLabel: it.sizeLabel, quantity: it.quantity, unitPrice: round2(it.total / Math.max(1, it.quantity)), total: it.total });
-        }
-        for (const it of legacyExchanged) {
-          items.push({ type: "NEW", productName: it.productName, sku: it.sku, sizeLabel: it.sizeLabel, quantity: it.quantity, unitPrice: round2(it.total / Math.max(1, it.quantity)), total: it.total });
-        }
-      }
 
-      return {
-        ...r,
-        rowType: "RETURN_TRANSACTION",
-        businessDate: r.businessDate instanceof Date ? r.businessDate.toISOString() : r.businessDate,
-        createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
-        saleInvoiceNumber: r.sale?.invoiceNumber ?? undefined,
-        customerName: r.customer?.name ?? null,
-        userName: r.user?.name ?? null,
-        amountPaid,
-        amountDue,
-        paymentStatus,
-        paymentMethod: derivePresentationPaymentMethod(r.refundMethod ?? undefined, paymentsInfo.payments),
-        payments: (paymentsInfo.payments ?? []).map((p: any) => ({
-          ...p,
-          amount: Number(p.amount ?? 0),
-          businessDate: p.businessDate instanceof Date ? p.businessDate.toISOString() : p.businessDate,
-          paidAt: p.paidAt instanceof Date ? p.paidAt.toISOString() : p.paidAt,
-        })),
-        items,
-      };
-    }));
+        return {
+          ...r,
+          rowType: "RETURN_TRANSACTION",
+          businessDate:
+            r.businessDate instanceof Date ? r.businessDate.toISOString() : r.businessDate,
+          createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
+          saleInvoiceNumber: r.sale?.invoiceNumber ?? undefined,
+          customerName: r.customer?.name ?? null,
+          userName: r.user?.name ?? null,
+          amountPaid,
+          amountDue,
+          paymentStatus,
+          paymentMethod: derivePresentationPaymentMethod(
+            r.refundMethod ?? undefined,
+            paymentsInfo.payments
+          ),
+          payments: (paymentsInfo.payments ?? []).map((p: any) => ({
+            ...p,
+            amount: Number(p.amount ?? 0),
+            businessDate:
+              p.businessDate instanceof Date ? p.businessDate.toISOString() : p.businessDate,
+            paidAt: p.paidAt instanceof Date ? p.paidAt.toISOString() : p.paidAt,
+          })),
+          items,
+        };
+      })
+    );
 
-    let unified = [
-      ...salesRows,
-      ...rtRows,
-    ];
+    let unified = [...salesRows, ...rtRows];
 
     // Apply top-level type filter (if user explicitly asked for SALES only)
     if (filters?.type === "SALE") {
@@ -1196,16 +1343,26 @@ export const billingService = {
 
     // If user asked for only EXCHANGE rows (return transactions of type EXCHANGE)
     if (filters?.type === "EXCHANGE") {
-      unified = unified.filter((r: any) => r.rowType === "RETURN_TRANSACTION" && r.type === "EXCHANGE");
+      unified = unified.filter(
+        (r: any) => r.rowType === "RETURN_TRANSACTION" && r.type === "EXCHANGE"
+      );
     }
 
     // If user asked for RETURNS only, include RETURN and RETURN_EXCHANGE rows
     if (filters?.type === "RETURN") {
-      unified = unified.filter((r: any) => r.rowType === "RETURN_TRANSACTION" && (r.type === "RETURN" || r.type === "RETURN_EXCHANGE"));
+      unified = unified.filter(
+        (r: any) =>
+          r.rowType === "RETURN_TRANSACTION" &&
+          (r.type === "RETURN" || r.type === "RETURN_EXCHANGE")
+      );
     }
 
     // Sort by createdAt desc
-    unified.sort((a, b) => new Date((b as any).businessDate ?? b.createdAt).getTime() - new Date((a as any).businessDate ?? a.createdAt).getTime());
+    unified.sort(
+      (a, b) =>
+        new Date((b as any).businessDate ?? b.createdAt).getTime() -
+        new Date((a as any).businessDate ?? a.createdAt).getTime()
+    );
 
     return unified;
   },
@@ -1234,7 +1391,7 @@ export const billingService = {
           where: { productId: it.productId, sizeId: it.sizeId, storeId: existing.storeId },
           data: { quantity: { increment: it.quantity } },
         });
-        
+
         await tx.stockMovement.create({
           data: {
             productId: it.productId,
@@ -1315,13 +1472,19 @@ export const billingService = {
     if (sale.paymentStatus === "PAID") {
       throw new Error("This sale is already fully paid");
     }
-    const normalizedEntries = normalizePaymentEntries(input.splitPayments, input.method, Number(input.amount ?? 0));
+    const normalizedEntries = normalizePaymentEntries(
+      input.splitPayments,
+      input.method,
+      Number(input.amount ?? 0)
+    );
     const paymentDelta = round2(normalizedEntries.reduce((sum, entry) => sum + entry.amount, 0));
     if (paymentDelta <= 0) throw new Error("Payment amount must be greater than zero");
 
     const currentAmountDue = Number(sale.amountDue ?? 0);
     if (paymentDelta > currentAmountDue + EPSILON) {
-      throw new Error(`Payment cannot exceed outstanding balance of ₹${currentAmountDue.toFixed(2)}`);
+      throw new Error(
+        `Payment cannot exceed outstanding balance of ₹${currentAmountDue.toFixed(2)}`
+      );
     }
 
     const amountPaid = Number(sale.amountPaid ?? 0) + paymentDelta;
@@ -1329,7 +1492,10 @@ export const billingService = {
     const amountDue = Math.max(finalPayableAmount - amountPaid, 0);
     const paymentStatus = amountPaid >= finalPayableAmount ? "PAID" : "PARTIAL";
 
-    const primaryMethodForSale = getPrimaryPaymentMethod(normalizedEntries, input.method ?? sale.paymentMethod);
+    const primaryMethodForSale = getPrimaryPaymentMethod(
+      normalizedEntries,
+      input.method ?? sale.paymentMethod
+    );
 
     const updated = await prisma.$transaction(async (tx) => {
       await tx.salePayment.createMany({
@@ -1345,7 +1511,7 @@ export const billingService = {
 
       // Cast to `any` so toSaleDto can access dynamic includes (payments, user)
       // without fighting Prisma's deep-conditional return type inference.
-      const updatedSale = await tx.sale.update({
+      const updatedSale = (await tx.sale.update({
         where: { id: saleId },
         data: {
           amountPaid: { increment: paymentDelta },
@@ -1359,7 +1525,7 @@ export const billingService = {
           payments: { include: { user: { select: { name: true } } }, orderBy: { paidAt: "desc" } },
           user: { select: { name: true } },
         },
-      }) as any;
+      })) as any;
 
       if (sale.customerId) {
         await tx.customer.update({
@@ -1381,7 +1547,12 @@ export const billingService = {
     input: {
       type: string;
       returnedItems: Array<{ productId: string; sizeId: string; quantity: number; total: number }>;
-      exchangedItems?: Array<{ productId: string; sizeId: string; quantity: number; total: number }>;
+      exchangedItems?: Array<{
+        productId: string;
+        sizeId: string;
+        quantity: number;
+        total: number;
+      }>;
       refundAmount: number;
       offsetAmount?: number;
       refundMethod?: string;
@@ -1464,7 +1635,9 @@ export const billingService = {
       const key = `${item.productId}:${item.sizeId}`;
       const existingSaleItem = saleItemsByKey.get(key);
       if (!existingSaleItem) {
-        throw new Error(`Returned item not found in original sale: ${item.productId} / ${item.sizeId}`);
+        throw new Error(
+          `Returned item not found in original sale: ${item.productId} / ${item.sizeId}`
+        );
       }
       if (item.quantity <= 0 || item.quantity > existingSaleItem.quantity) {
         throw new Error(`Invalid returned quantity for item ${item.productId} / ${item.sizeId}`);
@@ -1481,30 +1654,30 @@ export const billingService = {
     const returnStatus = returnedQty === 0 ? "NONE" : returnedQty >= totalQty ? "FULL" : "PARTIAL";
     const returnedTotal = returnedLineItems.reduce((sum, item) => sum + item.total, 0);
     const exchangedTotal = exchangedLineItems.reduce((sum, item) => sum + item.total, 0);
-    
+
     // Calculate discount on the difference or exchanged total
     const baseForDiscount = Math.max(exchangedTotal, 0);
     const discountType = input.discountType ?? "PERCENTAGE";
     const discountPercent = clamp0(Number(input.discountPercent ?? 0));
     const discountAmountInput = clamp0(Number(input.discountAmount ?? 0));
-    
+
     let discountAmount = 0;
     if (discountType === "PERCENTAGE") {
       discountAmount = round2((baseForDiscount * discountPercent) / 100);
     } else {
       discountAmount = Math.min(discountAmountInput, baseForDiscount);
     }
-    
+
     // Calculate final amounts
     const calculatedTotal = exchangedTotal - discountAmount;
     const taxRate = clamp0(Number(input.taxRate ?? 0));
     const taxAmount = taxRate > 0 ? round2((calculatedTotal * taxRate) / 100) : 0;
     const calculatedWithTax = calculatedTotal + taxAmount;
-    
+
     // Apply round-off
     const finalPayable = Math.round(calculatedWithTax);
     const roundOffAmount = round2(finalPayable - calculatedWithTax);
-    
+
     const netAmount = Math.max(finalPayable - returnedTotal, 0);
     const offsetAmount = netAmount;
     const refundAmount = Math.max(returnedTotal - finalPayable, 0);
@@ -1536,10 +1709,13 @@ export const billingService = {
             calculatedTotal: new Prisma.Decimal(calculatedWithTax),
             roundOffAmount: new Prisma.Decimal(roundOffAmount),
             finalPayable: new Prisma.Decimal(finalPayable),
-            splitPaymentData: (input.topUpPayments || input.refundPayments) ? JSON.stringify({
-              topUpPayments: input.topUpPayments,
-              refundPayments: input.refundPayments,
-            }) : undefined,
+            splitPaymentData:
+              input.topUpPayments || input.refundPayments
+                ? JSON.stringify({
+                    topUpPayments: input.topUpPayments,
+                    refundPayments: input.refundPayments,
+                  })
+                : undefined,
             transactionDate,
             businessDate,
             createdBy: userId,
@@ -1601,7 +1777,11 @@ export const billingService = {
           let refundTotal = 0;
 
           if (netAmount > 0) {
-            topUpEntries = normalizePaymentEntries(input.topUpPayments, input.refundMethod, netAmount);
+            topUpEntries = normalizePaymentEntries(
+              input.topUpPayments,
+              input.refundMethod,
+              netAmount
+            );
             topUpTotal = round2(topUpEntries.reduce((sum, entry) => sum + entry.amount, 0));
             if (topUpTotal - netAmount > EPSILON) {
               throw new Error("Top-up split payment total cannot exceed exchange payable amount");
@@ -1620,7 +1800,11 @@ export const billingService = {
           }
 
           if (refundAmount > 0) {
-            refundEntries = normalizePaymentEntries(input.refundPayments, input.refundMethod, refundAmount);
+            refundEntries = normalizePaymentEntries(
+              input.refundPayments,
+              input.refundMethod,
+              refundAmount
+            );
             refundTotal = round2(refundEntries.reduce((sum, entry) => sum + entry.amount, 0));
             if (refundTotal - refundAmount > EPSILON) {
               throw new Error("Refund split payment total cannot exceed refund amount");
@@ -1660,7 +1844,9 @@ export const billingService = {
               },
             });
             if (!stockEntry) {
-              throw new Error(`Stock entry not found for returned item ${item.productId} / ${item.sizeId}`);
+              throw new Error(
+                `Stock entry not found for returned item ${item.productId} / ${item.sizeId}`
+              );
             }
 
             await tx.stockEntry.update({
@@ -1740,12 +1926,18 @@ export const billingService = {
           const finalPayableAmount = Number(sale.finalPayableAmount ?? sale.total);
           const newAmountPaid = round2(currentAmountPaid + paymentDelta);
           const newAmountDue = Math.max(finalPayableAmount - newAmountPaid, 0);
-          const newPaymentStatus = newAmountPaid >= finalPayableAmount ? "PAID" : newAmountPaid > 0 ? "PARTIAL" : "PENDING";
+          const newPaymentStatus =
+            newAmountPaid >= finalPayableAmount
+              ? "PAID"
+              : newAmountPaid > 0
+                ? "PARTIAL"
+                : "PENDING";
 
           // Determine primary payment method from top-up entries if present
-          const primaryMethodForSale = topUpEntries.length > 0
-            ? getPrimaryPaymentMethod(topUpEntries, input.refundMethod ?? undefined)
-            : (sale.paymentMethod as any) ?? undefined;
+          const primaryMethodForSale =
+            topUpEntries.length > 0
+              ? getPrimaryPaymentMethod(topUpEntries, input.refundMethod ?? undefined)
+              : ((sale.paymentMethod as any) ?? undefined);
 
           const saleStatus =
             input.type === "RETURN"
@@ -1761,7 +1953,9 @@ export const billingService = {
             data: {
               returnStatus,
               status: saleStatus,
-              ...(Math.abs(paymentDelta) > EPSILON ? { amountPaid: { increment: paymentDelta } } : {}),
+              ...(Math.abs(paymentDelta) > EPSILON
+                ? { amountPaid: { increment: paymentDelta } }
+                : {}),
               amountDue: newAmountDue,
               paymentStatus: newPaymentStatus,
               ...(primaryMethodForSale ? { paymentMethod: primaryMethodForSale } : {}),
@@ -1822,7 +2016,10 @@ export const billingService = {
         _sum: { amount: true },
       }),
       prisma.salePayment.aggregate({
-        where: { businessDate: { gte: startOfPrevMonth, lte: endOfPrevMonth }, sale: { store: { orgId } } },
+        where: {
+          businessDate: { gte: startOfPrevMonth, lte: endOfPrevMonth },
+          sale: { store: { orgId } },
+        },
         _sum: { amount: true },
       }),
       prisma.sale.aggregate({
@@ -1843,10 +2040,18 @@ export const billingService = {
         where: { store: { orgId }, refundAmount: { gt: 0 } },
       }),
       prisma.returnTransaction.count({
-        where: { store: { orgId }, businessDate: { gte: startOfMonth, lte: endOfMonth }, refundAmount: { gt: 0 } },
+        where: {
+          store: { orgId },
+          businessDate: { gte: startOfMonth, lte: endOfMonth },
+          refundAmount: { gt: 0 },
+        },
       }),
       prisma.returnTransaction.count({
-        where: { store: { orgId }, businessDate: { gte: startOfPrevMonth, lte: endOfPrevMonth }, refundAmount: { gt: 0 } },
+        where: {
+          store: { orgId },
+          businessDate: { gte: startOfPrevMonth, lte: endOfPrevMonth },
+          refundAmount: { gt: 0 },
+        },
       }),
       prisma.returnTransaction.aggregate({
         where: { store: { orgId }, refundAmount: { gt: 0 } },
@@ -1945,15 +2150,13 @@ export const billingService = {
       if (to) createdAtClause.lt = to;
 
       // businessDate is an alias for transactionDate on sales
-      saleWhere.OR = [
-        { transactionDate: transactionDateClause },
-        { createdAt: createdAtClause },
-      ];
+      saleWhere.OR = [{ transactionDate: transactionDateClause }, { createdAt: createdAtClause }];
     }
 
     // Build return transaction query
     const rtWhere: any = { store: { orgId } };
-    if (filters?.startDate) rtWhere.businessDate = { ...(rtWhere.businessDate ?? {}), gte: new Date(filters.startDate) };
+    if (filters?.startDate)
+      rtWhere.businessDate = { ...(rtWhere.businessDate ?? {}), gte: new Date(filters.startDate) };
     if (filters?.endDate) {
       const end = new Date(filters.endDate);
       end.setDate(end.getDate() + 1);
@@ -1974,7 +2177,11 @@ export const billingService = {
     const [sales, returnTxns] = await Promise.all([
       prisma.sale.findMany({
         where: saleWhere,
-        include: { items: { include: { product: true, size: true } }, customer: true, payments: true },
+        include: {
+          items: { include: { product: true, size: true } },
+          customer: true,
+          payments: true,
+        },
         orderBy: { createdAt: "desc" },
       }),
       prisma.returnTransaction.findMany({
@@ -2009,29 +2216,64 @@ export const billingService = {
         payments: (s.payments ?? []).map((p: any) => ({
           ...p,
           amount: Number(p.amount ?? 0),
-          businessDate: p.businessDate instanceof Date ? p.businessDate.toISOString() : p.businessDate,
+          businessDate:
+            p.businessDate instanceof Date ? p.businessDate.toISOString() : p.businessDate,
           paidAt: p.paidAt instanceof Date ? p.paidAt.toISOString() : p.paidAt,
         })),
-        transactionDate: s.transactionDate instanceof Date ? s.transactionDate.toISOString() : s.transactionDate,
+        transactionDate:
+          s.transactionDate instanceof Date ? s.transactionDate.toISOString() : s.transactionDate,
         createdAt: s.createdAt instanceof Date ? s.createdAt.toISOString() : s.createdAt,
-        businessDate: s.transactionDate instanceof Date ? s.transactionDate.toISOString() : s.transactionDate ?? (s.createdAt instanceof Date ? s.createdAt.toISOString() : s.createdAt),
+        businessDate:
+          s.transactionDate instanceof Date
+            ? s.transactionDate.toISOString()
+            : (s.transactionDate ??
+              (s.createdAt instanceof Date ? s.createdAt.toISOString() : s.createdAt)),
       };
     });
 
     // For paged requests, also attach any sale payments that reference return transactions
-    const returnPaymentsByRt: Record<string, { payments: any[]; sum: number; primaryMethod?: string }> = {};
+    const returnPaymentsByRt: Record<
+      string,
+      { payments: any[]; sum: number; primaryMethod?: string }
+    > = {};
     if (returnTxns.length > 0) {
-      await Promise.all(returnTxns.map(async (r: any) => {
-        const payments = await prisma.salePayment.findMany({ where: { note: { contains: String(r.id) } }, orderBy: { paidAt: "desc" } });
-        const sum = round2((payments ?? []).reduce((s, p) => s + Number(p.amount ?? 0), 0));
-        const nonZero = (payments ?? []).filter((p) => Number(p.amount ?? 0) !== 0).map((p) => String(p.method ?? "").toUpperCase()).filter((m) => VALID_PAYMENT_METHODS.has(m));
-        const primary = nonZero.length > 0 ? getPrimaryPaymentMethod(nonZero.map((m) => ({ method: m as any, amount: (payments.find((p) => String(p.method ?? "").toUpperCase() === m)?.amount ?? 0) } as NormalizedPaymentEntry)), r.refundMethod) : undefined;
-        returnPaymentsByRt[String(r.id)] = { payments, sum, primaryMethod: primary };
-      }));
+      await Promise.all(
+        returnTxns.map(async (r: any) => {
+          const payments = await prisma.salePayment.findMany({
+            where: { note: { contains: String(r.id) } },
+            orderBy: { paidAt: "desc" },
+          });
+          const sum = round2((payments ?? []).reduce((s, p) => s + Number(p.amount ?? 0), 0));
+          const nonZero = (payments ?? [])
+            .filter((p) => Number(p.amount ?? 0) !== 0)
+            .map((p) => String(p.method ?? "").toUpperCase())
+            .filter((m) => VALID_PAYMENT_METHODS.has(m));
+          const primary =
+            nonZero.length > 0
+              ? getPrimaryPaymentMethod(
+                  nonZero.map(
+                    (m) =>
+                      ({
+                        method: m as any,
+                        amount:
+                          payments.find((p) => String(p.method ?? "").toUpperCase() === m)
+                            ?.amount ?? 0,
+                      }) as NormalizedPaymentEntry
+                  ),
+                  r.refundMethod
+                )
+              : undefined;
+          returnPaymentsByRt[String(r.id)] = { payments, sum, primaryMethod: primary };
+        })
+      );
     }
 
     const rtRows = returnTxns.map((r) => {
-      const paymentsInfo = returnPaymentsByRt[String(r.id)] ?? { payments: [], sum: 0, primaryMethod: undefined };
+      const paymentsInfo = returnPaymentsByRt[String(r.id)] ?? {
+        payments: [],
+        sum: 0,
+        primaryMethod: undefined,
+      };
       const amountPaid = Number(paymentsInfo.sum ?? 0);
       const netAmountVal = Number(r.netAmount ?? 0);
       const amountDue = Math.max(netAmountVal - amountPaid, 0);
@@ -2040,18 +2282,23 @@ export const billingService = {
       return {
         ...r,
         rowType: "RETURN_TRANSACTION",
-        businessDate: r.businessDate instanceof Date ? r.businessDate.toISOString() : r.businessDate,
+        businessDate:
+          r.businessDate instanceof Date ? r.businessDate.toISOString() : r.businessDate,
         createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
         saleInvoiceNumber: r.sale?.invoiceNumber ?? undefined,
         customerName: r.customer?.name ?? null,
         amountPaid,
         amountDue,
         paymentStatus,
-        paymentMethod: derivePresentationPaymentMethod(r.refundMethod ?? undefined, paymentsInfo.payments),
+        paymentMethod: derivePresentationPaymentMethod(
+          r.refundMethod ?? undefined,
+          paymentsInfo.payments
+        ),
         payments: (paymentsInfo.payments ?? []).map((p: any) => ({
           ...p,
           amount: Number(p.amount ?? 0),
-          businessDate: p.businessDate instanceof Date ? p.businessDate.toISOString() : p.businessDate,
+          businessDate:
+            p.businessDate instanceof Date ? p.businessDate.toISOString() : p.businessDate,
           paidAt: p.paidAt instanceof Date ? p.paidAt.toISOString() : p.paidAt,
         })),
       } as any;
@@ -2070,13 +2317,23 @@ export const billingService = {
     }
 
     if (filters?.type === "EXCHANGE") {
-      unified = unified.filter((r: any) => r.rowType === "RETURN_TRANSACTION" && r.type === "EXCHANGE");
+      unified = unified.filter(
+        (r: any) => r.rowType === "RETURN_TRANSACTION" && r.type === "EXCHANGE"
+      );
     }
     if (filters?.type === "RETURN") {
-      unified = unified.filter((r: any) => r.rowType === "RETURN_TRANSACTION" && (r.type === "RETURN" || r.type === "RETURN_EXCHANGE"));
+      unified = unified.filter(
+        (r: any) =>
+          r.rowType === "RETURN_TRANSACTION" &&
+          (r.type === "RETURN" || r.type === "RETURN_EXCHANGE")
+      );
     }
 
-    unified.sort((a, b) => new Date((b as any).businessDate ?? b.transactionDate ?? b.createdAt).getTime() - new Date((a as any).businessDate ?? a.transactionDate ?? a.createdAt).getTime());
+    unified.sort(
+      (a, b) =>
+        new Date((b as any).businessDate ?? b.transactionDate ?? b.createdAt).getTime() -
+        new Date((a as any).businessDate ?? a.transactionDate ?? a.createdAt).getTime()
+    );
 
     const total = unified.length;
     const totalPages = Math.max(1, Math.ceil(total / limit));

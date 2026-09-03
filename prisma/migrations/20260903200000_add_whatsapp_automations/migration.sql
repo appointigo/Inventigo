@@ -1,0 +1,15 @@
+CREATE TYPE "WhatsAppAutomationTrigger" AS ENUM ('SALE_COMPLETED', 'PAYMENT_DUE', 'CUSTOMER_INACTIVE');
+CREATE TYPE "WhatsAppAutomationExecutionStatus" AS ENUM ('QUEUED', 'PROCESSING', 'SUBMITTED', 'SKIPPED', 'FAILED');
+CREATE TABLE "whatsapp_automations" ("id" TEXT NOT NULL,"organizationId" TEXT NOT NULL,"storeId" TEXT,"templateDefinitionId" TEXT NOT NULL,"name" TEXT NOT NULL,"trigger" "WhatsAppAutomationTrigger" NOT NULL,"isActive" BOOLEAN NOT NULL DEFAULT false,"conditions" JSONB NOT NULL,"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,"updatedAt" TIMESTAMP(3) NOT NULL,CONSTRAINT "whatsapp_automations_pkey" PRIMARY KEY ("id"));
+CREATE TABLE "whatsapp_automation_executions" ("id" TEXT NOT NULL,"automationId" TEXT NOT NULL,"eventKey" TEXT NOT NULL,"subjectType" TEXT NOT NULL,"subjectId" TEXT NOT NULL,"storeId" TEXT,"contactId" TEXT,"recipientPhone" TEXT,"payload" JSONB NOT NULL,"status" "WhatsAppAutomationExecutionStatus" NOT NULL DEFAULT 'QUEUED',"skipReason" TEXT,"errorCode" TEXT,"errorMessage" TEXT,"attempts" INTEGER NOT NULL DEFAULT 0,"availableAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,"lockedAt" TIMESTAMP(3),"lockToken" TEXT,"completedAt" TIMESTAMP(3),"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,"updatedAt" TIMESTAMP(3) NOT NULL,CONSTRAINT "whatsapp_automation_executions_pkey" PRIMARY KEY ("id"));
+ALTER TABLE "whatsapp_messages" ADD COLUMN "automationExecutionId" TEXT;
+CREATE INDEX "whatsapp_automations_organizationId_trigger_isActive_idx" ON "whatsapp_automations"("organizationId","trigger","isActive");
+CREATE UNIQUE INDEX "whatsapp_automation_executions_automationId_eventKey_key" ON "whatsapp_automation_executions"("automationId","eventKey");
+CREATE INDEX "whatsapp_automation_executions_status_availableAt_lockedAt_idx" ON "whatsapp_automation_executions"("status","availableAt","lockedAt");
+CREATE INDEX "whatsapp_automation_executions_automationId_createdAt_idx" ON "whatsapp_automation_executions"("automationId","createdAt");
+CREATE INDEX "whatsapp_messages_automationExecutionId_createdAt_idx" ON "whatsapp_messages"("automationExecutionId","createdAt");
+ALTER TABLE "whatsapp_automations" ADD CONSTRAINT "whatsapp_automations_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "whatsapp_automations" ADD CONSTRAINT "whatsapp_automations_storeId_fkey" FOREIGN KEY ("storeId") REFERENCES "stores"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "whatsapp_automations" ADD CONSTRAINT "whatsapp_automations_templateDefinitionId_fkey" FOREIGN KEY ("templateDefinitionId") REFERENCES "whatsapp_template_definitions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "whatsapp_automation_executions" ADD CONSTRAINT "whatsapp_automation_executions_automationId_fkey" FOREIGN KEY ("automationId") REFERENCES "whatsapp_automations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "whatsapp_messages" ADD CONSTRAINT "whatsapp_messages_automationExecutionId_fkey" FOREIGN KEY ("automationExecutionId") REFERENCES "whatsapp_automation_executions"("id") ON DELETE SET NULL ON UPDATE CASCADE;

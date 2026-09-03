@@ -8,6 +8,7 @@ import type {
   CustomerUpsertInput,
   PaginatedCustomersDto,
 } from "../types";
+import { syncWhatsAppContactForCustomer } from "@/modules/whatsapp/services/WhatsAppContactService";
 
 const RECENT_DAYS = 7;
 const INACTIVE_DAYS = 60;
@@ -145,8 +146,10 @@ export const customerService = {
             ...(cleanEmail !== undefined ? { email: cleanEmail } : {}),
           },
         });
+        await syncWhatsAppContactForCustomer({ organizationId: orgId, customerId: updated.id, phone: updated.mobile });
         return toCustomerDto(updated);
       }
+      await syncWhatsAppContactForCustomer({ organizationId: orgId, customerId: existing.id, phone: existing.mobile });
       return toCustomerDto(existing);
     }
 
@@ -159,6 +162,7 @@ export const customerService = {
       },
     });
 
+    await syncWhatsAppContactForCustomer({ organizationId: orgId, customerId: created.id, phone: created.mobile });
     return toCustomerDto(created);
   },
 
@@ -313,6 +317,7 @@ export const customerService = {
           ...(metadata !== undefined ? { metadata } : {}),
         },
       });
+      await syncWhatsAppContactForCustomer({ organizationId: orgId, customerId: row.id, phone: row.mobile });
       return toCustomerDto(row);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to create customer";
@@ -365,6 +370,7 @@ export const customerService = {
       },
     });
 
+    await syncWhatsAppContactForCustomer({ organizationId: orgId, customerId: updated.id, phone: updated.mobile });
     return toCustomerDto(updated);
   },
 
