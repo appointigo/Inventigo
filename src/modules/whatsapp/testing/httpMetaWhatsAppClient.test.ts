@@ -29,6 +29,21 @@ test("normalizes timeouts", async () => {
   await assert.rejects(client.sendMessage(request), (error: unknown) => typeof error === "object" && error !== null && "code" in error && error.code === "META_TIMEOUT");
 });
 
+test("exchanges an Embedded Signup code with the exact redirect URI", async () => {
+  let seenUrl = "";
+  const client = new HttpMetaWhatsAppClient(config, credentials, async url => {
+    seenUrl = String(url);
+    return new Response(JSON.stringify({ access_token: "meta-token" }), { status: 200 });
+  });
+  await client.exchangeEmbeddedSignupCode({
+    code: "short-lived-code",
+    redirectUri: "http://localhost:3000/dashboard/whatsapp",
+  });
+  const url = new URL(seenUrl);
+  assert.equal(url.searchParams.get("redirect_uri"), "http://localhost:3000/dashboard/whatsapp");
+  assert.equal(url.searchParams.get("code"), "short-lived-code");
+});
+
 test("lists and creates WABA-scoped templates with verified field names", async () => {
   const seen: Array<{ url: string; body?: unknown }> = [];
   const client = new HttpMetaWhatsAppClient(config, credentials, async (url, init) => {

@@ -19,7 +19,7 @@ export class WhatsAppPlatformConfigurationError extends Error {
 
 export type WhatsAppPlatformConfig = { enabled: boolean; meta?: {
   appId: string; appSecret: string; embeddedSignupConfigId: string;
-  webhookVerifyToken: string; graphApiVersion: string; timeoutMs: number; credentialEncryptionKey: Buffer;
+  embeddedSignupRedirectUri: string; webhookVerifyToken: string; graphApiVersion: string; timeoutMs: number; credentialEncryptionKey: Buffer;
 } };
 
 const required = (env: NodeJS.ProcessEnv, key: string) => {
@@ -59,6 +59,21 @@ export function getWhatsAppPlatformConfig(
       "WHATSAPP_SETUP_MISCONFIGURED",
       "META_GRAPH_TIMEOUT_MS must be between 1000 and 60000"
     );
+  const embeddedSignupRedirectUri = required(env, "META_EMBEDDED_SIGNUP_REDIRECT_URI");
+  let redirectUrl: URL;
+  try {
+    redirectUrl = new URL(embeddedSignupRedirectUri);
+  } catch {
+    throw new WhatsAppPlatformConfigurationError(
+      "WHATSAPP_SETUP_MISCONFIGURED",
+      "META_EMBEDDED_SIGNUP_REDIRECT_URI must be an absolute URL"
+    );
+  }
+  if (redirectUrl.hash || (redirectUrl.protocol !== "https:" && !(redirectUrl.protocol === "http:" && redirectUrl.hostname === "localhost")))
+    throw new WhatsAppPlatformConfigurationError(
+      "WHATSAPP_SETUP_MISCONFIGURED",
+      "META_EMBEDDED_SIGNUP_REDIRECT_URI must use HTTPS, except on localhost"
+    );
   const credentialEncryptionKey = Buffer.from(required(env, "WHATSAPP_CREDENTIAL_ENCRYPTION_KEY"), "base64");
   if (credentialEncryptionKey.length !== 32)
     throw new WhatsAppPlatformConfigurationError(
@@ -67,7 +82,7 @@ export function getWhatsAppPlatformConfig(
     );
   return { enabled: true, meta: {
     appId: required(env, "META_APP_ID"), appSecret: required(env, "META_APP_SECRET"),
-    embeddedSignupConfigId: required(env, "META_EMBEDDED_SIGNUP_CONFIG_ID"), webhookVerifyToken: required(env, "META_WEBHOOK_VERIFY_TOKEN"), graphApiVersion,
+    embeddedSignupConfigId: required(env, "META_EMBEDDED_SIGNUP_CONFIG_ID"), embeddedSignupRedirectUri: redirectUrl.toString(), webhookVerifyToken: required(env, "META_WEBHOOK_VERIFY_TOKEN"), graphApiVersion,
     timeoutMs, credentialEncryptionKey,
   } };
 }
