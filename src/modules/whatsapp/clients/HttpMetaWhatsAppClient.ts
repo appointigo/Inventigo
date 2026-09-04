@@ -1,6 +1,6 @@
 import { WhatsAppError } from "../errors.ts";
 import type { WhatsAppCredentialStore } from "../credentials/WhatsAppCredentialStore.ts";
-import type { MetaCodeExchangeResult, MetaCreateTemplateRequest, MetaMessageTemplate, MetaPhoneNumber, MetaSendMessageRequest, MetaSendMessageResult, MetaTemplateContext, MetaTemplateStatus, MetaTokenInspection, MetaWaba, MetaWhatsAppClient } from "./MetaWhatsAppClient.ts";
+import type { MetaCodeExchangeRequest, MetaCodeExchangeResult, MetaCreateTemplateRequest, MetaMessageTemplate, MetaPhoneNumber, MetaSendMessageRequest, MetaSendMessageResult, MetaTemplateContext, MetaTemplateStatus, MetaTokenInspection, MetaWaba, MetaWhatsAppClient } from "./MetaWhatsAppClient.ts";
 
 type Config = { appId: string; appSecret: string; graphApiVersion: string; timeoutMs: number };
 type MetaErrorBody = { error?: { message?: string; code?: number; error_subcode?: number; type?: string; fbtrace_id?: string } };
@@ -53,8 +53,8 @@ export class HttpMetaWhatsAppClient implements MetaWhatsAppClient {
     return { providerMessageId: id, acceptedAt: new Date() };
   }
 
-  async exchangeEmbeddedSignupCode(code: string): Promise<MetaCodeExchangeResult> {
-    const params = new URLSearchParams({ client_id: this.config.appId, client_secret: this.config.appSecret, code });
+  async exchangeEmbeddedSignupCode(input: MetaCodeExchangeRequest): Promise<MetaCodeExchangeResult> {
+    const params = new URLSearchParams({ client_id: this.config.appId, client_secret: this.config.appSecret, code: input.code, redirect_uri: input.redirectUri });
     const result = await this.request<{ access_token?: string; expires_in?: number }>(`/oauth/access_token?${params}`);
     if (!result.access_token) throw new WhatsAppError("EMBEDDED_SIGNUP_INVALID_CODE", "Meta did not return an access token");
     return { accessToken: result.access_token, expiresAt: result.expires_in ? new Date(Date.now() + result.expires_in * 1000) : undefined };

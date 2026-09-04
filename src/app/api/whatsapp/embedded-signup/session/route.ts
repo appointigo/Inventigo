@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { requireOrgAuth } from "@/lib/auth.middleware";
 import { createMetaBackend } from "@/modules/whatsapp/server";
@@ -10,8 +11,9 @@ export async function POST() {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!(["OWNER", "ADMIN"] as string[]).includes(user.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   try {
-    const { config } = createMetaBackend(); const state = createEmbeddedSignupState();
-    const response = NextResponse.json({ state, appId: config.appId, configId: config.embeddedSignupConfigId, graphApiVersion: config.graphApiVersion });
+    const { config } = createMetaBackend(); const state = createEmbeddedSignupState(); const requestId = randomUUID();
+    console.info("[WhatsApp Signup] signup_started", { requestId, organizationId: user.orgId, userId: user.id });
+    const response = NextResponse.json({ state, requestId, appId: config.appId, configId: config.embeddedSignupConfigId, redirectUri: config.embeddedSignupRedirectUri, graphApiVersion: config.graphApiVersion });
     response.cookies.set(EMBEDDED_SIGNUP_STATE_COOKIE, createEmbeddedSignupStateCookie(state, user.id, user.orgId), { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/api/whatsapp/embedded-signup", maxAge: 600 });
     return response;
   } catch (error) {

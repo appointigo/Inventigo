@@ -16,7 +16,7 @@ const { Title, Paragraph, Text } = Typography;
 type Phone = { id: string; metaPhoneNumberId: string; displayPhoneNumber: string; verifiedName: string | null; qualityRating: string | null; status: string };
 type Waba = { id: string; metaWabaId: string; businessName: string | null; status: string; currency: string | null; timezone: string | null; phoneNumbers: Phone[] };
 type StatusResponse = { state: WhatsAppUiState; connectedAt: string | null; lastSyncedAt: string | null; businessAccountCount: number; phoneNumberCount: number; businessAccounts: Waba[] };
-type SessionResponse = { state: string; appId: string; configId: string; graphApiVersion: string };
+type SessionResponse = { state: string; requestId: string; appId: string; configId: string; redirectUri: string; graphApiVersion: string };
 type SetupPhase = "idle" | "handoff" | "syncing" | "cancelled" | "failed";
 type FacebookResponse = { authResponse?: { code?: string }; status?: string };
 type FacebookSdk = { init(options: { appId: string; cookie: boolean; xfbml: boolean; version: string }): void; login(callback: (response: FacebookResponse) => void, options: Record<string, unknown>): void };
@@ -65,9 +65,11 @@ export default function WhatsAppSetupPage() {
 
   const complete = useCallback(async (session: SessionResponse, code: string) => {
     setPhase("syncing");
-    const response = await fetch("/api/whatsapp/embedded-signup/complete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code, state: session.state, ...(selectedWabas.current.length ? { selectedWabaIds: selectedWabas.current } : {}) }) });
-    const body = await response.json() as { code?: string; error?: string };
-    if (!response.ok) throw new Error(body.code === "META_AUTH_FAILED" ? "Meta authorization or required permissions were not granted." : body.error || "WhatsApp setup could not be completed.");
+    if (process.env.NODE_ENV === "development") console.info("[WhatsApp Signup] backend_completion_started", { requestId: session.requestId, authorizationCodePresent: Boolean(code), selectedWabaCount: selectedWabas.current.length });
+    const response = await fetch("/api/whatsapp/embedded-signup/complete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ requestId: session.requestId, code, state: session.state, ...(selectedWabas.current.length ? { selectedWabaIds: selectedWabas.current } : {}) }) });
+    const body = await response.json() as { code?: string; error?: string; requestId?: string };
+    if (process.env.NODE_ENV === "development") console.info("[WhatsApp Signup] backend_completion_received", { requestId: body.requestId ?? session.requestId, ok: response.ok, httpStatus: response.status, errorCode: body.code });
+    if (!response.ok) throw new Error(body.error || "WhatsApp setup could not be completed.");
     await loadStatus(); setPhase("idle");
   }, [loadStatus]);
 
@@ -78,7 +80,10 @@ export default function WhatsAppSetupPage() {
       const responseBody = await response.json() as SessionResponse & { error?: string };
       if (!response.ok) throw new Error(response.status === 403 ? "Only an organization owner or admin can connect WhatsApp." : responseBody.error || "WhatsApp setup is currently unavailable.");
       const session = responseBody; const sdk = await loadMetaSdk(session.appId, session.graphApiVersion);
-      sdk.login(result => { const code = result.authResponse?.code; if (!code) { setPhase("cancelled"); return; } void complete(session, code).catch(reason => { setFlowError(reason instanceof Error ? reason.message : "WhatsApp setup failed."); setPhase("failed"); }); }, { config_id: session.configId, response_type: "code", override_default_response_type: true });
+      const redirectUrl = new URL(session.redirectUri);
+      if (window.location.origin !== redirectUrl.origin) throw new Error(`Open Stockiva at ${redirectUrl.origin} before connecting WhatsApp.`);
+      if (process.env.NODE_ENV === "development") console.info("[WhatsApp Signup] facebook_login_started", { requestId: session.requestId });
+      sdk.login(result => { const code = result.authResponse?.code; if (process.env.NODE_ENV === "development") console.info("[WhatsApp Signup] facebook_auth_callback", { requestId: session.requestId, status: result.status, authorizationCodePresent: Boolean(code) }); if (!code) { setPhase("cancelled"); return; } void complete(session, code).catch(reason => { if (process.env.NODE_ENV === "development") console.error("[WhatsApp Signup] frontend_completion_failed", { requestId: session.requestId, message: reason instanceof Error ? reason.message : "Unknown setup error" }); setFlowError(reason instanceof Error ? reason.message : "WhatsApp setup failed."); setPhase("failed"); }); }, { config_id: session.configId, redirect_uri: session.redirectUri, response_type: "code", override_default_response_type: true });
     } catch (reason) { setFlowError(reason instanceof Error ? reason.message : "WhatsApp setup failed."); setPhase("failed"); }
   }, [complete]);
 

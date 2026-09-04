@@ -6,17 +6,42 @@ import { WhatsAppError } from "../errors";
 
 export type CompleteEmbeddedSignupInput = {
   organizationId: string;
+  requestId?: string;
+  redirectUri: string;
   code: string;
   selectedWabaIds?: string[];
   registration?: { phoneNumberId: string; pin: string };
 };
 
+type SignupStage =
+  | "code_exchange_started"
+  | "code_exchange_completed"
+  | "token_inspection_started"
+  | "token_inspection_completed"
+  | "meta_assets_fetch_started"
+  | "waba_discovered"
+  | "phone_numbers_discovered"
+  | "webhook_subscription_completed"
+  | "credential_persistence_completed"
+  | "persistence_started"
+  | "integration_connected";
+
+type SignupStageReporter = (stage: SignupStage, details?: Record<string, unknown>) => void;
+
 export class WhatsAppEmbeddedSignupService {
   constructor(private readonly prisma: PrismaClient, private readonly meta: MetaWhatsAppClient, private readonly credentials: WhatsAppCredentialStore, private readonly appId: string) {}
 
-  async complete(input: CompleteEmbeddedSignupInput) {
-    const exchange = await this.meta.exchangeEmbeddedSignupCode(input.code);
+  async complete(input: CompleteEmbeddedSignupInput, report: SignupStageReporter = () => undefined) {
+    report("code_exchange_started", { authorizationCodePresent: Boolean(input.code) });
+    const exchange = await this.meta.exchangeEmbeddedSignupCode({ code: input.code, redirectUri: input.redirectUri });
+    report("code_exchange_completed", { accessTokenReceived: Boolean(exchange.accessToken) });
+    report("token_inspection_started");
     const inspection = await this.meta.inspectToken(exchange.accessToken);
+    report("token_inspection_completed", {
+      tokenValid: inspection.isValid,
+      tokenAppMatches: inspection.appId === this.appId,
+      grantedScopeCount: inspection.scopes.length + inspection.granularScopes.length,
+    });
     if (!inspection.isValid || inspection.appId !== this.appId) throw new WhatsAppError("META_AUTH_FAILED", "Embedded Signup token is invalid or belongs to another app");
     const grantedScopes = new Set([...inspection.scopes, ...inspection.granularScopes.map(item => item.scope)]);
     if (!["whatsapp_business_management", "whatsapp_business_messaging"].every(scope => grantedScopes.has(scope))) throw new WhatsAppError("META_AUTH_FAILED", "Embedded Signup did not grant the required WhatsApp permissions");
@@ -29,13 +54,19 @@ export class WhatsAppEmbeddedSignupService {
 
     const assets: Array<{ waba: MetaWaba; phones: MetaPhoneNumber[] }> = [];
     for (const wabaId of wabaIds) {
+      report("meta_assets_fetch_started", { wabaId });
       const [waba, phones] = await Promise.all([this.meta.getWaba(wabaId, exchange.accessToken), this.meta.listPhoneNumbers(wabaId, exchange.accessToken)]);
+      report("waba_discovered", { wabaId: waba.id });
+      report("phone_numbers_discovered", { wabaId: waba.id, phoneNumberCount: phones.length });
       if (input.registration && phones.some(p => p.id === input.registration?.phoneNumberId)) await this.meta.registerPhoneNumber(input.registration.phoneNumberId, input.registration.pin, exchange.accessToken);
       await this.meta.subscribeApp(wabaId, exchange.accessToken);
+      report("webhook_subscription_completed", { wabaId });
       assets.push({ waba, phones });
     }
     const credentialRef = await this.credentials.save({ organizationId: input.organizationId, accessToken: exchange.accessToken, expiresAt: exchange.expiresAt ?? inspection.expiresAt });
+    report("credential_persistence_completed");
     const now = new Date();
+    report("persistence_started", { wabaCount: assets.length, phoneNumberCount: assets.reduce((n, asset) => n + asset.phones.length, 0) });
     const integration = await this.prisma.$transaction(async tx => {
       const record = await tx.whatsAppIntegration.upsert({
         where: { organizationId_provider: { organizationId: input.organizationId, provider: "META" } },
@@ -52,6 +83,7 @@ export class WhatsAppEmbeddedSignupService {
       }
       return record;
     });
+    report("integration_connected", { integrationId: integration.id, status: integration.status });
     return { integrationId: integration.id, status: integration.status, wabaCount: assets.length, phoneNumberCount: assets.reduce((n, a) => n + a.phones.length, 0) };
   }
 
