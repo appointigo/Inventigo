@@ -1,5 +1,8 @@
 "use client";
 
+import { allocatePricingSnapshots } from "../utils/pricingEngine";
+import { getHistoricalReturnAmount, getHistoricalUnitAmount } from "../utils/saleCompatibility";
+
 import { useEffect, useMemo, useState } from "react";
 import { App, Button, Card, Input, InputNumber, Select, Space, Spin, Table, Typography, Divider, Tag, theme, DatePicker, Row, Drawer, Badge, FloatButton, Collapse } from "antd";
 import { SearchOutlined, SwapOutlined, ReloadOutlined, FilterOutlined } from "@ant-design/icons";
@@ -170,12 +173,16 @@ const ReturnExchangeView = ({
     () =>
       sale?.items.map((item) => {
         const qty = returnQuantities[item.id] ?? 0;
+        const alreadyReturned = sale.returnTransactions.flatMap((transaction) => transaction.returnedItems)
+          .filter((returned) => returned.productId === item.productId && returned.sizeId === item.sizeId)
+          .reduce((sum, returned) => sum + returned.quantity, 0);
         return {
           ...item,
-          returnQty: Math.min(Math.max(qty, 0), item.quantity),
+          alreadyReturned,
+          returnQty: Math.min(Math.max(qty, 0), Math.max(0, item.quantity - alreadyReturned)),
         };
       }) ?? [],
-    [sale?.items, returnQuantities]
+    [sale, returnQuantities]
   );
 
   const returnedItems = useMemo(
@@ -184,15 +191,14 @@ const ReturnExchangeView = ({
         .filter((item) => item.returnQty > 0)
         .map((item) => {
           // Use transactional snapshot price paid by customer, not MRP
-          const pricePaid = item.effectiveUnitPrice ?? item.finalUnitPrice ?? item.sellingPrice ?? item.unitPrice;
           return {
             productId: item.productId,
             sizeId: item.sizeId,
             quantity: item.returnQty,
-            total: Math.round(item.returnQty * pricePaid * 100) / 100,
+            total: getHistoricalReturnAmount(item, item.returnQty, item.alreadyReturned),
           };
         }),
-    [returnRows, returnQuantities]
+    [returnRows]
   );
 
   const returnedTotal = useMemo(
@@ -205,18 +211,14 @@ const ReturnExchangeView = ({
     [exchangeItems]
   );
 
-  // Discount calculation
-  const baseForDiscount = Math.max(exchangeTotal, 0);
-  const calculatedDiscount =
-    discountType === "PERCENTAGE"
-      ? Math.round((baseForDiscount * discountValue) / 100 * 100) / 100
-      : Math.min(discountValue, baseForDiscount);
+  const exchangePricing = allocatePricingSnapshots(exchangeItems.map((item) => ({
+    productId: item.productId, quantity: item.quantity, mrp: item.unitPrice, sellingPrice: item.unitPrice,
+  })), { discountType, discountPercent: discountType === "PERCENTAGE" ? discountValue : 0,
+    discountAmount: discountType === "FLAT" ? discountValue : 0, taxRate });
+  const calculatedDiscount = exchangePricing.discountAmount;
+  const calculatedTax = exchangePricing.taxAmount;
+  const calculatedWithTax = exchangePricing.total;
 
-  // Tax and totals
-  const calculatedTotal = exchangeTotal - calculatedDiscount;
-  const calculatedTax = taxRate > 0 ? Math.round((calculatedTotal * taxRate) / 100 * 100) / 100 : 0;
-  const calculatedWithTax = calculatedTotal + calculatedTax;
-  
   // Round-off calculation
   const finalPayable = Math.round(calculatedWithTax);
   const roundOff = Math.round((finalPayable - calculatedWithTax) * 100) / 100;
@@ -355,7 +357,7 @@ const ReturnExchangeView = ({
     );
   };
 
-  const saleColumns: ColumnsType<SaleItem & { returnQty: number }> = [
+  const saleColumns: ColumnsType<SaleItem & { returnQty: number; alreadyReturned: number }> = [
     {
       title: "Item",
       dataIndex: "productName",
@@ -384,7 +386,7 @@ const ReturnExchangeView = ({
       render: (_value, item) => (
         <InputNumber
           min={0}
-          max={item.quantity}
+          max={Math.max(0, item.quantity - item.alreadyReturned)}
           value={item.returnQty}
           onChange={(value) => handleReturnQtyChange(item.id, value)}
           style={{ width: "100%" }}
@@ -397,14 +399,14 @@ const ReturnExchangeView = ({
       key: "unitPrice",
       width: 120,
       align: "right",
-      render: (_value: number, record) => formatCurrency(record.effectiveUnitPrice ?? record.finalUnitPrice ?? record.sellingPrice ?? record.unitPrice),
+      render: (_value: number, record) => formatCurrency(getHistoricalUnitAmount(record)),
     },
     {
       title: "Total",
       key: "total",
       width: 120,
       align: "right",
-      render: (_value, item) => formatCurrency(item.returnQty * (item.effectiveUnitPrice ?? item.finalUnitPrice ?? item.sellingPrice ?? item.unitPrice)),
+      render: (_value, item) => formatCurrency(getHistoricalReturnAmount(item, item.returnQty, item.alreadyReturned)),
     },
   ];
 
@@ -918,7 +920,7 @@ const ReturnExchangeView = ({
                   />
                   <InputNumber
                     min={0}
-                    max={discountType === "PERCENTAGE" ? 100 : baseForDiscount}
+                    max={discountType === "PERCENTAGE" ? 100 : exchangeTotal}
                     value={discountValue}
                     onChange={(value) => setDiscountValue(Number(value ?? 0))}
                     size="small"

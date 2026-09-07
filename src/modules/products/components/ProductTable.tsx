@@ -561,7 +561,7 @@ const ProductTable = ({
           />
           {categoryFilter && sizeOptions.length > 0 && (
             <Select
-              placeholder="All Sizes"
+              placeholder="In-stock size"
               value={attributeFilters.sizeId ?? undefined}
               onChange={(value) => onAttributeChange("sizeId", value as string | undefined)}
               optionFilterProp="label"

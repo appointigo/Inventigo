@@ -29,7 +29,7 @@ type ProductQueryFilters = ProductListFilters & {
   categoryAttributeSchema?: { fields: AttributeField[] };
 };
 
-const buildProductWhere = (orgId: string, filters?: ProductListFilters) => {
+export const buildProductWhere = (orgId: string, filters?: ProductListFilters) => {
   const where: Record<string, unknown> = { orgId };
 
   if (filters?.categoryId) where.categoryId = filters.categoryId;
@@ -58,8 +58,8 @@ const buildProductWhere = (orgId: string, filters?: ProductListFilters) => {
     where.stockEntries = {
       some: {
         ...(filters?.storeId ? { storeId: filters.storeId } : {}),
-        ...(filters?.sizeId ? { sizeId: filters.sizeId } : {}),
-        ...(filters?.sizeId ? { quantity: { gt: 0 } } : {}),
+        ...(filters?.sizeId ? { sizeId: filters.sizeId, quantity: { gt: 0 } } : {}),
+        store: { orgId, isActive: true },
       },
     };
   }

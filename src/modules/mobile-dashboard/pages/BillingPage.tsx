@@ -295,7 +295,7 @@ export default function BillingPage() {
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
             <div>
               <div style={{ fontSize: 12, opacity: 0.72 }}>Total Amount</div>
-              <div style={{ fontSize: 24, fontWeight: 800 }}>Rs {(cart.subtotal + cart.taxAmount).toFixed(2)}</div>
+              <div style={{ fontSize: 24, fontWeight: 800 }}>Rs {cart.total.toFixed(2)}</div>
             </div>
             <Button type="primary" size="large" onClick={() => setCartOpen(true)}>
               Checkout
@@ -308,6 +308,7 @@ export default function BillingPage() {
         open={cartOpen}
         onClose={() => setCartOpen(false)}
         items={cart.items}
+        onItemPricingChange={cart.updateItemPricing}
         subtotal={cart.subtotal}
         taxPct={cart.taxPct}
         onTaxChange={cart.setTaxPct}

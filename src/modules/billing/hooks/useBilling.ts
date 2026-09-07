@@ -1,5 +1,8 @@
 "use client";
 
+import { allocatePricingSnapshots, resolveItemPrice, type ItemPriceAdjustment } from "../utils/pricingEngine";
+import { roundTo2 } from "@/shared/utils/money";
+
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import type { Sale, SaleFilters, SaleSummary, CartItem, CreateSaleInput, PaymentMethodType, SplitPaymentEntry } from "../types";
@@ -258,7 +261,7 @@ export function useCart() {
             : i
         );
       }
-      return [...prev, item];
+      return [...prev, { ...item, originalUnitPrice: item.originalUnitPrice ?? item.unitPrice, itemDiscountType: item.itemDiscountType ?? "NONE", itemDiscountValue: item.itemDiscountValue ?? 0 }];
     });
   };
 
@@ -268,6 +271,14 @@ export function useCart() {
         i.productId === productId && i.sizeId === sizeId ? { ...i, quantity } : i
       )
     );
+  };
+
+  const updateItemPricing = (productId: string, sizeId: string, adjustment: ItemPriceAdjustment) => {
+    setItems((prev) => prev.map((item) => {
+      if (item.productId !== productId || item.sizeId !== sizeId) return item;
+      const originalUnitPrice = item.originalUnitPrice ?? item.unitPrice;
+      return { ...item, ...adjustment, originalUnitPrice, unitPrice: resolveItemPrice(originalUnitPrice, adjustment) };
+    }));
   };
 
   const removeItem = (productId: string, sizeId: string) => {
@@ -294,9 +305,13 @@ export function useCart() {
   };
 
   const subtotal = items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-  const discountAmount = Math.round(subtotal * discountPct / 100);
-  const taxAmount = Math.round(subtotal * taxPct / 100);
-  const total = subtotal - discountAmount + taxAmount;
+  const pricing = allocatePricingSnapshots(items.map((item) => ({
+    productId: item.productId, quantity: item.quantity, mrp: item.originalUnitPrice ?? item.unitPrice,
+    sellingPrice: item.unitPrice,
+  })), { discountType: discountMode, discountPercent: discountPct,
+    discountAmount: roundTo2(subtotal * discountPct / 100), taxRate: taxPct });
+  const { discountAmount, taxAmount } = pricing;
+  const total = Math.round(pricing.total);
   const amountDue = Math.max(total - amountPaid, 0);
 
   const toCreateInput = (): CreateSaleInput => {
@@ -335,7 +350,7 @@ export function useCart() {
       taxMode: "EXCLUSIVE",
       discountAmount,
       taxAmount,
-      amountPaid: Math.max(0, amountPaid),
+      amountPaid: isAmountPaidManual ? Math.max(0, amountPaid) : total,
       customerName: customerName || undefined,
       customerPhone: customerPhone || undefined,
       customerEmail: customerEmail || undefined,
@@ -365,6 +380,7 @@ export function useCart() {
     isAmountPaidManual,
     addItem,
     updateQuantity,
+    updateItemPricing,
     removeItem,
     clearCart,
     setDiscountPct,

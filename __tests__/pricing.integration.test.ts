@@ -1,8 +1,7 @@
 /**
  * Pricing Engine Integration Tests
  * 
- * Run with: node __tests__/pricing.integration.test.mjs
- * (or: npx tsx __tests__/pricing.integration.test.ts)
+ * Run with: node scripts/verify-negotiated-pricing.mjs
  *
  * Validates:
  * - Discount allocation (percentage & flat)
@@ -12,15 +11,19 @@
  * - Return/exchange settlement correctness
  */
 
-// Pure TypeScript - but can be run as standalone test
-// For now, we'll inline the pricing engine for testing purposes
+import {
+  allocatePricingSnapshots,
+  type PricingAllocationOptions,
+  type PricingSourceItem,
+  type PricingAllocationResult,
+} from "../src/modules/billing/utils/pricingEngine";
 
 const round2 = (value: number): number => Math.round((value + Number.EPSILON) * 100) / 100;
 
 interface TestCase {
   name: string;
   items: PricingSourceItem[];
-  options: any;
+  options: PricingAllocationOptions;
   assertions: (result: PricingAllocationResult) => void;
 }
 

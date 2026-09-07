@@ -509,3 +509,14 @@ export const SecureNote = styled.div`
   gap: 5px;
   .anticon { font-size: 10px; }
 `;
+
+export const ItemPricingControls = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 12px;
+  .ant-select { min-width: 132px; }
+  .ant-input-number { width: 112px; }
+`;

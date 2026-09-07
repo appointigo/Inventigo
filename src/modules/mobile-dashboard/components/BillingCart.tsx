@@ -1,9 +1,11 @@
 "use client";
 
 import { DeleteOutlined, MinusOutlined, PlusOutlined, ShoppingCartOutlined } from "@ant-design/icons";
-import { Button, DatePicker, Drawer, Empty, Input, Select, Space, Typography } from "antd";
+import { Button, DatePicker, Drawer, Empty, Input, Space, Typography } from "antd";
 import dayjs from "dayjs";
-import type { PaymentMethodType, SplitPaymentEntry } from "@/modules/billing/types";
+import type { CartItem, PaymentMethodType, SplitPaymentEntry } from "@/modules/billing/types";
+import { ItemPriceEditor, type UpdateItemPricing } from "@/modules/billing/components/ItemPriceEditor";
+import { allocatePricingSnapshots } from "@/modules/billing/utils/pricingEngine";
 import { SplitPaymentPanel } from "./SplitPaymentPanel";
 
 const PAYMENT_OPTIONS: Array<{ value: PaymentMethodType; label: string }> = [
@@ -34,6 +36,7 @@ export function BillingCart({
   customerStats,
   customerLoading,
   onQuantityChange,
+  onItemPricingChange,
   onRemove,
   onCheckout,
   checkoutLoading,
@@ -42,7 +45,8 @@ export function BillingCart({
 }: {
   open: boolean;
   onClose: () => void;
-  items: Array<{ productId: string; sizeId: string; productName: string; sizeLabel: string; quantity: number; unitPrice: number }>;
+  items: CartItem[];
+  onItemPricingChange: UpdateItemPricing;
   subtotal: number;
   taxPct: number;
   onTaxChange: (value: number) => void;
@@ -67,8 +71,9 @@ export function BillingCart({
   transactionDate: string;
   onTransactionDateChange: (value: string) => void;
 }) {
-  const taxAmount = Math.round(subtotal * taxPct / 100);
-  const total = subtotal + taxAmount;
+  const pricing = allocatePricingSnapshots(items.map((item) => ({ productId: item.productId, quantity: item.quantity, mrp: item.originalUnitPrice ?? item.unitPrice, sellingPrice: item.unitPrice })), { taxRate: taxPct });
+  const taxAmount = pricing.taxAmount;
+  const total = Math.round(pricing.total);
   const splitTotal = splitPayments.reduce((sum, payment) => sum + payment.amount, 0);
   const splitMatchesTotal = Math.abs(splitTotal - total) < 0.01;
 
@@ -89,6 +94,7 @@ export function BillingCart({
                   </div>
                   <Button type="text" danger icon={<DeleteOutlined />} onClick={() => onRemove(item.productId, item.sizeId)} />
                 </div>
+                <ItemPriceEditor item={item} onChange={onItemPricingChange} />
                 <Space style={{ marginTop: 12 }}>
                   <Button icon={<MinusOutlined />} onClick={() => onQuantityChange(item.productId, item.sizeId, Math.max(1, item.quantity - 1))} />
                   <Typography.Text strong>{item.quantity}</Typography.Text>
@@ -175,7 +181,7 @@ export function BillingCart({
             onEntriesChange={onSplitPaymentsChange}
           />
         ) : null}
-        <Input type="number" min={0} value={taxPct} onChange={(event) => onTaxChange(Number(event.target.value || 0))} placeholder="Tax %" size="large" />
+        <Input type="number" min={0} value={taxPct} onChange={(event) => onTaxChange(Math.min(100, Math.max(0, Number(event.target.value) || 0)))} placeholder="Tax %" size="large" />
 
         <div style={{ border: "1px solid #e5e7eb", borderRadius: 16, padding: 14, background: "#f8fafc" }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>

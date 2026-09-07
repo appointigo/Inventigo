@@ -1,5 +1,7 @@
 "use client";
 
+import { getHistoricalUnitAmount } from "../utils/saleCompatibility";
+
 import React, { useState } from "react";
 import { Button, Tag, Avatar, Divider } from "antd";
 import { FileTextOutlined, DownOutlined, UpOutlined, ShoppingCartOutlined, SwapOutlined, ArrowLeftOutlined } from "@ant-design/icons";
@@ -43,6 +45,8 @@ export default function OrdersTable({ sales, loading = false, onViewSale, onView
   };
 
   const itemUnitPrice = (it: any) => {
+    if (it.netLineAmount != null || it.effectiveUnitPrice != null) return getHistoricalUnitAmount(it);
+    if (it.returnedLineAmount != null && it.returnedQuantity > 0) return Number(it.returnedLineAmount) / it.returnedQuantity;
     if (it.returnedUnitPrice != null) return Number(it.returnedUnitPrice);
     if (it.newUnitPrice != null) return Number(it.newUnitPrice);
     if (it.unitPrice != null) return Number(it.unitPrice);
@@ -309,7 +313,7 @@ export default function OrdersTable({ sales, loading = false, onViewSale, onView
                             (rec.items ?? []).map((it: any, i: number) => (
                               <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}>
                                 <div style={{ fontSize: 14 }}>{it.product?.name ?? it.productName}</div>
-                                <div style={{ color: "#6b7280" }}>{it.quantity} × {formatCurrency(it.unitPrice ?? it.unitPrice)}</div>
+                                <div style={{ color: "#6b7280" }}>{it.quantity} × {formatCurrency(getHistoricalUnitAmount(it))}</div>
                               </div>
                             ))
                           )}

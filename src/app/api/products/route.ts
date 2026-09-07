@@ -46,7 +46,7 @@ const getPositiveIntegerParam = (searchParams: URLSearchParams, key: string) => 
   const value = getOptionalParam(searchParams, key);
   if (!value) return undefined;
   const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
 };
 
 export const GET = async (request: Request) => {
@@ -70,7 +70,7 @@ export const GET = async (request: Request) => {
       getOptionalParam(searchParams, "brandId") ?? getOptionalParam(searchParams, "brand");
     const isActiveParam = getOptionalParam(searchParams, "isActive");
     const filters = {
-      storeId: getOptionalParam(searchParams, "storeId"),
+      storeId: getOptionalParam(searchParams, "storeId") ?? user.storeId ?? undefined,
       categoryId,
       brandId,
       sizeId: getOptionalParam(searchParams, "sizeId"),
@@ -83,8 +83,8 @@ export const GET = async (request: Request) => {
     const attributeFilters = buildAttributeFilters(searchParams);
     let categoryAttributeSchema = null;
     if (categoryId) {
-      const category = await prisma.category.findUnique({
-        where: { id: categoryId },
+      const category = await prisma.category.findFirst({
+        where: { id: categoryId, orgId: user.orgId },
         select: { attributeSchema: true },
       });
       categoryAttributeSchema = (category?.attributeSchema as { fields: AttributeField[] }) ?? {

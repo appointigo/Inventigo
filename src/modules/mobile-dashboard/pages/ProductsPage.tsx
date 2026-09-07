@@ -120,7 +120,7 @@ export default function ProductsPage() {
           showSearch
           optionFilterProp="label"
           size="large"
-          placeholder="Filter by available size"
+          placeholder="Filter by in-stock size"
           value={productFilters.sizeId}
           disabled={!productFilters.categoryId}
           onChange={(value) => setProductFilters({ sizeId: value })}

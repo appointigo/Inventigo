@@ -180,6 +180,7 @@ export const GET = async (request: Request) => {
             returnedProductId: true,
             returnedQuantity: true,
             returnedUnitPrice: true,
+            returnedLineAmount: true,
             returnedProduct: { select: { costPrice: true } },
           },
         };
@@ -217,7 +218,7 @@ export const GET = async (request: Request) => {
         );
 
         const returnedRevenue = returnedItems.reduce(
-          (sum: number, item: any) => sum + Number(item.returnedUnitPrice ?? 0) * Number(item.returnedQuantity ?? 0),
+          (sum: number, item: any) => sum + Number(item.returnedLineAmount ?? Number(item.returnedUnitPrice ?? 0) * Number(item.returnedQuantity ?? 0)),
           0
         );
         const returnedCost = returnedItems.reduce(

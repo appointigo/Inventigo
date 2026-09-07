@@ -1,5 +1,7 @@
 "use client";
 
+import { getHistoricalUnitAmount } from "../utils/saleCompatibility";
+
 import React, { useEffect, useState } from "react";
 import { Avatar, Card, Typography, Tag, Space, Button, Divider } from "antd";
 import { DownOutlined, UpOutlined, ShoppingCartOutlined, SwapOutlined, ArrowLeftOutlined, UserOutlined, FileTextOutlined } from "@ant-design/icons";
@@ -155,7 +157,7 @@ export default function TransactionCard({ record: initialRecord, onViewSale, onV
                   {(record.items ?? []).map((it: any, i: number) => (
                     <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}>
                       <div style={{ fontSize: 14 }}>{it.product?.name ?? it.productName}</div>
-                      <div style={{ color: "#6b7280" }}>{it.quantity} × {formatCurrency(it.effectiveUnitPrice ?? it.finalUnitPrice ?? it.sellingPrice ?? it.unitPrice)}</div>
+                      <div style={{ color: "#6b7280" }}>{it.quantity} × {formatCurrency(getHistoricalUnitAmount(it))}</div>
                     </div>
                   ))}
                   <div style={{ marginTop: 12, borderTop: "1px dashed #e5e7eb", paddingTop: 8 }}>

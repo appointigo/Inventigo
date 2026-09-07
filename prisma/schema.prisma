@@ -389,6 +389,10 @@ model Sale {
 }
 
 model SaleItem {
+  originalUnitPrice      Decimal?  @db.Decimal(10, 2)
+  itemDiscountType       String?
+  itemDiscountValue      Decimal?  @db.Decimal(10, 2)
+  netLineAmount          Decimal?  @db.Decimal(10, 2)
   id                     String    @id @default(uuid())
   saleId                 String
   productId              String
@@ -475,6 +479,7 @@ model ReturnTransaction {
 }
 
 model ReturnTransactionItem {
+  returnedLineAmount  Decimal?          @db.Decimal(10, 2)
   id                  String            @id @default(uuid())
   returnTransactionId String
   returnedProductId   String?
