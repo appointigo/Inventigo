@@ -10,6 +10,7 @@ const KNOWN_FILTER_KEYS = new Set([
   "category",
   "brandId",
   "brand",
+  "sizeId",
   "page",
   "pageSize",
   "limit",
@@ -22,6 +23,7 @@ const buildAttributeFilters = (searchParams: URLSearchParams) => {
 
   searchParams.forEach((value, key) => {
     if (KNOWN_FILTER_KEYS.has(key)) return;
+    if (!value || value === "undefined" || value === "null") return;
 
     if (filters[key]) {
       const existing = filters[key];
@@ -34,6 +36,19 @@ const buildAttributeFilters = (searchParams: URLSearchParams) => {
   return filters;
 };
 
+const getOptionalParam = (searchParams: URLSearchParams, key: string) => {
+  const value = searchParams.get(key)?.trim();
+  if (!value || value === "undefined" || value === "null") return undefined;
+  return value;
+};
+
+const getPositiveIntegerParam = (searchParams: URLSearchParams, key: string) => {
+  const value = getOptionalParam(searchParams, key);
+  if (!value) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+};
+
 export const GET = async (request: Request) => {
   let user;
   try {
@@ -44,36 +59,37 @@ export const GET = async (request: Request) => {
 
   try {
     const { searchParams } = new URL(request.url);
-    const pageParam = searchParams.has("page") ? Number(searchParams.get("page")) : undefined;
-    const pageSizeParam = searchParams.has("pageSize")
-      ? Number(searchParams.get("pageSize"))
-      : searchParams.has("limit")
-      ? Number(searchParams.get("limit"))
-      : undefined;
+    const pageParam = getPositiveIntegerParam(searchParams, "page");
+    const pageSizeParam =
+      getPositiveIntegerParam(searchParams, "pageSize") ??
+      getPositiveIntegerParam(searchParams, "limit");
 
-    const categoryId = searchParams.get("categoryId") || searchParams.get("category") || undefined;
-    const brandId = searchParams.get("brandId") || searchParams.get("brand") || undefined;
+    const categoryId =
+      getOptionalParam(searchParams, "categoryId") ?? getOptionalParam(searchParams, "category");
+    const brandId =
+      getOptionalParam(searchParams, "brandId") ?? getOptionalParam(searchParams, "brand");
+    const isActiveParam = getOptionalParam(searchParams, "isActive");
     const filters = {
-      storeId: searchParams.get("storeId") || undefined,
+      storeId: getOptionalParam(searchParams, "storeId"),
       categoryId,
       brandId,
-      sizeId: searchParams.get("sizeId") || undefined,
-      search: searchParams.get("search") || undefined,
-      isActive: searchParams.has("isActive") ? searchParams.get("isActive") === "true" : undefined,
+      sizeId: getOptionalParam(searchParams, "sizeId"),
+      search: getOptionalParam(searchParams, "search"),
+      isActive: isActiveParam ? isActiveParam === "true" : undefined,
       ...(pageParam !== undefined ? { page: pageParam } : {}),
       ...(pageSizeParam !== undefined ? { pageSize: pageSizeParam } : {}),
     };
 
     const attributeFilters = buildAttributeFilters(searchParams);
-    const hasPagination = Number.isFinite(pageParam) || Number.isFinite(pageSizeParam) || searchParams.has("page") || searchParams.has("pageSize") || searchParams.has("limit");
-
     let categoryAttributeSchema = null;
     if (categoryId) {
       const category = await prisma.category.findUnique({
         where: { id: categoryId },
         select: { attributeSchema: true },
       });
-      categoryAttributeSchema = (category?.attributeSchema as { fields: AttributeField[] }) ?? { fields: [] };
+      categoryAttributeSchema = (category?.attributeSchema as { fields: AttributeField[] }) ?? {
+        fields: [],
+      };
     }
 
     const result = await productService.listPaginatedWithAttributes(user.orgId, {
@@ -94,17 +110,19 @@ export const GET = async (request: Request) => {
 
 export const POST = async (request: Request) => {
   let user;
-  try { 
-    user = await requireOrgAuth(); 
-  }
-  catch { 
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 }); 
+  try {
+    user = await requireOrgAuth();
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
     const body = await request.json();
     if (!body.name || !body.sku || !body.categoryId || !body.brandId) {
-      return NextResponse.json({ error: "name, sku, categoryId, and brandId are required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "name, sku, categoryId, and brandId are required" },
+        { status: 400 }
+      );
     }
     if (typeof body.mrp !== "number" || body.mrp <= 0) {
       return NextResponse.json({ error: "mrp must be a positive number" }, { status: 400 });
@@ -121,4 +139,4 @@ export const POST = async (request: Request) => {
     console.error("[products POST]", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
-}
+};

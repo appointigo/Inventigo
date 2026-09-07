@@ -39,32 +39,32 @@ model Organization {
 }
 
 model Store {
-  id             String             @id @default(uuid())
-  orgId          String
-  name           String
-  code           String
-  address        String?
-  phone          String?
-  isActive       Boolean            @default(true)
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
-  alertConfigs   AlertConfig[]
-  brands         Brand[]
-  categories     Category[]
-  expenseBudgets ExpenseBudget[]
-  invitations    Invitation[]
-  leaveRequests  LeaveRequest[]
-  purchaseOrders PurchaseOrder[]
-  sales          Sale[]
+  id                 String              @id @default(uuid())
+  orgId              String
+  name               String
+  code               String
+  address            String?
+  phone              String?
+  isActive           Boolean             @default(true)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  alertConfigs       AlertConfig[]
+  brands             Brand[]
+  categories         Category[]
+  expenseBudgets     ExpenseBudget[]
+  invitations        Invitation[]
+  leaveRequests      LeaveRequest[]
+  purchaseOrders     PurchaseOrder[]
+  sales              Sale[]
   returnTransactions ReturnTransaction[]
-  attendances    StaffAttendance[]
-  stockEntries   StockEntry[]
-  stockMovements StockMovement[]
-  storeExpenses  StoreExpense[]
-  leavePolicies  StoreLeavePolicy[]
-  org            Organization       @relation(fields: [orgId], references: [id])
-  users          User[]
-  weeklyOffs     WeeklyOff[]
+  attendances        StaffAttendance[]
+  stockEntries       StockEntry[]
+  stockMovements     StockMovement[]
+  storeExpenses      StoreExpense[]
+  leavePolicies      StoreLeavePolicy[]
+  org                Organization        @relation(fields: [orgId], references: [id])
+  users              User[]
+  weeklyOffs         WeeklyOff[]
 
   @@unique([code, orgId])
   @@index([orgId])
@@ -72,31 +72,31 @@ model Store {
 }
 
 model User {
-  id              String            @id @default(uuid())
-  orgId           String?
-  name            String
-  email           String            @unique
-  passwordHash    String
-  role            Role              @default(STAFF)
-  storeId         String?
-  isActive        Boolean           @default(true)
-  emailVerified   Boolean           @default(false)
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  createdColors   Color[]
-  sentInvitations Invitation[]      @relation("SentInvitations")
-  leaveBalances   LeaveBalance[]
-  reviewedLeaves  LeaveRequest[]    @relation("LeaveReviewer")
-  leaveRequests   LeaveRequest[]    @relation("LeaveRequester")
-  purchaseOrders  PurchaseOrder[]
-  sales           Sale[]
-  salePayments    SalePayment[]
+  id                 String              @id @default(uuid())
+  orgId              String?
+  name               String
+  email              String              @unique
+  passwordHash       String
+  role               Role                @default(STAFF)
+  storeId            String?
+  isActive           Boolean             @default(true)
+  emailVerified      Boolean             @default(false)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  createdColors      Color[]
+  sentInvitations    Invitation[]        @relation("SentInvitations")
+  leaveBalances      LeaveBalance[]
+  reviewedLeaves     LeaveRequest[]      @relation("LeaveReviewer")
+  leaveRequests      LeaveRequest[]      @relation("LeaveRequester")
+  purchaseOrders     PurchaseOrder[]
+  sales              Sale[]
+  salePayments       SalePayment[]
   returnTransactions ReturnTransaction[]
-  attendances     StaffAttendance[]
-  stockMovements  StockMovement[]
-  storeExpenses   StoreExpense[]
-  org             Organization?     @relation(fields: [orgId], references: [id])
-  store           Store?            @relation(fields: [storeId], references: [id])
+  attendances        StaffAttendance[]
+  stockMovements     StockMovement[]
+  storeExpenses      StoreExpense[]
+  org                Organization?       @relation(fields: [orgId], references: [id])
+  store              Store?              @relation(fields: [storeId], references: [id])
 
   @@index([orgId])
   @@map("users")
@@ -185,24 +185,24 @@ model Brand {
 }
 
 model Product {
-  id                 String              @id @default(uuid())
+  id                 String                  @id @default(uuid())
   orgId              String
   name               String
   sku                String
   externalBarcode    String?
   categoryId         String
   brandId            String
-  basePrice          Decimal             @db.Decimal(10, 2)
-  costPrice          Decimal             @db.Decimal(10, 2)
-  attributes         Json                @default("{}")
+  basePrice          Decimal                 @db.Decimal(10, 2)
+  costPrice          Decimal                 @db.Decimal(10, 2)
+  attributes         Json                    @default("{}")
   imageUrl           String?
-  isActive           Boolean             @default(true)
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
-  mrp                Decimal             @db.Decimal(10, 2)
-  brand              Brand               @relation(fields: [brandId], references: [id])
-  category           Category            @relation(fields: [categoryId], references: [id])
-  org                Organization        @relation(fields: [orgId], references: [id])
+  isActive           Boolean                 @default(true)
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+  mrp                Decimal                 @db.Decimal(10, 2)
+  brand              Brand                   @relation(fields: [brandId], references: [id])
+  category           Category                @relation(fields: [categoryId], references: [id])
+  org                Organization            @relation(fields: [orgId], references: [id])
   purchaseOrderItems PurchaseOrderItem[]
   saleItems          SaleItem[]
   stockEntries       StockEntry[]
@@ -215,18 +215,19 @@ model Product {
   @@index([categoryId])
   @@index([brandId])
   @@index([sku])
+  @@index([orgId, externalBarcode])
   @@map("products")
 }
 
 model Size {
-  id                 String              @id @default(uuid())
+  id                 String                  @id @default(uuid())
   label              String
-  sortOrder          Int                 @default(0)
+  sortOrder          Int                     @default(0)
   categoryId         String
-  createdAt          DateTime            @default(now())
+  createdAt          DateTime                @default(now())
   purchaseOrderItems PurchaseOrderItem[]
   saleItems          SaleItem[]
-  category           Category            @relation(fields: [categoryId], references: [id])
+  category           Category                @relation(fields: [categoryId], references: [id])
   stockEntries       StockEntry[]
   stockMovements     StockMovement[]
   returnedItems      ReturnTransactionItem[] @relation("ReturnedSize")
@@ -256,6 +257,9 @@ model StockEntry {
   @@unique([productId, sizeId, storeId])
   @@index([storeId])
   @@index([productId])
+  @@index([sizeId, quantity])
+  @@index([storeId, sizeId, quantity])
+  @@index([variantSku])
   @@map("stock_entries")
 }
 
@@ -342,39 +346,39 @@ model PurchaseOrderItem {
 }
 
 model Sale {
-  id             String        @id @default(uuid())
-  storeId        String
-  invoiceNumber  String        @unique
-  customerName   String?
-  customerPhone  String?
-  customerEmail  String?
-  subtotal       Decimal       @db.Decimal(10, 2)
-  discountAmount Decimal       @default(0) @db.Decimal(10, 2)
-  taxAmount      Decimal       @default(0) @db.Decimal(10, 2)
-  total          Decimal       @db.Decimal(10, 2)
-  calculatedTotal Decimal?     @db.Decimal(10, 2)
-  roundOffAmount Decimal       @default(0) @db.Decimal(10, 2)
-  finalPayableAmount Decimal?  @db.Decimal(10, 2)
-  paymentMethod  PaymentMethod @default(CASH)
-  status         SaleStatus    @default(COMPLETED)
-  paymentStatus  PaymentStatus @default(PAID)
-  amountPaid     Decimal       @default(0) @db.Decimal(10, 2)
-  amountDue      Decimal       @default(0) @db.Decimal(10, 2)
-  returnStatus   ReturnStatus  @default(NONE)
-  promoVoided    Boolean       @default(false)
-  createdBy      String
-  transactionDate DateTime      @default(now())
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  promoCodeId    String?
-  customerId     String?
-  items          SaleItem[]
-  payments       SalePayment[]
+  id                 String              @id @default(uuid())
+  storeId            String
+  invoiceNumber      String              @unique
+  customerName       String?
+  customerPhone      String?
+  customerEmail      String?
+  subtotal           Decimal             @db.Decimal(10, 2)
+  discountAmount     Decimal             @default(0) @db.Decimal(10, 2)
+  taxAmount          Decimal             @default(0) @db.Decimal(10, 2)
+  total              Decimal             @db.Decimal(10, 2)
+  calculatedTotal    Decimal?            @db.Decimal(10, 2)
+  roundOffAmount     Decimal             @default(0) @db.Decimal(10, 2)
+  finalPayableAmount Decimal?            @db.Decimal(10, 2)
+  paymentMethod      PaymentMethod       @default(CASH)
+  status             SaleStatus          @default(COMPLETED)
+  paymentStatus      PaymentStatus       @default(PAID)
+  amountPaid         Decimal             @default(0) @db.Decimal(10, 2)
+  amountDue          Decimal             @default(0) @db.Decimal(10, 2)
+  returnStatus       ReturnStatus        @default(NONE)
+  promoVoided        Boolean             @default(false)
+  createdBy          String
+  transactionDate    DateTime            @default(now())
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  promoCodeId        String?
+  customerId         String?
+  items              SaleItem[]
+  payments           SalePayment[]
   returnTransactions ReturnTransaction[]
-  user           User          @relation(fields: [createdBy], references: [id])
-  customer       Customer?     @relation(fields: [customerId], references: [id])
-  promoCode      PromoCode?    @relation(fields: [promoCodeId], references: [id])
-  store          Store         @relation(fields: [storeId], references: [id])
+  user               User                @relation(fields: [createdBy], references: [id])
+  customer           Customer?           @relation(fields: [customerId], references: [id])
+  promoCode          PromoCode?          @relation(fields: [promoCodeId], references: [id])
+  store              Store               @relation(fields: [storeId], references: [id])
 
   @@index([storeId])
   @@index([customerId])
@@ -385,44 +389,44 @@ model Sale {
 }
 
 model SaleItem {
-  id        String   @id @default(uuid())
-  saleId    String
-  productId String
-  sizeId    String
-  quantity  Int
-  unitPrice Decimal  @db.Decimal(10, 2)
-  total     Decimal  @db.Decimal(10, 2)
-  mrp       Decimal?  @db.Decimal(10, 2)
-  sellingPrice Decimal? @db.Decimal(10, 2)
-  discountType String?
-  appliedDiscountPercent Decimal? @db.Decimal(10, 2)
-  allocatedDiscount Decimal? @default(0) @db.Decimal(10, 2)
-  taxableAmount Decimal? @default(0) @db.Decimal(10, 2)
-  taxAmount Decimal? @default(0) @db.Decimal(10, 2)
-  finalUnitPrice Decimal? @default(0) @db.Decimal(10, 2)
-  finalLineAmount Decimal? @default(0) @db.Decimal(10, 2)
-  effectiveUnitPrice Decimal? @default(0) @db.Decimal(10, 2)
-  costPrice Decimal? @db.Decimal(10, 2)
-  pricingSnapshotDate DateTime?
-  createdAt DateTime @default(now())
-  product   Product  @relation(fields: [productId], references: [id])
-  sale      Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  size      Size     @relation(fields: [sizeId], references: [id])
+  id                     String    @id @default(uuid())
+  saleId                 String
+  productId              String
+  sizeId                 String
+  quantity               Int
+  unitPrice              Decimal   @db.Decimal(10, 2)
+  total                  Decimal   @db.Decimal(10, 2)
+  mrp                    Decimal?  @db.Decimal(10, 2)
+  sellingPrice           Decimal?  @db.Decimal(10, 2)
+  discountType           String?
+  appliedDiscountPercent Decimal?  @db.Decimal(10, 2)
+  allocatedDiscount      Decimal?  @default(0) @db.Decimal(10, 2)
+  taxableAmount          Decimal?  @default(0) @db.Decimal(10, 2)
+  taxAmount              Decimal?  @default(0) @db.Decimal(10, 2)
+  finalUnitPrice         Decimal?  @default(0) @db.Decimal(10, 2)
+  finalLineAmount        Decimal?  @default(0) @db.Decimal(10, 2)
+  effectiveUnitPrice     Decimal?  @default(0) @db.Decimal(10, 2)
+  costPrice              Decimal?  @db.Decimal(10, 2)
+  pricingSnapshotDate    DateTime?
+  createdAt              DateTime  @default(now())
+  product                Product   @relation(fields: [productId], references: [id])
+  sale                   Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  size                   Size      @relation(fields: [sizeId], references: [id])
 
   @@map("sale_items")
 }
 
 model SalePayment {
-  id        String        @id @default(uuid())
-  saleId    String
-  amount    Decimal       @db.Decimal(10, 2)
-  method    PaymentMethod
-  businessDate DateTime   @default(now())
-  paidAt    DateTime      @default(now())
-  note      String?
-  createdBy String
-  sale      Sale          @relation(fields: [saleId], references: [id])
-  user      User          @relation(fields: [createdBy], references: [id])
+  id           String        @id @default(uuid())
+  saleId       String
+  amount       Decimal       @db.Decimal(10, 2)
+  method       PaymentMethod
+  businessDate DateTime      @default(now())
+  paidAt       DateTime      @default(now())
+  note         String?
+  createdBy    String
+  sale         Sale          @relation(fields: [saleId], references: [id])
+  user         User          @relation(fields: [createdBy], references: [id])
 
   @@index([saleId])
   @@index([businessDate])
@@ -431,36 +435,36 @@ model SalePayment {
 }
 
 model ReturnTransaction {
-  id               String        @id @default(uuid())
-  referenceNumber  String        @unique
+  id               String                  @id @default(uuid())
+  referenceNumber  String                  @unique
   originalSaleId   String
   storeId          String
   customerId       String?
   type             ReturnType
-  netAmount        Decimal       @db.Decimal(10, 2)
-  offsetAmount     Decimal       @default(0) @db.Decimal(10, 2)
-  refundAmount     Decimal       @db.Decimal(10, 2)
+  netAmount        Decimal                 @db.Decimal(10, 2)
+  offsetAmount     Decimal                 @default(0) @db.Decimal(10, 2)
+  refundAmount     Decimal                 @db.Decimal(10, 2)
   discountType     String?
-  discountPercent  Decimal?      @db.Decimal(5, 2)
-  discountAmount   Decimal?      @default(0) @db.Decimal(10, 2)
-  taxRate          Decimal?      @db.Decimal(5, 2)
-  calculatedTotal  Decimal?      @db.Decimal(10, 2)
-  roundOffAmount   Decimal?      @default(0) @db.Decimal(10, 2)
-  finalPayable     Decimal?      @db.Decimal(10, 2)
+  discountPercent  Decimal?                @db.Decimal(5, 2)
+  discountAmount   Decimal?                @default(0) @db.Decimal(10, 2)
+  taxRate          Decimal?                @db.Decimal(5, 2)
+  calculatedTotal  Decimal?                @db.Decimal(10, 2)
+  roundOffAmount   Decimal?                @default(0) @db.Decimal(10, 2)
+  finalPayable     Decimal?                @db.Decimal(10, 2)
   splitPaymentData Json?
   refundMethod     String?
   reason           String?
   condition        String?
   notes            String?
   transactionDate  DateTime?
-  businessDate     DateTime      @default(now())
-  createdAt        DateTime      @default(now())
+  businessDate     DateTime                @default(now())
+  createdAt        DateTime                @default(now())
   createdBy        String
   items            ReturnTransactionItem[]
-  sale             Sale          @relation(fields: [originalSaleId], references: [id])
-  customer         Customer?     @relation(fields: [customerId], references: [id])
-  user             User          @relation(fields: [createdBy], references: [id])
-  store            Store         @relation(fields: [storeId], references: [id])
+  sale             Sale                    @relation(fields: [originalSaleId], references: [id])
+  customer         Customer?               @relation(fields: [customerId], references: [id])
+  user             User                    @relation(fields: [createdBy], references: [id])
+  store            Store                   @relation(fields: [storeId], references: [id])
 
   @@index([originalSaleId])
   @@index([storeId])
@@ -471,22 +475,22 @@ model ReturnTransaction {
 }
 
 model ReturnTransactionItem {
-  id                   String            @id @default(uuid())
-  returnTransactionId  String
-  returnedProductId    String?
-  returnedSizeId       String?
-  returnedQuantity     Int
-  returnedUnitPrice    Decimal           @db.Decimal(10, 2)
-  newProductId         String?
-  newSizeId            String?
-  newQuantity          Int?
-  newUnitPrice         Decimal?          @db.Decimal(10, 2)
-  createdAt            DateTime          @default(now())
-  returnTransaction    ReturnTransaction @relation(fields: [returnTransactionId], references: [id])
-  returnedProduct      Product?          @relation("ReturnedProduct", fields: [returnedProductId], references: [id])
-  returnedSize         Size?             @relation("ReturnedSize", fields: [returnedSizeId], references: [id])
-  newProduct           Product?          @relation("NewProduct", fields: [newProductId], references: [id])
-  newSize              Size?             @relation("NewSize", fields: [newSizeId], references: [id])
+  id                  String            @id @default(uuid())
+  returnTransactionId String
+  returnedProductId   String?
+  returnedSizeId      String?
+  returnedQuantity    Int
+  returnedUnitPrice   Decimal           @db.Decimal(10, 2)
+  newProductId        String?
+  newSizeId           String?
+  newQuantity         Int?
+  newUnitPrice        Decimal?          @db.Decimal(10, 2)
+  createdAt           DateTime          @default(now())
+  returnTransaction   ReturnTransaction @relation(fields: [returnTransactionId], references: [id])
+  returnedProduct     Product?          @relation("ReturnedProduct", fields: [returnedProductId], references: [id])
+  returnedSize        Size?             @relation("ReturnedSize", fields: [returnedSizeId], references: [id])
+  newProduct          Product?          @relation("NewProduct", fields: [newProductId], references: [id])
+  newSize             Size?             @relation("NewSize", fields: [newSizeId], references: [id])
 
   @@index([returnTransactionId])
   @@index([returnedProductId])
@@ -495,21 +499,21 @@ model ReturnTransactionItem {
 }
 
 model Customer {
-  id        String       @id @default(uuid())
-  orgId     String
-  name      String?
-  mobile    String
-  email     String?
-  dateOfBirth DateTime?
-  notes     String?
-  lastVisitAt DateTime?
-  totalSpent Float      @default(0)
-  totalVisits Int       @default(0)
-  tags      String[]    @default([])
-  metadata  Json?
-  createdAt DateTime     @default(now())
-  org       Organization @relation(fields: [orgId], references: [id])
-  sales     Sale[]
+  id                 String              @id @default(uuid())
+  orgId              String
+  name               String?
+  mobile             String
+  email              String?
+  dateOfBirth        DateTime?
+  notes              String?
+  lastVisitAt        DateTime?
+  totalSpent         Float               @default(0)
+  totalVisits        Int                 @default(0)
+  tags               String[]            @default([])
+  metadata           Json?
+  createdAt          DateTime            @default(now())
+  org                Organization        @relation(fields: [orgId], references: [id])
+  sales              Sale[]
   returnTransactions ReturnTransaction[]
 
   @@unique([orgId, mobile])

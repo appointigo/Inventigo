@@ -7,7 +7,10 @@ import { useBrands } from "@/modules/brands/hooks/useBrands";
 import { useCategories } from "@/modules/categories/hooks/useCategories";
 import { useProducts } from "@/modules/products/hooks/useProducts";
 import type { Product } from "@/modules/products/types";
-import { mapProductToDuplicateDraft, saveDuplicateDraft } from "@/modules/products/utils/duplicateProduct";
+import {
+  mapProductToDuplicateDraft,
+  saveDuplicateDraft,
+} from "@/modules/products/utils/duplicateProduct";
 import { useStore } from "@/providers/StoreProvider";
 import { FilterDrawer } from "../components/FilterDrawer";
 import { FloatingActionButton } from "../components/FloatingActionButton";
@@ -21,15 +24,26 @@ export default function ProductsPage() {
   const router = useRouter();
   const { storeId } = useStore();
   const [duplicateLoadingId, setDuplicateLoadingId] = useState<string | null>(null);
-  const { productFilters, setProductFilters, isProductFilterOpen, openProductFilter, closeProductFilter, resetProductFilters } = useMobileWorkspace();
+  const {
+    productFilters,
+    setProductFilters,
+    isProductFilterOpen,
+    openProductFilter,
+    closeProductFilter,
+    resetProductFilters,
+  } = useMobileWorkspace();
   const { categories } = useCategories(storeId ?? undefined);
   const { brands } = useBrands(storeId ?? undefined);
-  const { products, loading } = useProducts({
-    storeId: storeId ?? undefined,
-    search: productFilters.search || undefined,
-    categoryId: productFilters.categoryId,
-    brandId: productFilters.brandId,
-  });
+  const { products, loading } = useProducts(
+    {
+      storeId: storeId ?? undefined,
+      search: productFilters.search || undefined,
+      categoryId: productFilters.categoryId,
+      brandId: productFilters.brandId,
+      sizeId: productFilters.sizeId,
+    },
+    { enabled: Boolean(storeId) }
+  );
 
   const handleDuplicate = async (product: Product) => {
     setDuplicateLoadingId(product.id);
@@ -49,7 +63,14 @@ export default function ProductsPage() {
       <PageContainer
         title="Products"
         subtitle="Search, filter, and review stock status quickly"
-        stickySlot={<SearchBar value={productFilters.search} placeholder="Search by name, SKU, or barcode" onChange={(value) => setProductFilters({ search: value })} onFilterClick={openProductFilter} />}
+        stickySlot={
+          <SearchBar
+            value={productFilters.search}
+            placeholder="Search by name, SKU, or barcode"
+            onChange={(value) => setProductFilters({ search: value })}
+            onFilterClick={openProductFilter}
+          />
+        }
       >
         {loading ? (
           <Skeleton active paragraph={{ rows: 5 }} />
@@ -68,14 +89,22 @@ export default function ProductsPage() {
           </div>
         )}
       </PageContainer>
-      <FloatingActionButton label="Add Product" onClick={() => router.push("/dashboard/products/new")} />
-      <FilterDrawer title="Product Filters" open={isProductFilterOpen} onClose={closeProductFilter} onReset={resetProductFilters}>
+      <FloatingActionButton
+        label="Add Product"
+        onClick={() => router.push("/dashboard/products/new")}
+      />
+      <FilterDrawer
+        title="Product Filters"
+        open={isProductFilterOpen}
+        onClose={closeProductFilter}
+        onReset={resetProductFilters}
+      >
         <Select
           allowClear
           size="large"
           placeholder="Filter by category"
           value={productFilters.categoryId}
-          onChange={(value) => setProductFilters({ categoryId: value })}
+          onChange={(value) => setProductFilters({ categoryId: value, sizeId: undefined })}
           options={categories.map((category) => ({ label: category.name, value: category.id }))}
         />
         <Select
@@ -85,6 +114,21 @@ export default function ProductsPage() {
           value={productFilters.brandId}
           onChange={(value) => setProductFilters({ brandId: value })}
           options={brands.map((brand) => ({ label: brand.name, value: brand.id }))}
+        />
+        <Select
+          allowClear
+          showSearch
+          optionFilterProp="label"
+          size="large"
+          placeholder="Filter by available size"
+          value={productFilters.sizeId}
+          disabled={!productFilters.categoryId}
+          onChange={(value) => setProductFilters({ sizeId: value })}
+          options={
+            categories
+              .find((category) => category.id === productFilters.categoryId)
+              ?.sizes?.map((size) => ({ label: size.label, value: size.id })) ?? []
+          }
         />
       </FilterDrawer>
     </>

@@ -8,7 +8,10 @@ import ProductTable from "@/modules/products/components/ProductTable";
 import ProductBulkUploadDrawer from "@/modules/products/components/BulkUploadDrawer";
 import type { Product } from "@/modules/products/types";
 import type { Category } from "@/modules/categories/types";
-import { mapProductToDuplicateDraft, saveDuplicateDraft } from "@/modules/products/utils/duplicateProduct";
+import {
+  mapProductToDuplicateDraft,
+  saveDuplicateDraft,
+} from "@/modules/products/utils/duplicateProduct";
 import { useCategories } from "@/modules/categories/hooks/useCategories";
 import { useBrands } from "@/modules/brands/hooks/useBrands";
 import { useMobileViewport } from "@/modules/mobile-dashboard/hooks/useMobileViewport";
@@ -24,30 +27,21 @@ export default function ProductsPage() {
   const searchParams = useSearchParams();
   const { storeId } = useStore();
   const [products, setProducts] = useState<Product[]>([]);
+  const [searchInput, setSearchInput] = useState(() => searchParams.get("search") ?? "");
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
   const [localPage, setLocalPage] = useState(1);
   const [localPageSize, setLocalPageSize] = useState(20);
-  const [categoryAttributeSchema, setCategoryAttributeSchema] = useState<Category["attributeSchema"] | null>(null);
+  const [categoryAttributeSchema, setCategoryAttributeSchema] = useState<
+    Category["attributeSchema"] | null
+  >(null);
   const [bulkDrawerOpen, setBulkDrawerOpen] = useState(false);
   const [duplicateLoadingId, setDuplicateLoadingId] = useState<string | null>(null);
 
   const schemaCache = useRef<Map<string, Category["attributeSchema"]>>(new Map());
-  const responseCache = useRef<
-    Map<
-      string,
-      {
-        data: {
-          items: Product[];
-          total: number;
-          page: number;
-          pageSize: number;
-          categoryAttributeSchema: Category["attributeSchema"] | null;
-        };
-        timestamp: number;
-      }
-    >
-  >(new Map());
+  const requestIdRef = useRef(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const requestedStoreIdRef = useRef<string | null>(null);
 
   const categoriesQuery = useCategories();
   const brandsQuery = useBrands();
@@ -55,7 +49,8 @@ export default function ProductsPage() {
   const { brands } = brandsQuery;
 
   const currentSearch = searchParams.get("search") ?? "";
-  const currentCategoryId = searchParams.get("categoryId") ?? searchParams.get("category") ?? undefined;
+  const currentCategoryId =
+    searchParams.get("categoryId") ?? searchParams.get("category") ?? undefined;
   const currentBrandId = searchParams.get("brandId") ?? searchParams.get("brand") ?? undefined;
   const currentCategory = useMemo(
     () => (currentCategoryId ? categories.find((c) => c.id === currentCategoryId) : undefined),
@@ -66,7 +61,9 @@ export default function ProductsPage() {
     100,
     Math.max(1, Number(searchParams.get("pageSize") ?? searchParams.get("limit") ?? "20"))
   );
-  const hasSearchFilters = Boolean(currentSearch || currentCategoryId || currentBrandId);
+  useEffect(() => {
+    setSearchInput(currentSearch);
+  }, [currentSearch]);
 
   useEffect(() => {
     setLocalPage(currentPage);
@@ -89,6 +86,7 @@ export default function ProductsPage() {
         "isActive",
       ]);
       if (knownKeys.has(key)) continue;
+      if (!value || value === "undefined" || value === "null") continue;
 
       if (result[key]) {
         const existing = result[key];
@@ -133,7 +131,13 @@ export default function ProductsPage() {
       }
 
       Object.entries(patch).forEach(([key, value]) => {
-        if (value === undefined || value === null || value === "") {
+        if (
+          value === undefined ||
+          value === null ||
+          value === "" ||
+          value === "undefined" ||
+          value === "null"
+        ) {
           next.delete(key);
         } else {
           next.set(key, value);
@@ -145,10 +149,24 @@ export default function ProductsPage() {
     [pathname, router, searchParams]
   );
 
-  const handleSearchChange = useCallback(
-    (value: string) => updateQuery({ search: value || undefined, page: "1" }),
-    [updateQuery]
-  );
+  useEffect(() => {
+    if (searchInput.trim() === currentSearch) return;
+
+    const timer = window.setTimeout(() => {
+      const next = new URLSearchParams(searchParams.toString());
+      const normalizedSearch = searchInput.trim();
+      if (normalizedSearch) next.set("search", normalizedSearch);
+      else next.delete("search");
+      next.set("page", "1");
+      router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+    }, 300);
+
+    return () => window.clearTimeout(timer);
+  }, [currentSearch, pathname, router, searchInput, searchParams]);
+
+  const handleSearchChange = useCallback((value: string) => {
+    setSearchInput(value);
+  }, []);
 
   const handleCategoryChange = useCallback(
     (value: string | undefined) => updateQuery({ categoryId: value || undefined, page: "1" }, true),
@@ -162,7 +180,13 @@ export default function ProductsPage() {
 
   const handleAttributeChange = useCallback(
     (name: string, value: string | string[] | boolean | undefined) => {
-      const normalizedValue = Array.isArray(value) ? value.join(",") : String(value);
+      const normalizedValue = Array.isArray(value)
+        ? value.length > 0
+          ? value.join(",")
+          : undefined
+        : value === undefined || value === ""
+          ? undefined
+          : String(value);
       updateQuery({ [name]: normalizedValue || undefined, page: "1" });
     },
     [updateQuery]
@@ -173,6 +197,7 @@ export default function ProductsPage() {
   }, [updateQuery]);
 
   const handleClearAllFilters = useCallback(() => {
+    setSearchInput("");
     const next = new URLSearchParams();
     const storeValue = searchParams.get("storeId");
     if (storeValue) next.set("storeId", storeValue);
@@ -196,29 +221,46 @@ export default function ProductsPage() {
   }, [currentCategoryId]);
 
   const fetchProducts = useCallback(async () => {
-    const cacheKey = normalizedQueryString;
-    const cached = responseCache.current.get(cacheKey);
-
-    if (cached && Date.now() - cached.timestamp < 60_000) {
-      setProducts(cached.data.items);
-      setTotal(cached.data.total);
-      setCategoryAttributeSchema(cached.data.categoryAttributeSchema);
+    if (!isReady || isMobile || !storeId) {
+      abortControllerRef.current?.abort();
+      requestIdRef.current += 1;
+      requestedStoreIdRef.current = null;
+      setProducts([]);
+      setTotal(0);
       setLoading(false);
       return;
     }
 
+    if (requestedStoreIdRef.current && requestedStoreIdRef.current !== storeId) {
+      setProducts([]);
+      setTotal(0);
+    }
+    requestedStoreIdRef.current = storeId;
+
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    const params = new URLSearchParams(normalizedQueryString);
+    params.set("storeId", storeId);
+    const queryString = params.toString();
+
     setLoading(true);
     try {
-      const url = `/api/products${cacheKey ? `?${cacheKey}` : ""}`;
-      const res = await fetch(url);
+      const url = `/api/products${queryString ? `?${queryString}` : ""}`;
+      const res = await fetch(url, { signal: controller.signal });
       if (!res.ok) {
-        throw new Error("Failed to load products");
+        if (requestId !== requestIdRef.current) return;
+        const errorBody = (await res.json().catch(() => null)) as { error?: string } | null;
+        message.error(errorBody?.error || "Unable to load products. Please try again.");
+        return;
       }
 
       const json = await res.json();
+      if (requestId !== requestIdRef.current) return;
       const items: Product[] = Array.isArray(json.items) ? json.items : [];
-      const nextPage = Number(json.page ?? currentPage) || 1;
-      const nextPageSize = Number(json.pageSize ?? currentPageSize) || 10;
       const nextCategoryAttributeSchema = json.categoryAttributeSchema ?? null;
 
       setProducts(items);
@@ -228,27 +270,20 @@ export default function ProductsPage() {
       if (currentCategoryId && nextCategoryAttributeSchema) {
         schemaCache.current.set(currentCategoryId, nextCategoryAttributeSchema);
       }
-
-      responseCache.current.set(cacheKey, {
-        data: {
-          items,
-          total: Number(json.total ?? items.length),
-          page: nextPage,
-          pageSize: nextPageSize,
-          categoryAttributeSchema: nextCategoryAttributeSchema,
-        },
-        timestamp: Date.now(),
-      });
     } catch (error) {
-      console.error("Failed to fetch products:", error);
+      if (error instanceof Error && error.name === "AbortError") return;
+      if (requestId === requestIdRef.current) {
+        message.error("Unable to load products. Check your connection and try again.");
+      }
+      console.warn("[Product list request failed]", error);
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
-  }, [normalizedQueryString, currentCategoryId, currentPage, currentPageSize]);
+  }, [normalizedQueryString, storeId, currentCategoryId, isReady, isMobile, message]);
 
   useEffect(() => {
-    const timer = window.setTimeout(fetchProducts, 300);
-    return () => window.clearTimeout(timer);
+    fetchProducts();
+    return () => abortControllerRef.current?.abort();
   }, [fetchProducts]);
 
   const refresh = useCallback(() => {
@@ -266,7 +301,7 @@ export default function ProductsPage() {
       message.success("Product deleted");
       refresh();
     },
-    [fetchProducts, message, refresh]
+    [message, refresh]
   );
 
   const handleDuplicate = useCallback(
@@ -311,7 +346,7 @@ export default function ProductsPage() {
           setLocalPageSize(nextPageSize);
           updateQuery({ page: String(nextPage), pageSize: String(nextPageSize) });
         }}
-        search={currentSearch}
+        search={searchInput}
         onSearchChange={handleSearchChange}
         categoryFilter={currentCategoryId}
         onCategoryChange={handleCategoryChange}

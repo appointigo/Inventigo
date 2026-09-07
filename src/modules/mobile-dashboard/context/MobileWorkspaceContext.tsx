@@ -3,12 +3,19 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 import { useCart } from "@/modules/billing/hooks/useBilling";
 
-export type MobileModuleKey = "dashboard" | "categories" | "brands" | "products" | "stock" | "billing";
+export type MobileModuleKey =
+  | "dashboard"
+  | "categories"
+  | "brands"
+  | "products"
+  | "stock"
+  | "billing";
 
 type ProductFiltersState = {
   search: string;
   categoryId?: string;
   brandId?: string;
+  sizeId?: string;
 };
 
 type MobileWorkspaceContextValue = {
@@ -38,28 +45,33 @@ export function MobileWorkspaceProvider({ children }: { children: ReactNode }) {
   const [productFilters, setProductFiltersState] = useState<ProductFiltersState>({ search: "" });
   const [isProductFilterOpen, setIsProductFilterOpen] = useState(false);
 
-  const value = useMemo<MobileWorkspaceContextValue>(() => ({
-    cart,
-    moduleSearch,
-    setModuleSearch: (module, value) => {
-      setModuleSearchState((current) => ({ ...current, [module]: value }));
-      if (module === "products") {
-        setProductFiltersState((current) => ({ ...current, search: value }));
-      }
-    },
-    productFilters,
-    setProductFilters: (value) => {
-      setProductFiltersState((current) => ({ ...current, ...value }));
-    },
-    resetProductFilters: () => {
-      setProductFiltersState({ search: moduleSearch.products });
-    },
-    isProductFilterOpen,
-    openProductFilter: () => setIsProductFilterOpen(true),
-    closeProductFilter: () => setIsProductFilterOpen(false),
-  }), [cart, isProductFilterOpen, moduleSearch, productFilters]);
+  const value = useMemo<MobileWorkspaceContextValue>(
+    () => ({
+      cart,
+      moduleSearch,
+      setModuleSearch: (module, value) => {
+        setModuleSearchState((current) => ({ ...current, [module]: value }));
+        if (module === "products") {
+          setProductFiltersState((current) => ({ ...current, search: value }));
+        }
+      },
+      productFilters,
+      setProductFilters: (value) => {
+        setProductFiltersState((current) => ({ ...current, ...value }));
+      },
+      resetProductFilters: () => {
+        setProductFiltersState({ search: moduleSearch.products });
+      },
+      isProductFilterOpen,
+      openProductFilter: () => setIsProductFilterOpen(true),
+      closeProductFilter: () => setIsProductFilterOpen(false),
+    }),
+    [cart, isProductFilterOpen, moduleSearch, productFilters]
+  );
 
-  return <MobileWorkspaceContext.Provider value={value}>{children}</MobileWorkspaceContext.Provider>;
+  return (
+    <MobileWorkspaceContext.Provider value={value}>{children}</MobileWorkspaceContext.Provider>
+  );
 }
 
 export function useMobileWorkspace() {

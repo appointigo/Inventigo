@@ -1,18 +1,24 @@
 import { Prisma } from "@prisma/client";
-import { createHash } from "crypto";
 import { prisma } from "@/lib/db";
-import type { Product, ProductFormValues, ProductListFilters, BulkProductValidated, BulkUploadResult, PaginatedProductsResponse } from "../types";
+import type {
+  Product,
+  ProductFormValues,
+  ProductListFilters,
+  BulkProductValidated,
+  BulkUploadResult,
+  PaginatedProductsResponse,
+} from "../types";
 import type { AttributeField } from "@/modules/categories/types";
 import { imageService } from "@/shared/services/imageService";
 import { normalizeNameKey, normalizeSku } from "@/shared/utils/normalization";
-import { buildVariantSku, normalizeSizeLabel, sanitizeScannedBarcode } from "@/shared/services/barcodeService";
+import { buildVariantSku } from "@/shared/services/barcodeService";
 
 const buildInclude = (storeId?: string) => ({
   category: { select: { name: true } },
   brand: { select: { name: true } },
   stockEntries: {
     where: storeId ? { storeId } : undefined,
-    include: { size: { select: { label: true } } },
+    include: { size: { select: { label: true, sortOrder: true } } },
   },
 });
 
@@ -29,13 +35,23 @@ const buildProductWhere = (orgId: string, filters?: ProductListFilters) => {
   if (filters?.categoryId) where.categoryId = filters.categoryId;
   if (filters?.brandId) where.brandId = filters.brandId;
   if (filters?.isActive !== undefined) where.isActive = filters.isActive;
-  if (filters?.search) {
-    where.OR = [
-      { name: { contains: filters.search, mode: "insensitive" } },
-      { sku: { contains: filters.search, mode: "insensitive" } },
-      { externalBarcode: { contains: filters.search, mode: "insensitive" } },
-      { stockEntries: { some: { variantSku: { contains: filters.search, mode: "insensitive" } } } },
-    ];
+  const search = filters?.search?.trim();
+  if (search) {
+    // Long numeric input is scanner/barcode-shaped. Avoid broad text matches for it,
+    // while preserving partial matching for names, SKUs and human-entered codes.
+    const isBarcodeShaped = /^\d{8,14}$/.test(search);
+    where.OR = isBarcodeShaped
+      ? [
+          { sku: { equals: search } },
+          { externalBarcode: { equals: search } },
+          { stockEntries: { some: { variantSku: { equals: search } } } },
+        ]
+      : [
+          { name: { contains: search, mode: "insensitive" } },
+          { sku: { contains: search, mode: "insensitive" } },
+          { externalBarcode: { contains: search, mode: "insensitive" } },
+          { stockEntries: { some: { variantSku: { contains: search, mode: "insensitive" } } } },
+        ];
   }
 
   if (filters?.storeId || filters?.sizeId) {
@@ -43,6 +59,7 @@ const buildProductWhere = (orgId: string, filters?: ProductListFilters) => {
       some: {
         ...(filters?.storeId ? { storeId: filters.storeId } : {}),
         ...(filters?.sizeId ? { sizeId: filters.sizeId } : {}),
+        ...(filters?.sizeId ? { quantity: { gt: 0 } } : {}),
       },
     };
   }
@@ -56,7 +73,7 @@ const buildAttributeConditions = (
 ) => {
   if (!schema?.fields?.length || !attributeFilters) return [];
 
-  const conditions: any[] = [];
+  const conditions: Prisma.ProductWhereInput[] = [];
 
   schema.fields.forEach((field) => {
     const rawValue = attributeFilters[field.name];
@@ -66,13 +83,16 @@ const buildAttributeConditions = (
 
     const values = Array.isArray(rawValue)
       ? rawValue
-      : String(rawValue).split(",").map((item) => item.trim()).filter(Boolean);
+      : String(rawValue)
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean);
 
     if (values.length === 0) {
       return;
     }
 
-    const fieldConditions: any[] = [];
+    const fieldConditions: Prisma.ProductWhereInput[] = [];
 
     values.forEach((value) => {
       if (field.type === "boolean") {
@@ -87,7 +107,9 @@ const buildAttributeConditions = (
           fieldConditions.push({ attributes: { path: [field.name], equals: numeric } });
         }
       } else if (field.type === "text") {
-        fieldConditions.push({ attributes: { path: [field.name], string_contains: String(value), mode: "insensitive" } });
+        fieldConditions.push({
+          attributes: { path: [field.name], string_contains: String(value), mode: "insensitive" },
+        });
       } else {
         fieldConditions.push({ attributes: { path: [field.name], equals: value } });
       }
@@ -103,14 +125,44 @@ const buildAttributeConditions = (
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const toDto = (p: any): Product => {
-  const stock = (p.stockEntries ?? []).map((e: any) => ({
-    sizeId: e.sizeId,
-    sizeLabel: e.size.label,
-    // Use stored variantSku if present; fall back to auto-generated format for legacy entries
-    variantSku: e.variantSku ?? buildVariantSku(p.sku, e.size.label),
-    quantity: e.quantity,
-    reorderLevel: e.reorderLevel,
-  }));
+  type StockEntryWithSize = {
+    sizeId: string;
+    variantSku: string | null;
+    quantity: number;
+    reorderLevel: number;
+    size: { label: string; sortOrder: number };
+  };
+
+  const stockBySize = new Map<string, Product["stock"][number] & { sortOrder: number }>();
+  for (const entry of (p.stockEntries ?? []) as StockEntryWithSize[]) {
+    const existing = stockBySize.get(entry.sizeId);
+    if (existing) {
+      existing.quantity += entry.quantity;
+      existing.reorderLevel = Math.max(existing.reorderLevel, entry.reorderLevel);
+      continue;
+    }
+
+    stockBySize.set(entry.sizeId, {
+      sizeId: entry.sizeId,
+      sizeLabel: entry.size.label,
+      variantSku: entry.variantSku ?? buildVariantSku(p.sku, entry.size.label),
+      quantity: entry.quantity,
+      reorderLevel: entry.reorderLevel,
+      sortOrder: entry.size.sortOrder,
+    });
+  }
+
+  const stock = Array.from(stockBySize.values())
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.sizeLabel.localeCompare(b.sizeLabel))
+    .map((entry) => ({
+      sizeId: entry.sizeId,
+      sizeLabel: entry.sizeLabel,
+      variantSku: entry.variantSku,
+      quantity: entry.quantity,
+      reorderLevel: entry.reorderLevel,
+    }));
+
+  const availableSizes = stock.filter((entry: Product["stock"][number]) => entry.quantity > 0);
 
   return {
     id: p.id,
@@ -128,6 +180,7 @@ const toDto = (p: any): Product => {
     imageUrl: p.imageUrl ?? null,
     isActive: p.isActive,
     stock,
+    availableSizes,
     totalStock: stock.reduce((sum: number, s: { quantity: number }) => sum + s.quantity, 0),
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),
@@ -143,7 +196,10 @@ export const productService = {
     return products.map(toDto);
   },
 
-  async listPaginated(orgId: string, filters?: ProductListFilters): Promise<PaginatedProductsResponse> {
+  async listPaginated(
+    orgId: string,
+    filters?: ProductListFilters
+  ): Promise<PaginatedProductsResponse> {
     const page = Math.max(1, Number(filters?.page ?? 1));
     const pageSize = Math.min(100, Math.max(1, Number(filters?.pageSize ?? 10)));
     const where = buildProductWhere(orgId, filters);
@@ -318,17 +374,25 @@ export const productService = {
       }
 
       // Re-fetch with stock entries included
-      return tx.product.findUniqueOrThrow({ where: { id: product.id }, include: buildInclude(storeId ?? undefined) });
+      return tx.product.findUniqueOrThrow({
+        where: { id: product.id },
+        include: buildInclude(storeId ?? undefined),
+      });
     });
 
     return toDto(p);
   },
 
-  async update(orgId: string, id: string, values: Partial<ProductFormValues>): Promise<Product | null> {
+  async update(
+    orgId: string,
+    id: string,
+    values: Partial<ProductFormValues>
+  ): Promise<Product | null> {
     const existing = await prisma.product.findFirst({ where: { id, orgId } });
     if (!existing) return null;
 
-    const incomingImageUrl = values.imageUrl !== undefined ? (values.imageUrl ?? null) : existing.imageUrl;
+    const incomingImageUrl =
+      values.imageUrl !== undefined ? (values.imageUrl ?? null) : existing.imageUrl;
     if (
       existing.imageUrl &&
       incomingImageUrl !== existing.imageUrl &&
@@ -343,13 +407,17 @@ export const productService = {
         data: {
           ...(values.name !== undefined && { name: values.name }),
           ...(values.sku !== undefined && { sku: values.sku }),
-          ...(values.externalBarcode !== undefined && { externalBarcode: values.externalBarcode ?? null }),
+          ...(values.externalBarcode !== undefined && {
+            externalBarcode: values.externalBarcode ?? null,
+          }),
           ...(values.categoryId !== undefined && { categoryId: values.categoryId }),
           ...(values.brandId !== undefined && { brandId: values.brandId }),
           ...(values.mrp !== undefined && { mrp: values.mrp }),
           ...(values.basePrice !== undefined && { basePrice: values.basePrice }),
           ...(values.costPrice !== undefined && { costPrice: values.costPrice }),
-          ...(values.attributes !== undefined && { attributes: values.attributes as Prisma.InputJsonValue }),
+          ...(values.attributes !== undefined && {
+            attributes: values.attributes as Prisma.InputJsonValue,
+          }),
           ...(values.isActive !== undefined && { isActive: values.isActive }),
           imageUrl: incomingImageUrl,
         } as Prisma.ProductUpdateInput,
@@ -386,8 +454,9 @@ export const productService = {
           });
 
           const sizeLabelMap = new Map(sizes.map((s) => [s.id, s.label]));
-          const productSku = (await tx.product.findUnique({ where: { id }, select: { sku: true } }))?.sku ?? id;
-          
+          const productSku =
+            (await tx.product.findUnique({ where: { id }, select: { sku: true } }))?.sku ?? id;
+
           for (const sz of values.sizes) {
             const vSku = buildVariantSku(productSku, sizeLabelMap.get(sz.sizeId) ?? sz.sizeId);
             await tx.stockEntry.upsert({
@@ -397,13 +466,23 @@ export const productService = {
                 variantSku: vSku,
                 ...(sz.reorderLevel !== undefined && { reorderLevel: sz.reorderLevel }),
               },
-              create: { productId: id, sizeId: sz.sizeId, storeId, quantity: sz.quantity, reorderLevel: sz.reorderLevel ?? 5, variantSku: vSku },
+              create: {
+                productId: id,
+                sizeId: sz.sizeId,
+                storeId,
+                quantity: sz.quantity,
+                reorderLevel: sz.reorderLevel ?? 5,
+                variantSku: vSku,
+              },
             });
           }
         }
       }
 
-      return tx.product.findUniqueOrThrow({ where: { id: product.id }, include: buildInclude(values.storeId) });
+      return tx.product.findUniqueOrThrow({
+        where: { id: product.id },
+        include: buildInclude(values.storeId),
+      });
     });
 
     return toDto(p);
@@ -455,22 +534,26 @@ export const productService = {
         }),
       ]);
 
-      const categoryMap = new Map(
-        allCategories.map((c) => [normalizeNameKey(c.name), c.id])
-      );
-      const brandMap = new Map(
-        allBrands.map((b) => [normalizeNameKey(b.name), b.id])
-      );
+      const categoryMap = new Map(allCategories.map((c) => [normalizeNameKey(c.name), c.id]));
+      const brandMap = new Map(allBrands.map((b) => [normalizeNameKey(b.name), b.id]));
 
       // 3. Validate all rows before writing anything
       const errors: Array<{ row: number; identifier: string; message: string }> = [];
       for (const [i, row] of rows.entries()) {
         const rowNum = i + 1;
         if (!brandMap.has(normalizeNameKey(row.brandName))) {
-          errors.push({ row: rowNum, identifier: row.name, message: `Brand "${row.brandName}" not found (row ${rowNum})` });
+          errors.push({
+            row: rowNum,
+            identifier: row.name,
+            message: `Brand "${row.brandName}" not found (row ${rowNum})`,
+          });
         }
         if (!categoryMap.has(normalizeNameKey(row.categoryName))) {
-          errors.push({ row: rowNum, identifier: row.name, message: `Category "${row.categoryName}" not found (row ${rowNum})` });
+          errors.push({
+            row: rowNum,
+            identifier: row.name,
+            message: `Category "${row.categoryName}" not found (row ${rowNum})`,
+          });
         }
       }
       if (errors.length > 0) return { success: false, errors };
@@ -497,9 +580,17 @@ export const productService = {
         if (sku) {
           // Explicit SKU — check uniqueness
           if (existingSkus.has(sku)) {
-            errors.push({ row: rowNum, identifier: row.name, message: `SKU "${sku}" already exists (row ${rowNum})` });
+            errors.push({
+              row: rowNum,
+              identifier: row.name,
+              message: `SKU "${sku}" already exists (row ${rowNum})`,
+            });
           } else if (seenSkusInBatch.has(sku)) {
-            errors.push({ row: rowNum, identifier: row.name, message: `Duplicate SKU "${sku}" within batch (row ${rowNum})` });
+            errors.push({
+              row: rowNum,
+              identifier: row.name,
+              message: `Duplicate SKU "${sku}" within batch (row ${rowNum})`,
+            });
           } else {
             seenSkusInBatch.add(sku);
             existingSkus.add(sku); // prevent later rows from reusing it
@@ -568,7 +659,12 @@ export const productService = {
 
         for (const { row, sku } of resolvedRows) {
           const productId = skuToId.get(sku);
-          if (!productId || !row.sizesAndQuantities || Object.keys(row.sizesAndQuantities).length === 0) continue;
+          if (
+            !productId ||
+            !row.sizesAndQuantities ||
+            Object.keys(row.sizesAndQuantities).length === 0
+          )
+            continue;
 
           // Resolve category sizes for this product
           const categoryId = categoryMap.get(normalizeNameKey(row.categoryName))!;
