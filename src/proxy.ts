@@ -2,7 +2,18 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 // Routes that don't require authentication
-const publicRoutes = ["/login", "/api/auth", "/api/cron", "/verify-email", "/onboarding", "/invite", "/stockiva-admin", "/api/admin/bootstrap-status", "/api/admin/create-super-admin"];
+const publicRoutes = [
+  "/login",
+  "/api/auth",
+  "/api/cron",
+  "/api/whatsapp/webhook",
+  "/verify-email",
+  "/onboarding",
+  "/invite",
+  "/stockiva-admin",
+  "/api/admin/bootstrap-status",
+  "/api/admin/create-super-admin",
+];
 
 export const proxy = (request: NextRequest) => {
   const { pathname } = request.nextUrl;

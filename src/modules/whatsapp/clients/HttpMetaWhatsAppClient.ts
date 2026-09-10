@@ -4,6 +4,15 @@ import type { MetaCodeExchangeRequest, MetaCodeExchangeResult, MetaCreateTemplat
 
 type Config = { appId: string; appSecret: string; graphApiVersion: string; timeoutMs: number };
 type MetaErrorBody = { error?: { message?: string; code?: number; error_subcode?: number; type?: string; fbtrace_id?: string } };
+const FACEBOOK_JS_SDK_REDIRECT_URI = "https://www.facebook.com/connect/login_success.html";
+
+function sanitizeMetaMessage(message?: string) {
+  if (!message) return undefined;
+  return message
+    .replace(/\bEAA[A-Za-z0-9_-]+\b/g, "[REDACTED_TOKEN]")
+    .replace(/(\b(?:code|access_token|client_secret)=)[^&\s]+/gi, "$1[REDACTED]")
+    .slice(0, 300);
+}
 
 if (typeof window !== "undefined") throw new Error("HttpMetaWhatsAppClient is server-only");
 
@@ -28,8 +37,15 @@ export class HttpMetaWhatsAppClient implements MetaWhatsAppClient {
   }
 
   private normalize(error: MetaErrorBody["error"], status: number) {
-    const details = { providerCode: error?.code, providerSubcode: error?.error_subcode, httpStatus: status, traceId: error?.fbtrace_id };
-    if (status === 401 || [102, 190].includes(error?.code ?? -1)) return new WhatsAppError("META_AUTH_FAILED", "Meta authorization failed", { details });
+    const details = {
+      providerCode: error?.code,
+      providerSubcode: error?.error_subcode,
+      providerType: error?.type,
+      providerMessage: sanitizeMetaMessage(error?.message),
+      httpStatus: status,
+      traceId: error?.fbtrace_id,
+    };
+    if (status === 401 || [102, 190].includes(error?.code ?? -1) || error?.error_subcode === 36008) return new WhatsAppError("META_AUTH_FAILED", "Meta authorization failed", { details });
     if (status === 429 || [4, 17, 32, 613, 80004].includes(error?.code ?? -1)) return new WhatsAppError("META_RATE_LIMITED", "Meta rate limit reached", { retryable: true, details });
     return new WhatsAppError("META_PROVIDER_FAILED", "Meta rejected the request", { retryable: status >= 500, details });
   }
@@ -54,7 +70,12 @@ export class HttpMetaWhatsAppClient implements MetaWhatsAppClient {
   }
 
   async exchangeEmbeddedSignupCode(input: MetaCodeExchangeRequest): Promise<MetaCodeExchangeResult> {
-    const params = new URLSearchParams({ client_id: this.config.appId, client_secret: this.config.appSecret, code: input.code, redirect_uri: input.redirectUri });
+    const params = new URLSearchParams({
+      client_id: this.config.appId,
+      client_secret: this.config.appSecret,
+      code: input.code,
+      redirect_uri: FACEBOOK_JS_SDK_REDIRECT_URI,
+    });
     const result = await this.request<{ access_token?: string; expires_in?: number }>(`/oauth/access_token?${params}`);
     if (!result.access_token) throw new WhatsAppError("EMBEDDED_SIGNUP_INVALID_CODE", "Meta did not return an access token");
     return { accessToken: result.access_token, expiresAt: result.expires_in ? new Date(Date.now() + result.expires_in * 1000) : undefined };

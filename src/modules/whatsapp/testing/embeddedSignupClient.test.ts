@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseEmbeddedSignupMessage } from "../embeddedSignupClient.ts";
+import { claimEmbeddedSignupCompletion, parseEmbeddedSignupMessage } from "../embeddedSignupClient.ts";
 
 test("accepts a Meta Embedded Signup completion event", () => {
   assert.deepEqual(parseEmbeddedSignupMessage("https://www.facebook.com", JSON.stringify({ type: "WA_EMBEDDED_SIGNUP", event: "FINISH", data: { waba_id: "123", phone_number_id: "456" } })), { event: "FINISH", wabaId: "123", phoneNumberId: "456" });
@@ -9,4 +9,11 @@ test("accepts a Meta Embedded Signup completion event", () => {
 test("rejects spoofed origins and unrelated messages", () => {
   assert.equal(parseEmbeddedSignupMessage("https://facebook.com.evil.test", JSON.stringify({ type: "WA_EMBEDDED_SIGNUP", event: "FINISH" })), null);
   assert.equal(parseEmbeddedSignupMessage("https://www.facebook.com", "not-json"), null);
+});
+
+test("submits each Embedded Signup request only once", () => {
+  const claims = new Set<string>();
+  assert.equal(claimEmbeddedSignupCompletion(claims, "request-1"), true);
+  assert.equal(claimEmbeddedSignupCompletion(claims, "request-1"), false);
+  assert.equal(claimEmbeddedSignupCompletion(claims, "request-2"), true);
 });

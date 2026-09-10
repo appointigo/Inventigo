@@ -1,36 +1,45 @@
 import "server-only";
 
+import { parseWhatsAppAllowedOrigins } from "./security/origin";
+
 export const VERIFIED_META_GRAPH_API_VERSION = "v26.0";
 
 export type WhatsAppPlatformConfigurationErrorCode =
   | "WHATSAPP_SETUP_DISABLED"
-  | "WHATSAPP_SETUP_NOT_CONFIGURED"
+  | "WHATSAPP_CONFIGURATION_MISSING"
   | "WHATSAPP_SETUP_MISCONFIGURED";
+
+export const REQUIRED_WHATSAPP_CONFIGURATION = [
+  "META_APP_ID",
+  "META_APP_SECRET",
+  "META_EMBEDDED_SIGNUP_CONFIG_ID",
+  "META_WEBHOOK_VERIFY_TOKEN",
+  "WHATSAPP_ALLOWED_ORIGINS",
+  "WHATSAPP_CREDENTIAL_ENCRYPTION_KEY",
+] as const;
+
+type RequiredWhatsAppConfigurationKey =
+  (typeof REQUIRED_WHATSAPP_CONFIGURATION)[number];
+type WhatsAppDisabledReason = "feature_flag_missing" | "feature_flag_false";
 
 export class WhatsAppPlatformConfigurationError extends Error {
   constructor(
     readonly code: WhatsAppPlatformConfigurationErrorCode,
-    message: string
+    message: string,
+    readonly missingConfiguration: readonly RequiredWhatsAppConfigurationKey[] = [],
+    readonly disabledReason?: WhatsAppDisabledReason
   ) {
     super(message);
     this.name = "WhatsAppPlatformConfigurationError";
   }
 }
 
-export type WhatsAppPlatformConfig = { enabled: boolean; meta?: {
-  appId: string; appSecret: string; embeddedSignupConfigId: string;
-  embeddedSignupRedirectUri: string; webhookVerifyToken: string; graphApiVersion: string; timeoutMs: number; credentialEncryptionKey: Buffer;
-} };
-
-const required = (env: NodeJS.ProcessEnv, key: string) => {
-  const value = env[key]?.trim();
-  if (!value)
-    throw new WhatsAppPlatformConfigurationError(
-      "WHATSAPP_SETUP_NOT_CONFIGURED",
-      `${key} is required when WhatsApp is enabled`
-    );
-  return value;
-};
+export type WhatsAppPlatformConfig =
+  | { enabled: false; disabledReason: WhatsAppDisabledReason }
+  | { enabled: true; meta: {
+    appId: string; appSecret: string; embeddedSignupConfigId: string;
+    allowedOrigins: readonly string[]; webhookVerifyToken: string; graphApiVersion: string; timeoutMs: number; credentialEncryptionKey: Buffer;
+  } };
 
 /**
  * Only a platform-wide feature switch is recognized before P07.
@@ -46,7 +55,21 @@ export function getWhatsAppPlatformConfig(
       "WHATSAPP_ENABLED must be either true or false"
     );
   }
-  if (value !== "true") return { enabled: false };
+  if (value !== "true") return {
+    enabled: false,
+    disabledReason: value === "false" ? "feature_flag_false" : "feature_flag_missing",
+  };
+  const missingConfiguration = REQUIRED_WHATSAPP_CONFIGURATION.filter(
+    key => !env[key]?.trim()
+  );
+  if (missingConfiguration.length) {
+    throw new WhatsAppPlatformConfigurationError(
+      "WHATSAPP_CONFIGURATION_MISSING",
+      `Required WhatsApp configuration is missing: ${missingConfiguration.join(", ")}`,
+      missingConfiguration
+    );
+  }
+  const required = (key: RequiredWhatsAppConfigurationKey) => env[key]!.trim();
   const graphApiVersion = env.META_GRAPH_API_VERSION?.trim() || VERIFIED_META_GRAPH_API_VERSION;
   if (!/^v\d+\.\d+$/.test(graphApiVersion))
     throw new WhatsAppPlatformConfigurationError(
@@ -59,30 +82,24 @@ export function getWhatsAppPlatformConfig(
       "WHATSAPP_SETUP_MISCONFIGURED",
       "META_GRAPH_TIMEOUT_MS must be between 1000 and 60000"
     );
-  const embeddedSignupRedirectUri = required(env, "META_EMBEDDED_SIGNUP_REDIRECT_URI");
-  let redirectUrl: URL;
+  let allowedOrigins: readonly string[];
   try {
-    redirectUrl = new URL(embeddedSignupRedirectUri);
-  } catch {
+    allowedOrigins = parseWhatsAppAllowedOrigins(required("WHATSAPP_ALLOWED_ORIGINS"));
+  } catch (error) {
     throw new WhatsAppPlatformConfigurationError(
       "WHATSAPP_SETUP_MISCONFIGURED",
-      "META_EMBEDDED_SIGNUP_REDIRECT_URI must be an absolute URL"
+      error instanceof Error ? error.message : "WHATSAPP_ALLOWED_ORIGINS is invalid"
     );
   }
-  if (redirectUrl.hash || (redirectUrl.protocol !== "https:" && !(redirectUrl.protocol === "http:" && redirectUrl.hostname === "localhost")))
-    throw new WhatsAppPlatformConfigurationError(
-      "WHATSAPP_SETUP_MISCONFIGURED",
-      "META_EMBEDDED_SIGNUP_REDIRECT_URI must use HTTPS, except on localhost"
-    );
-  const credentialEncryptionKey = Buffer.from(required(env, "WHATSAPP_CREDENTIAL_ENCRYPTION_KEY"), "base64");
+  const credentialEncryptionKey = Buffer.from(required("WHATSAPP_CREDENTIAL_ENCRYPTION_KEY"), "base64");
   if (credentialEncryptionKey.length !== 32)
     throw new WhatsAppPlatformConfigurationError(
       "WHATSAPP_SETUP_MISCONFIGURED",
       "WHATSAPP_CREDENTIAL_ENCRYPTION_KEY must be a base64-encoded 32-byte key"
     );
   return { enabled: true, meta: {
-    appId: required(env, "META_APP_ID"), appSecret: required(env, "META_APP_SECRET"),
-    embeddedSignupConfigId: required(env, "META_EMBEDDED_SIGNUP_CONFIG_ID"), embeddedSignupRedirectUri: redirectUrl.toString(), webhookVerifyToken: required(env, "META_WEBHOOK_VERIFY_TOKEN"), graphApiVersion,
+    appId: required("META_APP_ID"), appSecret: required("META_APP_SECRET"),
+    embeddedSignupConfigId: required("META_EMBEDDED_SIGNUP_CONFIG_ID"), allowedOrigins, webhookVerifyToken: required("META_WEBHOOK_VERIFY_TOKEN"), graphApiVersion,
     timeoutMs, credentialEncryptionKey,
   } };
 }

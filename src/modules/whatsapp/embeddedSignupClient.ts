@@ -1,5 +1,11 @@
 export type EmbeddedSignupEvent = { event: "FINISH" | "CANCEL" | "ERROR"; wabaId?: string; phoneNumberId?: string };
 
+export function claimEmbeddedSignupCompletion(claims: Set<string>, requestId: string) {
+  if (claims.has(requestId)) return false;
+  claims.add(requestId);
+  return true;
+}
+
 export function parseEmbeddedSignupMessage(origin: string, value: unknown): EmbeddedSignupEvent | null {
   if (!/^https:\/\/([a-z0-9-]+\.)*facebook\.com$/i.test(origin) || typeof value !== "string") return null;
   try {

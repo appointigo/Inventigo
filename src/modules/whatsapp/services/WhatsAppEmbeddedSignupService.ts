@@ -3,11 +3,11 @@ import type { PrismaClient } from "@prisma/client";
 import type { MetaPhoneNumber, MetaWaba, MetaWhatsAppClient } from "../clients/MetaWhatsAppClient";
 import type { WhatsAppCredentialStore } from "../credentials/WhatsAppCredentialStore";
 import { WhatsAppError } from "../errors";
+import { validateEmbeddedSignupAuthorization } from "../embeddedSignupAuthorization";
 
 export type CompleteEmbeddedSignupInput = {
   organizationId: string;
   requestId?: string;
-  redirectUri: string;
   code: string;
   selectedWabaIds?: string[];
   registration?: { phoneNumberId: string; pin: string };
@@ -33,7 +33,7 @@ export class WhatsAppEmbeddedSignupService {
 
   async complete(input: CompleteEmbeddedSignupInput, report: SignupStageReporter = () => undefined) {
     report("code_exchange_started", { authorizationCodePresent: Boolean(input.code) });
-    const exchange = await this.meta.exchangeEmbeddedSignupCode({ code: input.code, redirectUri: input.redirectUri });
+    const exchange = await this.meta.exchangeEmbeddedSignupCode({ code: input.code });
     report("code_exchange_completed", { accessTokenReceived: Boolean(exchange.accessToken) });
     report("token_inspection_started");
     const inspection = await this.meta.inspectToken(exchange.accessToken);
@@ -42,12 +42,11 @@ export class WhatsAppEmbeddedSignupService {
       tokenAppMatches: inspection.appId === this.appId,
       grantedScopeCount: inspection.scopes.length + inspection.granularScopes.length,
     });
-    if (!inspection.isValid || inspection.appId !== this.appId) throw new WhatsAppError("META_AUTH_FAILED", "Embedded Signup token is invalid or belongs to another app");
-    const grantedScopes = new Set([...inspection.scopes, ...inspection.granularScopes.map(item => item.scope)]);
-    if (!["whatsapp_business_management", "whatsapp_business_messaging"].every(scope => grantedScopes.has(scope))) throw new WhatsAppError("META_AUTH_FAILED", "Embedded Signup did not grant the required WhatsApp permissions");
-    const discoveredIds = [...new Set(inspection.granularScopes.filter(x => x.scope === "whatsapp_business_management").flatMap(x => x.targetIds))];
-    const wabaIds = input.selectedWabaIds?.length ? input.selectedWabaIds : discoveredIds;
-    if (!wabaIds.length || wabaIds.some(id => !discoveredIds.includes(id))) throw new WhatsAppError("EMBEDDED_SIGNUP_ASSET_MISMATCH", "Selected WhatsApp account was not granted to this signup token");
+    const wabaIds = validateEmbeddedSignupAuthorization({
+      inspection,
+      expectedAppId: this.appId,
+      selectedWabaIds: input.selectedWabaIds,
+    });
 
     const existingForeign = await this.prisma.whatsAppBusinessAccount.findFirst({ where: { metaWabaId: { in: wabaIds }, integration: { organizationId: { not: input.organizationId } } }, select: { id: true } });
     if (existingForeign) throw new WhatsAppError("EMBEDDED_SIGNUP_ASSET_MISMATCH", "A WhatsApp account cannot be connected across organizations");

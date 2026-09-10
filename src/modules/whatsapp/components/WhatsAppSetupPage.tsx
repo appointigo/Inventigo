@@ -9,7 +9,7 @@ import WhatsAppShell from "./WhatsAppShell";
 import { WhatsAppErrorState, WhatsAppLoadingState } from "./WhatsAppStateCard";
 import WhatsAppStatusBadge from "./WhatsAppStatusBadge";
 import type { WhatsAppUiState } from "../ui";
-import { parseEmbeddedSignupMessage } from "../embeddedSignupClient";
+import { claimEmbeddedSignupCompletion, parseEmbeddedSignupMessage } from "../embeddedSignupClient";
 import { CapabilityCard, CardGrid, Hero, HeroIcon, ProgressPanel, RequirementList, Surface, TwoColumn } from "./WhatsAppSetupPage.styled";
 
 const { Title, Paragraph, Text } = Typography;
@@ -46,6 +46,7 @@ export default function WhatsAppSetupPage() {
   const [loading, setLoading] = useState(true); const [error, setError] = useState(false);
   const [phase, setPhase] = useState<SetupPhase>("idle"); const [flowError, setFlowError] = useState<string>();
   const selectedWabas = useRef<string[]>([]);
+  const submittedSignupRequests = useRef(new Set<string>());
 
   const loadStatus = useCallback(async () => {
     setLoading(true); setError(false);
@@ -64,11 +65,12 @@ export default function WhatsAppSetupPage() {
   }, []);
 
   const complete = useCallback(async (session: SessionResponse, code: string) => {
+    if (!claimEmbeddedSignupCompletion(submittedSignupRequests.current, session.requestId)) return;
     setPhase("syncing");
     if (process.env.NODE_ENV === "development") console.info("[WhatsApp Signup] backend_completion_started", { requestId: session.requestId, authorizationCodePresent: Boolean(code), selectedWabaCount: selectedWabas.current.length });
     const response = await fetch("/api/whatsapp/embedded-signup/complete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ requestId: session.requestId, code, state: session.state, ...(selectedWabas.current.length ? { selectedWabaIds: selectedWabas.current } : {}) }) });
-    const body = await response.json() as { code?: string; error?: string; requestId?: string };
-    if (process.env.NODE_ENV === "development") console.info("[WhatsApp Signup] backend_completion_received", { requestId: body.requestId ?? session.requestId, ok: response.ok, httpStatus: response.status, errorCode: body.code });
+    const body = await response.json() as { code?: string; error?: string; requestId?: string; diagnostic?: Record<string, unknown> };
+    if (process.env.NODE_ENV === "development") console.info("[WhatsApp Signup] backend_completion_received", { requestId: body.requestId ?? session.requestId, ok: response.ok, httpStatus: response.status, errorCode: body.code, diagnostic: body.diagnostic });
     if (!response.ok) throw new Error(body.error || "WhatsApp setup could not be completed.");
     await loadStatus(); setPhase("idle");
   }, [loadStatus]);
@@ -76,14 +78,15 @@ export default function WhatsAppSetupPage() {
   const connect = useCallback(async () => {
     setFlowError(undefined); setPhase("handoff"); selectedWabas.current = [];
     try {
+      if (window.location.protocol !== "https:") throw new Error("WhatsApp setup requires an allowed HTTPS address.");
       const response = await fetch("/api/whatsapp/embedded-signup/session", { method: "POST" });
-      const responseBody = await response.json() as SessionResponse & { error?: string };
-      if (!response.ok) throw new Error(response.status === 403 ? "Only an organization owner or admin can connect WhatsApp." : responseBody.error || "WhatsApp setup is currently unavailable.");
+      const responseBody = await response.json() as SessionResponse & { error?: string; code?: string };
+      if (!response.ok) throw new Error(response.status === 403 && !responseBody.code ? "Only an organization owner or admin can connect WhatsApp." : responseBody.error || "WhatsApp setup is currently unavailable.");
       const session = responseBody; const sdk = await loadMetaSdk(session.appId, session.graphApiVersion);
       const redirectUrl = new URL(session.redirectUri);
-      if (window.location.origin !== redirectUrl.origin) throw new Error(`Open Stockiva at ${redirectUrl.origin} before connecting WhatsApp.`);
+      if (window.location.origin !== redirectUrl.origin || redirectUrl.pathname !== "/dashboard/whatsapp") throw new Error("This WhatsApp setup session is not valid for the current secure origin.");
       if (process.env.NODE_ENV === "development") console.info("[WhatsApp Signup] facebook_login_started", { requestId: session.requestId });
-      sdk.login(result => { const code = result.authResponse?.code; if (process.env.NODE_ENV === "development") console.info("[WhatsApp Signup] facebook_auth_callback", { requestId: session.requestId, status: result.status, authorizationCodePresent: Boolean(code) }); if (!code) { setPhase("cancelled"); return; } void complete(session, code).catch(reason => { if (process.env.NODE_ENV === "development") console.error("[WhatsApp Signup] frontend_completion_failed", { requestId: session.requestId, message: reason instanceof Error ? reason.message : "Unknown setup error" }); setFlowError(reason instanceof Error ? reason.message : "WhatsApp setup failed."); setPhase("failed"); }); }, { config_id: session.configId, redirect_uri: session.redirectUri, response_type: "code", override_default_response_type: true });
+      sdk.login(result => { const code = result.authResponse?.code; if (process.env.NODE_ENV === "development") console.info("[WhatsApp Signup] facebook_auth_callback", { requestId: session.requestId, status: result.status, authorizationCodePresent: Boolean(code) }); if (!code) { setPhase("cancelled"); return; } void complete(session, code).catch(reason => { if (process.env.NODE_ENV === "development") console.error("[WhatsApp Signup] frontend_completion_failed", { requestId: session.requestId, message: reason instanceof Error ? reason.message : "Unknown setup error" }); setFlowError(reason instanceof Error ? reason.message : "WhatsApp setup failed."); setPhase("failed"); }); }, { config_id: session.configId, response_type: "code", override_default_response_type: true, extras: { setup: {}, sessionInfoVersion: "3" } });
     } catch (reason) { setFlowError(reason instanceof Error ? reason.message : "WhatsApp setup failed."); setPhase("failed"); }
   }, [complete]);
 

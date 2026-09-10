@@ -126,7 +126,7 @@ readiness, transport, and terminal failure outcomes; all outbound actions use
 
 Required application settings are `DATABASE_URL`, the deployment's authentication
 secret/configuration, `WHATSAPP_ENABLED=true`, `META_APP_ID`, `META_APP_SECRET`,
-`META_EMBEDDED_SIGNUP_CONFIG_ID`, `META_WEBHOOK_VERIFY_TOKEN`,
+`META_EMBEDDED_SIGNUP_CONFIG_ID`, `WHATSAPP_ALLOWED_ORIGINS`, `META_WEBHOOK_VERIFY_TOKEN`,
 `WHATSAPP_CREDENTIAL_ENCRYPTION_KEY`, and `CRON_SECRET`.
 `META_GRAPH_API_VERSION` and `META_GRAPH_TIMEOUT_MS` are optional controlled
 overrides. Do not configure tenant WABA IDs, phone-number IDs, or access tokens as
@@ -136,11 +136,55 @@ environment variables. The old `WHATSAPP_ACCESS_TOKEN`,
 `WHATSAPP_TEST_MODE` names are unsupported and should be removed from deployment
 configuration.
 
+### Platform configuration
+
+WhatsApp setup uses server runtime configuration only. It does not infer trusted
+origins from `NODE_ENV`, `VERCEL_ENV`, `RAILWAY_ENVIRONMENT`, or provider domain
+suffixes; the request's public origin must exactly match the configured allowlist.
+No WhatsApp setting should use a `NEXT_PUBLIC_` prefix.
+
+| Setting | Classification | Notes |
+| --- | --- | --- |
+| `WHATSAPP_ENABLED` | `FEATURE_FLAG` | Must be exactly `true` to permit setup. Missing or `false` deliberately disables it. |
+| `META_APP_ID` | `REQUIRED_PUBLIC_CONFIG` | Stored server-side, then returned to the setup UI by the authenticated session endpoint. |
+| `META_APP_SECRET` | `REQUIRED_SERVER_SECRET` | Never returned to the browser. |
+| `META_EMBEDDED_SIGNUP_CONFIG_ID` | `REQUIRED_PUBLIC_CONFIG` | Stored server-side, then returned to the setup UI. |
+| `WHATSAPP_ALLOWED_ORIGINS` | `REQUIRED_SERVER_CONFIG` | Comma-separated exact HTTPS origins permitted to initiate signup. Paths, wildcards, and insecure HTTP origins are rejected. |
+| `META_WEBHOOK_VERIFY_TOKEN` | `REQUIRED_SERVER_SECRET` | Never returned to the browser. |
+| `WHATSAPP_CREDENTIAL_ENCRYPTION_KEY` | `REQUIRED_SERVER_SECRET` | Base64-encoded 32-byte key; never returned to the browser. |
+| `META_GRAPH_API_VERSION` | `OPTIONAL` | Defaults to the repository's verified Graph API version. |
+| `META_GRAPH_TIMEOUT_MS` | `OPTIONAL` | Defaults to 10000; accepted range is 1000–60000. |
+
+For Railway staging, production, and development tunnels, configure every
+permitted public origin in `WHATSAPP_ALLOWED_ORIGINS`, for example
+`https://stockiva-staging.up.railway.app,https://temporary.trycloudflare.com`.
+Change the configured origin when a temporary tunnel URL rotates; do not add a
+provider-domain wildcard. Variables in a developer's ignored `.env` file are not
+deployed by Git. Restart or redeploy after changing variables so all running
+application instances receive the new runtime values.
+
+The setup session returns `WHATSAPP_SETUP_DISABLED` only when the feature flag
+is absent or false, `WHATSAPP_CONFIGURATION_MISSING` when an enabled deployment
+lacks required settings, and `WHATSAPP_SETUP_MISCONFIGURED` when a supplied
+setting is invalid. Merchant responses remain generic; server logs contain only
+the relevant setting names and never their values.
+
 Meta App configuration must use the deployed HTTPS Embedded Signup origin and
 redirect flow, the `/api/whatsapp/webhook` callback, the matching verify token,
 the approved Embedded Signup configuration ID, and the permissions/app-review
 access documented for the configured P07 Meta contract. Subscribe the App to each
 connected WABA. Never attach a Stockiva credit line.
+
+The browser starts Embedded Signup through Meta's JavaScript SDK with
+`response_type=code`, `override_default_response_type=true`, and
+`sessionInfoVersion=3`. The SDK popup binds that authorization code to Meta's
+`https://www.facebook.com/connect/login_success.html` bridge URI, so the
+server-side code exchange must use that same URI. The session endpoint derives
+the application dashboard URL from the request's `Origin` header (or validated
+reverse-proxy headers when `Origin` is absent), requires an exact match in
+`WHATSAPP_ALLOWED_ORIGINS`, and returns
+`<allowed-origin>/dashboard/whatsapp`. That application URL is not the SDK popup
+callback URI.
 
 Deployment order:
 

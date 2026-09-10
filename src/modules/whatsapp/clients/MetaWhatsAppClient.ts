@@ -24,7 +24,7 @@ export type MetaSendMessageResult = {
 };
 
 export type MetaCodeExchangeResult = { accessToken: string; expiresAt?: Date };
-export type MetaCodeExchangeRequest = { code: string; redirectUri: string };
+export type MetaCodeExchangeRequest = { code: string };
 export type MetaTokenInspection = { appId: string; isValid: boolean; expiresAt?: Date; scopes: string[]; granularScopes: Array<{ scope: string; targetIds: string[] }> };
 export type MetaWaba = { id: string; name?: string; currency?: string; timezoneId?: string };
 export type MetaPhoneNumber = { id: string; displayPhoneNumber: string; verifiedName?: string; qualityRating?: string; codeVerificationStatus?: string; platformType?: string };

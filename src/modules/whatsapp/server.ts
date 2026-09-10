@@ -59,10 +59,14 @@ export function createWhatsAppAutomationWorker() {
 
 export function createMetaBackend() {
   const config = getWhatsAppPlatformConfig();
-  if (!config.enabled || !config.meta)
+  if (!config.enabled)
     throw new WhatsAppPlatformConfigurationError(
       "WHATSAPP_SETUP_DISABLED",
-      "WhatsApp is not enabled"
+      config.disabledReason === "feature_flag_false"
+        ? "WHATSAPP_ENABLED is explicitly false"
+        : "WHATSAPP_ENABLED is missing",
+      [],
+      config.disabledReason
     );
   const credentials = new PrismaWhatsAppCredentialStore(
     prisma,

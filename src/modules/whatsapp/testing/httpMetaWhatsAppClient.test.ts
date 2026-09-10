@@ -29,19 +29,54 @@ test("normalizes timeouts", async () => {
   await assert.rejects(client.sendMessage(request), (error: unknown) => typeof error === "object" && error !== null && "code" in error && error.code === "META_TIMEOUT");
 });
 
-test("exchanges an Embedded Signup code with the exact redirect URI", async () => {
+test("exchanges an Embedded Signup code with the Facebook JavaScript SDK redirect URI", async () => {
   let seenUrl = "";
   const client = new HttpMetaWhatsAppClient(config, credentials, async url => {
     seenUrl = String(url);
     return new Response(JSON.stringify({ access_token: "meta-token" }), { status: 200 });
   });
-  await client.exchangeEmbeddedSignupCode({
-    code: "short-lived-code",
-    redirectUri: "http://localhost:3000/dashboard/whatsapp",
-  });
+  await client.exchangeEmbeddedSignupCode({ code: "short-lived-code" });
   const url = new URL(seenUrl);
-  assert.equal(url.searchParams.get("redirect_uri"), "http://localhost:3000/dashboard/whatsapp");
+  assert.equal(url.searchParams.get("redirect_uri"), "https://www.facebook.com/connect/login_success.html");
   assert.equal(url.searchParams.get("code"), "short-lived-code");
+});
+
+test("classifies Meta redirect URI mismatch as an authentication failure", async () => {
+  const client = new HttpMetaWhatsAppClient(config, credentials, async () =>
+    new Response(JSON.stringify({ error: { code: 100, error_subcode: 36008 } }), { status: 400 })
+  );
+  await assert.rejects(
+    client.exchangeEmbeddedSignupCode({ code: "short-lived-code" }),
+    (error: unknown) =>
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "META_AUTH_FAILED"
+  );
+});
+
+test("sanitizes provider authentication diagnostics", async () => {
+  const client = new HttpMetaWhatsAppClient(config, credentials, async () =>
+    new Response(JSON.stringify({
+      error: {
+        message: "Invalid code=secret-code&access_token=EAAsecretvalue",
+        code: 100,
+        error_subcode: 36008,
+        type: "OAuthException",
+        fbtrace_id: "trace-id",
+      },
+    }), { status: 400 })
+  );
+  await assert.rejects(
+    client.exchangeEmbeddedSignupCode({ code: "short-lived-code" }),
+    (error: unknown) => {
+      if (typeof error !== "object" || error === null || !("details" in error)) return false;
+      const details = error.details as Record<string, unknown>;
+      return details.providerType === "OAuthException" &&
+        details.providerMessage === "Invalid code=[REDACTED]&access_token=[REDACTED]" &&
+        details.traceId === "trace-id";
+    }
+  );
 });
 
 test("lists and creates WABA-scoped templates with verified field names", async () => {
