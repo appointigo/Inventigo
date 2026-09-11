@@ -138,10 +138,10 @@ configuration.
 
 ### Platform configuration
 
-WhatsApp setup uses server runtime configuration only. It does not infer trusted
-origins from `NODE_ENV`, `VERCEL_ENV`, `RAILWAY_ENVIRONMENT`, or provider domain
-suffixes; the request's public origin must exactly match the configured allowlist.
-No WhatsApp setting should use a `NEXT_PUBLIC_` prefix.
+WhatsApp setup uses server runtime configuration only. Staging and production do
+not infer trusted origins from `VERCEL_ENV`, `RAILWAY_ENVIRONMENT`, or provider
+domain suffixes; the request's public origin must exactly match the configured
+allowlist. No WhatsApp setting should use a `NEXT_PUBLIC_` prefix.
 
 | Setting | Classification | Notes |
 | --- | --- | --- |
@@ -155,13 +155,20 @@ No WhatsApp setting should use a `NEXT_PUBLIC_` prefix.
 | `META_GRAPH_API_VERSION` | `OPTIONAL` | Defaults to the repository's verified Graph API version. |
 | `META_GRAPH_TIMEOUT_MS` | `OPTIONAL` | Defaults to 10000; accepted range is 1000–60000. |
 
-For Railway staging, production, and development tunnels, configure every
-permitted public origin in `WHATSAPP_ALLOWED_ORIGINS`, for example
-`https://stockiva-staging.up.railway.app,https://temporary.trycloudflare.com`.
-Change the configured origin when a temporary tunnel URL rotates; do not add a
-provider-domain wildcard. Variables in a developer's ignored `.env` file are not
-deployed by Git. Restart or redeploy after changing variables so all running
-application instances receive the new runtime values.
+In development only, valid HTTPS origins at `trycloudflare.com` or one of its
+subdomains are also accepted for rotating Cloudflare Quick Tunnels. This does
+not apply in staging or production, where every origin must remain explicitly
+listed in `WHATSAPP_ALLOWED_ORIGINS`.
+
+For Railway staging and production, configure every permitted public origin in
+`WHATSAPP_ALLOWED_ORIGINS`, for example
+`https://stockiva-staging.up.railway.app,https://stockiva.example.com`.
+Development origins may also be listed explicitly, but rotating Quick Tunnel
+subdomains do not require an environment update while `NODE_ENV=development`.
+Do not add a provider-domain wildcard to `WHATSAPP_ALLOWED_ORIGINS`. Variables in
+a developer's ignored `.env` file are not deployed by Git. Restart or redeploy
+after changing variables so all running application instances receive the new
+runtime values.
 
 The setup session returns `WHATSAPP_SETUP_DISABLED` only when the feature flag
 is absent or false, `WHATSAPP_CONFIGURATION_MISSING` when an enabled deployment

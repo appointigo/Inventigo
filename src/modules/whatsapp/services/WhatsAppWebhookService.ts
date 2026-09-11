@@ -115,6 +115,12 @@ export class WhatsAppWebhookService {
         deliveredAt: true,
         readAt: true,
         failedAt: true,
+        phoneNumber: {
+          select: {
+            metaPhoneNumberId: true,
+            waba: { select: { metaWabaId: true } },
+          },
+        },
       },
     });
     if (!message) {
@@ -124,6 +130,19 @@ export class WhatsAppWebhookService {
           processingStatus: "PROCESSED",
           processedAt: new Date(),
           lastError: "Unknown Meta message id",
+        },
+      });
+      return;
+    }
+    const assetMatches = message.phoneNumber.waba.metaWabaId === item.wabaId &&
+      (!item.phoneNumberId || message.phoneNumber.metaPhoneNumberId === item.phoneNumberId);
+    if (!assetMatches) {
+      await this.prisma.whatsAppWebhookEvent.update({
+        where: { id: webhookEventId },
+        data: {
+          processingStatus: "PROCESSED",
+          processedAt: new Date(),
+          lastError: "Meta message asset mismatch",
         },
       });
       return;

@@ -12,5 +12,19 @@ export async function POST(request:Request){
   const user=await requireOrgAuth().catch(()=>null); if(!user)return NextResponse.json({error:"Unauthorized"},{status:401});
   if(!(["OWNER","ADMIN"] as string[]).includes(user.role))return NextResponse.json({error:"Forbidden"},{status:403});
   const parsed=testMessageSchema.safeParse(await request.json().catch(()=>null)); if(!parsed.success)return NextResponse.json({error:parsed.error.issues[0]?.message??"Invalid request"},{status:400});
-  try{const response=await createMetaBackend().testMessages.send(user.orgId,parsed.data);return response.sent?NextResponse.json(response,{status:202}):NextResponse.json(response,{status:409});}catch(error){return NextResponse.json({error:isWhatsAppError(error)?error.message:"Unable to send test message"},{status:502});}
+  try{const response=await createMetaBackend().testMessages.send(user.orgId,parsed.data);return response.sent?NextResponse.json(response,{status:202}):NextResponse.json(response,{status:409});}catch(error){
+    if(!isWhatsAppError(error))return NextResponse.json({error:"Unable to send test message"},{status:502});
+    return NextResponse.json({
+      error:error.message,
+      code:error.code,
+      retryable:error.retryable,
+      provider:{
+        httpStatus:error.details?.httpStatus,
+        code:error.details?.providerCode,
+        subcode:error.details?.providerSubcode,
+        type:error.details?.providerType,
+        traceId:error.details?.traceId,
+      },
+    },{status:502});
+  }
 }

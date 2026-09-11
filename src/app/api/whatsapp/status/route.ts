@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireOrgAuth } from "@/lib/auth.middleware";
 import { prisma } from "@/lib/db";
+import { buildWhatsAppConnectionStatus } from "@/modules/whatsapp/connectionStatus";
 
 export async function GET() {
   let user;
@@ -17,6 +18,7 @@ export async function GET() {
       select: {
         id: true,
         status: true,
+        credentialRef: true,
         connectedAt: true,
         lastSyncedAt: true,
         businessAccounts: {
@@ -33,23 +35,7 @@ export async function GET() {
       },
     });
 
-    return NextResponse.json(integration
-      ? {
-          state: integration.status,
-          connectedAt: integration.connectedAt?.toISOString() ?? null,
-          lastSyncedAt: integration.lastSyncedAt?.toISOString() ?? null,
-          businessAccountCount: integration.businessAccounts.length,
-          phoneNumberCount: integration.businessAccounts.reduce((count, account) => count + account.phoneNumbers.length, 0),
-          businessAccounts: integration.businessAccounts,
-        }
-      : {
-          state: "NOT_CONNECTED",
-          connectedAt: null,
-          businessAccountCount: 0,
-          phoneNumberCount: 0,
-          lastSyncedAt: null,
-          businessAccounts: [],
-        });
+    return NextResponse.json(buildWhatsAppConnectionStatus(integration));
   } catch {
     return NextResponse.json({ error: "Unable to load WhatsApp status" }, { status: 500 });
   }

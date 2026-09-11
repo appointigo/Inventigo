@@ -32,6 +32,7 @@ export class MockMetaWhatsAppClient implements MetaWhatsAppClient {
   async listPhoneNumbers(): Promise<MetaPhoneNumber[]> { return []; }
   async registerPhoneNumber(): Promise<void> {}
   async subscribeApp(): Promise<void> {}
+  async isAppSubscribed(): Promise<boolean> { return true; }
   async listMessageTemplates(): Promise<MetaMessageTemplate[]> { return this.templates; }
   async createMessageTemplate(input: MetaCreateTemplateRequest): Promise<MetaMessageTemplate> {
     this.templateCreateRequests.push(input);

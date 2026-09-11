@@ -5,6 +5,7 @@ import { createMetaBackend } from "@/modules/whatsapp/server";
 import { WhatsAppPlatformConfigurationError } from "@/modules/whatsapp/config";
 import { createEmbeddedSignupState, createEmbeddedSignupStateCookie, EMBEDDED_SIGNUP_STATE_COOKIE } from "@/modules/whatsapp/security/embeddedSignupState";
 import { resolveWhatsAppPublicOrigin } from "@/modules/whatsapp/security/origin";
+import { getMetaEmbeddedSignupRedirectUri } from "@/modules/whatsapp/embeddedSignupRedirect";
 
 export const runtime = "nodejs";
 export async function POST(request: Request) {
@@ -27,8 +28,12 @@ export async function POST(request: Request) {
         { status: 403 }
       );
     }
-    const redirectUri = new URL("/dashboard/whatsapp", publicOrigin).toString();
+    const redirectUri = getMetaEmbeddedSignupRedirectUri() ??
+      new URL("/dashboard/whatsapp", publicOrigin).toString();
     console.info("[WhatsApp Signup] signup_started", { requestId, organizationId: user.orgId, userId: user.id });
+    if (process.env.NODE_ENV === "development") {
+      console.info(`[WhatsApp Signup] redirect_uri_check ${JSON.stringify({ requestId, redirectUri })}`);
+    }
     const response = NextResponse.json({ state, requestId, appId: config.appId, configId: config.embeddedSignupConfigId, redirectUri, graphApiVersion: config.graphApiVersion });
     response.cookies.set(EMBEDDED_SIGNUP_STATE_COOKIE, createEmbeddedSignupStateCookie(state, user.id, user.orgId), { httpOnly: true, sameSite: "lax", secure: true, path: "/api/whatsapp/embedded-signup", maxAge: 600 });
     return response;

@@ -39,10 +39,16 @@ export function parseWhatsAppAllowedOrigins(value: string): string[] {
 
 export function isWhatsAppOriginAllowed(
   origin: string,
-  allowedOrigins: readonly string[]
+  allowedOrigins: readonly string[],
+  nodeEnv: string | undefined = process.env.NODE_ENV
 ) {
   const normalized = normalizeWhatsAppOrigin(origin);
-  return normalized !== null && allowedOrigins.includes(normalized);
+  if (normalized === null) return false;
+  if (allowedOrigins.includes(normalized)) return true;
+  if (nodeEnv !== "development") return false;
+
+  const hostname = new URL(normalized).hostname;
+  return hostname === "trycloudflare.com" || hostname.endsWith(".trycloudflare.com");
 }
 
 /**
@@ -52,11 +58,12 @@ export function isWhatsAppOriginAllowed(
  */
 export function resolveWhatsAppPublicOrigin(
   request: Request,
-  allowedOrigins: readonly string[]
+  allowedOrigins: readonly string[],
+  nodeEnv: string | undefined = process.env.NODE_ENV
 ): string | null {
   const requestOrigin = request.headers.get("origin");
   if (requestOrigin !== null)
-    return isWhatsAppOriginAllowed(requestOrigin, allowedOrigins)
+    return isWhatsAppOriginAllowed(requestOrigin, allowedOrigins, nodeEnv)
       ? normalizeWhatsAppOrigin(requestOrigin)
       : null;
 
@@ -67,7 +74,7 @@ export function resolveWhatsAppPublicOrigin(
   const protocol = forwardedProto ? `${forwardedProto.replace(/:$/, "")}:` : requestUrl.protocol;
   const proxyOrigin = host ? `${protocol}//${host}` : requestUrl.origin;
 
-  return isWhatsAppOriginAllowed(proxyOrigin, allowedOrigins)
+  return isWhatsAppOriginAllowed(proxyOrigin, allowedOrigins, nodeEnv)
     ? normalizeWhatsAppOrigin(proxyOrigin)
     : null;
 }

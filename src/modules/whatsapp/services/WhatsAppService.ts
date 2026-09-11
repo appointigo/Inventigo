@@ -91,6 +91,7 @@ export class WhatsAppService {
     return {
       messageId: message.id,
       providerMessageId: result.providerMessageId,
+      ...(result.httpStatus ? { providerHttpStatus: result.httpStatus } : {}),
       status: "SUBMITTED",
     };
   }

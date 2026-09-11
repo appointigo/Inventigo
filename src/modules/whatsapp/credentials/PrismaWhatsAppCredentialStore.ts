@@ -34,4 +34,10 @@ export class PrismaWhatsAppCredentialStore implements WhatsAppCredentialStore {
       throw new WhatsAppError("META_AUTH_FAILED", "WhatsApp credential could not be decrypted", { cause });
     }
   }
+  async remove(credentialRef: string, organizationId: string) {
+    if (!credentialRef.startsWith(PREFIX)) throw new WhatsAppError("META_AUTH_FAILED", "Unsupported credential reference");
+    await this.prisma.whatsAppCredential.deleteMany({ where: {
+      id: credentialRef.slice(PREFIX.length), organizationId, provider: "META",
+    } });
+  }
 }

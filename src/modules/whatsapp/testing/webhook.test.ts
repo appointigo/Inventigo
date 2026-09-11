@@ -104,7 +104,7 @@ test("parses inbound messages with receiving number, contact profile, and reply 
 function lifecycleFixture(initialStatus = "SUBMITTED") {
   const webhooks = new Map<
     string,
-    { id: string; dedupeKey: string; processingStatus: string; processingAttempts: number }
+    { id: string; dedupeKey: string; processingStatus: string; processingAttempts: number; lastError?: string | null }
   >();
   const history: Array<{ eventType: string; occurredAt: Date }> = [];
   const updates: Array<Record<string, unknown>> = [];
@@ -157,6 +157,10 @@ function lifecycleFixture(initialStatus = "SUBMITTED") {
               deliveredAt: initialStatus === "READ" ? new Date(1700000100000) : null,
               readAt: initialStatus === "READ" ? new Date(1700000200000) : null,
               failedAt: null,
+              phoneNumber: {
+                metaPhoneNumberId: "phone-meta-1",
+                waba: { metaWabaId: "waba-1" },
+              },
             },
       update: async ({ data }: { data: Record<string, unknown> }) => {
         updates.push(data);
@@ -208,4 +212,14 @@ test("records unknown wamids as processed without creating message history", asy
   await fixture.service.receive(envelope("sent", "1700000000", "unknown") as never);
   assert.equal(fixture.history.length, 0);
   assert.equal([...fixture.webhooks.values()][0]?.processingStatus, "PROCESSED");
+});
+
+test("does not route a status event across tenant WABA assets", async () => {
+  const fixture = lifecycleFixture();
+  const payload = envelope("delivered");
+  payload.entry[0]!.id = "waba-b";
+  await fixture.service.receive(payload as never);
+  assert.equal(fixture.history.length, 0);
+  assert.equal(fixture.updates.length, 0);
+  assert.equal([...fixture.webhooks.values()][0]?.lastError, "Meta message asset mismatch");
 });

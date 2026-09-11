@@ -43,6 +43,12 @@ export const proxy = (request: NextRequest) => {
     request.cookies.get("authjs.session-token");
 
   if (!token) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json(
+        { error: "Unauthorized", code: "UNAUTHORIZED" },
+        { status: 401 }
+      );
+    }
     const loginUrl = new URL("/login", request.url);
     return NextResponse.redirect(loginUrl);
   }

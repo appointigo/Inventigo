@@ -1,9 +1,16 @@
 import type { PrismaClient, WhatsAppTemplateStatus } from "@prisma/client";
-import { WhatsAppError } from "../errors.ts";
+import { isWhatsAppError, WhatsAppError } from "../errors.ts";
 import type { MetaMessageTemplate, MetaWhatsAppClient } from "../clients/MetaWhatsAppClient.ts";
 import { invoiceV1Definition, toMetaTemplateRequest } from "../templates/invoiceV1.ts";
 
 type Db = Pick<PrismaClient, "whatsAppTemplateDefinition" | "whatsAppBusinessAccount" | "whatsAppTemplateInstance" | "$transaction">;
+type TemplateComparison = "EXISTS" | "MISSING" | "PENDING" | "APPROVED" | "REJECTED";
+
+function compareTemplate(remote?: MetaMessageTemplate): TemplateComparison {
+  if (!remote) return "MISSING";
+  if (remote.status === "PENDING" || remote.status === "APPROVED" || remote.status === "REJECTED") return remote.status;
+  return "EXISTS";
+}
 
 export class WhatsAppTemplateReconciliationService {
   constructor(private readonly db: Db, private readonly meta: MetaWhatsAppClient) {}
@@ -17,11 +24,31 @@ export class WhatsAppTemplateReconciliationService {
   }
 
   async reconcileInvoiceV1(input: { organizationId: string; wabaIds?: string[] }) {
+    try {
+      return await this.reconcileInvoiceV1Unchecked(input);
+    } catch (error) {
+      if (isWhatsAppError(error) && (error.code === "WHATSAPP_NOT_CONNECTED" || error.code === "TEMPLATE_SYNC_FAILED")) throw error;
+      throw new WhatsAppError("TEMPLATE_SYNC_FAILED", "WhatsApp templates could not be synchronized", {
+        retryable: isWhatsAppError(error) ? error.retryable : false,
+        details: isWhatsAppError(error) ? {
+          httpStatus: error.details?.httpStatus,
+          providerCode: error.details?.providerCode,
+          providerSubcode: error.details?.providerSubcode,
+          providerType: error.details?.providerType,
+          traceId: error.details?.traceId,
+        } : undefined,
+        cause: error,
+      });
+    }
+  }
+
+  private async reconcileInvoiceV1Unchecked(input: { organizationId: string; wabaIds?: string[] }) {
     const definition = await this.seedInvoiceV1();
     const wabas = await this.db.whatsAppBusinessAccount.findMany({
       where: {
         ...(input.wabaIds?.length ? { id: { in: input.wabaIds } } : {}),
-        integration: { organizationId: input.organizationId, credentialRef: { not: null } },
+        status: "ACTIVE",
+        integration: { organizationId: input.organizationId, status: "CONNECTED", credentialRef: { not: null } },
       },
       select: { id: true, metaWabaId: true, integration: { select: { credentialRef: true } } },
     });
@@ -34,10 +61,11 @@ export class WhatsAppTemplateReconciliationService {
       const context = { organizationId: input.organizationId, credentialRef, metaWabaId: waba.metaWabaId };
       const templates = await this.meta.listMessageTemplates(context);
       let remote = templates.find(template => template.name === definition.name && template.language === definition.language);
+      const comparison = compareTemplate(remote);
       const created = !remote;
       if (!remote) remote = await this.meta.createMessageTemplate(toMetaTemplateRequest(context, invoiceV1Definition));
       await this.persistInstance(waba.id, definition.id, remote);
-      results.push({ wabaId: waba.id, metaWabaId: waba.metaWabaId, created, status: remote.status });
+      results.push({ wabaId: waba.id, metaWabaId: waba.metaWabaId, comparison, created, status: remote.status });
     }
     return results;
   }

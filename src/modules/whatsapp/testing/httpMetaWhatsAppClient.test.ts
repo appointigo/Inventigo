@@ -2,16 +2,22 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { HttpMetaWhatsAppClient } from "../clients/HttpMetaWhatsAppClient.ts";
 
-const credentials = { save: async () => "ref", resolve: async () => "secret-token" };
+const credentials = { save: async () => "ref", resolve: async () => "secret-token", remove: async () => undefined };
 const config = { appId: "app", appSecret: "secret", graphApiVersion: "v26.0", timeoutMs: 50 };
 const request = { organizationId: "org", credentialRef: "ref", metaPhoneNumberId: "123", recipient: "919999999999", content: { type: "TEXT" as const, text: "Hello" } };
+const jsonResponse = (body: unknown, init: ResponseInit = {}) => new Response(
+  JSON.stringify(body),
+  { ...init, headers: { "Content-Type": "application/json", ...init.headers } }
+);
 
 test("sends the verified Cloud API message shape without putting tokens in the URL", async () => {
   let seen: { url?: string; init?: RequestInit } = {};
   const client = new HttpMetaWhatsAppClient(config, credentials, async (url, init) => {
-    seen = { url: String(url), init }; return new Response(JSON.stringify({ messages: [{ id: "wamid.1" }] }), { status: 200 });
+    seen = { url: String(url), init }; return jsonResponse({ messages: [{ id: "wamid.1" }] }, { status: 200 });
   });
-  assert.equal((await client.sendMessage(request)).providerMessageId, "wamid.1");
+  const result = await client.sendMessage(request);
+  assert.equal(result.providerMessageId, "wamid.1");
+  assert.equal(result.httpStatus, 200);
   assert.equal(seen.url, "https://graph.facebook.com/v26.0/123/messages");
   assert.equal((JSON.parse(String(seen.init?.body)) as { messaging_product: string }).messaging_product, "whatsapp");
   assert.ok(!seen.url.includes("secret-token"));
@@ -19,7 +25,7 @@ test("sends the verified Cloud API message shape without putting tokens in the U
 
 for (const [name, status, code, expected] of [["auth", 401, 190, "META_AUTH_FAILED"], ["rate limit", 429, 4, "META_RATE_LIMITED"], ["provider", 500, 2, "META_PROVIDER_FAILED"]] as const) {
   test(`normalizes ${name} errors`, async () => {
-    const client = new HttpMetaWhatsAppClient(config, credentials, async () => new Response(JSON.stringify({ error: { message: "sensitive provider text", code } }), { status }));
+    const client = new HttpMetaWhatsAppClient(config, credentials, async () => jsonResponse({ error: { message: "sensitive provider text", code } }, { status }));
     await assert.rejects(client.sendMessage(request), (error: unknown) => typeof error === "object" && error !== null && "code" in error && error.code === expected);
   });
 }
@@ -29,21 +35,183 @@ test("normalizes timeouts", async () => {
   await assert.rejects(client.sendMessage(request), (error: unknown) => typeof error === "object" && error !== null && "code" in error && error.code === "META_TIMEOUT");
 });
 
-test("exchanges an Embedded Signup code with the Facebook JavaScript SDK redirect URI", async () => {
+test("exchanges a manual Embedded Signup code with the canonical redirect URI", async () => {
   let seenUrl = "";
   const client = new HttpMetaWhatsAppClient(config, credentials, async url => {
     seenUrl = String(url);
-    return new Response(JSON.stringify({ access_token: "meta-token" }), { status: 200 });
+    return jsonResponse({ access_token: "meta-token" }, { status: 200 });
   });
   await client.exchangeEmbeddedSignupCode({ code: "short-lived-code" });
   const url = new URL(seenUrl);
-  assert.equal(url.searchParams.get("redirect_uri"), "https://www.facebook.com/connect/login_success.html");
+  assert.equal(url.searchParams.get("redirect_uri"), "https://seniors-xml-carmen-spot.trycloudflare.com/dashboard/whatsapp");
   assert.equal(url.searchParams.get("code"), "short-lived-code");
+});
+
+test("captures safe debug-token metadata", async () => {
+  const client = new HttpMetaWhatsAppClient(config, credentials, async () => jsonResponse({ data: {
+    app_id: "app",
+    is_valid: true,
+    type: "USER",
+    expires_at: 1_800_000_000,
+    data_access_expires_at: 1_900_000_000,
+    scopes: ["whatsapp_business_messaging"],
+    granular_scopes: [{ scope: "whatsapp_business_management", target_ids: ["123"] }],
+  } }, { status: 200 }));
+  const inspection = await client.inspectToken("oauth-token");
+  assert.equal(inspection.appId, "app");
+  assert.equal(inspection.isValid, true);
+  assert.equal(inspection.type, "USER");
+  assert.equal(inspection.expiresAt?.toISOString(), "2027-01-15T08:00:00.000Z");
+  assert.equal(inspection.dataAccessExpiresAt?.toISOString(), "2030-03-17T17:46:40.000Z");
+  assert.deepEqual(inspection.scopes, ["whatsapp_business_messaging"]);
+  assert.deepEqual(inspection.granularScopes, [{ scope: "whatsapp_business_management", targetIds: ["123"] }]);
+});
+
+test("accepts metadata only for the requested authorized WABA", async () => {
+  const client = new HttpMetaWhatsAppClient(config, credentials, async url => {
+    assert.equal(String(url), "https://graph.facebook.com/v26.0/123?fields=id,name,currency,timezone_id");
+    return jsonResponse({ id: "123", name: "Merchant WABA", currency: "INR", timezone_id: "Asia/Kolkata" });
+  });
+  assert.deepEqual(await client.getWaba("123", "oauth-token"), {
+    id: "123",
+    name: "Merchant WABA",
+    currency: "INR",
+    timezoneId: "Asia/Kolkata",
+  });
+});
+
+test("rejects mismatched WABA metadata", async () => {
+  const client = new HttpMetaWhatsAppClient(config, credentials, async () => jsonResponse({ id: "456" }));
+  await assert.rejects(client.getWaba("123", "oauth-token"), (error: unknown) =>
+    typeof error === "object" && error !== null && "code" in error && error.code === "META_INVALID_RESPONSE"
+  );
+});
+
+test("fetches safe WhatsApp phone-number metadata", async () => {
+  const client = new HttpMetaWhatsAppClient(config, credentials, async url => {
+    assert.equal(String(url), "https://graph.facebook.com/v26.0/123/phone_numbers?fields=id,display_phone_number,verified_name,quality_rating,name_status,code_verification_status,platform_type,status,is_pin_enabled");
+    return jsonResponse({ data: [{
+      id: "phone-1",
+      display_phone_number: "+91 90000 00001",
+      verified_name: "Merchant",
+      quality_rating: "GREEN",
+      name_status: "APPROVED",
+      code_verification_status: "VERIFIED",
+      platform_type: "CLOUD_API",
+      status: "CONNECTED",
+      is_pin_enabled: true,
+    }] });
+  });
+  assert.deepEqual(await client.listPhoneNumbers("123", "oauth-token"), [{
+    id: "phone-1",
+    displayPhoneNumber: "+91 90000 00001",
+    verifiedName: "Merchant",
+    qualityRating: "GREEN",
+    nameStatus: "APPROVED",
+    codeVerificationStatus: "VERIFIED",
+    platformType: "CLOUD_API",
+    status: "CONNECTED",
+    isPinEnabled: true,
+  }]);
+});
+
+test("requires and safely repeats confirmed WABA webhook subscription", async () => {
+  let calls = 0;
+  const client = new HttpMetaWhatsAppClient(config, credentials, async url => {
+    calls += 1;
+    assert.equal(String(url), "https://graph.facebook.com/v26.0/123/subscribed_apps");
+    return jsonResponse({ success: true });
+  });
+  await client.subscribeApp("123", "oauth-token");
+  await client.subscribeApp("123", "oauth-token");
+  assert.equal(calls, 2);
+});
+
+test("rejects an unconfirmed WABA webhook subscription", async () => {
+  const client = new HttpMetaWhatsAppClient(config, credentials, async () => jsonResponse({ success: false }));
+  await assert.rejects(client.subscribeApp("123", "oauth-token"), (error: unknown) =>
+    typeof error === "object" && error !== null && "code" in error && error.code === "WEBHOOK_SUBSCRIPTION_FAILED"
+  );
+});
+
+test("requires Meta to confirm phone registration", async () => {
+  const client = new HttpMetaWhatsAppClient(config, credentials, async (url, init) => {
+    assert.equal(String(url), "https://graph.facebook.com/v26.0/phone-1/register");
+    assert.deepEqual(JSON.parse(String(init?.body)), { messaging_product: "whatsapp", pin: "123456" });
+    return jsonResponse({ success: true });
+  });
+  await client.registerPhoneNumber("phone-1", "123456", "oauth-token");
+});
+
+test("normalizes phone registration rejection without exposing its PIN", async () => {
+  const client = new HttpMetaWhatsAppClient(config, credentials, async () => jsonResponse({
+    error: { message: "Invalid registration PIN", code: 100, type: "OAuthException", fbtrace_id: "trace-1" },
+  }, { status: 400 }));
+  await assert.rejects(client.registerPhoneNumber("phone-1", "123456", "oauth-token"), (error: unknown) =>
+    typeof error === "object" && error !== null && "code" in error && error.code === "PHONE_REGISTRATION_FAILED" &&
+      "message" in error && !String(error.message).includes("123456")
+  );
+});
+
+test("verifies that the configured Meta app is subscribed to the WABA", async () => {
+  const client = new HttpMetaWhatsAppClient(config, credentials, async (url, init) => {
+    assert.equal(String(url), "https://graph.facebook.com/v26.0/123/subscribed_apps");
+    assert.equal(init?.method, undefined);
+    return jsonResponse({ data: [
+      { whatsapp_business_api_data: { id: "another-app" } },
+      { whatsapp_business_api_data: { id: "app" } },
+    ] });
+  });
+  assert.equal(await client.isAppSubscribed("123", "app", "oauth-token"), true);
+  assert.equal(await client.isAppSubscribed("123", "missing-app", "oauth-token"), false);
+});
+
+test("rejects incomplete WABA subscription metadata", async () => {
+  const client = new HttpMetaWhatsAppClient(config, credentials, async () => jsonResponse({ success: true }));
+  await assert.rejects(client.isAppSubscribed("123", "app", "oauth-token"), (error: unknown) =>
+    typeof error === "object" && error !== null && "code" in error && error.code === "META_INVALID_RESPONSE"
+  );
+});
+
+test("classifies Meta app-domain redirect errors as authentication failures", async () => {
+  const client = new HttpMetaWhatsAppClient(config, credentials, async () =>
+    new Response(JSON.stringify({ error: { code: 191, type: "OAuthException" } }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    })
+  );
+  await assert.rejects(
+    client.exchangeEmbeddedSignupCode({ code: "short-lived-code" }),
+    (error: unknown) =>
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "META_AUTH_FAILED"
+  );
+});
+
+test("rejects a successful non-JSON Meta response without exposing its body", async () => {
+  const client = new HttpMetaWhatsAppClient(config, credentials, async () =>
+    new Response("<!DOCTYPE html><title>Proxy error</title>", {
+      status: 200,
+      headers: { "Content-Type": "text/html; charset=UTF-8" },
+    })
+  );
+  await assert.rejects(
+    client.exchangeEmbeddedSignupCode({ code: "short-lived-code" }),
+    (error: unknown) =>
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "META_INVALID_RESPONSE" &&
+      "message" in error &&
+      !String(error.message).includes("Proxy error")
+  );
 });
 
 test("classifies Meta redirect URI mismatch as an authentication failure", async () => {
   const client = new HttpMetaWhatsAppClient(config, credentials, async () =>
-    new Response(JSON.stringify({ error: { code: 100, error_subcode: 36008 } }), { status: 400 })
+    jsonResponse({ error: { code: 100, error_subcode: 36008 } }, { status: 400 })
   );
   await assert.rejects(
     client.exchangeEmbeddedSignupCode({ code: "short-lived-code" }),
@@ -57,7 +225,7 @@ test("classifies Meta redirect URI mismatch as an authentication failure", async
 
 test("sanitizes provider authentication diagnostics", async () => {
   const client = new HttpMetaWhatsAppClient(config, credentials, async () =>
-    new Response(JSON.stringify({
+    jsonResponse({
       error: {
         message: "Invalid code=secret-code&access_token=EAAsecretvalue",
         code: 100,
@@ -65,7 +233,7 @@ test("sanitizes provider authentication diagnostics", async () => {
         type: "OAuthException",
         fbtrace_id: "trace-id",
       },
-    }), { status: 400 })
+    }, { status: 400 })
   );
   await assert.rejects(
     client.exchangeEmbeddedSignupCode({ code: "short-lived-code" }),
@@ -83,8 +251,8 @@ test("lists and creates WABA-scoped templates with verified field names", async 
   const seen: Array<{ url: string; body?: unknown }> = [];
   const client = new HttpMetaWhatsAppClient(config, credentials, async (url, init) => {
     seen.push({ url: String(url), body: init?.body ? JSON.parse(String(init.body)) : undefined });
-    if (init?.method === "POST") return new Response(JSON.stringify({ id: "template-created", status: "PENDING" }), { status: 200 });
-    return new Response(JSON.stringify({ data: [{ id: "template-1", name: "stockiva_invoice_v1_en_us", language: "en_US", category: "UTILITY", status: "REJECTED", rejected_reason: "Incorrect category" }] }), { status: 200 });
+    if (init?.method === "POST") return jsonResponse({ id: "template-created", status: "PENDING" }, { status: 200 });
+    return jsonResponse({ data: [{ id: "template-1", name: "stockiva_invoice_v1_en_us", language: "en_US", category: "UTILITY", status: "REJECTED", rejected_reason: "Incorrect category" }] }, { status: 200 });
   });
   const context = { organizationId: "org", credentialRef: "ref", metaWabaId: "waba-1" };
   const listed = await client.listMessageTemplates(context);

@@ -21,13 +21,22 @@ export type MetaSendMessageRequest = {
 export type MetaSendMessageResult = {
   providerMessageId: string;
   acceptedAt: Date;
+  httpStatus?: number;
 };
 
 export type MetaCodeExchangeResult = { accessToken: string; expiresAt?: Date };
 export type MetaCodeExchangeRequest = { code: string };
-export type MetaTokenInspection = { appId: string; isValid: boolean; expiresAt?: Date; scopes: string[]; granularScopes: Array<{ scope: string; targetIds: string[] }> };
+export type MetaTokenInspection = {
+  appId: string;
+  isValid: boolean;
+  type?: string;
+  expiresAt?: Date;
+  dataAccessExpiresAt?: Date;
+  scopes: string[];
+  granularScopes: Array<{ scope: string; targetIds: string[] }>;
+};
 export type MetaWaba = { id: string; name?: string; currency?: string; timezoneId?: string };
-export type MetaPhoneNumber = { id: string; displayPhoneNumber: string; verifiedName?: string; qualityRating?: string; codeVerificationStatus?: string; platformType?: string };
+export type MetaPhoneNumber = { id: string; displayPhoneNumber: string; verifiedName?: string; qualityRating?: string; nameStatus?: string; codeVerificationStatus?: string; platformType?: string; status?: string; isPinEnabled?: boolean };
 export type MetaTemplateStatus = "APPROVED" | "PENDING" | "REJECTED" | "PAUSED" | "DISABLED";
 export type MetaMessageTemplate = { id: string; name: string; language: string; category: string; status: MetaTemplateStatus; rejectionReason?: string };
 export type MetaTemplateComponent =
@@ -44,6 +53,7 @@ export interface MetaWhatsAppClient {
   listPhoneNumbers(wabaId: string, accessToken: string): Promise<MetaPhoneNumber[]>;
   registerPhoneNumber(phoneNumberId: string, pin: string, accessToken: string): Promise<void>;
   subscribeApp(wabaId: string, accessToken: string): Promise<void>;
+  isAppSubscribed(wabaId: string, appId: string, accessToken: string): Promise<boolean>;
   listMessageTemplates(input: MetaTemplateContext): Promise<MetaMessageTemplate[]>;
   createMessageTemplate(input: MetaCreateTemplateRequest): Promise<MetaMessageTemplate>;
 }

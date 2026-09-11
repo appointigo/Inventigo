@@ -81,8 +81,11 @@ export default function WhatsAppBusinessAccountsPage() {
         { method: kind === "sync" ? "POST" : "DELETE" }
       );
       if (!res.ok) throw new Error();
+      const result = await res.json() as { disconnectMode?: string; localCredentialRemoved?: boolean };
       message.success(
-        kind === "sync" ? "Business account synced" : "Business account disconnected"
+        kind === "sync" ? "Business account synced" : result.localCredentialRemoved
+          ? "Disconnected locally and removed Stockiva credentials"
+          : "Business account disconnected locally"
       );
       setSelected(undefined);
       await load();
@@ -131,8 +134,8 @@ export default function WhatsAppBusinessAccountsPage() {
             onClick={() => void action(r.id, "sync")}
           />
           <Popconfirm
-            title="Disconnect from Stockiva?"
-            description="Meta assets stay intact; Store sender mappings are disabled."
+            title="Disconnect locally from Stockiva?"
+            description="Stockiva mappings and, for the last connected account, its local credential will be removed. Meta assets, webhook subscription, and Meta permissions stay unchanged."
             onConfirm={() => void action(r.id, "disconnect")}
           >
             <Button danger aria-label="Disconnect" icon={<DisconnectOutlined />} />

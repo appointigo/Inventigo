@@ -85,7 +85,7 @@ export function createMetaBackend() {
     signup,
     communication,
     testMessages: new WhatsAppTestMessageService(prisma, readiness, communication),
-    assets: new WhatsAppAssetService(prisma, signup),
+    assets: new WhatsAppAssetService(prisma, signup, credentials),
     templates: new WhatsAppTemplateReconciliationService(prisma, client),
   };
 }

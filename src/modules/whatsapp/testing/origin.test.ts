@@ -27,9 +27,19 @@ test("rejects insecure, wildcard, and path-based allowlist entries", () => {
 });
 
 test("allows only exact configured origins", () => {
-  assert.equal(isWhatsAppOriginAllowed(cloudflareOrigin, allowedOrigins), true);
-  assert.equal(isWhatsAppOriginAllowed("https://other.trycloudflare.com", allowedOrigins), false);
-  assert.equal(isWhatsAppOriginAllowed("http://localhost:3000", allowedOrigins), false);
+  assert.equal(isWhatsAppOriginAllowed(cloudflareOrigin, allowedOrigins, "production"), true);
+  assert.equal(isWhatsAppOriginAllowed("https://example.com", allowedOrigins, "production"), false);
+  assert.equal(isWhatsAppOriginAllowed("http://localhost:3000", allowedOrigins, "development"), false);
+});
+
+test("allows HTTPS Cloudflare Quick Tunnel origins only in development", () => {
+  const unconfiguredOrigins: string[] = [];
+  assert.equal(isWhatsAppOriginAllowed("https://abc.trycloudflare.com", unconfiguredOrigins, "development"), true);
+  assert.equal(isWhatsAppOriginAllowed("https://abc.trycloudflare.com", unconfiguredOrigins, "production"), false);
+  assert.equal(isWhatsAppOriginAllowed("https://trycloudflare.com", unconfiguredOrigins, "development"), true);
+  assert.equal(isWhatsAppOriginAllowed("https://trycloudflare.com.attacker.com", unconfiguredOrigins, "development"), false);
+  assert.equal(isWhatsAppOriginAllowed("https://eviltrycloudflare.com", unconfiguredOrigins, "development"), false);
+  assert.equal(isWhatsAppOriginAllowed("http://abc.trycloudflare.com", unconfiguredOrigins, "development"), false);
 });
 
 test("uses an allowed browser Origin as the canonical public origin", () => {
@@ -37,7 +47,7 @@ test("uses an allowed browser Origin as the canonical public origin", () => {
     method: "POST",
     headers: { origin: cloudflareOrigin },
   });
-  assert.equal(resolveWhatsAppPublicOrigin(request, allowedOrigins), cloudflareOrigin);
+  assert.equal(resolveWhatsAppPublicOrigin(request, allowedOrigins, "production"), cloudflareOrigin);
 });
 
 test("rejects a disallowed browser Origin instead of trusting proxy fallbacks", () => {
@@ -49,7 +59,7 @@ test("rejects a disallowed browser Origin instead of trusting proxy fallbacks", 
       "x-forwarded-host": "stockiva-staging.up.railway.app",
     },
   });
-  assert.equal(resolveWhatsAppPublicOrigin(request, allowedOrigins), null);
+  assert.equal(resolveWhatsAppPublicOrigin(request, allowedOrigins, "production"), null);
 });
 
 test("supports validated reverse-proxy headers when Origin is absent", () => {
@@ -60,7 +70,7 @@ test("supports validated reverse-proxy headers when Origin is absent", () => {
       "x-forwarded-host": "stockiva-staging.up.railway.app",
     },
   });
-  assert.equal(resolveWhatsAppPublicOrigin(request, allowedOrigins), railwayOrigin);
+  assert.equal(resolveWhatsAppPublicOrigin(request, allowedOrigins, "production"), railwayOrigin);
 });
 
 test("rejects spoofed or insecure proxy origins", () => {
@@ -74,6 +84,21 @@ test("rejects spoofed or insecure proxy origins", () => {
   const insecure = new Request("http://localhost:3000/api/whatsapp/embedded-signup/session", {
     method: "POST",
   });
-  assert.equal(resolveWhatsAppPublicOrigin(spoofed, allowedOrigins), null);
-  assert.equal(resolveWhatsAppPublicOrigin(insecure, allowedOrigins), null);
+  assert.equal(resolveWhatsAppPublicOrigin(spoofed, allowedOrigins, "development"), null);
+  assert.equal(resolveWhatsAppPublicOrigin(insecure, allowedOrigins, "development"), null);
+});
+
+test("resolves a rotated Cloudflare Quick Tunnel through proxy headers only in development", () => {
+  const request = new Request("http://127.0.0.1:3000/api/whatsapp/embedded-signup/session", {
+    method: "POST",
+    headers: {
+      "x-forwarded-proto": "https",
+      "x-forwarded-host": "another-random-name.trycloudflare.com",
+    },
+  });
+  assert.equal(
+    resolveWhatsAppPublicOrigin(request, allowedOrigins, "development"),
+    "https://another-random-name.trycloudflare.com"
+  );
+  assert.equal(resolveWhatsAppPublicOrigin(request, allowedOrigins, "production"), null);
 });

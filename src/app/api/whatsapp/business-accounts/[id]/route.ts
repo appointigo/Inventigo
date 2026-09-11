@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireOrgAuth } from "@/lib/auth.middleware";
 import { isWhatsAppError } from "@/modules/whatsapp/errors";
-import { createWhatsAppAssetReader } from "@/modules/whatsapp/server";
+import { createMetaBackend, createWhatsAppAssetReader } from "@/modules/whatsapp/server";
 
 const notFound = () =>
   NextResponse.json({ error: "WhatsApp Business Account not found" }, { status: 404 });
@@ -31,7 +31,7 @@ export async function DELETE(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   try {
     return NextResponse.json(
-      await createWhatsAppAssetReader().disconnectBusinessAccount(
+      await createMetaBackend().assets.disconnectBusinessAccount(
         user.orgId,
         (await context.params).id
       )

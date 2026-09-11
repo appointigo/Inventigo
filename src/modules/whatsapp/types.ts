@@ -52,6 +52,7 @@ export type SendWhatsAppMessageRequest = {
 export type SendWhatsAppMessageResult = {
   messageId: string;
   providerMessageId?: string;
+  providerHttpStatus?: number;
   status: "SUBMITTED" | "FAILED";
 };
 

@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { WhatsAppError } from "../errors.ts";
 import type { WhatsAppEmbeddedSignupService } from "./WhatsAppEmbeddedSignupService.ts";
+import type { WhatsAppCredentialStore } from "../credentials/WhatsAppCredentialStore.ts";
 
 if (typeof window !== "undefined") throw new Error("WhatsAppAssetService is server-only");
 
@@ -45,7 +46,8 @@ const phoneSelect = {
 export class WhatsAppAssetService {
   constructor(
     private readonly prisma: PrismaClient,
-    private readonly syncService?: WhatsAppEmbeddedSignupService
+    private readonly syncService?: WhatsAppEmbeddedSignupService,
+    private readonly credentials?: WhatsAppCredentialStore
   ) {}
   listBusinessAccounts(organizationId: string) {
     return this.prisma.whatsAppBusinessAccount.findMany({
@@ -102,6 +104,7 @@ export class WhatsAppAssetService {
   }
   async disconnectBusinessAccount(organizationId: string, id: string) {
     const account = await this.getBusinessAccount(organizationId, id);
+    let credentialRefToRemove: string | null = null;
     await this.prisma.$transaction(async (tx) => {
       await tx.storeWhatsAppSender.updateMany({
         where: { phoneNumber: { wabaId: id } },
@@ -126,8 +129,8 @@ export class WhatsAppAssetService {
           status: "ACTIVE",
         },
       });
-      if (!remaining)
-        await tx.whatsAppIntegration.update({
+      if (!remaining) {
+        const integration = await tx.whatsAppIntegration.findUniqueOrThrow({
           where: {
             id: (
               await tx.whatsAppBusinessAccount.findUniqueOrThrow({
@@ -136,9 +139,25 @@ export class WhatsAppAssetService {
               })
             ).integrationId,
           },
-          data: { status: "DISCONNECTED", disconnectedAt: new Date() },
+          select: { id: true, credentialRef: true },
         });
+        credentialRefToRemove = integration.credentialRef;
+        await tx.whatsAppIntegration.update({
+          where: { id: integration.id },
+          data: { status: "DISCONNECTED", credentialRef: null, connectedAt: null, disconnectedAt: new Date() },
+        });
+      }
     });
-    return { id: account.id, status: "DISABLED" as const };
+    if (credentialRefToRemove) {
+      if (!this.credentials) throw new Error("Local WhatsApp credential removal is unavailable");
+      await this.credentials.remove(credentialRefToRemove, organizationId);
+    }
+    return {
+      id: account.id,
+      status: "DISABLED" as const,
+      disconnectMode: "LOCAL_ONLY" as const,
+      localCredentialRemoved: Boolean(credentialRefToRemove),
+      externalMeta: { assetsChanged: false, appSubscriptionChanged: false, permissionsRevoked: false },
+    };
   }
 }
