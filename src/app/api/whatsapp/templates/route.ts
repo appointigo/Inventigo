@@ -8,13 +8,17 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   return NextResponse.json(await createWhatsAppTemplateService().list(user.orgId));
 }
-export async function POST() {
+export async function POST(request: Request) {
+  const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
   const user = await requireOrgAuth().catch(() => null);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!(["OWNER", "ADMIN"] as string[]).includes(user.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  try { return NextResponse.json(await createMetaBackend().templates.reconcileInvoiceV1({ organizationId: user.orgId })); }
+  try { return NextResponse.json(await createMetaBackend().templates.reconcileInvoiceV1({ organizationId: user.orgId, requestId })); }
   catch (error) {
     const code = isWhatsAppError(error) ? error.code : "TEMPLATE_SYNC_FAILED";
-    return NextResponse.json({ error: "WhatsApp templates could not be synchronized", code }, { status: code === "WHATSAPP_NOT_CONNECTED" ? 409 : 502 });
+    return NextResponse.json(
+      { error: "WhatsApp templates could not be synchronized", code, requestId },
+      { status: code === "WHATSAPP_NOT_CONNECTED" ? 409 : 502 }
+    );
   }
 }

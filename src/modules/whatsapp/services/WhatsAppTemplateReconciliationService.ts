@@ -5,6 +5,20 @@ import { invoiceV1Definition, toMetaTemplateRequest } from "../templates/invoice
 
 type Db = Pick<PrismaClient, "whatsAppTemplateDefinition" | "whatsAppBusinessAccount" | "whatsAppTemplateInstance" | "$transaction">;
 type TemplateComparison = "EXISTS" | "MISSING" | "PENDING" | "APPROVED" | "REJECTED";
+type ReconcileInput = { organizationId: string; wabaIds?: string[]; requestId?: string };
+
+function logReconciliation(
+  stage: string,
+  input: ReconcileInput,
+  details: Record<string, unknown> = {}
+) {
+  console.info(`[WhatsApp Templates] ${stage}`, {
+    requestId: input.requestId,
+    organizationId: input.organizationId,
+    templateName: invoiceV1Definition.name,
+    ...details,
+  });
+}
 
 function compareTemplate(remote?: MetaMessageTemplate): TemplateComparison {
   if (!remote) return "MISSING";
@@ -23,10 +37,32 @@ export class WhatsAppTemplateReconciliationService {
     });
   }
 
-  async reconcileInvoiceV1(input: { organizationId: string; wabaIds?: string[] }) {
+  async reconcileInvoiceV1(input: ReconcileInput) {
+    const startedAt = Date.now();
+    logReconciliation("reconcile_started", input);
     try {
-      return await this.reconcileInvoiceV1Unchecked(input);
+      const result = await this.reconcileInvoiceV1Unchecked(input);
+      logReconciliation("reconcile_completed", input, {
+        durationMs: Date.now() - startedAt,
+        reconciled: result.length,
+      });
+      return result;
     } catch (error) {
+      const details = isWhatsAppError(error) ? error.details : undefined;
+      console.error("[WhatsApp Templates] reconcile_failed", {
+        requestId: input.requestId,
+        organizationId: input.organizationId,
+        templateName: invoiceV1Definition.name,
+        durationMs: Date.now() - startedAt,
+        code: isWhatsAppError(error) ? error.code : "TEMPLATE_SYNC_FAILED",
+        httpStatus: details?.httpStatus,
+        providerCode: details?.providerCode,
+        providerSubcode: details?.providerSubcode,
+        providerType: details?.providerType,
+        providerMessage: details?.providerMessage,
+        contentType: details?.contentType,
+        traceId: details?.traceId,
+      });
       if (isWhatsAppError(error) && (error.code === "WHATSAPP_NOT_CONNECTED" || error.code === "TEMPLATE_SYNC_FAILED")) throw error;
       throw new WhatsAppError("TEMPLATE_SYNC_FAILED", "WhatsApp templates could not be synchronized", {
         retryable: isWhatsAppError(error) ? error.retryable : false,
@@ -35,6 +71,8 @@ export class WhatsAppTemplateReconciliationService {
           providerCode: error.details?.providerCode,
           providerSubcode: error.details?.providerSubcode,
           providerType: error.details?.providerType,
+          providerMessage: error.details?.providerMessage,
+          contentType: error.details?.contentType,
           traceId: error.details?.traceId,
         } : undefined,
         cause: error,
@@ -42,7 +80,7 @@ export class WhatsAppTemplateReconciliationService {
     }
   }
 
-  private async reconcileInvoiceV1Unchecked(input: { organizationId: string; wabaIds?: string[] }) {
+  private async reconcileInvoiceV1Unchecked(input: ReconcileInput) {
     const definition = await this.seedInvoiceV1();
     const wabas = await this.db.whatsAppBusinessAccount.findMany({
       where: {
@@ -52,19 +90,47 @@ export class WhatsAppTemplateReconciliationService {
       },
       select: { id: true, metaWabaId: true, integration: { select: { credentialRef: true } } },
     });
+    logReconciliation("integration_loaded", input, { connectedWabaCount: wabas.length });
     if (input.wabaIds?.length && wabas.length !== new Set(input.wabaIds).size) throw new WhatsAppError("WHATSAPP_NOT_CONNECTED", "One or more WhatsApp accounts do not belong to this organization");
     if (!wabas.length) throw new WhatsAppError("WHATSAPP_NOT_CONNECTED", "No connected WhatsApp Business Account was found");
 
     const results = [];
     for (const waba of wabas) {
+      logReconciliation("waba_loaded", input, { wabaId: waba.metaWabaId });
       const credentialRef = waba.integration.credentialRef!;
-      const context = { organizationId: input.organizationId, credentialRef, metaWabaId: waba.metaWabaId };
+      const context = {
+        organizationId: input.organizationId,
+        credentialRef,
+        metaWabaId: waba.metaWabaId,
+        requestId: input.requestId,
+        templateName: definition.name,
+      };
+      logReconciliation("meta_fetch_started", input, { wabaId: waba.metaWabaId });
       const templates = await this.meta.listMessageTemplates(context);
       let remote = templates.find(template => template.name === definition.name && template.language === definition.language);
+      if (remote) {
+        logReconciliation("matching_template_found", input, {
+          wabaId: waba.metaWabaId,
+          metaTemplateId: remote.id,
+          language: remote.language,
+          category: remote.category,
+          status: remote.status,
+        });
+      }
       const comparison = compareTemplate(remote);
       const created = !remote;
       if (!remote) remote = await this.meta.createMessageTemplate(toMetaTemplateRequest(context, invoiceV1Definition));
+      logReconciliation("db_update_started", input, {
+        wabaId: waba.metaWabaId,
+        metaTemplateId: remote.id,
+        status: remote.status,
+      });
       await this.persistInstance(waba.id, definition.id, remote);
+      logReconciliation("db_update_completed", input, {
+        wabaId: waba.metaWabaId,
+        metaTemplateId: remote.id,
+        status: remote.status,
+      });
       results.push({ wabaId: waba.id, metaWabaId: waba.metaWabaId, comparison, created, status: remote.status });
     }
     return results;

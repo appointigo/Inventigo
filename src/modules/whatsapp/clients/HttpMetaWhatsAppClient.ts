@@ -5,6 +5,7 @@ import type { MetaCodeExchangeRequest, MetaCodeExchangeResult, MetaCreateTemplat
 
 type Config = { appId: string; appSecret: string; graphApiVersion: string; timeoutMs: number };
 type MetaErrorBody = { error?: { message?: string; code?: number; error_subcode?: number; type?: string; fbtrace_id?: string } };
+type MetaResponseDiagnostic = { httpStatus: number; contentType: string; durationMs: number };
 
 function sanitizeMetaMessage(message?: string) {
   if (!message) return undefined;
@@ -19,7 +20,7 @@ if (typeof window !== "undefined") throw new Error("HttpMetaWhatsAppClient is se
 export class HttpMetaWhatsAppClient implements MetaWhatsAppClient {
   constructor(private readonly config: Config, private readonly credentials: WhatsAppCredentialStore, private readonly fetcher: typeof fetch = fetch) {}
 
-  private async request<T>(path: string, accessToken?: string, init: RequestInit = {}, captureStatus?: (status: number) => void): Promise<T> {
+  private async request<T>(path: string, accessToken?: string, init: RequestInit = {}, captureDiagnostic?: (diagnostic: MetaResponseDiagnostic) => void): Promise<T> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
     const startedAt = Date.now();
@@ -27,8 +28,12 @@ export class HttpMetaWhatsAppClient implements MetaWhatsAppClient {
       const response = await this.fetcher(`https://graph.facebook.com/${this.config.graphApiVersion}${path}`, {
         ...init, signal: controller.signal, headers: { ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}), "Content-Type": "application/json", ...init.headers },
       });
-      captureStatus?.(response.status);
       const contentType = response.headers.get("content-type") ?? "";
+      captureDiagnostic?.({
+        httpStatus: response.status,
+        contentType,
+        durationMs: Date.now() - startedAt,
+      });
       if (process.env.NODE_ENV === "development") {
         console.info("[WhatsApp Meta] response", JSON.stringify({
           status: response.status,
@@ -90,7 +95,7 @@ export class HttpMetaWhatsAppClient implements MetaWhatsAppClient {
       body = { ...common, type, [type]: { link: content.mediaUrl, ...(content.caption ? { caption: content.caption } : {}), ...(content.type === "DOCUMENT" && content.filename ? { filename: content.filename } : {}) } };
     } else throw new WhatsAppError("META_SEND_FAILED", "Unsupported WhatsApp content type");
     let httpStatus: number | undefined;
-    const result = await this.request<{ messages?: Array<{ id?: string }> }>(`/${input.metaPhoneNumberId}/messages`, accessToken, { method: "POST", body: JSON.stringify(body) }, status => { httpStatus = status; });
+    const result = await this.request<{ messages?: Array<{ id?: string }> }>(`/${input.metaPhoneNumberId}/messages`, accessToken, { method: "POST", body: JSON.stringify(body) }, diagnostic => { httpStatus = diagnostic.httpStatus; });
     const id = result.messages?.[0]?.id;
     if (!id) throw new WhatsAppError("META_INVALID_RESPONSE", "Meta accepted the request without a message id");
     return { providerMessageId: id, acceptedAt: new Date(), httpStatus };
@@ -173,7 +178,23 @@ export class HttpMetaWhatsAppClient implements MetaWhatsAppClient {
     do {
       const params = new URLSearchParams({ fields: "id,name,language,category,status,rejected_reason", limit: "100" });
       if (after) params.set("after", after);
-      const result = await this.request<{ data?: RawMetaTemplate[]; paging?: { cursors?: { after?: string }; next?: string } }>(`/${input.metaWabaId}/message_templates?${params}`, token);
+      let diagnostic: MetaResponseDiagnostic | undefined;
+      const result = await this.request<{ data?: RawMetaTemplate[]; paging?: { cursors?: { after?: string }; next?: string } }>(
+        `/${input.metaWabaId}/message_templates?${params}`,
+        token,
+        {},
+        value => { diagnostic = value; }
+      );
+      console.info("[WhatsApp Templates] meta_fetch_completed", {
+        requestId: input.requestId,
+        organizationId: input.organizationId,
+        wabaId: input.metaWabaId,
+        templateName: input.templateName,
+        httpStatus: diagnostic?.httpStatus,
+        contentType: diagnostic?.contentType,
+        durationMs: diagnostic?.durationMs,
+        resultCount: result.data?.length ?? 0,
+      });
       templates.push(...(result.data ?? []).map(normalizeTemplate));
       after = result.paging?.next ? result.paging.cursors?.after : undefined;
     } while (after);

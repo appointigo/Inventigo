@@ -42,7 +42,13 @@ export type MetaMessageTemplate = { id: string; name: string; language: string; 
 export type MetaTemplateComponent =
   | { type: "BODY"; text: string; example?: { bodyText: string[][] } }
   | { type: "FOOTER"; text: string };
-export type MetaTemplateContext = { organizationId: string; credentialRef: string; metaWabaId: string };
+export type MetaTemplateContext = {
+  organizationId: string;
+  credentialRef: string;
+  metaWabaId: string;
+  requestId?: string;
+  templateName?: string;
+};
 export type MetaCreateTemplateRequest = MetaTemplateContext & { name: string; language: string; category: "UTILITY" | "MARKETING" | "AUTHENTICATION"; components: MetaTemplateComponent[] };
 
 export interface MetaWhatsAppClient {
