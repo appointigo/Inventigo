@@ -26,6 +26,7 @@ import WhatsAppStatusBadge from "./WhatsAppStatusBadge";
 import { Surface } from "./WhatsAppSetupPage.styled";
 import type { WhatsAppUiState } from "../ui";
 import { canSyncWhatsApp } from "../overview";
+import { logWhatsAppApiFailure, readWhatsAppApiJson } from "../embeddedSignupClient";
 const { Title, Text, Paragraph } = Typography;
 type Waba = {
   id: string;
@@ -95,11 +96,20 @@ export default function WhatsAppOverviewPage() {
     setSyncing(true);
     try {
       const response = await fetch("/api/whatsapp/sync", { method: "POST" });
-      if (!response.ok) throw new Error();
+      if (!response.ok) {
+        const failure = await readWhatsAppApiJson<{
+          error?: string;
+          code?: string;
+          requestId?: string;
+          diagnostic?: Record<string, unknown>;
+        }>(response);
+        logWhatsAppApiFailure("sync_failed", failure);
+        throw new Error("Unable to synchronize with Meta.");
+      }
       await load();
       message.success("WhatsApp data synced");
-    } catch {
-      message.error("WhatsApp sync failed");
+    } catch (reason) {
+      message.error(reason instanceof Error ? reason.message : "Unable to synchronize with Meta.");
     } finally {
       setSyncing(false);
     }

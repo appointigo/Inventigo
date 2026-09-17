@@ -10,7 +10,7 @@ import { WhatsAppErrorState, WhatsAppLoadingState } from "./WhatsAppStateCard";
 import WhatsAppStatusBadge from "./WhatsAppStatusBadge";
 import type { WhatsAppUiState } from "../ui";
 import { buildWhatsAppSetupMilestones } from "../setupMilestones";
-import { ACTIVE_META_OAUTH_SESSION_KEY, buildManualMetaOAuthUrl, claimEmbeddedSignupCompletion, parseEmbeddedSignupMessage, parseMetaOAuthCallback, parseStockivaMetaOAuthMessage, parseStoredMetaOAuthSession, readWhatsAppApiJson, removeMetaOAuthCallbackParameters, STOCKIVA_META_OAUTH_CALLBACK } from "../embeddedSignupClient";
+import { ACTIVE_META_OAUTH_SESSION_KEY, buildManualMetaOAuthUrl, claimEmbeddedSignupCompletion, logWhatsAppApiFailure, parseEmbeddedSignupMessage, parseMetaOAuthCallback, parseStockivaMetaOAuthMessage, parseStoredMetaOAuthSession, readWhatsAppApiJson, removeMetaOAuthCallbackParameters, STOCKIVA_META_OAUTH_CALLBACK } from "../embeddedSignupClient";
 import type { MetaOAuthCallback, StoredMetaOAuthSession } from "../embeddedSignupClient";
 import { CapabilityCard, CardGrid, Hero, HeroIcon, ProgressPanel, RequirementList, Surface, TwoColumn } from "./WhatsAppSetupPage.styled";
 
@@ -237,8 +237,21 @@ export default function WhatsAppSetupPage() {
 
   const sync = useCallback(async () => {
     setPhase("syncing"); setFlowError(undefined);
-    try { const response = await fetch("/api/whatsapp/sync", { method: "POST" }); const body = await response.json() as { error?: string }; if (!response.ok) throw new Error(body.error || "Sync failed"); await loadStatus(); setPhase("idle"); }
-    catch (reason) { setFlowError(reason instanceof Error ? reason.message : "Sync failed"); setPhase("failed"); }
+    try {
+      const response = await fetch("/api/whatsapp/sync", { method: "POST" });
+      if (!response.ok) {
+        const failure = await readWhatsAppApiJson<{
+          error?: string;
+          code?: string;
+          requestId?: string;
+          diagnostic?: Record<string, unknown>;
+        }>(response);
+        logWhatsAppApiFailure("sync_failed", failure);
+        throw new Error("Unable to synchronize with Meta.");
+      }
+      await loadStatus(); setPhase("idle");
+    }
+    catch (reason) { setFlowError(reason instanceof Error ? reason.message : "Unable to synchronize with Meta."); setPhase("failed"); }
   }, [loadStatus]);
 
   const currentState = status?.state ?? "NOT_CONNECTED"; const isDisconnected = currentState === "NOT_CONNECTED" || currentState === "DISCONNECTED";

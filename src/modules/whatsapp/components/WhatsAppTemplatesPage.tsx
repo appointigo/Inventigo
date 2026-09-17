@@ -6,6 +6,7 @@ import type { ColumnsType } from "antd/es/table";
 import WhatsAppShell from "./WhatsAppShell";
 import WhatsAppStatusBadge from "./WhatsAppStatusBadge";
 import { Surface } from "./WhatsAppSetupPage.styled";
+import { logWhatsAppApiFailure, readWhatsAppApiJson } from "../embeddedSignupClient";
 const { Title, Text, Paragraph } = Typography;
 type Template = { id: string; metaTemplateId?: string | null; metaTemplateName: string; status: string; rejectionReason: string | null; lastSyncedAt: string | null; definition: { key: string; version: number; language: string; purpose: string; category: string; body: string; footer: string | null }; waba: { metaWabaId: string; businessName: string | null } };
 const color = (status: string) => status === "APPROVED" ? "green" : status === "REJECTED" || status === "DISABLED" ? "red" : status === "PAUSED" ? "orange" : "blue";
@@ -17,7 +18,28 @@ export default function WhatsAppTemplatesPage() {
   const load = useCallback(async () => { setLoading(true); setError(false); try { const r = await fetch("/api/whatsapp/templates", { cache: "no-store" }); if (!r.ok) throw new Error(); setRows(await r.json() as Template[]); } catch { setError(true); } finally { setLoading(false); } }, []);
   useEffect(() => { void load(); }, [load]);
   const detail = async (id: string) => { try { const r = await fetch(`/api/whatsapp/templates/${id}`, { cache: "no-store" }); if (!r.ok) throw new Error(); setSelected(await r.json() as Template); } catch { message.error("Unable to load template details"); } };
-  const reconcile = async () => { setSyncing(true); try { const r = await fetch("/api/whatsapp/templates", { method: "POST" }); if (!r.ok) throw new Error(); message.success("Templates reconciled with Meta"); await load(); } catch { message.error("Template reconciliation failed"); } finally { setSyncing(false); } };
+  const reconcile = async () => {
+    setSyncing(true);
+    try {
+      const response = await fetch("/api/whatsapp/templates", { method: "POST" });
+      if (!response.ok) {
+        const failure = await readWhatsAppApiJson<{
+          error?: string;
+          code?: string;
+          requestId?: string;
+          diagnostic?: Record<string, unknown>;
+        }>(response);
+        logWhatsAppApiFailure("template_sync_failed", failure);
+        throw new Error("Unable to synchronize with Meta.");
+      }
+      message.success("Templates reconciled with Meta");
+      await load();
+    } catch (reason) {
+      message.error(reason instanceof Error ? reason.message : "Unable to synchronize with Meta.");
+    } finally {
+      setSyncing(false);
+    }
+  };
   const rejected = rows.filter(row => row.status === "REJECTED" || row.status === "DISABLED");
   const columns: ColumnsType<Template> = [
     { title: "Template", render: (_, r) => <><Text strong>{r.metaTemplateName}</Text><br/><Text type="secondary">{r.definition.key} · v{r.definition.version}</Text></> },

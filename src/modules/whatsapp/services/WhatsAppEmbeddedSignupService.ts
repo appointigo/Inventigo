@@ -1,6 +1,6 @@
 import "server-only";
 import type { PrismaClient } from "@prisma/client";
-import type { MetaPhoneNumber, MetaWaba, MetaWhatsAppClient } from "../clients/MetaWhatsAppClient";
+import type { MetaDiagnosticReporter, MetaPhoneNumber, MetaWaba, MetaWhatsAppClient } from "../clients/MetaWhatsAppClient";
 import type { WhatsAppCredentialStore } from "../credentials/WhatsAppCredentialStore";
 import { WhatsAppError } from "../errors";
 import { isEmbeddedSignupPhoneRegistered, selectEmbeddedSignupPhoneNumber, validateEmbeddedSignupAuthorization } from "../embeddedSignupAuthorization";
@@ -31,6 +31,15 @@ type SignupStage =
   | "integration_connected";
 
 type SignupStageReporter = (stage: SignupStage, details?: Record<string, unknown>) => void;
+type SyncStage =
+  | "integration_loaded"
+  | "credential_loaded"
+  | "waba_resolved"
+  | "meta_request_started"
+  | "meta_response_received"
+  | "persistence_started"
+  | "completed";
+type SyncStageReporter = (stage: SyncStage, details?: Record<string, unknown>) => void;
 
 export class WhatsAppEmbeddedSignupService {
   constructor(private readonly prisma: PrismaClient, private readonly meta: MetaWhatsAppClient, private readonly credentials: WhatsAppCredentialStore, private readonly appId: string) {}
@@ -140,24 +149,42 @@ export class WhatsAppEmbeddedSignupService {
     return { integrationId: integration.id, status: integration.status, wabaCount: assets.length, phoneNumberCount: assets.reduce((n, a) => n + a.phones.length, 0) };
   }
 
-  async sync(organizationId: string) {
+  async sync(organizationId: string, report: SyncStageReporter = () => undefined) {
+    const startedAt = Date.now();
     const integration = await this.prisma.whatsAppIntegration.findUnique({
       where: { organizationId_provider: { organizationId, provider: "META" } },
       include: { businessAccounts: { select: { metaWabaId: true } } },
     });
+    report("integration_loaded", {
+      integrationFound: Boolean(integration),
+      wabaCount: integration?.businessAccounts.length ?? 0,
+    });
     if (!integration?.credentialRef) throw new WhatsAppError("WHATSAPP_NOT_CONNECTED", "WhatsApp is not connected");
     const token = await this.credentials.resolve(integration.credentialRef, organizationId);
+    report("credential_loaded", { hasAccessToken: Boolean(token) });
     const now = new Date();
     let phoneNumberCount = 0;
     let verifiedWabaCount = 0;
     for (const existing of integration.businessAccounts) {
-      const initialWaba = await this.meta.getWaba(existing.metaWabaId, token);
-      await this.meta.subscribeApp(initialWaba.id, token);
+      report("waba_resolved", { wabaId: existing.metaWabaId });
+      const invokeMeta = async <T>(operation: string, action: (capture: MetaDiagnosticReporter) => Promise<T>) => {
+        report("meta_request_started", { operation, wabaId: existing.metaWabaId });
+        return action(diagnostic => report("meta_response_received", {
+          operation,
+          wabaId: existing.metaWabaId,
+          upstreamHttpStatus: diagnostic.httpStatus,
+          metaContentType: diagnostic.contentType,
+          durationMs: diagnostic.durationMs,
+        }));
+      };
+      const initialWaba = await invokeMeta("get_waba", capture => this.meta.getWaba(existing.metaWabaId, token, capture));
+      await invokeMeta("subscribe_app", capture => this.meta.subscribeApp(initialWaba.id, token, capture));
       const [waba, phones, appSubscribed] = await Promise.all([
-        this.meta.getWaba(existing.metaWabaId, token),
-        this.meta.listPhoneNumbers(existing.metaWabaId, token),
-        this.meta.isAppSubscribed(existing.metaWabaId, this.appId, token),
+        invokeMeta("verify_waba", capture => this.meta.getWaba(existing.metaWabaId, token, capture)),
+        invokeMeta("list_phone_numbers", capture => this.meta.listPhoneNumbers(existing.metaWabaId, token, capture)),
+        invokeMeta("verify_app_subscription", capture => this.meta.isAppSubscribed(existing.metaWabaId, this.appId, token, capture)),
       ]);
+      report("persistence_started", { wabaId: existing.metaWabaId, phoneNumberCount: phones.length });
       const savedWaba = await this.prisma.whatsAppBusinessAccount.update({ where: { metaWabaId: waba.id }, data: { businessName: waba.name, currency: waba.currency, timezone: waba.timezoneId, status: "ACTIVE", lastSyncedAt: now } });
       for (const phone of phones) await this.prisma.whatsAppPhoneNumber.upsert({ where: { metaPhoneNumberId: phone.id }, create: {
         wabaId: savedWaba.id, metaPhoneNumberId: phone.id, displayPhoneNumber: phone.displayPhoneNumber, verifiedName: phone.verifiedName, qualityRating: phone.qualityRating, status: isEmbeddedSignupPhoneRegistered(phone) ? "ACTIVE" : "PENDING", lastSyncedAt: now,
@@ -167,6 +194,8 @@ export class WhatsAppEmbeddedSignupService {
     }
     const status = integration.businessAccounts.length > 0 && verifiedWabaCount === integration.businessAccounts.length ? "CONNECTED" : "ACTION_REQUIRED";
     await this.prisma.whatsAppIntegration.update({ where: { id: integration.id }, data: { status, lastSyncedAt: now } });
-    return { integrationId: integration.id, status, wabaCount: integration.businessAccounts.length, phoneNumberCount };
+    const result = { integrationId: integration.id, status, wabaCount: integration.businessAccounts.length, phoneNumberCount };
+    report("completed", { durationMs: Date.now() - startedAt, ...result });
+    return result;
   }
 }

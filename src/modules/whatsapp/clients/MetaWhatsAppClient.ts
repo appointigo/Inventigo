@@ -49,17 +49,23 @@ export type MetaTemplateContext = {
   requestId?: string;
   templateName?: string;
 };
+export type MetaResponseDiagnostic = {
+  httpStatus: number;
+  contentType: string;
+  durationMs: number;
+};
+export type MetaDiagnosticReporter = (diagnostic: MetaResponseDiagnostic) => void;
 export type MetaCreateTemplateRequest = MetaTemplateContext & { name: string; language: string; category: "UTILITY" | "MARKETING" | "AUTHENTICATION"; components: MetaTemplateComponent[] };
 
 export interface MetaWhatsAppClient {
   sendMessage(request: MetaSendMessageRequest): Promise<MetaSendMessageResult>;
   exchangeEmbeddedSignupCode(request: MetaCodeExchangeRequest): Promise<MetaCodeExchangeResult>;
   inspectToken(accessToken: string): Promise<MetaTokenInspection>;
-  getWaba(wabaId: string, accessToken: string): Promise<MetaWaba>;
-  listPhoneNumbers(wabaId: string, accessToken: string): Promise<MetaPhoneNumber[]>;
+  getWaba(wabaId: string, accessToken: string, report?: MetaDiagnosticReporter): Promise<MetaWaba>;
+  listPhoneNumbers(wabaId: string, accessToken: string, report?: MetaDiagnosticReporter): Promise<MetaPhoneNumber[]>;
   registerPhoneNumber(phoneNumberId: string, pin: string, accessToken: string): Promise<void>;
-  subscribeApp(wabaId: string, accessToken: string): Promise<void>;
-  isAppSubscribed(wabaId: string, appId: string, accessToken: string): Promise<boolean>;
+  subscribeApp(wabaId: string, accessToken: string, report?: MetaDiagnosticReporter): Promise<void>;
+  isAppSubscribed(wabaId: string, appId: string, accessToken: string, report?: MetaDiagnosticReporter): Promise<boolean>;
   listMessageTemplates(input: MetaTemplateContext): Promise<MetaMessageTemplate[]>;
   createMessageTemplate(input: MetaCreateTemplateRequest): Promise<MetaMessageTemplate>;
 }

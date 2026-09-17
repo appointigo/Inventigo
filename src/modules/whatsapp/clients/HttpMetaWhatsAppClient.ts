@@ -1,11 +1,10 @@
 import { WhatsAppError } from "../errors.ts";
 import type { WhatsAppCredentialStore } from "../credentials/WhatsAppCredentialStore.ts";
 import { META_MANUAL_OAUTH_REDIRECT_URI } from "../embeddedSignupRedirect.ts";
-import type { MetaCodeExchangeRequest, MetaCodeExchangeResult, MetaCreateTemplateRequest, MetaMessageTemplate, MetaPhoneNumber, MetaSendMessageRequest, MetaSendMessageResult, MetaTemplateContext, MetaTemplateStatus, MetaTokenInspection, MetaWaba, MetaWhatsAppClient } from "./MetaWhatsAppClient.ts";
+import type { MetaCodeExchangeRequest, MetaCodeExchangeResult, MetaCreateTemplateRequest, MetaDiagnosticReporter, MetaMessageTemplate, MetaPhoneNumber, MetaResponseDiagnostic, MetaSendMessageRequest, MetaSendMessageResult, MetaTemplateContext, MetaTemplateStatus, MetaTokenInspection, MetaWaba, MetaWhatsAppClient } from "./MetaWhatsAppClient.ts";
 
 type Config = { appId: string; appSecret: string; graphApiVersion: string; timeoutMs: number };
 type MetaErrorBody = { error?: { message?: string; code?: number; error_subcode?: number; type?: string; fbtrace_id?: string } };
-type MetaResponseDiagnostic = { httpStatus: number; contentType: string; durationMs: number };
 
 function sanitizeMetaMessage(message?: string) {
   if (!message) return undefined;
@@ -136,13 +135,13 @@ export class HttpMetaWhatsAppClient implements MetaWhatsAppClient {
       granularScopes: (data.granular_scopes ?? []).map(x => ({ scope: x.scope, targetIds: x.target_ids ?? [] })),
     };
   }
-  async getWaba(id: string, token: string): Promise<MetaWaba> {
-    const x = await this.request<{ id?: string; name?: string; currency?: string; timezone_id?: string }>(`/${id}?fields=id,name,currency,timezone_id`, token);
+  async getWaba(id: string, token: string, report?: MetaDiagnosticReporter): Promise<MetaWaba> {
+    const x = await this.request<{ id?: string; name?: string; currency?: string; timezone_id?: string }>(`/${id}?fields=id,name,currency,timezone_id`, token, {}, report);
     if (x.id !== id) throw new WhatsAppError("META_INVALID_RESPONSE", "Meta returned unexpected WhatsApp Business Account metadata");
     return { id: x.id, name: x.name, currency: x.currency, timezoneId: x.timezone_id };
   }
-  async listPhoneNumbers(id: string, token: string): Promise<MetaPhoneNumber[]> {
-    const x = await this.request<{ data?: Array<{ id?: string; display_phone_number?: string; verified_name?: string; quality_rating?: string; name_status?: string; code_verification_status?: string; platform_type?: string; status?: string; is_pin_enabled?: boolean }> }>(`/${id}/phone_numbers?fields=id,display_phone_number,verified_name,quality_rating,name_status,code_verification_status,platform_type,status,is_pin_enabled`, token);
+  async listPhoneNumbers(id: string, token: string, report?: MetaDiagnosticReporter): Promise<MetaPhoneNumber[]> {
+    const x = await this.request<{ data?: Array<{ id?: string; display_phone_number?: string; verified_name?: string; quality_rating?: string; name_status?: string; code_verification_status?: string; platform_type?: string; status?: string; is_pin_enabled?: boolean }> }>(`/${id}/phone_numbers?fields=id,display_phone_number,verified_name,quality_rating,name_status,code_verification_status,platform_type,status,is_pin_enabled`, token, {}, report);
     return (x.data ?? []).map(phone => {
       if (!phone.id || !phone.display_phone_number) throw new WhatsAppError("META_INVALID_RESPONSE", "Meta returned incomplete WhatsApp phone number metadata");
       return { id: phone.id, displayPhoneNumber: phone.display_phone_number, verifiedName: phone.verified_name, qualityRating: phone.quality_rating, nameStatus: phone.name_status, codeVerificationStatus: phone.code_verification_status, platformType: phone.platform_type, status: phone.status, isPinEnabled: phone.is_pin_enabled };
@@ -161,18 +160,24 @@ export class HttpMetaWhatsAppClient implements MetaWhatsAppClient {
       });
     }
   }
-  async subscribeApp(id: string, token: string) {
-    const result = await this.request<{ success?: boolean }>(`/${id}/subscribed_apps`, token, { method: "POST", body: "{}" });
+  async subscribeApp(id: string, token: string, report?: MetaDiagnosticReporter) {
+    const result = await this.request<{ success?: boolean }>(`/${id}/subscribed_apps`, token, { method: "POST", body: "{}" }, report);
     if (result.success !== true) throw new WhatsAppError("WEBHOOK_SUBSCRIPTION_FAILED", "Meta did not confirm the WABA webhook subscription");
   }
-  async isAppSubscribed(id: string, appId: string, token: string) {
-    const result = await this.request<{ data?: Array<{ whatsapp_business_api_data?: { id?: string } }> }>(`/${id}/subscribed_apps`, token);
+  async isAppSubscribed(id: string, appId: string, token: string, report?: MetaDiagnosticReporter) {
+    const result = await this.request<{ data?: Array<{ whatsapp_business_api_data?: { id?: string } }> }>(`/${id}/subscribed_apps`, token, {}, report);
     if (!Array.isArray(result.data)) throw new WhatsAppError("META_INVALID_RESPONSE", "Meta returned incomplete WABA subscription metadata");
     return result.data.some(subscription => subscription.whatsapp_business_api_data?.id === appId);
   }
 
   async listMessageTemplates(input: MetaTemplateContext): Promise<MetaMessageTemplate[]> {
     const token = await this.credentials.resolve(input.credentialRef, input.organizationId);
+    console.info("[WhatsApp Templates] credential_loaded", {
+      requestId: input.requestId,
+      organizationId: input.organizationId,
+      templateName: input.templateName,
+      hasAccessToken: Boolean(token),
+    });
     const templates: MetaMessageTemplate[] = [];
     let after: string | undefined;
     do {

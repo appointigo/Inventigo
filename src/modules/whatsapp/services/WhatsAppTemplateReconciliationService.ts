@@ -5,13 +5,19 @@ import { invoiceV1Definition, toMetaTemplateRequest } from "../templates/invoice
 
 type Db = Pick<PrismaClient, "whatsAppTemplateDefinition" | "whatsAppBusinessAccount" | "whatsAppTemplateInstance" | "$transaction">;
 type TemplateComparison = "EXISTS" | "MISSING" | "PENDING" | "APPROVED" | "REJECTED";
-type ReconcileInput = { organizationId: string; wabaIds?: string[]; requestId?: string };
+type ReconcileInput = {
+  organizationId: string;
+  wabaIds?: string[];
+  requestId?: string;
+  report?: (stage: string, details?: Record<string, unknown>) => void;
+};
 
 function logReconciliation(
   stage: string,
   input: ReconcileInput,
   details: Record<string, unknown> = {}
 ) {
+  input.report?.(stage, details);
   console.info(`[WhatsApp Templates] ${stage}`, {
     requestId: input.requestId,
     organizationId: input.organizationId,
@@ -42,7 +48,7 @@ export class WhatsAppTemplateReconciliationService {
     logReconciliation("reconcile_started", input);
     try {
       const result = await this.reconcileInvoiceV1Unchecked(input);
-      logReconciliation("reconcile_completed", input, {
+      logReconciliation("completed", input, {
         durationMs: Date.now() - startedAt,
         reconciled: result.length,
       });
@@ -96,7 +102,7 @@ export class WhatsAppTemplateReconciliationService {
 
     const results = [];
     for (const waba of wabas) {
-      logReconciliation("waba_loaded", input, { wabaId: waba.metaWabaId });
+      logReconciliation("waba_resolved", input, { wabaId: waba.metaWabaId });
       const credentialRef = waba.integration.credentialRef!;
       const context = {
         organizationId: input.organizationId,
@@ -107,14 +113,19 @@ export class WhatsAppTemplateReconciliationService {
       };
       logReconciliation("meta_fetch_started", input, { wabaId: waba.metaWabaId });
       const templates = await this.meta.listMessageTemplates(context);
+      logReconciliation("template_match_started", input, {
+        wabaId: waba.metaWabaId,
+        templateCount: templates.length,
+      });
       let remote = templates.find(template => template.name === definition.name && template.language === definition.language);
       if (remote) {
-        logReconciliation("matching_template_found", input, {
+        logReconciliation("template_found", input, {
           wabaId: waba.metaWabaId,
           metaTemplateId: remote.id,
           language: remote.language,
           category: remote.category,
           status: remote.status,
+          matchedTemplateCount: 1,
         });
       }
       const comparison = compareTemplate(remote);

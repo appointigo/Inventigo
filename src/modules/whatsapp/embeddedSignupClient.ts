@@ -7,6 +7,12 @@ export type ManualMetaOAuthConfiguration = {
   state: string;
 };
 export type StoredMetaOAuthSession = ManualMetaOAuthConfiguration & { requestId: string };
+export type WhatsAppApiFailure = {
+  error?: string;
+  code?: string;
+  requestId?: string;
+  diagnostic?: Record<string, unknown>;
+};
 export type MetaOAuthCallback =
   | { kind: "success"; code: string; state: string }
   | { kind: "error"; error: string; errorReason?: string; errorDescription?: string };
@@ -108,6 +114,17 @@ export async function readWhatsAppApiJson<T>(response: Response): Promise<T> {
   } catch {
     throw new Error("Stockiva returned an invalid JSON response.");
   }
+}
+
+export function logWhatsAppApiFailure(
+  event: "sync_failed" | "template_sync_failed",
+  failure: WhatsAppApiFailure
+): void {
+  console.error(`[WhatsApp Debug] ${event}`, {
+    requestId: failure.requestId,
+    code: failure.code,
+    diagnostic: failure.diagnostic,
+  });
 }
 
 export function parseEmbeddedSignupMessage(origin: string, value: unknown): EmbeddedSignupEvent | null {
