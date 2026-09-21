@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { requireOrgAuth } from "@/lib/auth.middleware";
 import { createMetaBackend, createWhatsAppTemplateService } from "@/modules/whatsapp/server";
 import { isWhatsAppError } from "@/modules/whatsapp/errors";
@@ -12,6 +13,15 @@ function safeFailureDiagnostic(error: unknown) {
     errorCode: typeof value.code === "string" ? value.code : undefined,
     clientVersion: typeof value.clientVersion === "string" ? value.clientVersion : undefined,
   };
+}
+
+function sanitizePrismaError(message: string) {
+  return message
+    .replace(/\u001b\[[0-9;]*m/g, "")
+    .replace(/\b(?:postgres(?:ql)?|mysql|mongodb):\/\/[^\s"']+/gi, "[REDACTED_DATABASE_URL]")
+    .replace(/\b(?:Bearer\s+)?(?:EA[A-Za-z0-9_-]{20,}|[A-Za-z0-9_-]{40,})\b/g, "[REDACTED_SECRET]")
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "")
+    .slice(0, 4_000);
 }
 
 export async function GET(request: Request) {
@@ -31,6 +41,16 @@ export async function GET(request: Request) {
     });
     return NextResponse.json(templates);
   } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientValidationError &&
+      (process.env.NODE_ENV === "development" || isWhatsAppDebugDiagnosticsEnabled())
+    ) {
+      console.error("[WhatsApp Templates] prisma_validation_failed", {
+        requestId,
+        errorType: error.name,
+        message: sanitizePrismaError(error.message),
+      });
+    }
     console.error("[WhatsApp Templates] list_failed", {
       requestId,
       organizationId: user.orgId,
@@ -55,7 +75,7 @@ export async function POST(request: Request) {
   });
   let currentStage = "authenticated";
   try {
-    return NextResponse.json(await createMetaBackend().templates.reconcileInvoiceV1({
+    return NextResponse.json(await createMetaBackend().templates.reconcileAll({
       organizationId: user.orgId,
       requestId,
       report: stage => { currentStage = stage; },

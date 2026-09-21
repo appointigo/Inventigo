@@ -24,6 +24,7 @@ import { WhatsAppCampaignMetricsService } from "./services/WhatsAppCampaignMetri
 import { WhatsAppAutomationService } from "./services/WhatsAppAutomationService";
 import { WhatsAppConversationService } from "./services/WhatsAppConversationService";
 import { WhatsAppIntegrationHealthService } from "./services/WhatsAppIntegrationHealthService";
+import { WhatsAppMerchantTemplateService } from "./services/WhatsAppMerchantTemplateService";
 
 export const createWhatsAppAssetReader = () => new WhatsAppAssetService(prisma);
 export const createWhatsAppStoreConfigurationService = () =>
@@ -87,5 +88,6 @@ export function createMetaBackend() {
     testMessages: new WhatsAppTestMessageService(prisma, readiness, communication),
     assets: new WhatsAppAssetService(prisma, signup, credentials),
     templates: new WhatsAppTemplateReconciliationService(prisma, client),
+    merchantTemplates: new WhatsAppMerchantTemplateService(prisma, client),
   };
 }

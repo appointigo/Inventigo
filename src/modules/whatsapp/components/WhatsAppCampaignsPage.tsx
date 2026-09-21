@@ -61,7 +61,7 @@ type Template = {
   version: number;
   language: string;
   body: string;
-  instances: Array<{ wabaId: string }>;
+  instances: Array<{ wabaId: string; status: string }>;
 };
 type Options = { stores: Store[]; templates: Template[] };
 type Preview = {
@@ -356,13 +356,14 @@ export default function WhatsAppCampaignsPage() {
           </Form.Item>
           <Form.Item
             name="templateDefinitionId"
-            label="Approved marketing template"
+            label="Marketing template"
+            extra={<><span>Pending templates keep the campaign in draft. </span><a href="/dashboard/whatsapp/templates">Create a new marketing template</a></>}
             rules={[{ required: true }]}
           >
             <Select
               options={options.templates.map((t) => ({
                 value: t.id,
-                label: `${t.name} · v${t.version} · ${t.language}`,
+                label: `${t.name} · v${t.version} · ${t.language} · ${t.instances.every(instance => instance.status === "APPROVED") ? "APPROVED" : "PENDING APPROVAL"}`,
               }))}
             />
           </Form.Item>

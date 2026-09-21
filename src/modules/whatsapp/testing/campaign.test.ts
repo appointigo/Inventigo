@@ -68,7 +68,7 @@ test("a sender outside the requested tenant/store is rejected", async () => {
   );
 });
 
-test("campaign creation requires template approval for every selected sender WABA", async () => {
+test("campaign creation requires a template instance for every selected sender WABA", async () => {
   const secondStoreId = "00000000-0000-4000-8000-000000000003";
   const secondSenderId = "00000000-0000-4000-8000-000000000004";
   const db = {
@@ -94,6 +94,42 @@ test("campaign creation requires template approval for every selected sender WAB
       audience: { tags: [] },
       scheduledAt: null,
     }),
-    /not approved for every sender WABA/
+    /unavailable for one or more sender WABAs/
   );
+});
+
+test("a pending marketing template can only create an unscheduled draft", async () => {
+  const created: Array<Record<string, unknown>> = [];
+  const tx = {
+    whatsAppCampaign: {
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        created.push(data);
+        return { id: "campaign-1", ...data };
+      },
+    },
+    whatsAppCampaignRecipient: { createMany: async () => ({ count: 0 }) },
+  };
+  const db = {
+    storeWhatsAppSender: {
+      findMany: async () => [{ id: senderId, storeId, phoneNumber: { wabaId: "waba-a" } }],
+    },
+    whatsAppTemplateDefinition: {
+      findFirst: async () => ({
+        id: "definition",
+        instances: [{ wabaId: "waba-a", status: "PENDING" }],
+      }),
+    },
+    whatsAppContact: { findMany: async () => [] },
+    $transaction: async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx),
+  } as unknown as PrismaClient;
+  const result = await new WhatsAppCampaignService(db).create(organizationId, {
+    name: "Pending offer",
+    templateDefinitionId: "definition",
+    stores: [{ storeId, senderId }],
+    audience: { tags: [] },
+    scheduledAt: null,
+  });
+  assert.equal(created[0]?.status, "DRAFT");
+  assert.equal(created[0]?.scheduledAt, null);
+  assert.equal(result.waitingForTemplateApproval, true);
 });

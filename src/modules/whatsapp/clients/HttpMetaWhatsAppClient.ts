@@ -181,7 +181,7 @@ export class HttpMetaWhatsAppClient implements MetaWhatsAppClient {
     const templates: MetaMessageTemplate[] = [];
     let after: string | undefined;
     do {
-      const params = new URLSearchParams({ fields: "id,name,language,category,status,rejected_reason", limit: "100" });
+      const params = new URLSearchParams({ fields: "id,name,language,category,status,rejected_reason,components", limit: "100" });
       if (after) params.set("after", after);
       let diagnostic: MetaResponseDiagnostic | undefined;
       const result = await this.request<{ data?: RawMetaTemplate[]; paging?: { cursors?: { after?: string }; next?: string } }>(
@@ -219,10 +219,10 @@ export class HttpMetaWhatsAppClient implements MetaWhatsAppClient {
   }
 }
 
-type RawMetaTemplate = { id?: string; name?: string; language?: string; category?: string; status?: string; rejected_reason?: string };
+type RawMetaTemplate = { id?: string; name?: string; language?: string; category?: string; status?: string; rejected_reason?: string; components?: unknown[] };
 const supportedTemplateStatuses = new Set<MetaTemplateStatus>(["APPROVED", "PENDING", "REJECTED", "PAUSED", "DISABLED"]);
 function normalizeTemplate(template: RawMetaTemplate): MetaMessageTemplate {
   if (!template.id || !template.name || !template.language || !template.category) throw new WhatsAppError("META_INVALID_RESPONSE", "Meta template response was incomplete");
   const status = supportedTemplateStatuses.has(template.status as MetaTemplateStatus) ? template.status as MetaTemplateStatus : "PENDING";
-  return { id: template.id, name: template.name, language: template.language, category: template.category, status, rejectionReason: template.rejected_reason };
+  return { id: template.id, name: template.name, language: template.language, category: template.category, status, rejectionReason: template.rejected_reason, components: template.components };
 }

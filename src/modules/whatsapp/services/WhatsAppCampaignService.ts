@@ -88,7 +88,7 @@ export class WhatsAppCampaignService {
         where: {
           category: "MARKETING",
           isActive: true,
-          instances: { some: { status: "APPROVED", waba: { integration: { organizationId } } } },
+          instances: { some: { status: { in: ["APPROVED", "PENDING"] }, waba: { integration: { organizationId } } } },
           OR: [
             { scope: "PLATFORM", organizationId: null },
             { scope: "ORGANIZATION", organizationId },
@@ -103,8 +103,8 @@ export class WhatsAppCampaignService {
           body: true,
           variables: true,
           instances: {
-            where: { status: "APPROVED", waba: { integration: { organizationId } } },
-            select: { wabaId: true },
+            where: { status: { in: ["APPROVED", "PENDING"] }, waba: { integration: { organizationId } } },
+            select: { wabaId: true, status: true },
           },
         },
         orderBy: [{ key: "asc" }, { version: "desc" }],
@@ -137,8 +137,8 @@ export class WhatsAppCampaignService {
           organizationId,
           name: input.name,
           templateDefinitionId: input.templateDefinitionId,
-          status: input.scheduledAt ? "SCHEDULED" : "DRAFT",
-          scheduledAt: input.scheduledAt ? new Date(input.scheduledAt) : null,
+          status: input.scheduledAt && context.templateReady ? "SCHEDULED" : "DRAFT",
+          scheduledAt: input.scheduledAt && context.templateReady ? new Date(input.scheduledAt) : null,
           audienceFilters: input.audience as Prisma.InputJsonValue,
           stores: {
             create: input.stores.map((x) => ({ storeId: x.storeId, senderId: x.senderId })),
@@ -173,6 +173,7 @@ export class WhatsAppCampaignService {
             .length,
         },
         validatedWabas: context.wabaIds,
+        waitingForTemplateApproval: !context.templateReady,
       };
     });
   }
@@ -182,7 +183,7 @@ export class WhatsAppCampaignService {
       select: { id: true },
     });
     if (!existing) throw new Error("Campaign not found");
-    await this.validate(organizationId, input);
+    const context = await this.validate(organizationId, input);
     const contacts = await this.audience(organizationId, input);
     return this.db.$transaction(async (tx) => {
       await tx.whatsAppCampaignStore.deleteMany({ where: { campaignId: id } });
@@ -192,8 +193,8 @@ export class WhatsAppCampaignService {
         data: {
           name: input.name,
           templateDefinitionId: input.templateDefinitionId,
-          status: input.scheduledAt ? "SCHEDULED" : "DRAFT",
-          scheduledAt: input.scheduledAt ? new Date(input.scheduledAt) : null,
+          status: input.scheduledAt && context.templateReady ? "SCHEDULED" : "DRAFT",
+          scheduledAt: input.scheduledAt && context.templateReady ? new Date(input.scheduledAt) : null,
           audienceFilters: input.audience as Prisma.InputJsonValue,
           stores: {
             create: input.stores.map((x) => ({ storeId: x.storeId, senderId: x.senderId })),
@@ -244,14 +245,17 @@ export class WhatsAppCampaignService {
       select: {
         id: true,
         instances: {
-          where: { wabaId: { in: wabaIds }, status: "APPROVED" },
-          select: { wabaId: true },
+          where: { wabaId: { in: wabaIds }, status: { in: ["APPROVED", "PENDING"] } },
+          select: { wabaId: true, status: true },
         },
       },
     });
     if (!definition || new Set(definition.instances.map((x) => x.wabaId)).size !== wabaIds.length)
-      throw new Error("The selected marketing template is not approved for every sender WABA");
-    return { wabaIds };
+      throw new Error("The selected marketing template is unavailable for one or more sender WABAs");
+    const templateReady = definition.instances.every(instance => instance.status === "APPROVED");
+    if (!templateReady && input.scheduledAt)
+      throw new Error("TEMPLATE_PENDING_APPROVAL: save the campaign as a draft until Meta approves the template");
+    return { wabaIds, templateReady };
   }
   private async validateStores(organizationId: string, stores: Input["stores"]) {
     const ids = stores.map((x) => x.senderId);

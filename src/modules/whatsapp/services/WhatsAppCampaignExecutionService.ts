@@ -26,13 +26,30 @@ export class WhatsAppCampaignExecutionService {
   async launch(organizationId: string, campaignId: string, now = new Date()) {
     const campaign = await this.db.whatsAppCampaign.findFirst({
       where: { id: campaignId, organizationId },
-      select: { id: true, status: true },
+      select: {
+        id: true,
+        status: true,
+        templateDefinitionId: true,
+        stores: { select: { sender: { select: { phoneNumber: { select: { wabaId: true } } } } } },
+      },
     });
     if (!campaign) throw new Error("Campaign not found");
     if (["QUEUED", "RUNNING"].includes(campaign.status))
       return this.metrics(organizationId, campaignId);
     if (!["DRAFT", "SCHEDULED"].includes(campaign.status))
       throw new Error("Campaign can no longer be launched");
+    const wabaIds = [...new Set(campaign.stores.map(store => store.sender.phoneNumber.wabaId))];
+    const approved = await this.db.whatsAppTemplateInstance.findMany({
+      where: {
+        definitionId: campaign.templateDefinitionId,
+        wabaId: { in: wabaIds },
+        status: "APPROVED",
+        waba: { integration: { organizationId } },
+      },
+      select: { wabaId: true },
+    });
+    if (new Set(approved.map(instance => instance.wabaId)).size !== wabaIds.length)
+      throw new Error("TEMPLATE_PENDING_APPROVAL");
 
     const [queued] = await this.db.$transaction([
       this.db.whatsAppCampaignRecipient.updateMany({

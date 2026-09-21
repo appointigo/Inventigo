@@ -117,7 +117,7 @@ export async function readWhatsAppApiJson<T>(response: Response): Promise<T> {
 }
 
 export function logWhatsAppApiFailure(
-  event: "sync_failed" | "template_sync_failed",
+  event: "sync_failed" | "template_sync_failed" | "template_create_failed",
   failure: WhatsAppApiFailure
 ): void {
   console.error(`[WhatsApp Debug] ${event}`, {

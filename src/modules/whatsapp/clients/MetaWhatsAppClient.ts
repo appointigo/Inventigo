@@ -38,7 +38,7 @@ export type MetaTokenInspection = {
 export type MetaWaba = { id: string; name?: string; currency?: string; timezoneId?: string };
 export type MetaPhoneNumber = { id: string; displayPhoneNumber: string; verifiedName?: string; qualityRating?: string; nameStatus?: string; codeVerificationStatus?: string; platformType?: string; status?: string; isPinEnabled?: boolean };
 export type MetaTemplateStatus = "APPROVED" | "PENDING" | "REJECTED" | "PAUSED" | "DISABLED";
-export type MetaMessageTemplate = { id: string; name: string; language: string; category: string; status: MetaTemplateStatus; rejectionReason?: string };
+export type MetaMessageTemplate = { id: string; name: string; language: string; category: string; status: MetaTemplateStatus; rejectionReason?: string; components?: unknown[] };
 export type MetaTemplateComponent =
   | { type: "BODY"; text: string; example?: { bodyText: string[][] } }
   | { type: "FOOTER"; text: string };

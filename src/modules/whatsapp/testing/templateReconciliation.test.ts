@@ -91,3 +91,128 @@ test("normalizes template provider failures to TEMPLATE_SYNC_FAILED", async () =
     error instanceof WhatsAppError && error.code === "TEMPLATE_SYNC_FAILED" && error.message === "WhatsApp templates could not be synchronized" && error.details?.traceId === "trace-1"
   );
 });
+
+test("reconciles merchant instances by Meta id without recreating them", async () => {
+  const updates: Array<Record<string, unknown>> = [];
+  const db = {
+    whatsAppTemplateDefinition: {
+      upsert: async () => invoiceV1Definition,
+      update: async () => ({}),
+    },
+    whatsAppBusinessAccount: {
+      findMany: async () => [{
+        id: "waba-db-1",
+        metaWabaId: "meta-waba-1",
+        integration: { credentialRef: "credential-1" },
+      }],
+    },
+    whatsAppTemplateInstance: {
+      findMany: async () => [{
+        id: "merchant-instance-1",
+        definitionId: "merchant-definition-1",
+        metaTemplateId: "merchant-meta-1",
+        metaTemplateName: "rare_thread_sale_v1",
+        definition: {
+          id: "merchant-definition-1",
+          name: "rare_thread_sale_v1",
+          language: "en_US",
+          category: "MARKETING",
+        },
+      }],
+      upsert: async () => ({}),
+      update: async ({ data }: { data: Record<string, unknown> }) => {
+        updates.push(data);
+        return {};
+      },
+    },
+    $transaction: async (operations: Array<Promise<unknown>>) => Promise.all(operations),
+  } as unknown as PrismaClient;
+  const meta = new MockMetaWhatsAppClient();
+  meta.templates = [
+    {
+      id: "invoice-meta-1",
+      name: invoiceV1Definition.name,
+      language: "en_US",
+      category: "UTILITY",
+      status: "APPROVED",
+    },
+    {
+      id: "merchant-meta-1",
+      name: "rare_thread_sale_v1",
+      language: "en_US",
+      category: "MARKETING",
+      status: "APPROVED",
+    },
+  ];
+  const result = await new WhatsAppTemplateReconciliationService(db, meta).reconcileAll({
+    organizationId: "org-1",
+  });
+  assert.equal(meta.templateCreateRequests.length, 0);
+  assert.equal(updates[0]?.status, "APPROVED");
+  assert.equal(result.length, 2);
+});
+
+test("imports unmatched Meta templates as tenant-owned imported definitions", async () => {
+  const definitions: Array<Record<string, unknown>> = [];
+  const instances: Array<Record<string, unknown>> = [];
+  const tx = {
+    whatsAppTemplateDefinition: {
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        definitions.push(data);
+        return { id: "import-definition-1" };
+      },
+    },
+    whatsAppTemplateInstance: {
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        instances.push(data);
+        return { id: "import-instance-1" };
+      },
+    },
+  };
+  const db = {
+    whatsAppTemplateDefinition: { upsert: async () => invoiceV1Definition },
+    whatsAppBusinessAccount: {
+      findMany: async () => [{
+        id: "waba-db-1",
+        metaWabaId: "meta-waba-1",
+        integration: { credentialRef: "credential-1" },
+      }],
+    },
+    whatsAppTemplateInstance: {
+      findMany: async () => [],
+      upsert: async () => ({}),
+    },
+    $transaction: async (value: unknown) => {
+      if (typeof value === "function")
+        return (value as (client: typeof tx) => Promise<unknown>)(tx);
+      return Promise.all(value as Array<Promise<unknown>>);
+    },
+  } as unknown as PrismaClient;
+  const meta = new MockMetaWhatsAppClient();
+  meta.templates = [
+    {
+      id: "invoice-meta-1",
+      name: invoiceV1Definition.name,
+      language: "en_US",
+      category: "UTILITY",
+      status: "APPROVED",
+    },
+    {
+      id: "external-meta-1",
+      name: "rare_thread_external_sale",
+      language: "en_US",
+      category: "MARKETING",
+      status: "APPROVED",
+      components: [{ type: "BODY", text: "Hi {{1}}, visit our sale." }],
+    },
+  ];
+  const result = await new WhatsAppTemplateReconciliationService(db, meta).reconcileAll({
+    organizationId: "org-1",
+  });
+  assert.equal(meta.templateCreateRequests.length, 0);
+  assert.equal(definitions[0]?.source, "META_IMPORTED");
+  assert.equal(definitions[0]?.organizationId, "org-1");
+  assert.equal(definitions[0]?.body, "Hi {{1}}, visit our sale.");
+  assert.equal(instances[0]?.metaTemplateId, "external-meta-1");
+  assert.equal(result.some(item => item.imported === true), true);
+});
