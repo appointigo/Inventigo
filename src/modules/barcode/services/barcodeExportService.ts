@@ -12,6 +12,16 @@ export interface BarcodeSheetOptions {
   autoPrint?: boolean;
 }
 
+const RUPEE_PATH =
+  "M14 8H86V20H59C67 25 72 33 74 42H86V54H75C72 72 57 84 35 87L75 112H52L15 88V76H37C50 76 59 68 62 54H14V42H61C57 29 46 20 30 20H14Z";
+
+/** CorelDRAW can lose U+20B9 during PDF font substitution. Only the currency
+ * glyph is outlined; the amount stays selectable text and barcode SVGs remain
+ * unchanged vector bars. The title/aria label preserves the real U+20B9 value. */
+export function renderOutlinedRupeePrice(value: number): string {
+  return `<span class="price-value"><svg class="rupee-glyph" viewBox="0 0 100 120" role="img" aria-label="₹"><title>₹</title><path d="${RUPEE_PATH}" /></svg><span>${value.toLocaleString("en-IN")}</span></span>`;
+}
+
 /**
  * Generate print HTML for barcode labels
  * Fixed layout: 13" × 19" (1560px × 2280px @ 120 DPI)
@@ -42,8 +52,8 @@ export const generateBarcodeLabelHTML = (labels: BarcodeLabel[], options: Barcod
           <div class="size-badge">Size: ${escapeHtml(label.sizeLabel)}</div>
           <div class="promo-badge">RARE THREAD — SPECIAL PRICE</div>
           <div class="price-row">
-            <span class="mrp">₹${mrp.toLocaleString("en-IN")}</span>
-            <span class="sell-price">₹${sellPrice.toLocaleString("en-IN")}</span>
+            <span class="mrp">${renderOutlinedRupeePrice(mrp)}</span>
+            <span class="sell-price">${renderOutlinedRupeePrice(sellPrice)}</span>
             <span class="discount-tag">${discount}% OFF</span>
           </div>
         </div>
@@ -211,6 +221,18 @@ export const generateBarcodeLabelHTML = (labels: BarcodeLabel[], options: Barcod
         margin-top: auto; /* push pricing row to bottom of left column */
         padding-bottom: 1mm;
         padding-right: 3px; /* keep clear of divider */
+      }
+      .price-value {
+        display: inline-flex;
+        align-items: baseline;
+      }
+      .rupee-glyph {
+        width: 0.62em;
+        height: 0.82em;
+        margin-right: 0.08em;
+        overflow: visible;
+        flex-shrink: 0;
+        fill: currentColor;
       }
       .mrp {
         font-family: 'Courier New', monospace;

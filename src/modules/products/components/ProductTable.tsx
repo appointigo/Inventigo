@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useRef } from "react";
+import type { Key } from "react";
 import {
   Table,
   Button,
@@ -30,6 +31,7 @@ import {
   CopyOutlined,
   PrinterOutlined,
   DownloadOutlined,
+  CloseOutlined,
 } from "@ant-design/icons";
 import type { MenuProps } from "antd";
 import type { ColumnsType } from "antd/es/table";
@@ -39,6 +41,7 @@ import type { Category } from "@/modules/categories/types";
 import type { Brand } from "@/modules/brands/types";
 import { buildVariantSku } from "@/shared/services/barcodeService";
 import { generateBarcodeLabelHTML } from "@/modules/barcode/services/barcodeExportService";
+import { updateBarcodeSelection } from "../utils/barcodeSelection";
 
 interface ProductTableProps {
   products: Product[];
@@ -101,6 +104,7 @@ const ProductTable = ({
   const { message } = App.useApp();
   const [barcodePrintOpen, setBarcodePrintOpen] = useState(false);
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
+  const [selectedProductsById, setSelectedProductsById] = useState<Record<string, Product>>({});
   const [copiesMap, setCopiesMap] = useState<Record<string, number>>({});
   const [exportLoading, setExportLoading] = useState(false);
   const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
@@ -188,15 +192,29 @@ const ProductTable = ({
     [hiddenAttributeFields, attributeFilters]
   );
 
-  useEffect(() => {
-    const pageIds = new Set(products.map((product) => product.id));
-    setSelectedProductIds((prev) => prev.filter((id) => pageIds.has(id)));
-  }, [products]);
-
   const selectedProducts = useMemo(
-    () => products.filter((product) => selectedProductIds.includes(product.id)),
-    [products, selectedProductIds]
+    () =>
+      selectedProductIds
+        .map((id) => selectedProductsById[id])
+        .filter((product): product is Product => Boolean(product)),
+    [selectedProductIds, selectedProductsById]
   );
+
+  const clearBarcodeSelection = () => {
+    setSelectedProductIds([]);
+    setSelectedProductsById({});
+    setCopiesMap({});
+  };
+
+  const handleSelectionChange = (selectedRowKeys: Key[]) => {
+    const next = updateBarcodeSelection(
+      { ids: selectedProductIds, productsById: selectedProductsById },
+      products,
+      selectedRowKeys,
+    );
+    setSelectedProductIds(next.ids);
+    setSelectedProductsById(next.productsById);
+  };
 
   const barcodeRows = useMemo(
     () =>
@@ -573,6 +591,11 @@ const ProductTable = ({
           )}
         </Space>
         <Space>
+          {selectedProductIds.length > 0 && (
+            <Button icon={<CloseOutlined />} onClick={clearBarcodeSelection}>
+              Clear Selection
+            </Button>
+          )}
           <Button
             icon={<PrinterOutlined />}
             disabled={selectedProductIds.length === 0 || barcodeRows.length === 0}
@@ -815,7 +838,8 @@ const ProductTable = ({
         rowKey="id"
         rowSelection={{
           selectedRowKeys: selectedProductIds,
-          onChange: (selectedRowKeys) => setSelectedProductIds(selectedRowKeys.map(String)),
+          preserveSelectedRowKeys: true,
+          onChange: handleSelectionChange,
         }}
         loading={loading}
         pagination={{
