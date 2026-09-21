@@ -79,6 +79,9 @@ export type CategoryPerformanceRow = {
   stockoutDays: number | null;
   stockCoverDays: number | null;
   grossMargin: number | null;
+  observedDemand: number | null;
+  unfulfilledDemand: number | null;
+  demandFulfillmentRate: number | null;
   diagnostic: InventoryDiagnostic;
 };
 
@@ -91,6 +94,8 @@ export type ProductSignalRow = {
   brandId: string;
   brand: string;
   unitsSold: number;
+  observedDemand: number | null;
+  unfulfilledDemand: number | null;
   currentStock: number;
   inventoryValue: number;
   sellThrough: number | null;
@@ -112,7 +117,9 @@ export type SizeInsightRow = {
   sizeId: string;
   size: string;
   unitsSold: number;
-  demandShare: number;
+  salesShare: number;
+  observedDemandShare: number | null;
+  unfulfilledDemand: number | null;
   currentStock: number;
   stockoutDays: number | null;
   sellThrough: number | null;
@@ -164,7 +171,8 @@ export type InventoryIntelligenceResponse = {
     stockHistoryReliable: boolean;
     stockHistoryNote: string | null;
     grossMarginReliable: boolean;
-    lostDemandAvailable: false;
+    lostDemandAvailable: boolean;
+    demandEvidence: "none" | "early" | "reliable";
   };
   kpis: {
     revenue: ComparableMetric;
@@ -188,5 +196,27 @@ export type InventoryIntelligenceResponse = {
   replenishment: ProductSignalRow[];
   diagnostics: InventoryDiagnostic;
   diagnosticEvidence: DiagnosticEvidenceGroup[];
-  lostDemand: null;
+  lostDemand: null | {
+    evidence: "early" | "reliable";
+    evidenceNote: string;
+    observedDemand: number;
+    fulfilledQuantity: number;
+    unfulfilledQuantity: number;
+    fulfillmentRate: number | null;
+    reasons: Array<{ label: string; count: number; share: number }>;
+    attributes: Array<{
+      attribute: string;
+      value: string;
+      observedDemand: number;
+      unfulfilledDemand: number;
+      observedDemandShare: number;
+    }>;
+    requirements: Array<{
+      requirement: string;
+      observedDemand: number;
+      unfulfilled: number;
+      currentStock: number;
+      signal: string;
+    }>;
+  };
 };

@@ -154,6 +154,8 @@ function ProductSignalTable({
           <tr>
             <th>Product</th>
             <th>Units</th>
+            <th>Observed</th>
+            <th>Lost</th>
             <th>Stock</th>
             <th>Cover</th>
             <th>Signal</th>
@@ -177,6 +179,8 @@ function ProductSignalTable({
                 </small>
               </td>
               <td>{row.unitsSold}</td>
+              <td>{row.observedDemand ?? "—"}</td>
+              <td>{row.unfulfilledDemand ?? "—"}</td>
               <td>{row.currentStock}</td>
               <td>{row.stockCoverDays === null ? "—" : `${row.stockCoverDays}d`}</td>
               <td>
@@ -324,6 +328,24 @@ export default function InventoryIntelligencePanel({
         ),
       },
       {
+        title: "Observed demand",
+        dataIndex: "observedDemand",
+        align: "right",
+        render: (value: number | null) => (value === null ? "—" : number(value)),
+      },
+      {
+        title: "Lost demand",
+        dataIndex: "unfulfilledDemand",
+        align: "right",
+        render: (value: number | null) => (value === null ? "—" : number(value)),
+      },
+      {
+        title: "Demand fulfilment",
+        dataIndex: "demandFulfillmentRate",
+        align: "right",
+        render: (value: number | null) => (value === null ? "—" : number(value, "%")),
+      },
+      {
         title: "Avg. stock",
         dataIndex: "averageStock",
         align: "right",
@@ -335,7 +357,8 @@ export default function InventoryIntelligencePanel({
         dataIndex: "stockChange",
         align: "right",
         sorter: (a, b) =>
-          (a.stockChange.percentage ?? -Infinity) - (b.stockChange.percentage ?? -Infinity),
+          (a.stockChange.percentage ?? Number.MIN_SAFE_INTEGER) -
+          (b.stockChange.percentage ?? Number.MIN_SAFE_INTEGER),
         render: (value: ChangeMetric) => <Tag>{changeLabel(value)}</Tag>,
       },
       {
@@ -658,7 +681,14 @@ export default function InventoryIntelligencePanel({
           </Card>
 
           <div className="ii-two-column">
-            <Card title="High Demand / Low Stock" className="ii-section">
+            <Card
+              title={
+                data.methodology.lostDemandAvailable
+                  ? "Demand Gap & Replenishment"
+                  : "Sales Activity / Low Stock"
+              }
+              className="ii-section"
+            >
               <ProductSignalTable
                 rows={data.highDemandLowStock}
                 empty="No immediate replenishment risks detected"
@@ -679,7 +709,7 @@ export default function InventoryIntelligencePanel({
             className="ii-section"
             extra={
               data.sizeAvailabilityScore === null ? null : (
-                <Tooltip title="Sales demand share × historical in-stock percentage, summed across sizes. High-demand unavailable sizes reduce the score most.">
+                <Tooltip title="Observed-demand share when available, otherwise sales share, weighted by historical in-stock percentage.">
                   <Tag color="blue">Demand-weighted availability {data.sizeAvailabilityScore}%</Tag>
                 </Tooltip>
               )
@@ -690,7 +720,9 @@ export default function InventoryIntelligencePanel({
                 <thead>
                   <tr>
                     <th>Size</th>
-                    <th>Demand Share</th>
+                    <th>Sales Share</th>
+                    <th>Observed Demand Share</th>
+                    <th>Lost Demand</th>
                     <th>Units Sold</th>
                     <th>Current Stock</th>
                     <th>Sell-through</th>
@@ -705,7 +737,11 @@ export default function InventoryIntelligencePanel({
                       <td>
                         <strong>{row.size}</strong>
                       </td>
-                      <td>{row.demandShare}%</td>
+                      <td>{row.salesShare}%</td>
+                      <td>
+                        {row.observedDemandShare === null ? "—" : `${row.observedDemandShare}%`}
+                      </td>
+                      <td>{row.unfulfilledDemand ?? "—"}</td>
                       <td>{row.unitsSold}</td>
                       <td>{row.currentStock}</td>
                       <td>{number(row.sellThrough, "%")}</td>
@@ -721,13 +757,76 @@ export default function InventoryIntelligencePanel({
             </div>
           </Card>
 
-          <Card title="Lost Demand Signals" className="ii-section">
-            <Alert
-              type="info"
-              showIcon
-              title="Lost-demand data unavailable"
-              description="This Stockiva branch does not persist visitor interest, conversion outcomes, non-conversion reasons, or requested product/size context. No demand counts or revenue estimates are fabricated."
-            />
+          <Card title="Lost Opportunities" className="ii-section">
+            {data.lostDemand ? (
+              <>
+                <Alert
+                  type={data.lostDemand.evidence === "reliable" ? "success" : "info"}
+                  showIcon
+                  title={`${data.lostDemand.unfulfilledQuantity} unfulfilled of ${data.lostDemand.observedDemand} observed units`}
+                  description={data.lostDemand.evidenceNote}
+                  style={{ marginBottom: 12 }}
+                />
+                <div className="ii-two-column">
+                  <div style={{ overflowX: "auto" }}>
+                    <table className="ii-table">
+                      <thead>
+                        <tr>
+                          <th>Missing requirement</th>
+                          <th>Observed</th>
+                          <th>Lost</th>
+                          <th>Stock</th>
+                          <th>Signal</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {data.lostDemand.requirements.map((row) => (
+                          <tr key={row.requirement}>
+                            <td>{row.requirement}</td>
+                            <td>{row.observedDemand}</td>
+                            <td>{row.unfulfilled}</td>
+                            <td>{row.currentStock}</td>
+                            <td>
+                              <Tag>{row.signal}</Tag>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div style={{ overflowX: "auto" }}>
+                    <table className="ii-table">
+                      <thead>
+                        <tr>
+                          <th>Attribute demand</th>
+                          <th>Observed share</th>
+                          <th>Lost</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {data.lostDemand.attributes.slice(0, 10).map((row) => (
+                          <tr key={`${row.attribute}:${row.value}`}>
+                            <td>
+                              <strong>{row.value}</strong>
+                              <small>{row.attribute}</small>
+                            </td>
+                            <td>{row.observedDemandShare}%</td>
+                            <td>{row.unfulfilledDemand}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <Alert
+                type="info"
+                showIcon
+                title="No structured demand recorded for this period"
+                description="Sales-derived signals remain labelled as sales activity until customer visits and unmet requirements are captured."
+              />
+            )}
           </Card>
 
           <div className="ii-two-column">

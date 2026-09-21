@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { demandIntelligenceService } from "@/modules/demand-intelligence/services/demandIntelligenceService";
 import type { Prisma } from "@prisma/client";
 import type {
   AnalyticsPeriod,
@@ -128,6 +129,8 @@ type AggregateResult = {
 
 const round = (value: number, digits = 2) => Number(value.toFixed(digits));
 const variantKey = (productId: string, sizeId: string) => `${productId}:${sizeId}`;
+const isInboundMovement = (type: string) =>
+  type === "IN" || type === "RETURN" || type === "EXCHANGE_IN";
 
 const dayKey = (date: Date) => {
   const shifted = new Date(date.getTime() + OFFSET_MS);
@@ -337,6 +340,8 @@ export const inventoryIntelligenceService = {
       stockEntries,
       movements,
       lastSales,
+      demandAnalytics,
+      comparisonDemandAnalytics,
     ] = await Promise.all([
       prisma.sale.findMany({ where: saleWhere(currentStart, currentEnd), select: saleSelect }),
       prisma.sale.findMany({
@@ -386,7 +391,31 @@ export const inventoryIntelligenceService = {
         where: { storeId, type: "SALE", store: { orgId } },
         _max: { movementDate: true },
       }),
+      demandIntelligenceService
+        .analytics(orgId, null, storeId, currentStart, currentEnd)
+        .catch((error: unknown) => {
+          const code = (error as { code?: string }).code;
+          if (code === "P2021" || code === "P2022") return null;
+          throw error;
+        }),
+      demandIntelligenceService
+        .analytics(orgId, null, storeId, comparisonStart, comparisonEnd)
+        .catch((error: unknown) => {
+          const code = (error as { code?: string }).code;
+          if (code === "P2021" || code === "P2022") return null;
+          throw error;
+        }),
     ]);
+
+    const observedDemandAvailable = Boolean(demandAnalytics && demandAnalytics.evidence !== "none");
+    const demandByCategory = new Map(
+      (demandAnalytics?.categories ?? []).map((category) => [category.categoryId, category])
+    );
+    const demandByProduct = new Map(
+      (demandAnalytics?.requirements ?? [])
+        .filter((requirement) => requirement.productId)
+        .map((requirement) => [requirement.productId!, requirement])
+    );
 
     const current = aggregateTransactions(currentSales, currentReturns);
     const comparison = aggregateTransactions(comparisonSales, comparisonReturns);
@@ -467,9 +496,7 @@ export const inventoryIntelligenceService = {
       movements.reduce((total, movement) => {
         if (movement.movementDate < start || movement.movementDate >= end) return total;
         if (categoryId && movement.product.categoryId !== categoryId) return total;
-        return movement.type === "IN" || movement.type === "RETURN"
-          ? total + movement.quantity
-          : total;
+        return isInboundMovement(movement.type) ? total + movement.quantity : total;
       }, 0);
     const currentStock = Array.from(currentQuantities.values()).reduce(
       (sum, quantity) => sum + quantity,
@@ -554,10 +581,14 @@ export const inventoryIntelligenceService = {
           : null,
     }));
 
-    const categoryIds = new Set(Array.from(stockMeta.values()).map((meta) => meta.categoryId));
+    const categoryIds = new Set([
+      ...Array.from(stockMeta.values()).map((meta) => meta.categoryId),
+      ...(demandAnalytics?.categories.map((category) => category.categoryId) ?? []),
+    ]);
     const categoryPerformance: CategoryPerformanceRow[] = Array.from(categoryIds)
       .map((categoryId) => {
-        const meta = Array.from(stockMeta.values()).find((item) => item.categoryId === categoryId)!;
+        const meta = Array.from(stockMeta.values()).find((item) => item.categoryId === categoryId);
+        const categoryDemand = demandByCategory.get(categoryId);
         const currentRows = Array.from(current.rows.values()).filter(
           (row) => row.categoryId === categoryId
         );
@@ -622,7 +653,7 @@ export const inventoryIntelligenceService = {
         const stockChange = calculateChange(averageStock, comparisonAverageStock);
         return {
           categoryId,
-          category: meta.category,
+          category: meta?.category ?? categoryDemand?.category ?? "Unknown category",
           revenue,
           comparisonRevenue,
           unitsSold,
@@ -637,6 +668,13 @@ export const inventoryIntelligenceService = {
           stockoutDays,
           stockCoverDays,
           grossMargin: categoryGross,
+          observedDemand: observedDemandAvailable ? (categoryDemand?.observedDemand ?? 0) : null,
+          unfulfilledDemand: observedDemandAvailable
+            ? (categoryDemand?.unfulfilledDemand ?? 0)
+            : null,
+          demandFulfillmentRate: observedDemandAvailable
+            ? (categoryDemand?.fulfillmentRate ?? null)
+            : null,
           diagnostic: classifyInventoryPerformance({
             salesChangePct: salesChange.percentage,
             stockChangePct: stockChange.percentage,
@@ -677,7 +715,7 @@ export const inventoryIntelligenceService = {
           movement.productId === productId &&
           movement.movementDate >= currentStart &&
           movement.movementDate < currentEnd &&
-          (movement.type === "IN" || movement.type === "RETURN")
+          isInboundMovement(movement.type)
             ? sum + movement.quantity
             : sum,
         0
@@ -697,8 +735,15 @@ export const inventoryIntelligenceService = {
       const daysSinceSale = lastSale
         ? Math.max(0, Math.floor((now.getTime() - lastSale.getTime()) / DAY_MS))
         : null;
+      const productDemand = demandByProduct.get(productId);
       let status: ProductSignalRow["status"] = "Healthy";
-      if (productCurrentStock <= 0 && unitsSold > 0) status = "Critical";
+      if (
+        productCurrentStock <= 2 &&
+        observedDemandAvailable &&
+        (productDemand?.unfulfilled ?? 0) > 0
+      )
+        status = "Critical";
+      else if (productCurrentStock <= 0 && unitsSold > 0) status = "Critical";
       else if (stockCoverDays !== null && stockCoverDays <= INVENTORY_THRESHOLDS.criticalCoverDays)
         status = "Critical";
       else if (stockCoverDays !== null && stockCoverDays <= INVENTORY_THRESHOLDS.reorderCoverDays)
@@ -713,6 +758,7 @@ export const inventoryIntelligenceService = {
         (Math.max(0, unitsSold) / currentDays) * 10 +
           (sellThrough ?? 0) / 10 +
           (stockoutDays ?? 0) * 3 +
+          (productDemand?.unfulfilled ?? 0) * 3 +
           (stockCoverDays !== null && stockCoverDays <= INVENTORY_THRESHOLDS.reorderCoverDays
             ? INVENTORY_THRESHOLDS.reorderCoverDays - stockCoverDays
             : 0),
@@ -727,6 +773,8 @@ export const inventoryIntelligenceService = {
         brandId: meta.brandId,
         brand: meta.brand,
         unitsSold,
+        observedDemand: observedDemandAvailable ? (productDemand?.observedDemand ?? 0) : null,
+        unfulfilledDemand: observedDemandAvailable ? (productDemand?.unfulfilled ?? 0) : null,
         currentStock: productCurrentStock,
         inventoryValue: round(inventoryValue),
         sellThrough,
@@ -740,7 +788,9 @@ export const inventoryIntelligenceService = {
 
     const highDemandLowStock = productSignals
       .filter(
-        (row) => row.unitsSold > 0 && (row.status === "Critical" || row.status === "Reorder soon")
+        (row) =>
+          (row.unitsSold > 0 || (row.observedDemand ?? 0) > 0) &&
+          (row.status === "Critical" || row.status === "Reorder soon")
       )
       .sort((a, b) => b.priorityScore - a.priorityScore)
       .slice(0, 10);
@@ -775,7 +825,9 @@ export const inventoryIntelligenceService = {
         sizeId: meta.sizeId,
         size: meta.size,
         unitsSold: 0,
-        demandShare: 0,
+        salesShare: 0,
+        observedDemandShare: null,
+        unfulfilledDemand: null,
         currentStock: 0,
         stockoutDays: stockHistoryReliable ? 0 : null,
         sellThrough: null,
@@ -788,10 +840,15 @@ export const inventoryIntelligenceService = {
     });
     const sizeInsights = Array.from(sizeMap.values())
       .map((row) => {
-        const demandShare =
+        const salesShare =
           totalPositiveUnits > 0
             ? round((Math.max(0, row.unitsSold) / totalPositiveUnits) * 100, 1)
             : 0;
+        const sizeDemand = demandAnalytics?.attributes.find(
+          (attribute) =>
+            attribute.attribute.toLocaleLowerCase("en-IN") === "size" &&
+            attribute.value.toLocaleLowerCase("en-IN") === row.size.toLocaleLowerCase("en-IN")
+        );
         const dailySizeStock = stockHistoryReliable
           ? Array.from({ length: Math.ceil(currentDays) }, (_, index) => {
               const snapshot = snapshotAt(new Date(currentStart.getTime() + index * DAY_MS));
@@ -814,7 +871,7 @@ export const inventoryIntelligenceService = {
             movement.sizeId === row.sizeId &&
             movement.movementDate >= currentStart &&
             movement.movementDate < currentEnd &&
-            (movement.type === "IN" || movement.type === "RETURN")
+            isInboundMovement(movement.type)
               ? sum + movement.quantity
               : sum,
           0
@@ -827,24 +884,40 @@ export const inventoryIntelligenceService = {
           ? round(((dailySizeStock.length - (stockoutDays ?? 0)) / dailySizeStock.length) * 100, 1)
           : null;
         let status: SizeInsightRow["status"] = "Healthy";
-        if (row.currentStock <= 0 && demandShare >= 10) status = "Out of stock";
+        const pressureShare = sizeDemand?.observedDemandShare ?? salesShare;
+        if (row.currentStock <= 0 && pressureShare >= 10) status = "Out of stock";
         else if (
           row.currentStock <= Math.max(2, (row.unitsSold / Math.max(1, currentDays)) * 7) &&
-          demandShare >= 10
+          pressureShare >= 10
         )
           status = "Critical";
-        else if (demandShare < 2) status = "Low demand";
+        else if (pressureShare < 2) status = "Low demand";
         else if (row.currentStock < 5) status = "Low";
-        return { ...row, demandShare, stockoutDays, sellThrough, availability, status };
+        return {
+          ...row,
+          salesShare,
+          observedDemandShare: observedDemandAvailable
+            ? (sizeDemand?.observedDemandShare ?? 0)
+            : null,
+          unfulfilledDemand: observedDemandAvailable ? (sizeDemand?.unfulfilledDemand ?? 0) : null,
+          stockoutDays,
+          sellThrough,
+          availability,
+          status,
+        };
       })
-      .sort((a, b) => b.demandShare - a.demandShare);
+      .sort(
+        (a, b) => (b.observedDemandShare ?? b.salesShare) - (a.observedDemandShare ?? a.salesShare)
+      );
     const sizeAvailabilityScore =
       totalPositiveUnits > 0 && stockHistoryReliable
         ? Math.min(
             100,
             round(
               sizeInsights.reduce(
-                (score, row) => score + row.demandShare * ((row.availability ?? 0) / 100),
+                (score, row) =>
+                  score +
+                  (row.observedDemandShare ?? row.salesShare) * ((row.availability ?? 0) / 100),
                 0
               ),
               1
@@ -867,7 +940,7 @@ export const inventoryIntelligenceService = {
             movement.sizeId === meta.sizeId &&
             movement.movementDate >= currentStart &&
             movement.movementDate < currentEnd &&
-            (movement.type === "IN" || movement.type === "RETURN")
+            isInboundMovement(movement.type)
               ? sum + movement.quantity
               : sum,
           0
@@ -969,7 +1042,7 @@ export const inventoryIntelligenceService = {
 
     const overallSalesChange = calculateChange(current.revenue, comparison.revenue);
     const overallStockChange = calculateChange(currentStock, sumSnapshot(comparisonClosing));
-    const diagnostics = classifyInventoryPerformance({
+    let diagnostics = classifyInventoryPerformance({
       salesChangePct: overallSalesChange.percentage,
       stockChangePct: overallStockChange.percentage,
       sellThrough: currentSellThrough,
@@ -977,6 +1050,32 @@ export const inventoryIntelligenceService = {
       stockoutDays: null,
       unitsSold: current.units,
     });
+    if (
+      demandAnalytics?.evidence === "reliable" &&
+      comparisonDemandAnalytics?.evidence === "reliable" &&
+      (overallSalesChange.percentage ?? 0) < -10
+    ) {
+      const observedChange = calculateChange(
+        demandAnalytics.demand.observedDemand,
+        comparisonDemandAnalytics.demand.observedDemand
+      );
+      if (
+        (observedChange.percentage ?? -100) >= -5 &&
+        demandAnalytics.demand.unfulfilledQuantity > 0
+      ) {
+        diagnostics = {
+          classification: "Possible inventory constraint",
+          strength: "strong",
+          summary:
+            "Sales declined while recorded customer demand remained stable and some demand could not be fulfilled; inventory availability is a strong observed signal.",
+          signals: [
+            "Sales declined",
+            `Observed demand: ${observedChange.percentage === null ? "new activity" : `${observedChange.percentage}%`}`,
+            `${demandAnalytics.demand.unfulfilledQuantity} demand units were unfulfilled`,
+          ],
+        };
+      }
+    }
     const formatChangeSignal = (label: string, change: ReturnType<typeof calculateChange>) => {
       if (change.state === "new") return `${label}: new activity`;
       if (change.percentage === null) return `${label}: comparison unavailable`;
@@ -1035,19 +1134,50 @@ export const inventoryIntelligenceService = {
       },
       {
         key: "demand",
-        title: "Demand",
+        title: observedDemandAvailable ? "Observed Demand" : "Sales Activity",
         state: "available",
-        signals: [
-          formatChangeSignal("Revenue", overallSalesChange),
-          formatChangeSignal("Net units", calculateChange(current.units, comparison.units)),
-        ],
+        signals: observedDemandAvailable
+          ? [
+              `Observed demand: ${demandAnalytics!.demand.observedDemand} units`,
+              `Unfulfilled demand: ${demandAnalytics!.demand.unfulfilledQuantity} units`,
+              `Demand fulfilment: ${demandAnalytics!.demand.fulfillmentRate ?? "N/A"}%`,
+              ...(comparisonDemandAnalytics?.evidence !== "none"
+                ? [
+                    formatChangeSignal(
+                      "Observed demand",
+                      calculateChange(
+                        demandAnalytics!.demand.observedDemand,
+                        comparisonDemandAnalytics!.demand.observedDemand
+                      )
+                    ),
+                  ]
+                : []),
+            ]
+          : [
+              formatChangeSignal("Revenue", overallSalesChange),
+              formatChangeSignal(
+                "Net sales units",
+                calculateChange(current.units, comparison.units)
+              ),
+            ],
+        note: demandAnalytics?.evidenceNote,
       },
       {
         key: "lostDemand",
-        title: "Walk-In / Lost Demand",
-        state: "unavailable",
-        signals: [],
-        note: "No visitor-interest or non-conversion records exist in the current data model.",
+        title: "Lost Opportunities",
+        state: observedDemandAvailable ? "available" : "unavailable",
+        signals: observedDemandAvailable
+          ? demandAnalytics!.requirements
+              .filter((requirement) => requirement.unfulfilled > 0)
+              .slice(0, 3)
+              .map(
+                (requirement) =>
+                  `${requirement.requirement}: ${requirement.unfulfilled} unfulfilled`
+              )
+          : [],
+        note:
+          demandAnalytics?.evidenceNote ??
+          "No structured customer-demand records exist for this period.",
       },
       {
         key: "pricing",
@@ -1108,7 +1238,8 @@ export const inventoryIntelligenceService = {
           ? null
           : "Exact historical stock is unavailable because ADJUSTMENT movements do not retain their direction.",
         grossMarginReliable: current.costComplete && comparison.costComplete,
-        lostDemandAvailable: false,
+        lostDemandAvailable: observedDemandAvailable,
+        demandEvidence: demandAnalytics?.evidence ?? "none",
       },
       kpis: {
         revenue: comparable(current.revenue, comparison.revenue),
@@ -1169,7 +1300,25 @@ export const inventoryIntelligenceService = {
       replenishment,
       diagnostics,
       diagnosticEvidence,
-      lostDemand: null,
+      lostDemand: observedDemandAvailable
+        ? {
+            evidence: demandAnalytics!.evidence as "early" | "reliable",
+            evidenceNote: demandAnalytics!.evidenceNote,
+            observedDemand: demandAnalytics!.demand.observedDemand,
+            fulfilledQuantity: demandAnalytics!.demand.fulfilledQuantity,
+            unfulfilledQuantity: demandAnalytics!.demand.unfulfilledQuantity,
+            fulfillmentRate: demandAnalytics!.demand.fulfillmentRate,
+            reasons: demandAnalytics!.reasons,
+            attributes: demandAnalytics!.attributes,
+            requirements: demandAnalytics!.requirements.slice(0, 10).map((requirement) => ({
+              requirement: requirement.requirement,
+              observedDemand: requirement.observedDemand,
+              unfulfilled: requirement.unfulfilled,
+              currentStock: requirement.currentStock,
+              signal: requirement.signal,
+            })),
+          }
+        : null,
     };
   },
 };

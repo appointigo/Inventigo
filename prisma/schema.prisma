@@ -19,6 +19,8 @@ model Organization {
   brands                 Brand[]
   categories             Category[]
   customers              Customer[]
+  customerVisits         CustomerVisit[]
+  demandRequests         DemandRequest[]
   expenseBudgets         ExpenseBudget[]
   expenseCategoryOptions ExpenseCategoryOption[]
   featureFlags           FeatureFlag[]
@@ -57,6 +59,8 @@ model Store {
   purchaseOrders     PurchaseOrder[]
   sales              Sale[]
   returnTransactions ReturnTransaction[]
+  customerVisits     CustomerVisit[]
+  demandRequests     DemandRequest[]
   attendances        StaffAttendance[]
   stockEntries       StockEntry[]
   stockMovements     StockMovement[]
@@ -94,6 +98,7 @@ model User {
   returnTransactions ReturnTransaction[]
   attendances        StaffAttendance[]
   stockMovements     StockMovement[]
+  createdVisits      CustomerVisit[]     @relation("VisitCreator")
   storeExpenses      StoreExpense[]
   org                Organization?       @relation(fields: [orgId], references: [id])
   store              Store?              @relation(fields: [storeId], references: [id])
@@ -143,20 +148,21 @@ model Color {
 }
 
 model Category {
-  id              String        @id @default(uuid())
+  id              String          @id @default(uuid())
   orgId           String
   storeId         String?
   name            String
   slug            String
   description     String?
-  attributeSchema Json          @default("{}")
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  attributeSchema Json            @default("{}")
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
   alertConfigs    AlertConfig[]
-  org             Organization  @relation(fields: [orgId], references: [id])
-  store           Store?        @relation(fields: [storeId], references: [id])
+  org             Organization    @relation(fields: [orgId], references: [id])
+  store           Store?          @relation(fields: [storeId], references: [id])
   products        Product[]
   sizes           Size[]
+  demandRequests  DemandRequest[]
 
   @@unique([name, orgId])
   @@unique([slug, orgId])
@@ -166,17 +172,18 @@ model Category {
 }
 
 model Brand {
-  id        String       @id @default(uuid())
-  orgId     String
-  storeId   String?
-  name      String
-  logoUrl   String?
-  isActive  Boolean      @default(true)
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
-  org       Organization @relation(fields: [orgId], references: [id])
-  store     Store?       @relation(fields: [storeId], references: [id])
-  products  Product[]
+  id             String          @id @default(uuid())
+  orgId          String
+  storeId        String?
+  name           String
+  logoUrl        String?
+  isActive       Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  org            Organization    @relation(fields: [orgId], references: [id])
+  store          Store?          @relation(fields: [storeId], references: [id])
+  products       Product[]
+  demandRequests DemandRequest[]
 
   @@unique([name, orgId])
   @@index([orgId])
@@ -209,6 +216,7 @@ model Product {
   stockMovements     StockMovement[]
   returnedItems      ReturnTransactionItem[] @relation("ReturnedProduct")
   newItems           ReturnTransactionItem[] @relation("NewProduct")
+  demandRequests     DemandRequest[]
 
   @@unique([sku, orgId])
   @@index([orgId])
@@ -376,6 +384,7 @@ model Sale {
   items              SaleItem[]
   payments           SalePayment[]
   returnTransactions ReturnTransaction[]
+  customerVisit      CustomerVisit?
   user               User                @relation(fields: [createdBy], references: [id])
   customer           Customer?           @relation(fields: [customerId], references: [id])
   promoCode          PromoCode?          @relation(fields: [promoCodeId], references: [id])
@@ -530,6 +539,62 @@ model Customer {
   @@index([orgId])
   @@index([mobile])
   @@map("customers")
+}
+
+model CustomerVisit {
+  id             String          @id @default(uuid())
+  orgId          String
+  storeId        String
+  visitedAt      DateTime        @default(now())
+  outcome        VisitOutcome
+  linkedSaleId   String?         @unique
+  source         String?
+  notes          String?
+  createdBy      String?
+  idempotencyKey String?         @unique
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  org            Organization    @relation(fields: [orgId], references: [id])
+  store          Store           @relation(fields: [storeId], references: [id])
+  linkedSale     Sale?           @relation(fields: [linkedSaleId], references: [id])
+  creator        User?           @relation("VisitCreator", fields: [createdBy], references: [id])
+  demandRequests DemandRequest[]
+
+  @@index([orgId])
+  @@index([storeId, visitedAt])
+  @@index([outcome])
+  @@map("customer_visits")
+}
+
+model DemandRequest {
+  id                String              @id @default(uuid())
+  orgId             String
+  storeId           String
+  visitId           String
+  categoryId        String?
+  brandId           String?
+  productId         String?
+  requestedQuantity Int                 @default(1)
+  fulfilledQuantity Int                 @default(0)
+  status            DemandRequestStatus
+  reasonCode        DemandReasonCode
+  attributes        Json                @default("{}")
+  notes             String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  org               Organization        @relation(fields: [orgId], references: [id])
+  store             Store               @relation(fields: [storeId], references: [id])
+  visit             CustomerVisit       @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  category          Category?           @relation(fields: [categoryId], references: [id])
+  brand             Brand?              @relation(fields: [brandId], references: [id])
+  product           Product?            @relation(fields: [productId], references: [id])
+
+  @@index([storeId, createdAt])
+  @@index([visitId])
+  @@index([categoryId])
+  @@index([productId])
+  @@index([reasonCode])
+  @@map("demand_requests")
 }
 
 model AlertConfig {
@@ -871,6 +936,34 @@ enum ReturnType {
   RETURN
   EXCHANGE
   RETURN_EXCHANGE
+}
+
+enum VisitOutcome {
+  CONVERTED
+  NOT_CONVERTED
+  PARTIALLY_CONVERTED
+  BROWSING
+}
+
+enum DemandRequestStatus {
+  FULFILLED
+  PARTIALLY_FULFILLED
+  UNFULFILLED
+  ABANDONED
+}
+
+enum DemandReasonCode {
+  OUT_OF_STOCK
+  VARIANT_UNAVAILABLE
+  PRODUCT_UNAVAILABLE
+  BRAND_UNAVAILABLE
+  FEATURE_UNAVAILABLE
+  PRICE_TOO_HIGH
+  COLOR_UNAVAILABLE
+  SIZE_UNAVAILABLE
+  CUSTOMER_CHANGED_MIND
+  JUST_BROWSING
+  OTHER
 }
 
 enum AttendanceStatus {

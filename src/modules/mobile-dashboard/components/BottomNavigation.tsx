@@ -1,12 +1,19 @@
 "use client";
 
-import { AppstoreOutlined, BarChartOutlined, DollarOutlined, InboxOutlined, ShoppingOutlined, TagsOutlined } from "@ant-design/icons";
+import {
+  AppstoreOutlined,
+  BarChartOutlined,
+  DollarOutlined,
+  InboxOutlined,
+  ShoppingOutlined,
+  UserAddOutlined,
+} from "@ant-design/icons";
 import { usePathname, useRouter } from "next/navigation";
 
 const NAV_ITEMS = [
   { key: "dashboard", label: "Dashboard", href: "/dashboard", icon: BarChartOutlined },
   { key: "categories", label: "Categories", href: "/dashboard/categories", icon: AppstoreOutlined },
-  { key: "brands", label: "Brands", href: "/dashboard/brands", icon: TagsOutlined },
+  { key: "demand", label: "Demand", href: "/dashboard/demand", icon: UserAddOutlined },
   { key: "products", label: "Products", href: "/dashboard/products", icon: ShoppingOutlined },
   { key: "stock", label: "Stock", href: "/dashboard/stock", icon: InboxOutlined },
   { key: "billing", label: "Billing", href: "/dashboard/billing", icon: DollarOutlined },
@@ -71,7 +78,16 @@ export function BottomNavigation() {
               }}
             >
               <Icon style={{ fontSize: 18 }} />
-              <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{item.label}</span>
+              <span
+                style={{
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  maxWidth: "100%",
+                }}
+              >
+                {item.label}
+              </span>
             </button>
           );
         })}

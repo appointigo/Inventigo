@@ -30,11 +30,11 @@ export function calculateInventoryValue(positions: Array<{ quantity: number; uni
 }
 
 export function resolveMovementDelta(
-  type: "IN" | "OUT" | "SALE" | "RETURN" | "ADJUSTMENT",
+  type: "IN" | "OUT" | "SALE" | "RETURN" | "EXCHANGE_IN" | "EXCHANGE_OUT" | "ADJUSTMENT",
   quantity: number
 ) {
-  if (type === "IN" || type === "RETURN") return Math.abs(quantity);
-  if (type === "OUT" || type === "SALE") return -Math.abs(quantity);
+  if (type === "IN" || type === "RETURN" || type === "EXCHANGE_IN") return Math.abs(quantity);
+  if (type === "OUT" || type === "SALE" || type === "EXCHANGE_OUT") return -Math.abs(quantity);
   return null;
 }
 
@@ -45,7 +45,7 @@ export function reconstructStockSnapshot(
   current: Map<string, number>,
   movements: Array<{
     key: string;
-    type: "IN" | "OUT" | "SALE" | "RETURN" | "ADJUSTMENT";
+    type: "IN" | "OUT" | "SALE" | "RETURN" | "EXCHANGE_IN" | "EXCHANGE_OUT" | "ADJUSTMENT";
     quantity: number;
     date: Date;
   }>,

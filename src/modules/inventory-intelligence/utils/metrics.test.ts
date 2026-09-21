@@ -74,6 +74,8 @@ test("resolves directional movements and rejects ambiguous adjustments", () => {
   assert.equal(resolveMovementDelta("RETURN", 2), 2);
   assert.equal(resolveMovementDelta("SALE", 3), -3);
   assert.equal(resolveMovementDelta("OUT", 5), -5);
+  assert.equal(resolveMovementDelta("EXCHANGE_IN", 2), 2);
+  assert.equal(resolveMovementDelta("EXCHANGE_OUT", 2), -2);
   assert.equal(resolveMovementDelta("ADJUSTMENT", 5), null);
   assert.equal(calculateStockoutDays([3, 0, -1, 2]), 2);
   assert.equal(calculateStockoutDays(null), null);
