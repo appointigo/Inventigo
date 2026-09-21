@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "prisma:fix-exchanged-sales": "node prisma/scripts/fix-exchanged-sales-and-backfill-returns.js",
+    "vercel-build": "if [ \"$VERCEL_ENV\" = \"production\" ]; then npx prisma migrate deploy; fi && npm run build",
     "postinstall": "prisma generate"
   },
   "dependencies": {
