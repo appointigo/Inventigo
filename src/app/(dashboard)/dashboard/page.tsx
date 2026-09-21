@@ -48,6 +48,9 @@ import type { PaymentMethodDistribution, PaymentMethodDistributionResponse } fro
 import { calculateProfitabilityMetrics } from "@/modules/dashboard/services/profitabilityService";
 
 const MobileDashboardPage = dynamic(() => import("@/modules/mobile-dashboard/pages/DashboardPage"));
+const InventoryIntelligencePanel = dynamic(
+  () => import("@/modules/inventory-intelligence/components/InventoryIntelligencePanel")
+);
 
 const { Title, Text } = Typography;
 
@@ -1014,6 +1017,10 @@ const DashboardPage = () => {
             )}
           </section>
         </div>
+      ) : null}
+
+      {activeTab === "inventory-intelligence" ? (
+        <InventoryIntelligencePanel storeId={storeId ?? undefined} />
       ) : null}
 
       {activeTab === "sales" ? (

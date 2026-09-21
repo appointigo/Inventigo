@@ -283,6 +283,7 @@ model StockMovement {
 
   @@index([productId])
   @@index([storeId])
+  @@index([storeId, movementDate])
   @@index([movementDate])
   @@index([createdAt])
   @@index([referenceType, referenceId])
@@ -381,6 +382,7 @@ model Sale {
   store              Store               @relation(fields: [storeId], references: [id])
 
   @@index([storeId])
+  @@index([storeId, transactionDate])
   @@index([customerId])
   @@index([createdAt])
   @@index([status])
@@ -417,6 +419,8 @@ model SaleItem {
   sale                   Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
   size                   Size      @relation(fields: [sizeId], references: [id])
 
+  @@index([saleId])
+  @@index([productId])
   @@map("sale_items")
 }
 
@@ -472,6 +476,7 @@ model ReturnTransaction {
 
   @@index([originalSaleId])
   @@index([storeId])
+  @@index([storeId, businessDate])
   @@index([customerId])
   @@index([businessDate])
   @@index([createdAt])

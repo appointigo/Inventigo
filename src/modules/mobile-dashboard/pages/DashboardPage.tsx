@@ -1,8 +1,9 @@
 "use client";
 
 import { ArrowRightOutlined, FireOutlined, ShoppingCartOutlined, TagsOutlined, WarningOutlined } from "@ant-design/icons";
-import { Button, Empty, Skeleton, Typography } from "antd";
+import { Button, Empty, Segmented, Skeleton, Typography } from "antd";
 import dayjs from "dayjs";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useLowStockAlerts } from "@/modules/alerts/hooks/useAlerts";
 import { useSales } from "@/modules/billing/hooks/useBilling";
@@ -11,6 +12,7 @@ import { useStore } from "@/providers/StoreProvider";
 import { Card } from "../components/Card";
 import { ListItem } from "../components/ListItem";
 import { PageContainer } from "../components/PageContainer";
+import InventoryIntelligencePanel from "@/modules/inventory-intelligence/components/InventoryIntelligencePanel";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(value);
@@ -22,6 +24,7 @@ export default function DashboardPage() {
   const { data, loading } = useDashboard(storeId ?? undefined);
   const { items: lowStockItems, loading: alertsLoading } = useLowStockAlerts();
   const { sales, loading: salesLoading } = useSales();
+  const [view, setView] = useState<"overview" | "intelligence">("overview");
 
   const today = dayjs().format("YYYY-MM-DD");
   const todaysSales = sales.filter((sale) => dayjs(sale.transactionDate ?? sale.createdAt).format("YYYY-MM-DD") === today);
@@ -37,6 +40,17 @@ export default function DashboardPage() {
 
   return (
     <PageContainer title="Retail Flow" subtitle={`Quick mobile view for ${storeName || "your active store"}`}>
+      <Segmented
+        block
+        value={view}
+        onChange={(value) => setView(value as "overview" | "intelligence")}
+        options={[{ label: "Overview", value: "overview" }, { label: "Inventory Intelligence", value: "intelligence" }]}
+        style={{ marginBottom: 16 }}
+      />
+      {view === "intelligence" ? (
+        <InventoryIntelligencePanel storeId={storeId ?? undefined} compact />
+      ) : (
+        <>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
         {metricCards.map((card) => (
           <button
@@ -80,6 +94,8 @@ export default function DashboardPage() {
           )}
         </Card>
       </div>
+        </>
+      )}
     </PageContainer>
   );
 }

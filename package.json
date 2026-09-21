@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test:inventory-intelligence": "node --experimental-transform-types --test src/modules/inventory-intelligence/utils/analyticsPeriod.test.ts src/modules/inventory-intelligence/utils/metrics.test.ts",
     "prisma:fix-exchanged-sales": "node prisma/scripts/fix-exchanged-sales-and-backfill-returns.js",
     "postinstall": "prisma generate"
   },
