@@ -7,6 +7,17 @@ type UseProductsOptions = {
   enabled?: boolean;
 };
 
+const setOptionalParam = (
+  params: URLSearchParams,
+  key: string,
+  value: string | number | boolean | undefined
+) => {
+  if (value === undefined || value === "") return;
+  const normalized = String(value);
+  if (normalized === "undefined" || normalized === "null") return;
+  params.set(key, normalized);
+};
+
 export function useProducts(filters?: ProductListFilters, options?: UseProductsOptions) {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -17,6 +28,13 @@ export function useProducts(filters?: ProductListFilters, options?: UseProductsO
   const requestIdRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
   const enabled = options?.enabled ?? true;
+  const [debouncedSearch, setDebouncedSearch] = useState(filters?.search ?? "");
+
+  useEffect(() => {
+    const nextSearch = filters?.search?.trim() ?? "";
+    const timer = window.setTimeout(() => setDebouncedSearch(nextSearch), 300);
+    return () => window.clearTimeout(timer);
+  }, [filters?.search]);
 
   const fetchProducts = useCallback(async () => {
     if (!enabled) {
@@ -38,13 +56,14 @@ export function useProducts(filters?: ProductListFilters, options?: UseProductsO
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (filters?.storeId) params.set("storeId", filters.storeId);
-      if (filters?.categoryId) params.set("categoryId", filters.categoryId);
-      if (filters?.brandId) params.set("brandId", filters.brandId);
-      if (filters?.search) params.set("search", filters.search);
-      if (filters?.isActive !== undefined) params.set("isActive", String(filters.isActive));
-      if (filters?.page !== undefined) params.set("page", String(filters.page));
-      if (filters?.pageSize !== undefined) params.set("pageSize", String(filters.pageSize));
+      setOptionalParam(params, "storeId", filters?.storeId);
+      setOptionalParam(params, "categoryId", filters?.categoryId);
+      setOptionalParam(params, "brandId", filters?.brandId);
+      setOptionalParam(params, "sizeId", filters?.sizeId);
+      setOptionalParam(params, "search", debouncedSearch);
+      setOptionalParam(params, "isActive", filters?.isActive);
+      setOptionalParam(params, "page", filters?.page);
+      setOptionalParam(params, "pageSize", filters?.pageSize);
       const qs = params.toString();
       const res = await fetch(`/api/products${qs ? `?${qs}` : ""}`, {
         signal: controller.signal,
@@ -63,23 +82,31 @@ export function useProducts(filters?: ProductListFilters, options?: UseProductsO
           setPage(data.page);
           setPageSize(data.pageSize);
         }
-        setResolvedSearch(filters?.search ?? "");
+        setResolvedSearch(debouncedSearch);
       } else if (requestId === requestIdRef.current) {
         setProducts([]);
         setTotal(0);
-        setResolvedSearch(filters?.search ?? "");
+        setResolvedSearch(debouncedSearch);
       }
-    } 
-    catch (error) {
+    } catch (error) {
       if (error instanceof Error && error.name === "AbortError") return;
       console.error("Failed to fetch products:", error);
-    } 
-    finally {
+    } finally {
       if (requestId === requestIdRef.current) {
         setLoading(false);
       }
     }
-  }, [enabled, filters?.storeId, filters?.categoryId, filters?.brandId, filters?.search, filters?.isActive, filters?.page, filters?.pageSize]);
+  }, [
+    enabled,
+    filters?.storeId,
+    filters?.categoryId,
+    filters?.brandId,
+    filters?.sizeId,
+    debouncedSearch,
+    filters?.isActive,
+    filters?.page,
+    filters?.pageSize,
+  ]);
 
   useEffect(() => {
     fetchProducts();
@@ -104,11 +131,9 @@ export function useProduct(id: string | null, storeId?: string) {
       const res = await fetch(`/api/products/${encodeURIComponent(id)}${qs}`);
       const data = res.ok ? await res.json() : null;
       setProduct(data);
-    } 
-    catch (error) {
+    } catch (error) {
       console.error("Failed to fetch product:", error);
-    } 
-    finally {
+    } finally {
       setLoading(false);
     }
   }, [id, storeId]);

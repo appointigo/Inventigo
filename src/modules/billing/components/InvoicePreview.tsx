@@ -58,7 +58,7 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
   const round2 = (value: number) => Math.round(value * 100) / 100;
 
   const getItemSnapshot = (item: SaleItem) => {
-    const unitMrp = item.mrp != null ? Number(item.mrp) : Number(item.unitPrice);
+    const unitMrp = Number(item.originalUnitPrice ?? item.mrp ?? item.unitPrice);
     const finalUnitPrice = item.finalUnitPrice != null
       ? Number(item.finalUnitPrice)
       : item.sellingPrice != null
@@ -90,7 +90,10 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
     };
   };
 
-  const mrpSubtotal = round2(sale.items.reduce((sum, item) => sum + ((item.mrp != null ? Number(item.mrp) : Number(item.unitPrice)) * item.quantity), 0));
+  const mrpSubtotal = round2(sale.items.reduce((sum, item) => sum + Number(item.originalUnitPrice ?? item.mrp ?? item.unitPrice) * item.quantity, 0));
+  const invoiceSubtotal = sale.items.every((item) => item.netLineAmount != null)
+    ? round2(sale.items.reduce((sum, item) => sum + Number(item.taxableAmount ?? 0), 0) + sale.discountAmount)
+    : sale.subtotal;
   const totalSavings = Math.max(0, round2(mrpSubtotal - Number(sale.total)));
 
   const handlePrint = () => {
@@ -276,7 +279,7 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
           </table>
           ${historySections}
           <div class="totals">
-            <div>Subtotal (MRP): ${formatCurrency(mrpSubtotal)}</div>
+            <div>Subtotal (before bill discount, excl. tax): ${formatCurrency(invoiceSubtotal)}</div>
             ${sale.discountAmount > 0 ? `<div>Discount: -${formatCurrency(sale.discountAmount)}</div>` : ""}
             ${totalSavings > 0 ? `<div>You Saved: ${formatCurrency(totalSavings)}</div>` : ""}
             ${sale.taxAmount > 0 ? `<div>Tax: ${formatCurrency(sale.taxAmount)}</div>` : ""}
@@ -322,7 +325,7 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
       ),
     },
     {
-      title: "Price",
+      title: "Price (excl. tax)",
       dataIndex: "unitPrice",
       width: 140,
       align: "right",
@@ -331,6 +334,9 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
         return (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
             <Text strong>{formatCurrency(finalUnitPrice)}</Text>
+            {record.originalUnitPrice != null && <Text type="secondary" style={{ fontSize: 12 }}>
+              Agreed {formatCurrency(record.sellingPrice ?? record.unitPrice)} / unit
+            </Text>}
             {unitMrp > finalUnitPrice && (
               <>
                 <Text delete type="secondary" style={{ fontSize: 12 }}>
@@ -351,7 +357,7 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
       render: (qty: number) => <Text strong>{qty}</Text>,
     },
     {
-      title: "Total",
+      title: "Total (excl. tax)",
       dataIndex: "total",
       width: 100,
       align: "right",
@@ -474,8 +480,8 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
         {/* Summary */}
         <SummaryCard>
           <SumRow>
-            <span>Subtotal (MRP)</span>
-            <span>{formatCurrency(mrpSubtotal)}</span>
+            <span>Subtotal (before bill discount, excl. tax)</span>
+            <span>{formatCurrency(invoiceSubtotal)}</span>
           </SumRow>
           {sale.discountAmount > 0 && (
             <SumRow>

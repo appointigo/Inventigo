@@ -25,21 +25,57 @@ export function ProductCard({
 
   return (
     <Card style={{ padding: 14 }}>
-      <div style={{ display: "flex", alignItems: "start", justifyContent: "space-between", gap: 12 }}>
+      <div
+        style={{ display: "flex", alignItems: "start", justifyContent: "space-between", gap: 12 }}
+      >
         <div style={{ minWidth: 0, flex: 1 }}>
-          <Typography.Text strong style={{ fontSize: 15 }}>{product.name}</Typography.Text>
+          <Typography.Text strong style={{ fontSize: 15 }}>
+            {product.name}
+          </Typography.Text>
           <div style={{ marginTop: 6, color: "#64748b", fontSize: 13 }}>
             {product.categoryName} • {product.brandName}
           </div>
-          <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <Typography.Text strong style={{ fontSize: 16 }}>Rs {product.basePrice.toFixed(2)}</Typography.Text>
-            <Tag color={stockMeta.color} style={{ marginInlineEnd: 0 }}>{stockMeta.label}</Tag>
+          <div
+            style={{
+              marginTop: 10,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              flexWrap: "wrap",
+            }}
+          >
+            <Typography.Text strong style={{ fontSize: 16 }}>
+              Rs {product.basePrice.toFixed(2)}
+            </Typography.Text>
+            <Tag color={stockMeta.color} style={{ marginInlineEnd: 0 }}>
+              {stockMeta.label}
+            </Tag>
             <Typography.Text type="secondary">{product.totalStock} pcs</Typography.Text>
           </div>
+          {product.availableSizes.length > 0 ? (
+            <div style={{ marginTop: 8, display: "flex", gap: 4, flexWrap: "wrap" }}>
+              {product.availableSizes.slice(0, 5).map((size) => (
+                <Tag key={size.sizeId} color="blue" style={{ marginInlineEnd: 0 }}>
+                  {size.sizeLabel} × {size.quantity}
+                </Tag>
+              ))}
+              {product.availableSizes.length > 5 ? (
+                <Tag style={{ marginInlineEnd: 0 }}>+{product.availableSizes.length - 5}</Tag>
+              ) : null}
+            </div>
+          ) : null}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {onDuplicate ? <Button onClick={() => onDuplicate(product)} loading={duplicateLoading}>Duplicate</Button> : null}
-          {onAdd ? <Button type="primary" onClick={() => onAdd(product)} disabled={!!duplicateLoading}>Add</Button> : null}
+          {onDuplicate ? (
+            <Button onClick={() => onDuplicate(product)} loading={duplicateLoading}>
+              Duplicate
+            </Button>
+          ) : null}
+          {onAdd ? (
+            <Button type="primary" onClick={() => onAdd(product)} disabled={!!duplicateLoading}>
+              Add
+            </Button>
+          ) : null}
         </div>
       </div>
     </Card>

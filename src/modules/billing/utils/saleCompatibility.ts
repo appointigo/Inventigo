@@ -1,6 +1,7 @@
 type Numeric = number | string | { toString(): string } | null | undefined;
 
 export type RawSaleItem = {
+  netLineAmount?: Numeric;
   quantity?: Numeric;
   unitPrice?: Numeric;
   total?: Numeric;
@@ -128,4 +129,24 @@ export function normalizeSaleCompatibility<T extends RawSaleForCompatibility>(sa
     : realPayments;
 
   return { ...sale, items, payments, amountPaid, amountDue };
+}
+
+/** New lines use the exact persisted paid amount; old snapshots keep their historical interpretation. */
+type HistoricalPricing = Pick<RawSaleItem, "quantity" | "netLineAmount" | "effectiveUnitPrice" | "finalUnitPrice" | "sellingPrice" | "unitPrice">;
+
+export function getHistoricalUnitAmount(item: HistoricalPricing): number {
+  const quantity = Math.max(1, toNumber(item.quantity));
+  if (item.netLineAmount != null) return toNumber(item.netLineAmount) / quantity;
+  return toNumber(item.effectiveUnitPrice ?? item.finalUnitPrice ?? item.sellingPrice ?? item.unitPrice);
+}
+
+export function getHistoricalReturnAmount(item: HistoricalPricing, quantity: number, alreadyReturned = 0): number {
+  const soldQuantity = Math.max(1, toNumber(item.quantity));
+  if (item.netLineAmount != null) {
+    const cents = toCents(item.netLineAmount);
+    // Cumulative rounding ensures all partial returns reconcile to the exact line.
+    return fromCents(Math.round(cents * (alreadyReturned + quantity) / soldQuantity) -
+      Math.round(cents * alreadyReturned / soldQuantity));
+  }
+  return fromCents(Math.round(getHistoricalUnitAmount(item) * quantity * 100));
 }

@@ -1,3 +1,5 @@
+import type { ItemPriceAdjustment } from "./utils/pricingEngine";
+
 export type PaymentMethodType = "CASH" | "CARD" | "UPI";
 export type SaleStatusType = "COMPLETED" | "REFUNDED" | "EXCHANGED";
 export type SaleHistoryStatusFilter = SaleStatusType | "PENDING";
@@ -39,7 +41,8 @@ export type CreateSaleInput = {
   transactionDate?: string;
 };
 
-export type CartItem = {
+export type CartItem = ItemPriceAdjustment & {
+  originalUnitPrice?: number;
   productId: string;
   productName: string;
   sku: string;
@@ -134,7 +137,9 @@ export type Sale = {
   createdAt: string;
 };
 
-export type SaleItem = {
+export type SaleItem = ItemPriceAdjustment & {
+  originalUnitPrice?: number;
+  netLineAmount?: number;
   id: string;
   productId: string;
   productName: string;

@@ -4,14 +4,14 @@
 export type BulkProductRow = {
   brand_name: string;
   category_name: string;
-  sku: string;                   // optional — blank triggers auto-generation
+  sku: string; // optional — blank triggers auto-generation
   name: string;
   base_price: string;
   cost_price: string;
-  sizes_and_quantities: string;  // "S:10,M:20,L:15" — optional
-  external_barcode: string;      // optional
-  image_url: string;             // optional
-  attributes: string;            // "color:Blue;material:Cotton" — optional
+  sizes_and_quantities: string; // "S:10,M:20,L:15" — optional
+  external_barcode: string; // optional
+  image_url: string; // optional
+  attributes: string; // "color:Blue;material:Cotton" — optional
   [key: string]: string;
 };
 
@@ -19,7 +19,7 @@ export type BulkProductRow = {
 export type BulkProductValidated = {
   brandName: string;
   categoryName: string;
-  sku: string;                        // may be empty string (server auto-generates)
+  sku: string; // may be empty string (server auto-generates)
   name: string;
   basePrice: number;
   costPrice: number;
@@ -107,6 +107,7 @@ export type Product = {
   imageUrl: string | null;
   isActive: boolean;
   stock: ProductStockSize[];
+  availableSizes: ProductStockSize[];
   totalStock: number;
   createdAt: string;
   updatedAt: string;

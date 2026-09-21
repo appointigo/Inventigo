@@ -90,6 +90,7 @@ export const POST = async (
       "Sale not found",
       "Only completed sales can be returned or exchanged",
       "Exchange/return window has expired",
+      "Invalid",
       "Invalid returned quantity",
       "Returned item not found in original sale",
       "Invalid exchanged quantity",

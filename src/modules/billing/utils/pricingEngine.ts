@@ -1,7 +1,33 @@
 export type PricingDiscountType = "PERCENTAGE" | "FLAT";
+export type ItemDiscountType = "NONE" | "PRICE" | "FLAT" | "PERCENTAGE";
+export type ItemPriceAdjustment = { itemDiscountType?: ItemDiscountType; itemDiscountValue?: number };
+
+/** Fixed discounts and direct prices are per unit, before bill-wide discounts. */
+export function resolveItemPrice(originalUnitPrice: number, adjustment: ItemPriceAdjustment = {}): number {
+  validateAmount(originalUnitPrice, "original unit price");
+  const type = adjustment.itemDiscountType ?? "NONE";
+  const rawValue = adjustment.itemDiscountValue ?? 0;
+  validateAmount(rawValue, "item discount/price");
+  const value = roundTo2(rawValue);
+  if (type !== "NONE" && typeof adjustment.itemDiscountValue !== "number") throw new Error("Invalid item discount/price");
+  if (!["NONE", "PRICE", "FLAT", "PERCENTAGE"].includes(type) ||
+      (type === "PERCENTAGE" && value > 100) ||
+      (type === "FLAT" && value > originalUnitPrice) ||
+      (type === "NONE" && value !== 0)) throw new Error("Invalid item discount/price");
+  return roundTo2(type === "PRICE" ? value : type === "FLAT" ? originalUnitPrice - value :
+    type === "PERCENTAGE" ? originalUnitPrice * (1 - value / 100) : originalUnitPrice);
+}
+
+export function validateAmount(value: number, name: string): void {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 99999999.99) {
+    throw new Error(`Invalid ${name}`);
+  }
+}
+
 export type PricingTaxMode = "EXCLUSIVE" | "INCLUSIVE";
 
-export type PricingSourceItem = {
+export type PricingSourceItem = ItemPriceAdjustment & {
+  originalUnitPrice?: number;
   productId: string;
   quantity: number;
   mrp: number;
@@ -12,6 +38,10 @@ export type PricingSourceItem = {
 };
 
 export type SaleItemPricingSnapshot = {
+  originalUnitPrice: number;
+  itemDiscountType: ItemDiscountType;
+  itemDiscountValue: number;
+  netLineAmount: number;
   productId: string;
   quantity: number;
   mrp: number;
@@ -57,20 +87,33 @@ export function allocatePricingSnapshots(
 ): PricingAllocationResult {
   const pricingSnapshotDate = options.pricingSnapshotDate ?? new Date();
   const discountType = options.discountType ?? "PERCENTAGE";
-  const discountPercent = clamp0(Number(options.discountPercent ?? 0));
+  const discountPercent = options.discountPercent ?? 0;
+  validateAmount(discountPercent, "bill discount percentage");
+  if (discountPercent > 100) throw new Error("Invalid bill discount percentage");
+  validateAmount(options.discountAmount ?? 0, "bill discount amount");
+  validateAmount(options.taxRate ?? 0, "tax rate");
+  if (!["PERCENTAGE", "FLAT"].includes(discountType)) throw new Error("Invalid discount type");
+  if (options.taxMode && !["EXCLUSIVE", "INCLUSIVE"].includes(options.taxMode)) throw new Error("Invalid tax mode");
   const totalDiscountInput = clamp0(Number(options.discountAmount ?? 0));
   const taxRate = clamp0(Number(options.taxRate ?? 0));
   const taxMode = options.taxMode ?? "EXCLUSIVE";
 
   const normalizedItems = items.map((item) => {
-    const quantity = Math.max(0, Number(item.quantity ?? 0));
+    const quantity = item.quantity;
+    if (!Number.isSafeInteger(quantity) || quantity < 0) throw new Error("Invalid quantity");
+    validateAmount(item.sellingPrice, "selling price");
+    const originalUnitPrice = item.originalUnitPrice ?? item.sellingPrice;
+    const sellingPrice = item.itemDiscountType != null
+      ? resolveItemPrice(originalUnitPrice, item) : roundTo2(item.sellingPrice);
     const mrpCents = toCents(Number(item.mrp ?? item.sellingPrice ?? 0));
-    const sellingPriceCents = toCents(Number(item.sellingPrice ?? 0));
+    const sellingPriceCents = toCents(sellingPrice);
     const baseLineAmountCents = sellingPriceCents * quantity;
+    validateAmount(fromCents(baseLineAmountCents), "line total");
 
     return {
       ...item,
       quantity,
+      originalUnitPrice,
       mrp: fromCents(mrpCents),
       sellingPrice: fromCents(sellingPriceCents),
       baseLineAmountCents,
@@ -101,27 +144,32 @@ export function allocatePricingSnapshots(
   });
 
   const taxableBaseTotalCents = discountedLines.reduce((sum, item) => sum + item.discountedLineAmountCents, 0);
-  const totalTaxAmountCents = taxRate > 0
-    ? taxMode === "INCLUSIVE"
-      ? Math.round((taxableBaseTotalCents * taxRate) / (100 + taxRate))
-      : Math.round((taxableBaseTotalCents * taxRate) / 100)
-    : 0;
-
-  const taxBasesCents = discountedLines.map((item) => item.discountedLineAmountCents);
-  const taxSharesCents = taxRate > 0 ? allocateRoundedSharesCents(totalTaxAmountCents, taxBasesCents) : discountedLines.map(() => 0);
+  // Allocate rounding within each tax-rate group, preserving the existing bill tax rule.
+  const taxSharesCents = discountedLines.map(() => 0);
+  for (const rate of new Set(discountedLines.map((item) => item.taxRate))) {
+    const bases = discountedLines.map((item) => item.taxRate === rate ? item.discountedLineAmountCents : 0);
+    const base = bases.reduce((sum, amount) => sum + amount, 0);
+    const tax = Math.round(base * rate / (taxMode === "INCLUSIVE" ? 100 + rate : 100));
+    allocateRoundedSharesCents(tax, bases).forEach((amount, index) => { taxSharesCents[index] += amount; });
+  }
+  const totalTaxAmountCents = taxSharesCents.reduce((sum, amount) => sum + amount, 0);
 
   const snapshots = discountedLines.map((item, index) => {
     const allocatedTaxCents = taxSharesCents[index] ?? 0;
     const taxableAmountCents = taxMode === "INCLUSIVE"
       ? Math.max(0, item.discountedLineAmountCents - allocatedTaxCents)
       : item.discountedLineAmountCents;
-    const lineNetAmountCents = item.discountedLineAmountCents;
+    const lineNetAmountCents = taxableAmountCents + allocatedTaxCents;
     const finalUnitPrice = item.quantity > 0 ? fromCents(Math.round(taxableAmountCents / item.quantity)) : 0;
     const effectiveUnitPrice = item.quantity > 0
-      ? fromCents(Math.round((lineNetAmountCents + allocatedTaxCents) / item.quantity))
+      ? fromCents(Math.round(lineNetAmountCents / item.quantity))
       : 0;
 
     return {
+      originalUnitPrice: item.originalUnitPrice,
+      itemDiscountType: item.itemDiscountType ?? "NONE",
+      itemDiscountValue: roundTo2(item.itemDiscountValue ?? 0),
+      netLineAmount: fromCents(lineNetAmountCents),
       productId: item.productId,
       quantity: item.quantity,
       mrp: item.mrp,
@@ -134,7 +182,7 @@ export function allocatePricingSnapshots(
       taxableAmount: fromCents(taxableAmountCents),
       taxAmount: fromCents(allocatedTaxCents),
       finalUnitPrice,
-      finalLineAmount: fromCents(lineNetAmountCents),
+      finalLineAmount: fromCents(taxableAmountCents),
       effectiveUnitPrice,
       pricingSnapshotDate,
       costPrice: item.costPrice,
@@ -148,6 +196,8 @@ export function allocatePricingSnapshots(
     ? fromCents(taxableBaseTotalCents)
     : fromCents(taxableBaseTotalCents + totalTaxAmountCents);
 
+  validateAmount(fromCents(subtotalCents), "sale subtotal");
+  validateAmount(finalTotal, "sale total");
   return {
     snapshots,
     subtotal: fromCents(subtotalCents),

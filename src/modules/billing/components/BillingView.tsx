@@ -1,5 +1,7 @@
 "use client";
 
+import { ItemPriceEditor } from "./ItemPriceEditor";
+
 import { useState, useCallback, useMemo, useEffect, useRef, type KeyboardEvent } from "react";
 import dynamic from "next/dynamic";
 import { App, DatePicker, Input, Select, Spin } from "antd";
@@ -358,7 +360,7 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
     const max = Math.max(0, cart.subtotal);
     const clamped = clampNumber(discountValue, 0, max);
     const normalized = max > 0 ? (clamped / max) * 100 : 0;
-    if (Math.abs(cart.discountPct - normalized) > 0.01) {
+    if (Math.abs(cart.discountPct - normalized) > 0.000000001) {
       cart.setDiscountPct(normalized);
     }
   }, [cart, discountMode, discountValue]);
@@ -596,13 +598,7 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
   // ─── Derived values ────────────────────────────────────────────────────────
   const percentValue = clampNumber(cart.discountPct, 0, 100);
   const rupeeValue = clampNumber(discountValue, 0, Math.max(0, cart.subtotal));
-  const discountAmount = Math.round(
-    discountMode === "RUPEE"
-      ? rupeeValue
-      : (cart.subtotal * percentValue) / 100
-  );
-  const taxAmount = Math.round((cart.subtotal * cart.taxPct) / 100);
-  const total = cart.subtotal - discountAmount + taxAmount;
+  const { discountAmount, taxAmount, total } = cart;
   const totalItems = cart.items.reduce((s, i) => s + i.quantity, 0);
   const splitTotalEntered = cart.splitPayments.reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
   const splitMatchesTotal = Math.abs(splitTotalEntered - total) < 0.01;
@@ -784,6 +780,7 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
                         ))}
                       <RowSkuPill>{item.sku}</RowSkuPill>
                     </RowMetaLine>
+                    <ItemPriceEditor item={item} onChange={cart.updateItemPricing} />
                   </RowInfoWrap>
                   <RowQtyCtrl>
                     <RowQtyBtn

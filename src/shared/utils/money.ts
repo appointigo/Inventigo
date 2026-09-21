@@ -37,16 +37,15 @@ export const allocateRoundedSharesCents = (totalCents: number, bases: number[]):
     return bases.map(() => 0);
   }
 
-  let allocated = 0;
-  return bases.map((base, index) => {
-    const normalizedBase = Math.max(0, Math.round(base));
-    if (index === bases.length - 1) {
-      return normalizedTotal - allocated;
-    }
-    const share = Math.round((normalizedTotal * normalizedBase) / totalBase);
-    allocated += share;
-    return share;
-  });
+  // Largest remainders conserve paise without a negative last share or allocating
+  // discount/tax to a zero-price or ineligible line.
+  const exact = bases.map((base) => normalizedTotal * Math.max(0, Math.round(base)) / totalBase);
+  const shares = exact.map(Math.floor);
+  const remainder = normalizedTotal - shares.reduce((sum, share) => sum + share, 0);
+  const order = exact.map((value, index) => ({ index, fraction: value - shares[index] }))
+    .sort((a, b) => b.fraction - a.fraction || a.index - b.index);
+  for (let i = 0; i < remainder; i++) shares[order[i].index] += 1;
+  return shares;
 };
 
 export function formatCurrency(amount: number | string): string {
