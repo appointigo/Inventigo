@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { App, Badge, Button, Empty, Input, Skeleton, Typography } from "antd";
 import { CameraOutlined, SearchOutlined, ShoppingCartOutlined } from "@ant-design/icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSales } from "@/modules/billing/hooks/useBilling";
+import { createSaleRequest } from "@/modules/billing/hooks/useBilling";
 import type { VariantRow } from "@/modules/billing/types";
 import { useProducts } from "@/modules/products/hooks/useProducts";
 import { useStore } from "@/providers/StoreProvider";
@@ -12,6 +12,8 @@ import { BillingCart } from "../components/BillingCart";
 import { Card } from "../components/Card";
 import { PageContainer } from "../components/PageContainer";
 import { useMobileWorkspace } from "../context/MobileWorkspaceContext";
+import { formatCurrency } from "@/shared/utils/formatCurrency";
+import styles from "./BillingPage.module.css";
 
 const CameraBarcodeScannerModal = dynamic(
   () => import("@/modules/barcode/components/CameraBarcodeScannerModal"),
@@ -23,7 +25,6 @@ export default function BillingPage() {
   const { storeId } = useStore();
   const { moduleSearch, setModuleSearch, cart } = useMobileWorkspace();
   const { products, loading } = useProducts({ storeId: storeId ?? undefined, search: moduleSearch.billing || undefined });
-  const { createSale } = useSales();
   const [cartOpen, setCartOpen] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [cameraScanOpen, setCameraScanOpen] = useState(false);
@@ -126,7 +127,7 @@ export default function BillingPage() {
 
     setCheckoutLoading(true);
     try {
-      await createSale(cart.toCreateInput());
+      await createSaleRequest(cart.toCreateInput());
       cart.clearCart();
       setCartOpen(false);
       message.success("Sale completed");
@@ -222,14 +223,15 @@ export default function BillingPage() {
       <PageContainer
         title="Billing"
         subtitle="Fast mobile POS with cart-first checkout"
+        style={{ paddingBottom: "calc(238px + env(safe-area-inset-bottom))" }}
         headerExtra={
           <Badge count={cart.items.length}>
             <Button icon={<ShoppingCartOutlined />} size="large" shape="round" onClick={() => setCartOpen(true)} />
           </Badge>
         }
         stickySlot={(
-          <div style={{ display: "grid", gap: 10 }}>
-            <div style={{ display: "flex", gap: 10 }}>
+          <div className={styles.searchPanel}>
+            <div className={styles.searchRow}>
               <Input
                 value={moduleSearch.billing}
                 allowClear
@@ -238,7 +240,7 @@ export default function BillingPage() {
                 placeholder="Search product or barcode"
                 onChange={(event) => setModuleSearch("billing", event.target.value)}
                 onPressEnter={handleScanEnter}
-                style={{ minHeight: 48, borderRadius: 18, flex: 1 }}
+                className={styles.searchInput}
               />
               {cameraSupported ? (
                 <Button
@@ -246,11 +248,11 @@ export default function BillingPage() {
                   shape="round"
                   icon={<CameraOutlined />}
                   onClick={() => setCameraScanOpen(true)}
-                  style={{ minWidth: 52, height: 48 }}
+                  className={styles.scanButton}
                 />
               ) : null}
             </div>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            <Typography.Text type="secondary" className={styles.scanHint}>
               Barcode scanners can type here and auto-add on Enter. Camera scan is available on supported devices.
             </Typography.Text>
           </div>
@@ -261,22 +263,24 @@ export default function BillingPage() {
         ) : products.length === 0 ? (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No sellable products found" />
         ) : (
-          <div style={{ display: "grid", gap: 12 }}>
+          <div className={styles.productList}>
             {products.map((product) => {
               const sellableSize = product.stock.find((size) => size.quantity > 0) ?? product.stock[0];
               return (
-                <Card key={product.id} style={{ padding: 14 }}>
-                  <div style={{ display: "flex", alignItems: "start", justifyContent: "space-between", gap: 12 }}>
-                    <div style={{ minWidth: 0 }}>
-                      <Typography.Text strong>{product.name}</Typography.Text>
-                      <div style={{ marginTop: 6, color: "#64748b" }}>{product.brandName} • {product.categoryName}</div>
-                      <div style={{ marginTop: 10, fontWeight: 700 }}>Rs {product.basePrice.toFixed(2)}</div>
-                      <div style={{ marginTop: 4, color: sellableSize?.quantity ? "#0f766e" : "#dc2626" }}>
+                <Card key={product.id} style={{ padding: 13 }}>
+                  <div className={styles.productRow}>
+                    <div className={styles.productDetails}>
+                      <Typography.Text strong className={styles.productName}>{product.name}</Typography.Text>
+                      <div className={styles.productMeta}>{product.brandName} • {product.categoryName}</div>
+                      <div className={styles.productPrice}>{formatCurrency(product.basePrice)}</div>
+                      <div className={sellableSize?.quantity ? styles.inStock : styles.outOfStock}>
                         {sellableSize ? `${sellableSize.sizeLabel} • ${sellableSize.quantity} in stock` : "No variants"}
                       </div>
                     </div>
                     <Button
                       type="primary"
+                      size="large"
+                      className={styles.addButton}
                       disabled={!sellableSize || sellableSize.quantity <= 0}
                       onClick={() => sellableSize && addToCart(product.id, product.name, product.sku, sellableSize.sizeId, sellableSize.sizeLabel, product.basePrice)}
                     >
@@ -290,15 +294,15 @@ export default function BillingPage() {
         )}
       </PageContainer>
 
-      <div style={{ position: "fixed", left: 16, right: 16, bottom: 118, zIndex: 25, maxWidth: 720, marginInline: "auto" }}>
-        <Card style={{ padding: 14, background: "linear-gradient(135deg, #0f172a 0%, #1d4ed8 100%)", color: "#fff" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+      <div className={styles.checkoutDock}>
+        <Card style={{ padding: 14, background: "linear-gradient(135deg, #0f172a 0%, #1d4ed8 100%)", color: "#fff", border: 0 }}>
+          <div className={styles.checkoutRow}>
             <div>
               <div style={{ fontSize: 12, opacity: 0.72 }}>Total Amount</div>
-              <div style={{ fontSize: 24, fontWeight: 800 }}>Rs {cart.total.toFixed(2)}</div>
+              <div className={styles.total}>{formatCurrency(cart.total)}</div>
             </div>
-            <Button type="primary" size="large" onClick={() => setCartOpen(true)}>
-              Checkout
+            <Button type="primary" size="large" className={styles.checkoutButton} onClick={() => setCartOpen(true)}>
+              Cart & checkout
             </Button>
           </div>
         </Card>

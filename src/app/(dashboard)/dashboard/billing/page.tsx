@@ -12,10 +12,9 @@ import BillingView from "@/modules/billing/components/BillingView";
 
 const MobileBillingPage = dynamic(() => import("@/modules/mobile-dashboard/pages/BillingPage"));
 
-const BillingPage = () => {
+const DesktopBillingPage = () => {
   const [activeTab, setActiveTab] = useState("new-sale");
   const [prefillSaleId, setPrefillSaleId] = useState<string | undefined>(undefined);
-  const { isMobile, isReady } = useMobileViewport();
 
   const {
     sales,
@@ -35,14 +34,6 @@ const BillingPage = () => {
   } = useSales();
 
   const defaultTaxPct = 0;
-
-  if (!isReady) {
-    return null;
-  }
-
-  if (isMobile) {
-    return <MobileBillingPage />;
-  }
 
   return (
     <PageWrapper>
@@ -123,5 +114,14 @@ const BillingPage = () => {
   );
 };
 
-export default BillingPage;
+const BillingPage = () => {
+  const { isMobile, isReady } = useMobileViewport();
 
+  if (!isReady) {
+    return null;
+  }
+
+  return isMobile ? <MobileBillingPage /> : <DesktopBillingPage />;
+};
+
+export default BillingPage;
