@@ -1,6 +1,6 @@
 "use client";
 
-export type DashboardTab = "overview" | "stock" | "sales";
+export type DashboardTab = "overview" | "stock" | "sales" | "inventory-intelligence";
 
 interface DashboardTabsProps {
   activeTab: DashboardTab;
@@ -11,6 +11,7 @@ const TAB_ITEMS: Array<{ key: DashboardTab; label: string; mobileLabel: string }
   { key: "overview", label: "Overview", mobileLabel: "Overview" },
   { key: "stock", label: "Stock", mobileLabel: "Stock" },
   { key: "sales", label: "Sales & Revenue", mobileLabel: "Sales" },
+  { key: "inventory-intelligence", label: "Inventory Intelligence", mobileLabel: "Intelligence" },
 ];
 
 export default function DashboardTabs({ activeTab, onTabChange }: DashboardTabsProps) {

@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test:inventory-intelligence": "node --experimental-transform-types --test src/modules/inventory-intelligence/utils/analyticsPeriod.test.ts src/modules/inventory-intelligence/utils/metrics.test.ts",
+    "test:demand-intelligence": "node --experimental-transform-types --test src/modules/demand-intelligence/utils/demandAnalytics.test.ts src/modules/demand-intelligence/utils/demandValidation.test.ts src/modules/demand-intelligence/utils/demandSecurity.test.ts",
     "prisma:fix-exchanged-sales": "node prisma/scripts/fix-exchanged-sales-and-backfill-returns.js",
     "vercel-build": "if [ \"$VERCEL_ENV\" = \"production\" ]; then npx prisma migrate deploy; fi && npm run build",
     "postinstall": "prisma generate"

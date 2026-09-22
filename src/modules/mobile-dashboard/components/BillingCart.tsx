@@ -1,12 +1,14 @@
 "use client";
 
 import { DeleteOutlined, MinusOutlined, PlusOutlined, ShoppingCartOutlined } from "@ant-design/icons";
-import { Button, DatePicker, Drawer, Empty, Input, Space, Typography } from "antd";
+import { Button, DatePicker, Drawer, Empty, Input, Typography } from "antd";
 import dayjs from "dayjs";
 import type { CartItem, PaymentMethodType, SplitPaymentEntry } from "@/modules/billing/types";
 import { ItemPriceEditor, type UpdateItemPricing } from "@/modules/billing/components/ItemPriceEditor";
 import { allocatePricingSnapshots } from "@/modules/billing/utils/pricingEngine";
 import { SplitPaymentPanel } from "./SplitPaymentPanel";
+import { formatCurrency } from "@/shared/utils/formatCurrency";
+import styles from "./BillingCart.module.css";
 
 const PAYMENT_OPTIONS: Array<{ value: PaymentMethodType; label: string }> = [
   { value: "CASH", label: "Cash" },
@@ -78,28 +80,31 @@ export function BillingCart({
   const splitMatchesTotal = Math.abs(splitTotal - total) < 0.01;
 
   return (
-    <Drawer title="Billing Cart" placement="right" open={open} onClose={onClose} size={420} destroyOnHidden>
-      <div style={{ display: "grid", gap: 16 }}>
+    <Drawer title="Billing Cart" placement="right" open={open} onClose={onClose} size="min(420px, 100vw)" destroyOnHidden className={styles.drawer}>
+      <div className={styles.content}>
         {items.length === 0 ? (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No items in cart" />
         ) : (
-          <div style={{ display: "grid", gap: 12 }}>
+          <div className={styles.items}>
             {items.map((item) => (
-              <div key={`${item.productId}-${item.sizeId}`} style={{ border: "1px solid #e5e7eb", borderRadius: 16, padding: 12 }}>
+              <div key={`${item.productId}-${item.sizeId}`} className={styles.item}>
                 <div style={{ display: "flex", alignItems: "start", justifyContent: "space-between", gap: 12 }}>
                   <div>
                     <Typography.Text strong>{item.productName}</Typography.Text>
                     <div style={{ color: "#64748b", marginTop: 4 }}>{item.sizeLabel}</div>
-                    <div style={{ marginTop: 6 }}>Rs {item.unitPrice.toFixed(2)}</div>
+                    <div className={styles.unitPrice}>{formatCurrency(item.unitPrice)} / unit</div>
                   </div>
                   <Button type="text" danger icon={<DeleteOutlined />} onClick={() => onRemove(item.productId, item.sizeId)} />
                 </div>
                 <ItemPriceEditor item={item} onChange={onItemPricingChange} />
-                <Space style={{ marginTop: 12 }}>
-                  <Button icon={<MinusOutlined />} onClick={() => onQuantityChange(item.productId, item.sizeId, Math.max(1, item.quantity - 1))} />
-                  <Typography.Text strong>{item.quantity}</Typography.Text>
-                  <Button icon={<PlusOutlined />} onClick={() => onQuantityChange(item.productId, item.sizeId, item.quantity + 1)} />
-                </Space>
+                <div className={styles.quantityRow}>
+                  <div className={styles.quantityControl}>
+                    <Button aria-label={`Decrease ${item.productName} quantity`} icon={<MinusOutlined />} onClick={() => onQuantityChange(item.productId, item.sizeId, Math.max(1, item.quantity - 1))} />
+                    <Typography.Text strong>{item.quantity}</Typography.Text>
+                    <Button aria-label={`Increase ${item.productName} quantity`} icon={<PlusOutlined />} onClick={() => onQuantityChange(item.productId, item.sizeId, item.quantity + 1)} />
+                  </div>
+                  <Typography.Text strong>{formatCurrency(item.unitPrice * item.quantity)}</Typography.Text>
+                </div>
               </div>
             ))}
           </div>
@@ -133,7 +138,7 @@ export function BillingCart({
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
                   <Typography.Text type="secondary">Total spend</Typography.Text>
-                  <Typography.Text>Rs {(customerStats?.totalSpend ?? 0).toFixed(2)}</Typography.Text>
+                  <Typography.Text>{formatCurrency(customerStats?.totalSpend ?? 0)}</Typography.Text>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
                   <Typography.Text type="secondary">Last purchase</Typography.Text>
@@ -150,7 +155,7 @@ export function BillingCart({
 
         <div style={{ display: "grid", gap: 10 }}>
           <Typography.Text strong style={{ display: "block" }}>Payment Method</Typography.Text>
-          <Space.Compact block>
+          <div className={styles.paymentGrid}>
             {PAYMENT_OPTIONS.map((option) => (
               <Button
                 key={option.value}
@@ -159,7 +164,6 @@ export function BillingCart({
                   onSplitModeChange(false);
                   onPaymentMethodChange(option.value);
                 }}
-                style={{ flex: 1 }}
               >
                 {option.label}
               </Button>
@@ -167,11 +171,10 @@ export function BillingCart({
             <Button
               type={splitMode ? "primary" : "default"}
               onClick={() => onSplitModeChange(true)}
-              style={{ flex: 1 }}
             >
               Split
             </Button>
-          </Space.Compact>
+          </div>
         </div>
 
         {splitMode ? (
@@ -186,15 +189,15 @@ export function BillingCart({
         <div style={{ border: "1px solid #e5e7eb", borderRadius: 16, padding: 14, background: "#f8fafc" }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
             <Typography.Text type="secondary">Subtotal</Typography.Text>
-            <Typography.Text>Rs {subtotal.toFixed(2)}</Typography.Text>
+            <Typography.Text>{formatCurrency(subtotal)}</Typography.Text>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
             <Typography.Text type="secondary">Tax</Typography.Text>
-            <Typography.Text>Rs {taxAmount.toFixed(2)}</Typography.Text>
+            <Typography.Text>{formatCurrency(taxAmount)}</Typography.Text>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between" }}>
             <Typography.Text strong>Total</Typography.Text>
-            <Typography.Text strong>Rs {total.toFixed(2)}</Typography.Text>
+            <Typography.Text strong>{formatCurrency(total)}</Typography.Text>
           </div>
         </div>
 
@@ -205,6 +208,7 @@ export function BillingCart({
           disabled={items.length === 0 || (splitMode && !splitMatchesTotal)}
           loading={checkoutLoading}
           onClick={onCheckout}
+          className={styles.checkout}
         >
           Checkout
         </Button>

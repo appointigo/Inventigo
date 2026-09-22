@@ -1,0 +1,32 @@
+.searchPanel { display: grid; gap: 7px; }
+.searchRow { display: flex; gap: 9px; min-width: 0; }
+.searchInput { min-width: 0; min-height: 48px; flex: 1; border-radius: 16px; }
+.scanButton { min-width: 48px; height: 48px; flex: 0 0 48px; }
+.scanHint { font-size: 11px; line-height: 1.35; }
+.productList { display: grid; gap: 10px; }
+.productRow { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.productDetails { min-width: 0; flex: 1; }
+.productName { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.productMeta { margin-top: 3px; overflow: hidden; color: #64748b; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.productPrice { margin-top: 7px; color: #0f172a; font-size: 16px; font-weight: 750; }
+.inStock, .outOfStock { margin-top: 2px; font-size: 12px; }
+.inStock { color: #0f766e; }
+.outOfStock { color: #dc2626; }
+.addButton { min-width: 68px; min-height: 44px; flex: 0 0 auto; border-radius: 13px; }
+.checkoutDock {
+  position: fixed;
+  right: 12px;
+  bottom: calc(94px + env(safe-area-inset-bottom));
+  left: 12px;
+  z-index: 25;
+  max-width: 720px;
+  margin-inline: auto;
+}
+.checkoutRow { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.total { overflow-wrap: anywhere; font-size: clamp(20px, 6vw, 26px); font-weight: 820; letter-spacing: -0.03em; }
+.checkoutButton { min-height: 48px; flex: 0 0 auto; border-radius: 14px; }
+@media (max-width: 339px) {
+  .checkoutDock { right: 8px; left: 8px; }
+  .checkoutButton { padding-inline: 12px; font-size: 13px; }
+  .scanHint { display: none; }
+}
