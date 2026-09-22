@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Alert,
   App,
@@ -15,32 +16,48 @@ import {
   Progress,
   Select,
   Skeleton,
-  Space,
-  Statistic,
   Table,
   Tag,
   Typography,
 } from "antd";
-import { PlusOutlined, UserAddOutlined } from "@ant-design/icons";
+import {
+  ArrowLeftOutlined,
+  CloseCircleOutlined,
+  DeleteOutlined,
+  PlusOutlined,
+  SaveOutlined,
+  ShopOutlined,
+  ShoppingCartOutlined,
+  UserAddOutlined,
+  UsergroupAddOutlined,
+} from "@ant-design/icons";
 import dayjs, { type Dayjs } from "dayjs";
 import { useStore } from "@/providers/StoreProvider";
 import { useCategories } from "@/modules/categories/hooks/useCategories";
 import { useBrands } from "@/modules/brands/hooks/useBrands";
 import { useProducts } from "@/modules/products/hooks/useProducts";
+import { useMobileViewport } from "@/modules/mobile-dashboard/hooks/useMobileViewport";
 import { useCreateCustomerVisit, useDemandIntelligence } from "../hooks/useDemandIntelligence";
 import type { DemandReasonCode, DemandRequestInput, VisitOutcome } from "../types";
 import { DEMAND_REASON_LABELS } from "../types";
+import styles from "./DemandIntelligencePage.module.css";
 
 const stockReasons: DemandReasonCode[] = [
-  "OUT_OF_STOCK",
+  "SIZE_UNAVAILABLE",
   "PRODUCT_UNAVAILABLE",
+  "OUT_OF_STOCK",
   "VARIANT_UNAVAILABLE",
   "BRAND_UNAVAILABLE",
   "FEATURE_UNAVAILABLE",
   "PRICE_TOO_HIGH",
   "OTHER",
 ];
-
+const prominentReasons: DemandReasonCode[] = [
+  "SIZE_UNAVAILABLE",
+  "PRODUCT_UNAVAILABLE",
+  "PRICE_TOO_HIGH",
+  "OTHER",
+];
 const newRequest = (reasonCode: DemandReasonCode): DemandRequestInput => ({
   requestedQuantity: 1,
   fulfilledQuantity: 0,
@@ -48,7 +65,6 @@ const newRequest = (reasonCode: DemandReasonCode): DemandRequestInput => ({
   reasonCode,
   attributes: {},
 });
-
 const signalColor = (signal: string) =>
   signal === "Critical Demand Gap"
     ? "red"
@@ -58,28 +74,49 @@ const signalColor = (signal: string) =>
         ? "green"
         : "blue";
 
-function VisitCapture({
-  open,
-  onClose,
-  storeId,
+function Field({
+  label,
+  required,
+  children,
+  wide = false,
 }: {
-  open: boolean;
-  onClose: () => void;
+  label: string;
+  required?: boolean;
+  children: React.ReactNode;
+  wide?: boolean;
+}) {
+  return (
+    <label className={wide ? styles.wideField : styles.field}>
+      <span>
+        {label}
+        {required ? <b> *</b> : null}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+function VisitForm({
+  storeId,
+  inline,
+  onClose,
+}: {
   storeId: string;
+  inline: boolean;
+  onClose: () => void;
 }) {
   const { message } = App.useApp();
   const { categories } = useCategories(storeId);
   const { brands } = useBrands(storeId);
   const { products } = useProducts(
     { storeId, page: 1, pageSize: 200, isActive: true },
-    { enabled: open }
+    { enabled: true }
   );
   const mutation = useCreateCustomerVisit();
   const [outcome, setOutcome] = useState<VisitOutcome>();
   const [requests, setRequests] = useState<DemandRequestInput[]>([]);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const canSave = outcome === "CONVERTED" || requests.length > 0;
-
   const reset = () => {
     setOutcome(undefined);
     setRequests([]);
@@ -96,7 +133,8 @@ function VisitCapture({
         requestIndex === index ? { ...request, ...patch } : request
       )
     );
-
+  const addRequest = (reason: DemandReasonCode) =>
+    setRequests((current) => [...current, newRequest(reason)]);
   const submit = async (saveAndNew = false, quickBrowsing = false) => {
     const finalOutcome = quickBrowsing ? "BROWSING" : outcome;
     const finalRequests = quickBrowsing ? [newRequest("JUST_BROWSING")] : requests;
@@ -126,318 +164,460 @@ function VisitCapture({
     }
   };
 
-  return (
-    <Drawer
-      title="Record Customer Visit"
-      open={open}
-      onClose={close}
-      size="min(680px, 100vw)"
-      destroyOnHidden
-    >
-      <Space orientation="vertical" size={18} style={{ width: "100%" }}>
-        <div>
-          <Typography.Title level={4} style={{ marginTop: 0 }}>
-            Did the customer buy?
-          </Typography.Title>
-          <div className="demand-outcome-grid">
-            {(
+  const content = (
+    <div className={styles.captureBody}>
+      {inline ? (
+        <div className={styles.captureTitle}>
+          <span>
+            <UserAddOutlined />
+          </span>
+          <div>
+            <h2>Record Customer Visit</h2>
+            <p>Add what the customer looked for and whether they bought.</p>
+          </div>
+        </div>
+      ) : null}
+      <section className={styles.formSection}>
+        <div className={styles.stepTitle}>
+          <span>1</span>
+          <h3>
+            Visit Outcome <b>*</b>
+          </h3>
+        </div>
+        <div className={styles.outcomeGrid}>
+          {(
+            [
+              ["CONVERTED", "Bought", <ShoppingCartOutlined key="b" />],
+              ["NOT_CONVERTED", "Didn’t Buy", <CloseCircleOutlined key="n" />],
               [
-                ["CONVERTED", "Yes"],
-                ["NOT_CONVERTED", "No"],
-                ["PARTIALLY_CONVERTED", "Partially"],
-              ] as const
-            ).map(([value, label]) => (
+                "PARTIALLY_CONVERTED",
+                "Partially",
+                <Progress type="circle" percent={66} size={24} showInfo={false} key="p" />,
+              ],
+            ] as const
+          ).map(([value, label, icon]) => (
+            <Button
+              key={value}
+              className={`${styles.outcomeButton} ${styles[`outcome${value}`]} ${outcome === value ? styles.outcomeSelected : ""}`}
+              onClick={() => {
+                setOutcome(value);
+                setRequests(value === "CONVERTED" ? [] : requests);
+              }}
+            >
+              {icon}
+              <span>{label}</span>
+            </Button>
+          ))}
+        </div>
+      </section>
+
+      {outcome === "NOT_CONVERTED" ? (
+        <section className={styles.formSection}>
+          <div className={styles.stepTitle}>
+            <span>2</span>
+            <h3>
+              Reason (why didn’t they buy?) <b>*</b>
+            </h3>
+          </div>
+          <div className={styles.reasonChips}>
+            <Button onClick={() => submit(false, true)} loading={mutation.isPending}>
+              Just browsing
+            </Button>
+            {stockReasons.map((reason) => (
               <Button
-                key={value}
-                size="large"
-                type={outcome === value ? "primary" : "default"}
-                onClick={() => {
-                  setOutcome(value);
-                  setRequests(value === "CONVERTED" ? [] : requests);
-                }}
+                key={reason}
+                type={requests.some((item) => item.reasonCode === reason) ? "primary" : "default"}
+                className={prominentReasons.includes(reason) ? "" : styles.secondaryReason}
+                onClick={() => addRequest(reason)}
               >
-                {label}
+                {DEMAND_REASON_LABELS[reason]}
               </Button>
             ))}
           </div>
-        </div>
+        </section>
+      ) : null}
 
-        {outcome === "NOT_CONVERTED" ? (
-          <Card size="small" title="Why was the sale not completed?">
-            <Flex gap={8} wrap>
-              <Button size="large" onClick={() => submit(false, true)} loading={mutation.isPending}>
-                Just browsing
-              </Button>
-              {stockReasons.map((reason) => (
-                <Button
-                  key={reason}
-                  size="large"
-                  onClick={() => setRequests((current) => [...current, newRequest(reason)])}
-                >
-                  {DEMAND_REASON_LABELS[reason]}
-                </Button>
-              ))}
-            </Flex>
-          </Card>
-        ) : null}
+      {outcome === "PARTIALLY_CONVERTED" && requests.length === 0 ? (
+        <Alert
+          className={styles.partialAlert}
+          type="info"
+          showIcon
+          title="Record what the customer still wanted"
+          action={<Button onClick={() => addRequest("VARIANT_UNAVAILABLE")}>Add request</Button>}
+        />
+      ) : null}
 
-        {outcome === "PARTIALLY_CONVERTED" && requests.length === 0 ? (
-          <Alert
-            type="info"
-            showIcon
-            title="Record what the customer still wanted"
-            action={
-              <Button onClick={() => setRequests([newRequest("VARIANT_UNAVAILABLE")])}>
-                Add request
-              </Button>
-            }
-          />
-        ) : null}
-
-        {requests.map((request, index) => {
-          const category = categories.find((item) => item.id === request.categoryId);
-          const categoryProducts = products.filter(
-            (product) => !request.categoryId || product.categoryId === request.categoryId
-          );
-          return (
-            <Card
-              key={index}
-              size="small"
-              title={`Demand request ${index + 1}`}
-              extra={
-                <Button
-                  danger
-                  type="text"
-                  onClick={() =>
-                    setRequests((current) =>
-                      current.filter((_, requestIndex) => requestIndex !== index)
-                    )
-                  }
-                >
-                  Remove
-                </Button>
-              }
-            >
-              <div className="demand-form-grid">
-                <Select
-                  showSearch
-                  optionFilterProp="label"
-                  placeholder="Category *"
-                  value={request.categoryId}
-                  options={categories.map((item) => ({ value: item.id, label: item.name }))}
-                  onChange={(categoryId) =>
-                    updateRequest(index, { categoryId, productId: undefined, attributes: {} })
-                  }
-                />
-                <Select
-                  allowClear
-                  showSearch
-                  optionFilterProp="label"
-                  placeholder="Brand (optional)"
-                  value={request.brandId}
-                  options={brands.map((item) => ({ value: item.id, label: item.name }))}
-                  onChange={(brandId) => updateRequest(index, { brandId })}
-                />
-                <Select
-                  allowClear
-                  showSearch
-                  optionFilterProp="label"
-                  placeholder="Product (optional)"
-                  value={request.productId}
-                  options={categoryProducts.map((item) => ({
-                    value: item.id,
-                    label: `${item.name} (${item.sku})`,
-                  }))}
-                  onChange={(productId) => updateRequest(index, { productId })}
-                />
-                <Select
-                  value={request.reasonCode}
-                  options={Object.entries(DEMAND_REASON_LABELS).map(([value, label]) => ({
-                    value,
-                    label,
-                  }))}
-                  onChange={(reasonCode) => updateRequest(index, { reasonCode })}
-                />
-                <Select
-                  value={request.status}
-                  options={[
-                    { value: "UNFULFILLED", label: "Unfulfilled" },
-                    { value: "PARTIALLY_FULFILLED", label: "Partially fulfilled" },
-                    { value: "FULFILLED", label: "Fulfilled" },
-                    { value: "ABANDONED", label: "Abandoned" },
-                  ]}
-                  onChange={(status) => {
-                    if (status === "FULFILLED") {
-                      updateRequest(index, {
-                        status,
-                        fulfilledQuantity: request.requestedQuantity,
-                      });
-                    } else if (status === "PARTIALLY_FULFILLED") {
-                      updateRequest(index, {
-                        status,
-                        requestedQuantity: Math.max(2, request.requestedQuantity),
-                        fulfilledQuantity: Math.max(
-                          1,
-                          Math.min(
-                            request.fulfilledQuantity,
-                            Math.max(1, request.requestedQuantity - 1)
+      {outcome && outcome !== "CONVERTED" ? (
+        <section className={styles.formSection}>
+          <div className={styles.stepTitle}>
+            <span>3</span>
+            <h3>Requested Item Details</h3>
+          </div>
+          {requests.length === 0 ? (
+            <div className={styles.requestPrompt}>
+              Choose a reason above to add the first requested item.
+            </div>
+          ) : null}
+          <div className={styles.requests}>
+            {requests.map((request, index) => {
+              const category = categories.find((item) => item.id === request.categoryId);
+              const categoryProducts = products.filter(
+                (product) => !request.categoryId || product.categoryId === request.categoryId
+              );
+              return (
+                <div className={styles.requestCard} key={index}>
+                  {requests.length > 1 ? (
+                    <div className={styles.requestCardHeader}>
+                      <strong>Request {index + 1}</strong>
+                      <Button
+                        danger
+                        type="text"
+                        icon={<DeleteOutlined />}
+                        onClick={() =>
+                          setRequests((current) =>
+                            current.filter((_, requestIndex) => requestIndex !== index)
                           )
-                        ),
-                      });
-                    } else {
-                      updateRequest(index, { status, fulfilledQuantity: 0 });
-                    }
-                  }}
-                />
-                <InputNumber
-                  min={request.status === "PARTIALLY_FULFILLED" ? 2 : 1}
-                  max={999}
-                  value={request.requestedQuantity}
-                  addonBefore="Wanted"
-                  style={{ width: "100%" }}
-                  onChange={(value) =>
-                    updateRequest(index, {
-                      requestedQuantity: value ?? 1,
-                      ...(request.status === "FULFILLED"
-                        ? { fulfilledQuantity: value ?? 1 }
-                        : request.status === "PARTIALLY_FULFILLED"
-                          ? {
-                              fulfilledQuantity: Math.min(
-                                request.fulfilledQuantity,
-                                Math.max(1, (value ?? 1) - 1)
-                              ),
-                            }
-                          : {}),
-                    })
-                  }
-                />
-                <InputNumber
-                  min={0}
-                  max={request.requestedQuantity}
-                  value={request.fulfilledQuantity}
-                  addonBefore="Fulfilled"
-                  style={{ width: "100%" }}
-                  onChange={(value) => updateRequest(index, { fulfilledQuantity: value ?? 0 })}
-                />
-                {category?.sizes.length ? (
-                  <Select
-                    allowClear
-                    showSearch
-                    optionFilterProp="label"
-                    placeholder="Size"
-                    value={request.attributes?.size as string | undefined}
-                    options={category.sizes.map((size) => ({
-                      value: size.label,
-                      label: size.label,
-                    }))}
-                    onChange={(size) =>
-                      updateRequest(index, { attributes: { ...request.attributes, size } })
-                    }
-                  />
-                ) : null}
-                {category?.attributeSchema.fields
-                  .filter((field) => field.name.toLocaleLowerCase("en-IN") !== "size")
-                  .map((field) =>
-                    field.type === "select" || field.type === "multi-select" ? (
+                        }
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  ) : null}
+                  <div className={styles.formGrid}>
+                    <Field label="Category" required>
                       <Select
-                        key={field.name}
-                        mode={field.type === "multi-select" ? "multiple" : undefined}
-                        allowClear={!field.required}
                         showSearch
                         optionFilterProp="label"
-                        placeholder={field.name}
-                        value={request.attributes?.[field.name] as string | string[] | undefined}
-                        options={(field.options ?? []).map((option) => ({
-                          value: option,
-                          label: option,
-                        }))}
-                        onChange={(value) =>
-                          updateRequest(index, {
-                            attributes: { ...request.attributes, [field.name]: value },
-                          })
+                        placeholder="Choose category"
+                        value={request.categoryId}
+                        options={categories.map((item) => ({ value: item.id, label: item.name }))}
+                        onChange={(categoryId) =>
+                          updateRequest(index, { categoryId, productId: undefined, attributes: {} })
                         }
                       />
-                    ) : field.type === "number" ? (
-                      <InputNumber
-                        key={field.name}
-                        placeholder={field.name}
-                        style={{ width: "100%" }}
-                        value={request.attributes?.[field.name] as number | undefined}
-                        onChange={(value) =>
-                          updateRequest(index, {
-                            attributes: { ...request.attributes, [field.name]: value ?? "" },
-                          })
-                        }
-                      />
-                    ) : field.type === "boolean" ? (
+                    </Field>
+                    <Field label="Product / Style">
                       <Select
-                        key={field.name}
-                        allowClear={!field.required}
-                        placeholder={field.name}
-                        value={request.attributes?.[field.name] as boolean | undefined}
+                        allowClear
+                        showSearch
+                        optionFilterProp="label"
+                        placeholder="Search product or style"
+                        value={request.productId}
+                        options={categoryProducts.map((item) => ({
+                          value: item.id,
+                          label: `${item.name} (${item.sku})`,
+                        }))}
+                        onChange={(productId) => updateRequest(index, { productId })}
+                      />
+                    </Field>
+                    <Field label="Brand">
+                      <Select
+                        allowClear
+                        showSearch
+                        optionFilterProp="label"
+                        placeholder="Optional"
+                        value={request.brandId}
+                        options={brands.map((item) => ({ value: item.id, label: item.name }))}
+                        onChange={(brandId) => updateRequest(index, { brandId })}
+                      />
+                    </Field>
+                    <Field label="Reason" required>
+                      <Select
+                        value={request.reasonCode}
+                        options={Object.entries(DEMAND_REASON_LABELS).map(([value, label]) => ({
+                          value,
+                          label,
+                        }))}
+                        onChange={(reasonCode) => updateRequest(index, { reasonCode })}
+                      />
+                    </Field>
+                    <Field label="Request Status" required>
+                      <Select
+                        value={request.status}
                         options={[
-                          { value: true, label: "Yes" },
-                          { value: false, label: "No" },
+                          { value: "UNFULFILLED", label: "Unfulfilled" },
+                          { value: "PARTIALLY_FULFILLED", label: "Partially fulfilled" },
+                          { value: "FULFILLED", label: "Fulfilled" },
+                          { value: "ABANDONED", label: "Abandoned" },
                         ]}
+                        onChange={(status) => {
+                          if (status === "FULFILLED")
+                            updateRequest(index, {
+                              status,
+                              fulfilledQuantity: request.requestedQuantity,
+                            });
+                          else if (status === "PARTIALLY_FULFILLED")
+                            updateRequest(index, {
+                              status,
+                              requestedQuantity: Math.max(2, request.requestedQuantity),
+                              fulfilledQuantity: Math.max(
+                                1,
+                                Math.min(
+                                  request.fulfilledQuantity,
+                                  Math.max(1, request.requestedQuantity - 1)
+                                )
+                              ),
+                            });
+                          else updateRequest(index, { status, fulfilledQuantity: 0 });
+                        }}
+                      />
+                    </Field>
+                    <Field label="Quantity" required>
+                      <InputNumber
+                        min={request.status === "PARTIALLY_FULFILLED" ? 2 : 1}
+                        max={999}
+                        value={request.requestedQuantity}
+                        style={{ width: "100%" }}
                         onChange={(value) =>
                           updateRequest(index, {
-                            attributes: { ...request.attributes, [field.name]: value },
+                            requestedQuantity: value ?? 1,
+                            ...(request.status === "FULFILLED"
+                              ? { fulfilledQuantity: value ?? 1 }
+                              : request.status === "PARTIALLY_FULFILLED"
+                                ? {
+                                    fulfilledQuantity: Math.min(
+                                      request.fulfilledQuantity,
+                                      Math.max(1, (value ?? 1) - 1)
+                                    ),
+                                  }
+                                : {}),
                           })
                         }
                       />
-                    ) : (
-                      <Input
-                        key={field.name}
-                        placeholder={field.name}
-                        value={request.attributes?.[field.name] as string | undefined}
-                        onChange={(event) =>
-                          updateRequest(index, {
-                            attributes: { ...request.attributes, [field.name]: event.target.value },
-                          })
-                        }
+                    </Field>
+                    {request.status === "PARTIALLY_FULFILLED" ? (
+                      <Field label="Fulfilled Quantity" required>
+                        <InputNumber
+                          min={0}
+                          max={request.requestedQuantity}
+                          value={request.fulfilledQuantity}
+                          style={{ width: "100%" }}
+                          onChange={(value) =>
+                            updateRequest(index, { fulfilledQuantity: value ?? 0 })
+                          }
+                        />
+                      </Field>
+                    ) : null}
+                    {category?.sizes.length ? (
+                      <Field label="Size / Attribute">
+                        <Select
+                          allowClear
+                          showSearch
+                          optionFilterProp="label"
+                          placeholder="Choose size"
+                          value={request.attributes?.size as string | undefined}
+                          options={category.sizes.map((size) => ({
+                            value: size.label,
+                            label: size.label,
+                          }))}
+                          onChange={(size) =>
+                            updateRequest(index, { attributes: { ...request.attributes, size } })
+                          }
+                        />
+                      </Field>
+                    ) : null}
+                    {category?.attributeSchema.fields
+                      .filter((field) => field.name.toLocaleLowerCase("en-IN") !== "size")
+                      .map((attribute) => (
+                        <Field
+                          key={attribute.name}
+                          label={attribute.name}
+                          required={attribute.required}
+                        >
+                          {attribute.type === "select" || attribute.type === "multi-select" ? (
+                            <Select
+                              mode={attribute.type === "multi-select" ? "multiple" : undefined}
+                              allowClear={!attribute.required}
+                              showSearch
+                              optionFilterProp="label"
+                              placeholder={`Choose ${attribute.name.toLowerCase()}`}
+                              value={
+                                request.attributes?.[attribute.name] as
+                                  | string
+                                  | string[]
+                                  | undefined
+                              }
+                              options={(attribute.options ?? []).map((option) => ({
+                                value: option,
+                                label: option,
+                              }))}
+                              onChange={(value) =>
+                                updateRequest(index, {
+                                  attributes: { ...request.attributes, [attribute.name]: value },
+                                })
+                              }
+                            />
+                          ) : attribute.type === "number" ? (
+                            <InputNumber
+                              placeholder={attribute.name}
+                              style={{ width: "100%" }}
+                              value={request.attributes?.[attribute.name] as number | undefined}
+                              onChange={(value) =>
+                                updateRequest(index, {
+                                  attributes: {
+                                    ...request.attributes,
+                                    [attribute.name]: value ?? "",
+                                  },
+                                })
+                              }
+                            />
+                          ) : attribute.type === "boolean" ? (
+                            <Select
+                              allowClear={!attribute.required}
+                              placeholder={attribute.name}
+                              value={request.attributes?.[attribute.name] as boolean | undefined}
+                              options={[
+                                { value: true, label: "Yes" },
+                                { value: false, label: "No" },
+                              ]}
+                              onChange={(value) =>
+                                updateRequest(index, {
+                                  attributes: { ...request.attributes, [attribute.name]: value },
+                                })
+                              }
+                            />
+                          ) : (
+                            <Input
+                              placeholder={attribute.name}
+                              value={request.attributes?.[attribute.name] as string | undefined}
+                              onChange={(event) =>
+                                updateRequest(index, {
+                                  attributes: {
+                                    ...request.attributes,
+                                    [attribute.name]: event.target.value,
+                                  },
+                                })
+                              }
+                            />
+                          )}
+                        </Field>
+                      ))}
+                    <Field label="Notes" wide>
+                      <Input.TextArea
+                        autoSize={{ minRows: 1, maxRows: 3 }}
+                        placeholder="Any additional details (e.g. colour, fit, occasion)"
+                        value={request.notes}
+                        onChange={(event) => updateRequest(index, { notes: event.target.value })}
                       />
-                    )
-                  )}
-              </div>
-            </Card>
-          );
-        })}
-
-        {outcome && outcome !== "CONVERTED" ? (
+                    </Field>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
           <Button
+            className={styles.addRequestButton}
             icon={<PlusOutlined />}
-            onClick={() => setRequests((current) => [...current, newRequest("OUT_OF_STOCK")])}
+            onClick={() => addRequest("OUT_OF_STOCK")}
           >
-            Add another request
+            <span>
+              Add another request<small>Track multiple items from the same visit</small>
+            </span>
           </Button>
-        ) : null}
-        {outcome ? (
-          <Flex gap={8} wrap>
-            <Button
-              type="primary"
-              size="large"
-              onClick={() => submit(false)}
-              loading={mutation.isPending}
-              disabled={!canSave}
-            >
-              Save visit
-            </Button>
-            <Button
-              size="large"
-              onClick={() => submit(true)}
-              disabled={mutation.isPending || !canSave}
-            >
-              Save & New
-            </Button>
-          </Flex>
-        ) : null}
-      </Space>
+        </section>
+      ) : null}
+
+      {outcome ? (
+        <div className={`${styles.actionBar} ${inline ? styles.inlineActionBar : ""}`}>
+          <Button
+            size="large"
+            onClick={() => submit(true)}
+            disabled={mutation.isPending || !canSave}
+          >
+            Save &amp; New
+          </Button>
+          <Button
+            type="primary"
+            size="large"
+            icon={<SaveOutlined />}
+            onClick={() => submit(false)}
+            loading={mutation.isPending}
+            disabled={!canSave}
+          >
+            Save Visit
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+
+  if (inline)
+    return (
+      <Card className={styles.captureCard} styles={{ body: { padding: 0 } }}>
+        {content}
+      </Card>
+    );
+  return (
+    <Drawer
+      title="Record Customer Visit"
+      open
+      onClose={close}
+      size="min(720px, 100vw)"
+      destroyOnHidden
+    >
+      {content}
     </Drawer>
   );
 }
 
+function MobileSummary({
+  visits,
+  unfulfilled,
+  conversion,
+}: {
+  visits: number | string;
+  unfulfilled: number | string;
+  conversion: number | string;
+}) {
+  const metrics = [
+    {
+      label: "Visits Today",
+      value: visits,
+      icon: <UsergroupAddOutlined />,
+      tone: styles.summaryBlue,
+    },
+    {
+      label: "Unfulfilled Requests",
+      value: unfulfilled,
+      icon: <CloseCircleOutlined />,
+      tone: styles.summaryRed,
+    },
+    {
+      label: "Conversion Rate",
+      value: conversion,
+      icon: <BarChartIcon />,
+      tone: styles.summaryGreen,
+    },
+  ];
+  return (
+    <section className={styles.mobileSummary}>
+      {metrics.map((metric) => (
+        <div key={metric.label}>
+          <span className={metric.tone}>{metric.icon}</span>
+          <p>
+            <small>{metric.label}</small>
+            <strong>{metric.value}</strong>
+          </p>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+function BarChartIcon() {
+  return (
+    <span className={styles.miniBars} aria-hidden="true">
+      <i />
+      <i />
+      <i />
+    </span>
+  );
+}
+
 export default function DemandIntelligencePage() {
-  const { storeId } = useStore();
+  const router = useRouter();
+  const { storeId, storeName } = useStore();
+  const { isMobile, isReady } = useMobileViewport();
   const [captureOpen, setCaptureOpen] = useState(false);
   const [range, setRange] = useState<[Dayjs, Dayjs]>(() => [
     dayjs().subtract(29, "day").startOf("day"),
@@ -448,7 +628,13 @@ export default function DemandIntelligencePage() {
     range[0].toISOString(),
     range[1].add(1, "day").toISOString()
   );
+  const todayQuery = useDemandIntelligence(
+    storeId ?? undefined,
+    dayjs().startOf("day").toISOString(),
+    dayjs().add(1, "day").startOf("day").toISOString()
+  );
   const data = query.data;
+  const today = todayQuery.data;
   const metricCards = useMemo(
     () =>
       data
@@ -468,16 +654,104 @@ export default function DemandIntelligencePage() {
         : [],
     [data]
   );
-
   if (!storeId)
     return <Alert type="info" showIcon title="Choose a store to use Demand Intelligence." />;
+  if (!isReady) return <Skeleton active paragraph={{ rows: 12 }} />;
+
+  if (isMobile)
+    return (
+      <main className={styles.mobilePage}>
+        <header className={styles.mobileHeader}>
+          <Button
+            type="text"
+            aria-label="Go back"
+            icon={<ArrowLeftOutlined />}
+            onClick={() => router.back()}
+          />
+          <div>
+            <h1>Demand Intelligence</h1>
+            <p>Capture customer visits and track demand</p>
+          </div>
+          <div className={styles.storeContext}>
+            <ShopOutlined />
+            <span>
+              <strong>{storeName}</strong>
+              <small>Current Store</small>
+            </span>
+          </div>
+        </header>
+        {todayQuery.isLoading ? (
+          <Card className={styles.mobileSummary}>
+            <Skeleton active paragraph={{ rows: 1 }} title={false} />
+          </Card>
+        ) : todayQuery.isError ? (
+          <Alert type="error" showIcon title="Today’s summary could not be loaded" />
+        ) : (
+          <MobileSummary
+            visits={today?.visits.total ?? 0}
+            unfulfilled={today?.demand.unfulfilledRequests ?? 0}
+            conversion={
+              today?.visits.conversionRate === null || today?.visits.conversionRate === undefined
+                ? "N/A"
+                : `${today.visits.conversionRate}%`
+            }
+          />
+        )}
+        <VisitForm storeId={storeId} inline onClose={() => undefined} />
+        <section className={styles.missedCard}>
+          <div className={styles.missedHeader}>
+            <span>
+              <CloseCircleOutlined />
+            </span>
+            <div>
+              <h2>Missed Customer Requests</h2>
+              <p>Recent unmet demand at this store</p>
+            </div>
+          </div>
+          {query.isLoading ? (
+            <Skeleton active paragraph={{ rows: 3 }} />
+          ) : query.isError ? (
+            <Alert
+              type="error"
+              showIcon
+              title="Missed requests could not be loaded"
+              description={query.error.message}
+            />
+          ) : data?.requirements.length ? (
+            <div className={styles.missedList}>
+              {data.requirements
+                .filter((row) => row.unfulfilled > 0)
+                .slice(0, 3)
+                .map((row) => (
+                  <div key={row.key}>
+                    <span className={styles.itemIcon}>
+                      <ShoppingCartOutlined />
+                    </span>
+                    <p>
+                      <strong>{row.requirement}</strong>
+                      <small>
+                        {row.unfulfilled} customer {row.unfulfilled === 1 ? "request" : "requests"}
+                      </small>
+                    </p>
+                    <b>{row.currentStock} in stock</b>
+                  </div>
+                ))}
+            </div>
+          ) : (
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description="No missed customer requests yet"
+            />
+          )}
+        </section>
+      </main>
+    );
+
   return (
-    <div className="demand-intelligence-page">
-      <Flex justify="space-between" align="flex-start" gap={12} wrap style={{ marginBottom: 16 }}>
+    <div className={styles.desktopPage}>
+      <header className={styles.desktopHeader}>
         <div>
-          <Typography.Title level={2} style={{ margin: 0 }}>
-            Demand Intelligence
-          </Typography.Title>
+          <Typography.Title level={2}>Demand Intelligence</Typography.Title>
           <Typography.Text type="secondary">
             Record customer visits and turn unmet requirements into inventory decisions.
           </Typography.Text>
@@ -498,7 +772,7 @@ export default function DemandIntelligencePage() {
             Record Customer Visit
           </Button>
         </Flex>
-      </Flex>
+      </header>
       {query.isError ? (
         <Alert
           type="error"
@@ -521,20 +795,20 @@ export default function DemandIntelligencePage() {
                   : "No observed-demand sample yet"
             }
             description={data.evidenceNote}
-            style={{ marginBottom: 14 }}
           />
-          <div className="demand-summary-grid">
+          <div className={styles.desktopSummary}>
             {metricCards.map(([label, value]) => (
               <Card size="small" key={label}>
-                <Statistic title={label} value={value} />
+                <span>{label}</span>
+                <strong>{value}</strong>
               </Card>
             ))}
           </div>
-          <div className="demand-two-column">
+          <div className={styles.desktopColumns}>
             <Card title="Why Sales Were Lost">
               {data.reasons.length ? (
                 data.reasons.map((reason) => (
-                  <div key={reason.reasonCode} style={{ marginBottom: 12 }}>
+                  <div key={reason.reasonCode} className={styles.reasonRow}>
                     <Flex justify="space-between">
                       <Typography.Text>{reason.label}</Typography.Text>
                       <Typography.Text strong>
@@ -569,7 +843,7 @@ export default function DemandIntelligencePage() {
               />
             </Card>
           </div>
-          <Card title="Demand vs Availability" style={{ marginTop: 14 }}>
+          <Card title="Demand vs Availability" className={styles.desktopTable}>
             <Table
               size="small"
               pagination={{ pageSize: 10 }}
@@ -595,7 +869,7 @@ export default function DemandIntelligencePage() {
               ]}
             />
           </Card>
-          <Card title="Category Demand" style={{ marginTop: 14 }}>
+          <Card title="Category Demand" className={styles.desktopTable}>
             <Table
               size="small"
               pagination={false}
@@ -623,47 +897,9 @@ export default function DemandIntelligencePage() {
           </Card>
         </>
       )}
-      <VisitCapture open={captureOpen} onClose={() => setCaptureOpen(false)} storeId={storeId} />
-      <style jsx global>{`
-        .demand-summary-grid {
-          display: grid;
-          grid-template-columns: repeat(5, minmax(0, 1fr));
-          gap: 10px;
-          margin-bottom: 14px;
-        }
-        .demand-two-column {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 14px;
-        }
-        .demand-outcome-grid {
-          display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 10px;
-        }
-        .demand-form-grid {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 10px;
-        }
-        @media (max-width: 1000px) {
-          .demand-summary-grid {
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-          }
-        }
-        @media (max-width: 767px) {
-          .demand-summary-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
-          .demand-two-column,
-          .demand-form-grid {
-            grid-template-columns: 1fr;
-          }
-          .demand-outcome-grid {
-            grid-template-columns: 1fr;
-          }
-        }
-      `}</style>
+      {captureOpen ? (
+        <VisitForm storeId={storeId} inline={false} onClose={() => setCaptureOpen(false)} />
+      ) : null}
     </div>
   );
 }

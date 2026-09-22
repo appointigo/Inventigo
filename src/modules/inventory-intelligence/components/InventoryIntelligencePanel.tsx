@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Alert,
   Button,
@@ -9,6 +10,8 @@ import {
   Drawer,
   Empty,
   Flex,
+  Modal,
+  Segmented,
   Select,
   Skeleton,
   Space,
@@ -17,16 +20,27 @@ import {
   Tooltip,
   Typography,
 } from "antd";
-import { InfoCircleOutlined, ReloadOutlined } from "@ant-design/icons";
+import {
+  AppstoreOutlined,
+  BarChartOutlined,
+  BulbOutlined,
+  CalendarOutlined,
+  ClockCircleOutlined,
+  InfoCircleOutlined,
+  PlusOutlined,
+  ReloadOutlined,
+  RiseOutlined,
+  ShoppingCartOutlined,
+  TeamOutlined,
+  WarningFilled,
+} from "@ant-design/icons";
 import type { Dayjs } from "dayjs";
-import type { ColumnsType } from "antd/es/table";
 import {
   Bar,
-  BarChart,
   CartesianGrid,
+  ComposedChart,
   Legend,
   Line,
-  LineChart,
   ReferenceLine,
   ResponsiveContainer,
   Scatter,
@@ -40,12 +54,12 @@ import { useInventoryDrilldown, useInventoryIntelligence } from "../hooks/useInv
 import type {
   CategoryPerformanceRow,
   ChangeMetric,
-  ComparableMetric,
   InventoryComparisonMode,
   InventoryDrilldownRow,
   InventoryPeriodPreset,
   ProductSignalRow,
 } from "../types";
+import styles from "./InventoryIntelligencePanel.module.css";
 
 const money = (value: number | null) =>
   value === null || !Number.isFinite(value)
@@ -55,141 +69,133 @@ const money = (value: number | null) =>
         currency: "INR",
         maximumFractionDigits: 0,
       }).format(value);
-
 const number = (value: number | null, suffix = "") =>
   value === null || !Number.isFinite(value)
     ? "Unavailable"
     : `${new Intl.NumberFormat("en-IN", { maximumFractionDigits: 1 }).format(value)}${suffix}`;
-
-const changeLabel = (change: ChangeMetric) => {
-  if (change.state === "new") return "NEW";
-  if (change.percentage === null || !Number.isFinite(change.percentage)) return "N/A";
-  const prefix = change.percentage > 0 ? "+" : "";
-  return `${prefix}${change.percentage}%`;
+const changeLabel = (change: ChangeMetric) =>
+  change.state === "new"
+    ? "NEW"
+    : change.percentage === null || !Number.isFinite(change.percentage)
+      ? "N/A"
+      : `${Math.abs(change.percentage)}%`;
+const periodLabels: Record<InventoryPeriodPreset, string> = {
+  weekly: "Last 7 Days",
+  monthly: "Last 30 Days",
+  quarterly: "Last 3 Months",
+  halfYearly: "Last 6 Months",
+  annual: "Last 12 Months",
+  custom: "Custom Range",
+};
+const comparisonLabels: Record<InventoryComparisonMode, string> = {
+  previousPeriod: "Previous Period",
+  previousYear: "Previous Year",
+};
+const signalColor = (status: ProductSignalRow["status"] | string) =>
+  status === "Critical" || status === "Dead stock candidate"
+    ? "red"
+    : status === "Reorder soon" ||
+        status === "Overstock risk" ||
+        status === "Slow moving" ||
+        status === "Low"
+      ? "orange"
+      : status === "Healthy"
+        ? "green"
+        : "blue";
+const categoryStatus = (row: CategoryPerformanceRow) => {
+  switch (row.diagnostic.classification) {
+    case "Overstock risk":
+      return { label: "Too much stock", color: "red" };
+    case "Strong demand / replenishment risk":
+    case "Possible inventory constraint":
+      return { label: "Restock soon", color: "orange" };
+    case "Healthy":
+      return { label: "Healthy", color: "green" };
+    default:
+      return { label: "Needs attention", color: "blue" };
+  }
 };
 
-const changeColor = (change: ChangeMetric) =>
-  change.state === "increase" ? "blue" : change.state === "decrease" ? "orange" : "default";
-
-const absoluteChangeLabel = (change: ChangeMetric, formatter: (value: number | null) => string) => {
-  if (change.state === "notApplicable") return "Δ N/A";
-  const prefix = change.absolute > 0 ? "+" : "";
-  return `Δ ${prefix}${formatter(change.absolute)}`;
-};
-
-function MetricCard({
+function BusinessMetricCard({
   title,
-  metric,
-  formatter,
+  value,
+  icon,
+  tone,
+  change,
+  secondary,
   tooltip,
-  neutralChange = false,
 }: {
   title: string;
-  metric: ComparableMetric;
-  formatter: (value: number | null) => string;
-  tooltip: string;
-  neutralChange?: boolean;
+  value: string;
+  icon: React.ReactNode;
+  tone: "blue" | "cyan" | "green";
+  change?: ChangeMetric;
+  secondary: React.ReactNode;
+  tooltip?: string;
 }) {
+  const direction = change?.state === "increase" ? "↑" : change?.state === "decrease" ? "↓" : "";
+  const unfavorable = change?.state === "decrease";
   return (
-    <Card size="small" styles={{ body: { padding: 14 } }} style={{ height: "100%" }}>
-      <Flex align="center" gap={6}>
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+    <Card className={styles.metricCard} styles={{ body: { padding: 16 } }}>
+      <div className={`${styles.metricIcon} ${styles[tone]}`}>{icon}</div>
+      <div className={styles.metricContent}>
+        <div className={styles.metricLabel}>
           {title}
-        </Typography.Text>
-        <Tooltip title={tooltip}>
-          <InfoCircleOutlined style={{ color: "var(--text-faint)", fontSize: 12 }} />
-        </Tooltip>
-      </Flex>
-      <div
-        style={{
-          fontSize: 22,
-          fontWeight: 650,
-          marginTop: 8,
-          color: metric.current === null ? "var(--text-faint)" : "var(--text-primary)",
-        }}
-      >
-        {formatter(metric.current)}
+          {tooltip ? (
+            <Tooltip title={tooltip}>
+              <InfoCircleOutlined aria-label={`About ${title}`} />
+            </Tooltip>
+          ) : null}
+        </div>
+        <div className={styles.metricValue}>{value}</div>
+        <div className={styles.metricMeta}>
+          {change ? (
+            <span className={unfavorable ? styles.negativeChange : styles.positiveChange}>
+              {direction} {changeLabel(change)}
+            </span>
+          ) : null}
+          <span>{secondary}</span>
+        </div>
       </div>
-      <Flex align="center" gap={8} style={{ marginTop: 7 }} wrap>
-        <Tooltip title="Percentage change from the comparison period">
-          <Tag color={neutralChange ? "default" : changeColor(metric.change)} style={{ margin: 0 }}>
-            {changeLabel(metric.change)}
-          </Tag>
-        </Tooltip>
-        <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-          {absoluteChangeLabel(metric.change, formatter)} · vs {formatter(metric.comparison)}
-        </Typography.Text>
-      </Flex>
-      {metric.note ? (
-        <Typography.Text type="secondary" style={{ display: "block", marginTop: 6, fontSize: 10 }}>
-          {metric.note}
-        </Typography.Text>
-      ) : null}
     </Card>
   );
 }
 
-const signalColor = (status: ProductSignalRow["status"]) => {
-  if (status === "Critical" || status === "Dead stock candidate") return "red";
-  if (status === "Reorder soon" || status === "Overstock risk" || status === "Slow moving")
-    return "orange";
-  return status === "Healthy" ? "green" : "blue";
-};
-
-function ProductSignalTable({
+function AttentionList({
   rows,
   empty,
+  kind,
   onSelect,
 }: {
   rows: ProductSignalRow[];
   empty: string;
-  onSelect?: (row: ProductSignalRow) => void;
+  kind: "restock" | "overstock";
+  onSelect: (row: ProductSignalRow) => void;
 }) {
-  return rows.length === 0 ? (
-    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={empty} />
-  ) : (
-    <div style={{ overflowX: "auto" }}>
-      <table className="ii-table">
-        <thead>
-          <tr>
-            <th>Product</th>
-            <th>Units</th>
-            <th>Observed</th>
-            <th>Lost</th>
-            <th>Stock</th>
-            <th>Cover</th>
-            <th>Signal</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr
-              key={row.productId}
-              onClick={() => onSelect?.(row)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") onSelect?.(row);
-              }}
-              tabIndex={onSelect ? 0 : undefined}
-              style={{ cursor: onSelect ? "pointer" : undefined }}
-            >
-              <td>
-                <strong>{row.product}</strong>
-                <small>
-                  {row.sku} · {row.category}
-                </small>
-              </td>
-              <td>{row.unitsSold}</td>
-              <td>{row.observedDemand ?? "—"}</td>
-              <td>{row.unfulfilledDemand ?? "—"}</td>
-              <td>{row.currentStock}</td>
-              <td>{row.stockCoverDays === null ? "—" : `${row.stockCoverDays}d`}</td>
-              <td>
-                <Tag color={signalColor(row.status)}>{row.status}</Tag>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+  if (!rows.length) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={empty} />;
+  return (
+    <div className={styles.attentionList}>
+      {rows.slice(0, 2).map((row) => (
+        <button key={row.productId} type="button" onClick={() => onSelect(row)}>
+          <span>
+            <strong>{row.product}</strong>
+            <small>
+              {kind === "restock"
+                ? row.unfulfilledDemand === null
+                  ? `${row.unitsSold} sold in the selected period`
+                  : `${row.unfulfilledDemand} customer requests missed`
+                : `${row.currentStock} units in stock`}
+            </small>
+          </span>
+          <b>
+            {kind === "restock"
+              ? `${row.currentStock} in stock`
+              : row.daysSinceSale && row.daysSinceSale > 0
+                ? `No sale in ${row.daysSinceSale}d`
+                : `${row.unitsSold} sold`}
+          </b>
+        </button>
+      ))}
     </div>
   );
 }
@@ -201,13 +207,18 @@ export default function InventoryIntelligencePanel({
   storeId?: string;
   compact?: boolean;
 }) {
+  const router = useRouter();
   const [period, setPeriod] = useState<InventoryPeriodPreset>("monthly");
   const [comparisonMode, setComparisonMode] = useState<InventoryComparisonMode>("previousPeriod");
+  const [trendMode, setTrendMode] = useState<"actual" | "indexed">("actual");
   const [draftRange, setDraftRange] = useState<[Dayjs | null, Dayjs | null] | null>(null);
   const [appliedRange, setAppliedRange] = useState<{ start: string; end: string } | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<CategoryPerformanceRow | null>(null);
   const [selectedBrandId, setSelectedBrandId] = useState<string>();
   const [selectedProductId, setSelectedProductId] = useState<string>();
+  const [variantCategoryId, setVariantCategoryId] = useState<string>();
+  const [categoryChartOpen, setCategoryChartOpen] = useState(false);
+  const [insightsOpen, setInsightsOpen] = useState(false);
   const filters = {
     storeId,
     period,
@@ -217,7 +228,9 @@ export default function InventoryIntelligencePanel({
   };
   const query = useInventoryIntelligence(filters);
   const data = query.data;
+  const activeVariantCategoryId = variantCategoryId ?? data?.categoryPerformance[0]?.categoryId;
   const drilldownQuery = useInventoryDrilldown(filters, selectedCategory?.categoryId);
+  const variantQuery = useInventoryDrilldown(filters, activeVariantCategoryId);
   const customRangeReady = period !== "custom" || Boolean(appliedRange);
 
   const openCategory = (
@@ -228,12 +241,10 @@ export default function InventoryIntelligencePanel({
     setSelectedBrandId(product?.brandId);
     setSelectedProductId(product?.productId);
   };
-
   const openProduct = (product: ProductSignalRow) => {
     const category = data?.categoryPerformance.find((row) => row.categoryId === product.categoryId);
     if (category) openCategory(category, product);
   };
-
   const categoryDrilldown = useMemo(() => drilldownQuery.data ?? [], [drilldownQuery.data]);
   const brandOptions = useMemo(
     () =>
@@ -262,147 +273,41 @@ export default function InventoryIntelligencePanel({
       ),
     [categoryDrilldown, selectedBrandId, selectedProductId]
   );
-  const drawerEvidence = useMemo(() => {
-    const revenue = categoryDrilldown.reduce((sum, row) => sum + row.revenue, 0);
-    const comparisonRevenue = categoryDrilldown.reduce(
-      (sum, row) => sum + row.comparisonRevenue,
-      0
-    );
-    const units = categoryDrilldown.reduce((sum, row) => sum + row.unitsSold, 0);
-    const comparisonUnits = categoryDrilldown.reduce(
-      (sum, row) => sum + row.comparisonUnitsSold,
-      0
-    );
-    const productRevenue = new Map<string, number>();
-    const comparisonProductRevenue = new Map<string, number>();
-    categoryDrilldown.forEach((row) => {
-      productRevenue.set(row.productId, (productRevenue.get(row.productId) ?? 0) + row.revenue);
-      comparisonProductRevenue.set(
-        row.productId,
-        (comparisonProductRevenue.get(row.productId) ?? 0) + row.comparisonRevenue
-      );
-    });
-    const topFiveShare = (values: Map<string, number>, total: number) =>
-      total > 0
-        ? (Array.from(values.values())
-            .sort((a, b) => b - a)
-            .slice(0, 5)
-            .reduce((sum, value) => sum + Math.max(0, value), 0) /
-            total) *
-          100
-        : null;
-    return {
-      realizedPrice: units > 0 ? revenue / units : null,
-      comparisonRealizedPrice: comparisonUnits > 0 ? comparisonRevenue / comparisonUnits : null,
-      topFiveShare: topFiveShare(productRevenue, revenue),
-      comparisonTopFiveShare: topFiveShare(comparisonProductRevenue, comparisonRevenue),
-    };
-  }, [categoryDrilldown]);
-
-  const columns = useMemo<ColumnsType<CategoryPerformanceRow>>(
-    () => [
-      { title: "Category", dataIndex: "category", fixed: "left", width: 150 },
+  const variantRows = useMemo(() => {
+    const grouped = new Map<
+      string,
       {
-        title: "Revenue",
-        dataIndex: "revenue",
-        align: "right",
-        sorter: (a, b) => a.revenue - b.revenue,
-        render: money,
-      },
-      {
-        title: "Units sold",
-        dataIndex: "unitsSold",
-        align: "right",
-        sorter: (a, b) => a.unitsSold - b.unitsSold,
-      },
-      {
-        title: "Sales Δ",
-        dataIndex: "salesChange",
-        align: "right",
-        render: (value: ChangeMetric, row) => (
-          <Tooltip
-            title={`${money(row.comparisonRevenue)} → ${money(row.revenue)}; ${row.comparisonUnitsSold} → ${row.unitsSold} units`}
-          >
-            <Tag color={changeColor(value)}>{changeLabel(value)}</Tag>
-          </Tooltip>
-        ),
-      },
-      {
-        title: "Observed demand",
-        dataIndex: "observedDemand",
-        align: "right",
-        render: (value: number | null) => (value === null ? "—" : number(value)),
-      },
-      {
-        title: "Lost demand",
-        dataIndex: "unfulfilledDemand",
-        align: "right",
-        render: (value: number | null) => (value === null ? "—" : number(value)),
-      },
-      {
-        title: "Demand fulfilment",
-        dataIndex: "demandFulfillmentRate",
-        align: "right",
-        render: (value: number | null) => (value === null ? "—" : number(value, "%")),
-      },
-      {
-        title: "Avg. stock",
-        dataIndex: "averageStock",
-        align: "right",
-        sorter: (a, b) => (a.averageStock ?? -1) - (b.averageStock ?? -1),
-        render: (value: number | null) => number(value),
-      },
-      {
-        title: "Stock Δ",
-        dataIndex: "stockChange",
-        align: "right",
-        sorter: (a, b) =>
-          (a.stockChange.percentage ?? Number.MIN_SAFE_INTEGER) -
-          (b.stockChange.percentage ?? Number.MIN_SAFE_INTEGER),
-        render: (value: ChangeMetric) => <Tag>{changeLabel(value)}</Tag>,
-      },
-      {
-        title: "Current stock",
-        dataIndex: "currentStock",
-        align: "right",
-        sorter: (a, b) => a.currentStock - b.currentStock,
-      },
-      {
-        title: "Sell-through",
-        dataIndex: "sellThrough",
-        align: "right",
-        sorter: (a, b) => (a.sellThrough ?? -1) - (b.sellThrough ?? -1),
-        render: (value: number | null) => number(value, "%"),
-      },
-      {
-        title: "Stockouts",
-        dataIndex: "stockoutDays",
-        align: "right",
-        render: (value: number | null) => (value === null ? "Unavailable" : `${value}d`),
-      },
-      {
-        title: "Cover",
-        dataIndex: "stockCoverDays",
-        align: "right",
-        render: (value: number | null) => (value === null ? "No sales" : `${value}d`),
-      },
-      {
-        title: "Gross margin",
-        dataIndex: "grossMargin",
-        align: "right",
-        sorter: (a, b) => (a.grossMargin ?? -1) - (b.grossMargin ?? -1),
-        render: money,
-      },
-      {
-        title: "Signal",
-        dataIndex: ["diagnostic", "classification"],
-        width: 210,
-        render: (value: string) => <Tag>{value}</Tag>,
-      },
-    ],
-    []
-  );
-
+        key: string;
+        size: string;
+        sold: number;
+        stock: number;
+        sellThrough: number | null;
+        status: string;
+      }
+    >();
+    for (const row of variantQuery.data ?? []) {
+      const current = grouped.get(row.sizeId) ?? {
+        key: row.sizeId,
+        size: row.size,
+        sold: 0,
+        stock: 0,
+        sellThrough: null,
+        status: "Monitor",
+      };
+      current.sold += row.unitsSold;
+      current.stock += row.currentStock;
+      const match = data?.sizeInsights.find((size) => size.sizeId === row.sizeId);
+      if (match) current.status = match.status;
+      grouped.set(row.sizeId, current);
+    }
+    return Array.from(grouped.values()).map((row) => ({
+      ...row,
+      sellThrough:
+        row.sold + row.stock > 0
+          ? Math.round((row.sold / (row.sold + row.stock)) * 1000) / 10
+          : null,
+    }));
+  }, [data?.sizeInsights, variantQuery.data]);
   const applyCustom = () => {
     const startDay = draftRange?.[0];
     const endDay = draftRange?.[1]?.add(1, "day");
@@ -415,59 +320,62 @@ export default function InventoryIntelligencePanel({
 
   if (!storeId)
     return <Alert type="info" showIcon title="Choose a store to load Inventory Intelligence." />;
+  const demandMissed = data?.lostDemand ? 100 - (data.lostDemand.fulfillmentRate ?? 0) : null;
+  const inactiveUnits =
+    data?.inactivity
+      .filter((bucket) => bucket.label !== "0–30 days")
+      .reduce((sum, bucket) => sum + bucket.units, 0) ?? 0;
+  const stockCover = data?.kpis.stockCover.current ?? null;
 
   return (
-    <div className="inventory-intelligence">
-      <Flex justify="space-between" align="flex-start" gap={16} wrap style={{ marginBottom: 16 }}>
+    <div className={`${styles.page} ${compact ? styles.compact : ""}`}>
+      <header className={styles.header}>
         <div>
-          <Typography.Title level={compact ? 4 : 3} style={{ margin: 0 }}>
-            Inventory Intelligence
-          </Typography.Title>
-          <Typography.Text type="secondary">
-            Understand how sales, demand and inventory availability are affecting store performance.
+          <Typography.Text className={styles.eyebrow}>
+            Analytics &nbsp;›&nbsp; Inventory Intelligence
+          </Typography.Text>
+          <Typography.Title level={compact ? 3 : 2}>Inventory Intelligence</Typography.Title>
+          <Typography.Text className={styles.subtitle}>
+            Turn your sales, stock and customer demand into smarter decisions.
           </Typography.Text>
         </div>
-        <Space wrap className="ii-controls">
+        <div className={styles.controls}>
           <Select<InventoryPeriodPreset>
             aria-label="Analytics period"
             value={period}
+            prefix={<CalendarOutlined />}
             onChange={(value) => {
               setPeriod(value);
               if (value !== "custom") setAppliedRange(null);
             }}
-            style={{ width: 145 }}
-            options={[
-              { value: "weekly", label: "Weekly" },
-              { value: "monthly", label: "Monthly" },
-              { value: "quarterly", label: "Quarterly" },
-              { value: "halfYearly", label: "Half-Yearly" },
-              { value: "annual", label: "Annual" },
-              { value: "custom", label: "Custom" },
-            ]}
+            options={Object.entries(periodLabels).map(([value, label]) => ({ value, label }))}
           />
           <Select<InventoryComparisonMode>
             aria-label="Comparison period"
             value={comparisonMode}
             onChange={setComparisonMode}
-            style={{ width: 155 }}
-            options={[
-              { value: "previousPeriod", label: "Previous Period" },
-              { value: "previousYear", label: "Previous Year" },
-            ]}
+            options={Object.entries(comparisonLabels).map(([value, label]) => ({ value, label }))}
           />
+          <Tooltip title="Refresh analytics">
+            <Button
+              aria-label="Refresh analytics"
+              icon={<ReloadOutlined />}
+              onClick={() => query.refetch()}
+              loading={query.isFetching}
+              disabled={!customRangeReady}
+            />
+          </Tooltip>
           <Button
-            icon={<ReloadOutlined />}
-            onClick={() => query.refetch()}
-            loading={query.isFetching}
-            disabled={!customRangeReady}
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => router.push("/dashboard/demand")}
           >
-            Refresh
+            Record Customer Visit
           </Button>
-        </Space>
-      </Flex>
-
+        </div>
+      </header>
       {period === "custom" ? (
-        <Flex gap={8} wrap style={{ marginBottom: 14 }}>
+        <div className={styles.customRange}>
           <DatePicker.RangePicker
             value={draftRange}
             onChange={(value) => setDraftRange(value as [Dayjs | null, Dayjs | null] | null)}
@@ -480,16 +388,10 @@ export default function InventoryIntelligencePanel({
           >
             Apply
           </Button>
-        </Flex>
+        </div>
       ) : null}
-
       {period === "custom" && !appliedRange ? (
-        <Alert
-          type="info"
-          showIcon
-          title="Select a custom date range and choose Apply"
-          style={{ marginBottom: 16 }}
-        />
+        <Alert type="info" showIcon title="Select a custom date range and choose Apply" />
       ) : query.isError ? (
         <Alert
           type="error"
@@ -497,405 +399,501 @@ export default function InventoryIntelligencePanel({
           title="Inventory Intelligence could not be loaded"
           description={query.error.message}
           action={<Button onClick={() => query.refetch()}>Try again</Button>}
-          style={{ marginBottom: 16 }}
         />
       ) : null}
       {period === "custom" && !appliedRange ? null : query.isLoading || !data ? (
-        <Skeleton active paragraph={{ rows: 18 }} />
+        <div className={styles.loadingGrid}>
+          {Array.from({ length: 8 }).map((_, index) => (
+            <Card key={index} className={styles.surface}>
+              <Skeleton active paragraph={{ rows: 3 }} title={false} />
+            </Card>
+          ))}
+        </div>
       ) : (
         <>
-          <Alert
-            type={data.methodology.stockHistoryReliable ? "info" : "warning"}
-            showIcon
-            title={`${data.range.current.label} vs ${data.range.comparison.label}`}
-            description={
-              data.methodology.stockHistoryNote ??
-              "Current and comparison periods use equivalent elapsed durations."
-            }
-            style={{ marginBottom: 14 }}
-          />
-
-          <div className="ii-kpis">
-            <MetricCard
-              title="Revenue"
-              metric={data.kpis.revenue}
-              formatter={money}
+          <section className={styles.kpiGrid} aria-label="Business snapshot">
+            <BusinessMetricCard
+              title="Sales"
+              value={money(data.kpis.revenue.current)}
+              icon={<BarChartOutlined />}
+              tone="blue"
+              change={data.kpis.revenue.change}
+              secondary={`vs ${comparisonLabels[comparisonMode].toLowerCase()}`}
               tooltip="Net item revenue after dated returns and exchanges."
             />
-            <MetricCard
+            <BusinessMetricCard
               title="Units Sold"
-              metric={data.kpis.unitsSold}
-              formatter={(v) => number(v)}
+              value={number(data.kpis.unitsSold.current)}
+              icon={<ShoppingCartOutlined />}
+              tone="cyan"
+              change={data.kpis.unitsSold.change}
+              secondary={`vs ${comparisonLabels[comparisonMode].toLowerCase()}`}
               tooltip="Net units sold after returns."
             />
-            <MetricCard
-              title="Gross Margin"
-              metric={data.kpis.grossMargin}
-              formatter={money}
-              tooltip="Net item revenue less historical cost snapshots."
+            <BusinessMetricCard
+              title="Customer Demand Fulfilled"
+              value={
+                data.lostDemand?.fulfillmentRate === null || !data.lostDemand
+                  ? "Insufficient data"
+                  : `${data.lostDemand.fulfillmentRate}%`
+              }
+              icon={<TeamOutlined />}
+              tone="blue"
+              secondary={
+                demandMissed === null
+                  ? "No customer demand recorded yet"
+                  : `${number(demandMissed, "%")} of recorded demand was missed`
+              }
+              tooltip={
+                data.lostDemand?.evidenceNote ??
+                "Start recording customer visits to measure demand fulfilment."
+              }
             />
-            <MetricCard
-              title="Gross Margin %"
-              metric={data.kpis.grossMarginPercent}
-              formatter={(v) => number(v, "%")}
-              tooltip="Gross margin divided by net item revenue when historical costs are complete."
-            />
-            <MetricCard
+            <BusinessMetricCard
               title="Inventory Value"
-              metric={data.kpis.inventoryValue}
-              formatter={money}
+              value={money(data.kpis.inventoryValue.current)}
+              icon={<AppstoreOutlined />}
+              tone="green"
+              secondary={
+                <>
+                  Stock cover:{" "}
+                  {stockCover === null
+                    ? "No recent sales"
+                    : stockCover > 365
+                      ? "> 1 year"
+                      : `${number(stockCover)} days`}
+                  {stockCover !== null ? (
+                    <Tooltip title={`${number(stockCover)} days of stock cover`}>
+                      <InfoCircleOutlined aria-label="Exact stock cover" />
+                    </Tooltip>
+                  ) : null}
+                </>
+              }
               tooltip="Current sellable quantity valued at product cost."
-              neutralChange
             />
-            <MetricCard
-              title="Sell-Through"
-              metric={data.kpis.sellThrough}
-              formatter={(v) => number(v, "%")}
-              tooltip="Net units sold divided by opening stock plus inbound units."
-            />
-            <MetricCard
-              title="Stock Cover"
-              metric={data.kpis.stockCover}
-              formatter={(v) => (v === null ? "No recent sales" : `${v} days`)}
-              tooltip="Estimated selling days supported by current stock at recent velocity."
-              neutralChange
-            />
-          </div>
-
-          <Card
-            title="Sales vs Inventory Trend"
-            className="ii-section"
-            extra={
-              <Typography.Text type="secondary">
-                Normalized index (first non-zero observation = 100)
-              </Typography.Text>
-            }
-          >
-            {data.trend.length === 0 ? (
-              <Empty description="No trend data" />
-            ) : (
-              <ResponsiveContainer width="100%" height={280} minWidth={0}>
-                <LineChart data={data.trend} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} domain={[0, "auto"]} />
-                  <ChartTooltip
-                    formatter={(value, name, item) => [
-                      `${number(Number(value))} (actual ${number(Number(name === "Sales Index" ? item.payload.salesActual : item.payload.inventoryActual))})`,
-                      name,
-                    ]}
-                  />
-                  <Legend />
-                  <Line
-                    type="monotone"
-                    dataKey="salesIndex"
-                    name="Sales Index"
-                    stroke="#2563eb"
-                    strokeWidth={2}
-                    connectNulls
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="inventoryIndex"
-                    name="Inventory Availability Index"
-                    stroke="#0f766e"
-                    strokeWidth={2}
-                    connectNulls
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            )}
-            <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-              Similar movement is an association and does not necessarily mean inventory caused the
-              sales change.
-            </Typography.Text>
-            {data.correlation ? (
-              <Tag style={{ marginLeft: 8 }}>{data.correlation.description}</Tag>
-            ) : null}
-          </Card>
-
-          <Card title="Category Performance" className="ii-section">
-            <Table<CategoryPerformanceRow>
-              rowKey="categoryId"
-              columns={columns}
-              dataSource={data.categoryPerformance}
-              size="small"
-              pagination={false}
-              scroll={{ x: 1500 }}
-              onRow={(row) => ({
-                onClick: () => openCategory(row),
-                tabIndex: 0,
-                onKeyDown: (event) => {
-                  if (event.key === "Enter") openCategory(row);
-                },
-                style: { cursor: "pointer" },
-              })}
-              locale={{ emptyText: <Empty description="No category activity in this period" /> }}
-            />
-            <div style={{ marginTop: 18 }}>
-              <Typography.Text strong>Sales Change vs Stock Change</Typography.Text>
-              <ResponsiveContainer width="100%" height={300} minWidth={0}>
-                <ScatterChart margin={{ top: 18, right: 22, bottom: 18, left: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" dataKey="x" name="Stock change" unit="%" />
-                  <YAxis type="number" dataKey="y" name="Sales change" unit="%" />
-                  <ZAxis type="number" dataKey="z" name="Units" range={[70, 350]} />
-                  <ReferenceLine x={0} stroke="#94a3b8" />
-                  <ReferenceLine y={0} stroke="#94a3b8" />
-                  <ChartTooltip
-                    cursor={{ strokeDasharray: "3 3" }}
-                    labelFormatter={(_, payload) => payload?.[0]?.payload?.category ?? "Category"}
-                    formatter={(value, name) => [
-                      name === "Units" ? number(Number(value)) : `${value}%`,
-                      name,
-                    ]}
-                  />
-                  <Scatter
-                    name="Categories"
-                    data={data.categoryPerformance
-                      .filter(
-                        (row) =>
-                          row.salesChange.percentage !== null && row.stockChange.percentage !== null
-                      )
-                      .map((row) => ({
-                        x: row.stockChange.percentage,
-                        y: row.salesChange.percentage,
-                        z: Math.max(1, row.unitsSold),
-                        category: row.category,
-                        source: row,
-                      }))}
-                    fill="#7c3aed"
-                    onClick={(point) => {
-                      const category = point.payload?.source as CategoryPerformanceRow | undefined;
-                      if (category) openCategory(category);
-                    }}
-                  />
-                </ScatterChart>
-              </ResponsiveContainer>
-              <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-                Upper-right: growing with stock support · Upper-left: replenishment opportunity ·
-                Lower-right: overstock/demand risk · Lower-left: investigate. Bubble area reflects
-                units sold, so small-volume percentage changes remain visibly contextualized.
-              </Typography.Text>
+          </section>
+          <Alert
+            className={styles.businessAlert}
+            type={data.diagnostics.strength === "strong" ? "warning" : "info"}
+            showIcon
+            icon={<WarningFilled />}
+            title={data.diagnostics.summary}
+          />
+          <section className={`${styles.surface} ${styles.attentionSection}`}>
+            <div className={styles.sectionHeading}>
+              <div>
+                <h2>What Needs Your Attention</h2>
+                <p>Key insights to help you take action.</p>
+              </div>
+              <Button onClick={() => setInsightsOpen(true)}>View All Insights</Button>
             </div>
-          </Card>
-
-          <div className="ii-two-column">
-            <Card
-              title={
-                data.methodology.lostDemandAvailable
-                  ? "Demand Gap & Replenishment"
-                  : "Sales Activity / Low Stock"
-              }
-              className="ii-section"
-            >
-              <ProductSignalTable
-                rows={data.highDemandLowStock}
-                empty="No immediate replenishment risks detected"
-                onSelect={openProduct}
-              />
-            </Card>
-            <Card title="Overstock / Slow Moving" className="ii-section">
-              <ProductSignalTable
-                rows={data.overstock}
-                empty="No overstock risks detected"
-                onSelect={openProduct}
-              />
-            </Card>
-          </div>
-
-          <Card
-            title="Size Availability & Demand"
-            className="ii-section"
-            extra={
-              data.sizeAvailabilityScore === null ? null : (
-                <Tooltip title="Observed-demand share when available, otherwise sales share, weighted by historical in-stock percentage.">
-                  <Tag color="blue">Demand-weighted availability {data.sizeAvailabilityScore}%</Tag>
-                </Tooltip>
-              )
-            }
-          >
-            <div style={{ overflowX: "auto" }}>
-              <table className="ii-table">
-                <thead>
-                  <tr>
-                    <th>Size</th>
-                    <th>Sales Share</th>
-                    <th>Observed Demand Share</th>
-                    <th>Lost Demand</th>
-                    <th>Units Sold</th>
-                    <th>Current Stock</th>
-                    <th>Sell-through</th>
-                    <th>Stockout Days</th>
-                    <th>Availability</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.sizeInsights.map((row) => (
-                    <tr key={row.sizeId}>
-                      <td>
-                        <strong>{row.size}</strong>
-                      </td>
-                      <td>{row.salesShare}%</td>
-                      <td>
-                        {row.observedDemandShare === null ? "—" : `${row.observedDemandShare}%`}
-                      </td>
-                      <td>{row.unfulfilledDemand ?? "—"}</td>
-                      <td>{row.unitsSold}</td>
-                      <td>{row.currentStock}</td>
-                      <td>{number(row.sellThrough, "%")}</td>
-                      <td>{row.stockoutDays === null ? "Unavailable" : `${row.stockoutDays}d`}</td>
-                      <td>{row.availability === null ? "Unavailable" : `${row.availability}%`}</td>
-                      <td>
-                        <Tag>{row.status}</Tag>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-
-          <Card title="Lost Opportunities" className="ii-section">
-            {data.lostDemand ? (
-              <>
-                <Alert
-                  type={data.lostDemand.evidence === "reliable" ? "success" : "info"}
-                  showIcon
-                  title={`${data.lostDemand.unfulfilledQuantity} unfulfilled of ${data.lostDemand.observedDemand} observed units`}
-                  description={data.lostDemand.evidenceNote}
-                  style={{ marginBottom: 12 }}
-                />
-                <div className="ii-two-column">
-                  <div style={{ overflowX: "auto" }}>
-                    <table className="ii-table">
-                      <thead>
-                        <tr>
-                          <th>Missing requirement</th>
-                          <th>Observed</th>
-                          <th>Lost</th>
-                          <th>Stock</th>
-                          <th>Signal</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {data.lostDemand.requirements.map((row) => (
-                          <tr key={row.requirement}>
-                            <td>{row.requirement}</td>
-                            <td>{row.observedDemand}</td>
-                            <td>{row.unfulfilled}</td>
-                            <td>{row.currentStock}</td>
-                            <td>
-                              <Tag>{row.signal}</Tag>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <div style={{ overflowX: "auto" }}>
-                    <table className="ii-table">
-                      <thead>
-                        <tr>
-                          <th>Attribute demand</th>
-                          <th>Observed share</th>
-                          <th>Lost</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {data.lostDemand.attributes.slice(0, 10).map((row) => (
-                          <tr key={`${row.attribute}:${row.value}`}>
-                            <td>
-                              <strong>{row.value}</strong>
-                              <small>{row.attribute}</small>
-                            </td>
-                            <td>{row.observedDemandShare}%</td>
-                            <td>{row.unfulfilledDemand}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+            <div className={styles.attentionGrid}>
+              <article className={`${styles.attentionPanel} ${styles.restockPanel}`}>
+                <div className={styles.panelTitle}>
+                  <span className={styles.panelIcon}>
+                    <ShoppingCartOutlined />
+                  </span>
+                  <span>
+                    <strong>Restock Opportunities</strong>
+                    <small>Items with customer demand but low stock.</small>
+                  </span>
+                  <Tag color="red">{data.highDemandLowStock.length} items</Tag>
                 </div>
-              </>
-            ) : (
-              <Alert
-                type="info"
-                showIcon
-                title="No structured demand recorded for this period"
-                description="Sales-derived signals remain labelled as sales activity until customer visits and unmet requirements are captured."
-              />
-            )}
-          </Card>
-
-          <div className="ii-two-column">
-            <Card
-              title="Inventory Inactivity"
-              className="ii-section"
-              extra={
-                <Tooltip title="A proxy based on days since last sale; this is not FIFO inventory ageing.">
-                  <InfoCircleOutlined />
-                </Tooltip>
-              }
-            >
-              <ResponsiveContainer width="100%" height={250} minWidth={0}>
-                <BarChart data={data.inactivity}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <ChartTooltip formatter={(value) => money(Number(value))} />
-                  <Bar dataKey="costValue" name="Cost value" fill="#d97706" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-              <div style={{ overflowX: "auto", marginTop: 12 }}>
-                <table className="ii-table">
+                <AttentionList
+                  rows={data.highDemandLowStock}
+                  empty="No restock opportunities detected."
+                  kind="restock"
+                  onSelect={openProduct}
+                />
+              </article>
+              <article className={`${styles.attentionPanel} ${styles.overstockPanel}`}>
+                <div className={styles.panelTitle}>
+                  <span className={styles.panelIcon}>
+                    <AppstoreOutlined />
+                  </span>
+                  <span>
+                    <strong>Overstock / Slow Moving</strong>
+                    <small>Items with high stock but low sales.</small>
+                  </span>
+                  <Tag color="orange">{data.overstock.length} items</Tag>
+                </div>
+                <AttentionList
+                  rows={data.overstock}
+                  empty="No slow-moving stock found for this period."
+                  kind="overstock"
+                  onSelect={openProduct}
+                />
+              </article>
+              <article className={`${styles.attentionPanel} ${styles.demandPanel}`}>
+                <div className={styles.panelTitle}>
+                  <span className={styles.panelIcon}>
+                    <TeamOutlined />
+                  </span>
+                  <span>
+                    <strong>Customer Demand</strong>
+                    <small>
+                      {demandMissed === null
+                        ? "No recorded demand yet."
+                        : `${number(demandMissed, "%")} of recorded demand was not fulfilled.`}
+                    </small>
+                  </span>
+                </div>
+                {data.lostDemand?.requirements.length ? (
+                  <ol className={styles.demandList}>
+                    {data.lostDemand.requirements.slice(0, 4).map((row) => (
+                      <li key={row.requirement}>{row.requirement}</li>
+                    ))}
+                  </ol>
+                ) : (
+                  <Empty
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                    description="Start recording visits to see unmet demand."
+                  />
+                )}
+              </article>
+            </div>
+          </section>
+          <div className={styles.middleGrid}>
+            <section className={`${styles.surface} ${styles.chartSection}`}>
+              <div className={styles.sectionHeading}>
+                <div>
+                  <h2>Sales &amp; Stock Trend</h2>
+                  <p>Units sold vs available stock over time.</p>
+                </div>
+                <Segmented
+                  value={trendMode}
+                  onChange={(value) => setTrendMode(value as "actual" | "indexed")}
+                  options={[
+                    { label: "Actual", value: "actual" },
+                    { label: "Indexed", value: "indexed" },
+                  ]}
+                />
+              </div>
+              {data.trend.length ? (
+                <ResponsiveContainer width="100%" height={255} minWidth={0}>
+                  <ComposedChart
+                    data={data.trend}
+                    margin={{ top: 12, right: 8, bottom: 2, left: -14 }}
+                  >
+                    <CartesianGrid stroke="#e7edf5" vertical={false} />
+                    <XAxis
+                      dataKey="label"
+                      tick={{ fontSize: 11, fill: "#64748b" }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      yAxisId="sales"
+                      tick={{ fontSize: 11, fill: "#64748b" }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      yAxisId="stock"
+                      orientation="right"
+                      tick={{ fontSize: 11, fill: "#64748b" }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <ChartTooltip
+                      formatter={(value, name, item) => [
+                        trendMode === "indexed"
+                          ? `${number(Number(value))} (actual ${number(Number(name === "Units Sold" ? item.payload.salesActual : item.payload.inventoryActual))})`
+                          : number(Number(value)),
+                        name,
+                      ]}
+                    />
+                    <Legend iconType="circle" iconSize={8} />
+              <Bar
+                isAnimationActive={false}
+                yAxisId="sales"
+                      dataKey={trendMode === "actual" ? "salesActual" : "salesIndex"}
+                      name="Units Sold"
+                      fill="#3284f5"
+                      radius={[4, 4, 0, 0]}
+                      barSize={24}
+                    />
+              <Line
+                isAnimationActive={false}
+                yAxisId="stock"
+                      type="monotone"
+                      dataKey={trendMode === "actual" ? "inventoryActual" : "inventoryIndex"}
+                      name="Available Stock"
+                      stroke="#12936f"
+                      strokeWidth={2.5}
+                      dot={{ r: 3, fill: "#12936f" }}
+                      connectNulls
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              ) : (
+                <Empty description="No trend data for this period" />
+              )}
+            </section>
+            <section className={`${styles.surface} ${styles.categorySection}`}>
+              <div className={styles.sectionHeading}>
+                <div>
+                  <h2>Category Health</h2>
+                  <p>Sales, stock and performance by category.</p>
+                </div>
+                <Button onClick={() => setCategoryChartOpen(true)}>View Chart</Button>
+              </div>
+              <div className={styles.tableScroll}>
+                <table className={styles.businessTable}>
                   <thead>
                     <tr>
-                      <th>Inactivity bucket</th>
-                      <th>Units</th>
-                      <th>Cost value</th>
-                      <th>Share</th>
+                      <th>Category</th>
+                      <th>Sales</th>
+                      <th>Stock</th>
+                      <th>Sell-through</th>
+                      <th>Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {data.inactivity.map((bucket) => (
-                      <tr key={bucket.label}>
-                        <td>{bucket.label}</td>
-                        <td>{number(bucket.units)}</td>
-                        <td>{money(bucket.costValue)}</td>
-                        <td>{number(bucket.percentage, "%")}</td>
-                      </tr>
-                    ))}
+                    {data.categoryPerformance.map((row) => {
+                      const status = categoryStatus(row);
+                      return (
+                        <tr
+                          key={row.categoryId}
+                          tabIndex={0}
+                          onClick={() => openCategory(row)}
+                          onKeyDown={(event) => event.key === "Enter" && openCategory(row)}
+                        >
+                          <td>
+                            <strong>{row.category}</strong>
+                          </td>
+                          <td>{money(row.revenue)}</td>
+                          <td>{row.currentStock}</td>
+                          <td>{number(row.sellThrough, "%")}</td>
+                          <td>
+                            <Tag color={status.color}>{status.label}</Tag>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
-            </Card>
-            <Card title="Replenishment Opportunities" className="ii-section">
-              <ProductSignalTable
-                rows={data.replenishment}
-                empty="No replenishment signal meets the current thresholds"
-                onSelect={openProduct}
-              />
-            </Card>
+            </section>
           </div>
-
-          <Card title="Performance Diagnostics" className="ii-section">
-            <Flex gap={10} align="center" wrap>
-              <Tag color={data.diagnostics.strength === "strong" ? "orange" : "blue"}>
-                {data.diagnostics.classification}
-              </Tag>
-              <Typography.Text strong>Strongest observed signal</Typography.Text>
-            </Flex>
-            <Typography.Paragraph style={{ marginTop: 10, marginBottom: 8 }}>
-              {data.diagnostics.summary}
-            </Typography.Paragraph>
-            <Space wrap>
-              {data.diagnostics.signals.map((signal) => (
-                <Tag key={signal}>{signal}</Tag>
-              ))}
-            </Space>
-            <div className="ii-evidence-grid">
+          <div className={styles.bottomGrid}>
+            <section className={`${styles.surface} ${styles.variantSection}`}>
+              <div className={styles.sectionHeading}>
+                <div>
+                  <h2>Size &amp; Variant Demand</h2>
+                  <p>Sales and stock by variant for the selected category.</p>
+                </div>
+                <Select
+                  aria-label="Category for variant demand"
+                  value={activeVariantCategoryId}
+                  onChange={setVariantCategoryId}
+                  options={data.categoryPerformance.map((row) => ({
+                    value: row.categoryId,
+                    label: row.category,
+                  }))}
+                />
+              </div>
+              {variantQuery.isLoading ? (
+                <Skeleton active paragraph={{ rows: 5 }} />
+              ) : variantRows.length ? (
+                <div className={styles.tableScroll}>
+                  <table className={styles.businessTable}>
+                    <thead>
+                      <tr>
+                        <th>Size / Variant</th>
+                        <th>Sold</th>
+                        <th>Stock</th>
+                        <th>Sell-through</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {variantRows.slice(0, 7).map((row) => (
+                        <tr key={row.key}>
+                          <td>
+                            <strong>{row.size}</strong>
+                          </td>
+                          <td>{row.sold}</td>
+                          <td>{row.stock}</td>
+                          <td>{number(row.sellThrough, "%")}</td>
+                          <td>
+                            <Tag color={signalColor(row.status)}>{row.status}</Tag>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description="No variants found for this category"
+                />
+              )}
+            </section>
+            <section className={`${styles.surface} ${styles.healthSection}`}>
+              <div className={styles.sectionHeading}>
+                <div>
+                  <h2>Inventory Health</h2>
+                  <p>Availability, inactivity and stock efficiency.</p>
+                </div>
+              </div>
+              <div className={styles.healthList}>
+                <div>
+                  <span className={styles.healthGreen}>
+                    <TeamOutlined />
+                  </span>
+                  <p>
+                    <strong>Inventory Availability</strong>
+                    <small>
+                      {data.sizeAvailabilityScore === null
+                        ? "Insufficient demand data"
+                        : `${data.sizeAvailabilityScore}% demand-weighted availability`}
+                    </small>
+                  </p>
+                </div>
+                <div>
+                  <span className={styles.healthAmber}>
+                    <ClockCircleOutlined />
+                  </span>
+                  <p>
+                    <strong>Inventory Efficiency</strong>
+                    <small>{data.diagnostics.classification}</small>
+                  </p>
+                </div>
+                <div>
+                  <span className={styles.healthRed}>
+                    <RiseOutlined />
+                  </span>
+                  <p>
+                    <strong>Inactive Stock</strong>
+                    <small>
+                      {inactiveUnits
+                        ? `${number(inactiveUnits)} units inactive for 30+ days`
+                        : "No inactive units detected"}
+                    </small>
+                  </p>
+                </div>
+                <div>
+                  <span className={styles.healthBlue}>
+                    <AppstoreOutlined />
+                  </span>
+                  <p>
+                    <strong>Replenishment Suggestions</strong>
+                    <small>
+                      {data.replenishment.length
+                        ? `${data.replenishment.length} items to review`
+                        : "No items currently need review"}
+                    </small>
+                  </p>
+                </div>
+              </div>
+            </section>
+            <section className={`${styles.surface} ${styles.insightSection}`}>
+              <div className={styles.sectionHeading}>
+                <div>
+                  <h2>What the Numbers Are Telling You</h2>
+                  <p>Simple insights based on your data.</p>
+                </div>
+              </div>
+              <div className={styles.insightList}>
+                <div>
+                  <span className={styles.insightRed}>
+                    <RiseOutlined />
+                  </span>
+                  <p>
+                    <strong>{data.diagnostics.classification}</strong>
+                    <small>{data.diagnostics.summary}</small>
+                  </p>
+                </div>
+                {data.lostDemand ? (
+                  <div>
+                    <span className={styles.insightAmber}>
+                      <WarningFilled />
+                    </span>
+                    <p>
+                      <strong>Some customer requests were missed</strong>
+                      <small>
+                        {data.lostDemand.unfulfilledQuantity} of {data.lostDemand.observedDemand}{" "}
+                        requested units were not fulfilled.
+                      </small>
+                    </p>
+                  </div>
+                ) : null}
+                <div>
+                  <span className={styles.insightBlue}>
+                    <BulbOutlined />
+                  </span>
+                  <p>
+                    <strong>Review buying decisions</strong>
+                    <small>
+                      {data.overstock.length
+                        ? `${data.overstock.length} slow-moving or overstocked items need attention.`
+                        : "No overstock risks detected in this period."}
+                    </small>
+                  </p>
+                </div>
+              </div>
+            </section>
+          </div>
+          <Modal
+            title="Category sales and stock movement"
+            open={categoryChartOpen}
+            onCancel={() => setCategoryChartOpen(false)}
+            footer={null}
+            width={760}
+          >
+            <ResponsiveContainer width="100%" height={360} minWidth={0}>
+              <ScatterChart margin={{ top: 18, right: 22, bottom: 18, left: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis type="number" dataKey="x" name="Stock change" unit="%" />
+                <YAxis type="number" dataKey="y" name="Sales change" unit="%" />
+                <ZAxis type="number" dataKey="z" name="Units" range={[70, 350]} />
+                <ReferenceLine x={0} stroke="#94a3b8" />
+                <ReferenceLine y={0} stroke="#94a3b8" />
+                <ChartTooltip
+                  cursor={{ strokeDasharray: "3 3" }}
+                  labelFormatter={(_, payload) => payload?.[0]?.payload?.category ?? "Category"}
+                />
+                <Scatter
+                  name="Categories"
+                  data={data.categoryPerformance
+                    .filter(
+                      (row) =>
+                        row.salesChange.percentage !== null && row.stockChange.percentage !== null
+                    )
+                    .map((row) => ({
+                      x: row.stockChange.percentage,
+                      y: row.salesChange.percentage,
+                      z: Math.max(1, row.unitsSold),
+                      category: row.category,
+                      source: row,
+                    }))}
+                  fill="#2f7df4"
+                  onClick={(point) => {
+                    const category = point.payload?.source as CategoryPerformanceRow | undefined;
+                    if (category) {
+                      setCategoryChartOpen(false);
+                      openCategory(category);
+                    }
+                  }}
+                />
+              </ScatterChart>
+            </ResponsiveContainer>
+          </Modal>
+          <Drawer
+            title="All inventory insights"
+            open={insightsOpen}
+            onClose={() => setInsightsOpen(false)}
+            size="min(720px, 100vw)"
+          >
+            <Space orientation="vertical" size={16} style={{ width: "100%" }}>
+              <Alert
+                showIcon
+                type={data.diagnostics.strength === "strong" ? "warning" : "info"}
+                title={data.diagnostics.classification}
+                description={data.diagnostics.summary}
+              />
               {data.diagnosticEvidence.map((group) => (
                 <Card
                   key={group.key}
@@ -907,28 +905,20 @@ export default function InventoryIntelligencePanel({
                     </Tag>
                   }
                 >
-                  {group.signals.length ? (
-                    <Space orientation="vertical" size={4}>
-                      {group.signals.map((signal) => (
-                        <Typography.Text key={signal}>{signal}</Typography.Text>
-                      ))}
-                    </Space>
-                  ) : null}
-                  {group.note ? (
-                    <Typography.Text
-                      type="secondary"
-                      style={{ display: "block", marginTop: group.signals.length ? 8 : 0 }}
-                    >
-                      {group.note}
-                    </Typography.Text>
-                  ) : null}
+                  <Space orientation="vertical" size={4}>
+                    {group.signals.map((signal) => (
+                      <Typography.Text key={signal}>{signal}</Typography.Text>
+                    ))}
+                    {group.note ? (
+                      <Typography.Text type="secondary">{group.note}</Typography.Text>
+                    ) : null}
+                  </Space>
                 </Card>
               ))}
-            </div>
-          </Card>
+            </Space>
+          </Drawer>
         </>
       )}
-
       <Drawer
         title={selectedCategory?.category ?? "Category detail"}
         open={Boolean(selectedCategory)}
@@ -937,7 +927,7 @@ export default function InventoryIntelligencePanel({
           setSelectedBrandId(undefined);
           setSelectedProductId(undefined);
         }}
-        size="min(620px, 100vw)"
+        size="min(700px, 100vw)"
       >
         {selectedCategory ? (
           <Space orientation="vertical" size={16} style={{ width: "100%" }}>
@@ -947,12 +937,11 @@ export default function InventoryIntelligencePanel({
               title={selectedCategory.diagnostic.classification}
               description={selectedCategory.diagnostic.summary}
             />
-            <div className="ii-drawer-grid">
+            <div className={styles.drawerMetrics}>
               {[
                 ["Revenue", money(selectedCategory.revenue)],
                 ["Units sold", number(selectedCategory.unitsSold)],
                 ["Average stock", number(selectedCategory.averageStock)],
-                ["Stock change", changeLabel(selectedCategory.stockChange)],
                 ["Current stock", number(selectedCategory.currentStock)],
                 ["Inventory value", money(selectedCategory.inventoryValue)],
                 ["Sell-through", number(selectedCategory.sellThrough, "%")],
@@ -962,45 +951,14 @@ export default function InventoryIntelligencePanel({
                     ? "No sales"
                     : `${selectedCategory.stockCoverDays} days`,
                 ],
-                [
-                  "Stockout days",
-                  selectedCategory.stockoutDays === null
-                    ? "Unavailable"
-                    : number(selectedCategory.stockoutDays),
-                ],
                 ["Gross margin", money(selectedCategory.grossMargin)],
-                [
-                  "Gross margin %",
-                  selectedCategory.grossMargin === null || selectedCategory.revenue === 0
-                    ? "Unavailable"
-                    : number((selectedCategory.grossMargin / selectedCategory.revenue) * 100, "%"),
-                ],
               ].map(([label, value]) => (
                 <Card size="small" key={label}>
                   <Typography.Text type="secondary">{label}</Typography.Text>
-                  <div style={{ fontSize: 18, fontWeight: 650, marginTop: 5 }}>{value}</div>
+                  <div className={styles.drawerMetricValue}>{value}</div>
                 </Card>
               ))}
             </div>
-            {!drilldownQuery.isLoading && !drilldownQuery.isError ? (
-              <div className="ii-drawer-evidence">
-                <Card size="small" title="Pricing evidence">
-                  <Typography.Text>
-                    Realized unit price: {money(drawerEvidence.realizedPrice)} vs{" "}
-                    {money(drawerEvidence.comparisonRealizedPrice)}
-                  </Typography.Text>
-                  <Typography.Text type="secondary" style={{ display: "block", marginTop: 4 }}>
-                    Based on historical net line revenue, not current catalogue price.
-                  </Typography.Text>
-                </Card>
-                <Card size="small" title="Product mix evidence">
-                  <Typography.Text>
-                    Top-five product revenue share: {number(drawerEvidence.topFiveShare, "%")} vs{" "}
-                    {number(drawerEvidence.comparisonTopFiveShare, "%")}
-                  </Typography.Text>
-                </Card>
-              </div>
-            ) : null}
             <Typography.Title level={5} style={{ margin: 0 }}>
               Brand → Product → Size
             </Typography.Title>
@@ -1040,173 +998,48 @@ export default function InventoryIntelligencePanel({
             ) : sizeRows.length === 0 ? (
               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No matching variants" />
             ) : (
-              <div style={{ overflowX: "auto" }}>
-                <table className="ii-table">
-                  <thead>
-                    <tr>
-                      <th>Brand / Product</th>
-                      <th>Size</th>
-                      <th>Revenue</th>
-                      <th>Revenue Δ</th>
-                      <th>Units</th>
-                      <th>Margin</th>
-                      <th>Margin %</th>
-                      <th>Avg. stock</th>
-                      <th>Stock Δ</th>
-                      <th>Stock</th>
-                      <th>Sell-through</th>
-                      <th>Cover</th>
-                      <th>Stockouts</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sizeRows.map((row: InventoryDrilldownRow) => (
-                      <tr key={`${row.productId}:${row.sizeId}`}>
-                        <td>
-                          <strong>{row.product}</strong>
-                          <small>
-                            {row.brand} · {row.sku}
-                          </small>
-                        </td>
-                        <td>{row.size}</td>
-                        <td>{money(row.revenue)}</td>
-                        <td>
-                          <Tag color={changeColor(row.revenueChange)}>
-                            {changeLabel(row.revenueChange)}
-                          </Tag>
-                        </td>
-                        <td>{row.unitsSold}</td>
-                        <td>{money(row.grossMargin)}</td>
-                        <td>
-                          {row.grossMargin === null || row.revenue === 0
-                            ? "Unavailable"
-                            : number((row.grossMargin / row.revenue) * 100, "%")}
-                        </td>
-                        <td>{number(row.averageStock)}</td>
-                        <td>
-                          <Tag color={changeColor(row.stockChange)}>
-                            {changeLabel(row.stockChange)}
-                          </Tag>
-                        </td>
-                        <td>{row.currentStock}</td>
-                        <td>{number(row.sellThrough, "%")}</td>
-                        <td>
-                          {row.stockCoverDays === null ? "No sales" : `${row.stockCoverDays}d`}
-                        </td>
-                        <td>
-                          {row.stockoutDays === null ? "Unavailable" : `${row.stockoutDays}d`}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <Table<InventoryDrilldownRow>
+                rowKey={(row) => `${row.productId}:${row.sizeId}`}
+                size="small"
+                pagination={false}
+                scroll={{ x: 900 }}
+                dataSource={sizeRows}
+                columns={[
+                  {
+                    title: "Product",
+                    dataIndex: "product",
+                    fixed: "left",
+                    width: 180,
+                    render: (value, row) => (
+                      <>
+                        <strong>{value}</strong>
+                        <small className={styles.tableSubtext}>
+                          {row.brand} · {row.sku}
+                        </small>
+                      </>
+                    ),
+                  },
+                  { title: "Size", dataIndex: "size" },
+                  { title: "Revenue", dataIndex: "revenue", render: money },
+                  { title: "Units", dataIndex: "unitsSold" },
+                  { title: "Margin", dataIndex: "grossMargin", render: money },
+                  { title: "Stock", dataIndex: "currentStock" },
+                  {
+                    title: "Sell-through",
+                    dataIndex: "sellThrough",
+                    render: (value) => number(value, "%"),
+                  },
+                  {
+                    title: "Cover",
+                    dataIndex: "stockCoverDays",
+                    render: (value) => (value === null ? "No sales" : `${value}d`),
+                  },
+                ]}
+              />
             )}
           </Space>
         ) : null}
       </Drawer>
-
-      <style jsx global>{`
-        .inventory-intelligence .ii-kpis {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-          gap: 10px;
-          margin-bottom: 14px;
-        }
-        .inventory-intelligence .ii-section {
-          margin-bottom: 14px;
-          border-color: var(--border-primary);
-        }
-        .inventory-intelligence .ii-two-column {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 14px;
-        }
-        .inventory-intelligence .ii-table,
-        .ant-drawer .ii-table {
-          width: 100%;
-          border-collapse: collapse;
-          min-width: 560px;
-          font-size: 12px;
-        }
-        .inventory-intelligence .ii-table th,
-        .ant-drawer .ii-table th {
-          text-align: left;
-          color: var(--text-muted);
-          font-weight: 600;
-          padding: 9px 8px;
-          border-bottom: 1px solid var(--border-primary);
-        }
-        .inventory-intelligence .ii-table td,
-        .ant-drawer .ii-table td {
-          padding: 10px 8px;
-          border-bottom: 1px solid var(--border-subtle);
-          vertical-align: top;
-        }
-        .inventory-intelligence .ii-table small,
-        .ant-drawer .ii-table small {
-          display: block;
-          color: var(--text-muted);
-          margin-top: 2px;
-        }
-        .ii-drawer-grid {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 10px;
-        }
-        .ii-drawer-evidence {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 10px;
-          width: 100%;
-        }
-        .ii-evidence-grid {
-          display: grid;
-          grid-template-columns: repeat(5, minmax(0, 1fr));
-          gap: 10px;
-          margin-top: 16px;
-        }
-        @media (max-width: 1200px) {
-          .inventory-intelligence .ii-kpis {
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-          }
-          .ii-evidence-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
-        }
-        @media (max-width: 767px) {
-          .inventory-intelligence .ii-kpis {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
-          .inventory-intelligence .ii-two-column {
-            grid-template-columns: 1fr;
-          }
-          .ii-drawer-grid {
-            grid-template-columns: 1fr;
-          }
-          .ii-drawer-evidence {
-            grid-template-columns: 1fr;
-          }
-          .ii-evidence-grid {
-            grid-template-columns: 1fr;
-          }
-          .inventory-intelligence .ii-controls {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            width: 100%;
-          }
-          .inventory-intelligence .ii-controls > .ant-space-item,
-          .inventory-intelligence .ii-controls .ant-select,
-          .inventory-intelligence .ii-controls .ant-btn {
-            width: 100% !important;
-          }
-        }
-        @media (max-width: 420px) {
-          .inventory-intelligence .ii-kpis {
-            grid-template-columns: 1fr;
-          }
-        }
-      `}</style>
     </div>
   );
 }
