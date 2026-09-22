@@ -1,0 +1,20 @@
+.drawer :global(.ant-drawer-body) {
+  padding: 14px;
+  overflow-x: hidden;
+}
+
+.content { display: grid; gap: 14px; min-width: 0; }
+.items { display: grid; gap: 10px; }
+.item { min-width: 0; padding: 12px; border: 1px solid #e5e7eb; border-radius: 16px; }
+.unitPrice { margin-top: 5px; color: #334155; font-size: 13px; }
+.quantityRow { margin-top: 11px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.quantityControl { display: flex; align-items: center; gap: 11px; }
+.quantityControl :global(.ant-btn) { min-width: 44px; min-height: 44px; border-radius: 12px; }
+.paymentGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.paymentGrid :global(.ant-btn) { min-width: 0; min-height: 44px; border-radius: 11px; }
+.checkout { min-height: 48px; border-radius: 13px; }
+
+@media (max-width: 359px) {
+  .drawer :global(.ant-drawer-body) { padding: 12px; }
+  .item { padding: 10px; }
+}

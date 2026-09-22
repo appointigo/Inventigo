@@ -7,6 +7,19 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import type { Sale, SaleFilters, SaleSummary, CartItem, CreateSaleInput, PaymentMethodType, SplitPaymentEntry } from "../types";
 
+export async function createSaleRequest(input: CreateSaleInput): Promise<Sale> {
+  const res = await fetch("/api/billing", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => ({ error: "Failed to create sale" }));
+    throw new Error(payload?.error || "Failed to create sale");
+  }
+  return res.json();
+}
+
 export function useSales(initialFilters?: SaleFilters) {
   const { status: sessionStatus } = useSession();
   const [sales, setSales] = useState<SaleSummary[]>([]);
@@ -129,16 +142,7 @@ export function useSales(initialFilters?: SaleFilters) {
   }, [fetchSales]);
 
   const createSale = async (input: CreateSaleInput): Promise<Sale> => {
-    const res = await fetch("/api/billing", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input),
-    });
-    if (!res.ok) {
-      const payload = await res.json().catch(() => ({ error: "Failed to create sale" }));
-      throw new Error(payload?.error || "Failed to create sale");
-    }
-    const sale = await res.json();
+    const sale = await createSaleRequest(input);
     await fetchSales();
     return sale;
   };

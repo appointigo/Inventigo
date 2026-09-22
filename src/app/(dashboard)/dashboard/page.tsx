@@ -191,8 +191,7 @@ const WelcomeGuide = ({ userName }: { userName?: string | null }) => {
   );
 }
 
-const DashboardPage = () => {
-  const { isMobile, isReady } = useMobileViewport();
+const DesktopDashboardPage = () => {
   const { data: session, status: sessionStatus } = useSession();
   const { storeId } = useStore();
   const { data, loading } = useDashboard(storeId ?? undefined);
@@ -777,14 +776,6 @@ const DashboardPage = () => {
     breakEvenRevenue: profitabilityMetrics.breakEvenRevenue,
     breakEvenGap: profitabilityMetrics.breakEvenGap,
   }), [profitabilityMetrics]);
-
-  if (!isReady) {
-    return null;
-  }
-
-  if (isMobile) {
-    return <MobileDashboardPage />;
-  }
 
   if (loading && !data) {
     return (
@@ -1475,5 +1466,15 @@ const DashboardPage = () => {
     </div>
   );
 }
+
+const DashboardPage = () => {
+  const { isMobile, isReady } = useMobileViewport();
+
+  if (!isReady) {
+    return null;
+  }
+
+  return isMobile ? <MobileDashboardPage /> : <DesktopDashboardPage />;
+};
 
 export default DashboardPage;

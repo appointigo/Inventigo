@@ -396,7 +396,7 @@
 .inlineActionBar {
   position: fixed;
   right: 0;
-  bottom: 76px;
+  bottom: calc(96px + env(safe-area-inset-bottom));
   left: 0;
   z-index: 30;
   width: 100%;
