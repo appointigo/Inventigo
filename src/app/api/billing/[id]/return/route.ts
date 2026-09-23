@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { billingService } from "@/modules/billing/services/billingService";
 import { requireOrgAuth } from "@/lib/auth.middleware";
+import type { WhatsAppInvoiceSelection } from "@/modules/billing/types";
 
 const parseTransactionItem = (item: unknown) => {
   const record = item && typeof item === "object" ? item as Record<string, unknown> : {};
@@ -77,6 +78,9 @@ export const POST = async (
       condition: typeof payload.condition === "string" ? payload.condition : undefined,
       notes: typeof payload.notes === "string" ? payload.notes : undefined,
       businessDate: typeof payload.businessDate === "string" ? payload.businessDate : undefined,
+      whatsappInvoice: payload.whatsappInvoice && typeof payload.whatsappInvoice === "object"
+        ? payload.whatsappInvoice as WhatsAppInvoiceSelection
+        : undefined,
     });
     return NextResponse.json(transaction, { status: 201 });
   } catch (error) {

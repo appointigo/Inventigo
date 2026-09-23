@@ -23,6 +23,7 @@ type Profile = {
   signature: string | null;
   supportPhone: string | null;
   defaultLanguage: string;
+  defaultInvoiceTemplateInstanceId: string | null;
 };
 type Store = { id: string; name: string; code: string; whatsappProfile: Profile | null };
 type Snapshot = { stores: Store[]; phoneNumbers: unknown[] };
@@ -36,6 +37,8 @@ export default function WhatsAppStoreProfilesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [invoiceTemplates, setInvoiceTemplates] = useState<Array<{ id: string; label: string; language: string; name: string }>>([]);
+  const [invoiceWarning, setInvoiceWarning] = useState<string | null>(null);
   const load = useCallback(async () => {
     setLoading(true);
     setError(false);
@@ -64,8 +67,21 @@ export default function WhatsAppStoreProfilesPage() {
           signature: null,
           supportPhone: null,
           defaultLanguage: "en",
+          defaultInvoiceTemplateInstanceId: null,
         }
       );
+    if (selected) {
+      void fetch(`/api/whatsapp/invoices/options?storeId=${encodeURIComponent(selected.id)}`, { cache: "no-store" })
+        .then(response => response.ok ? response.json() : Promise.reject())
+        .then((body: { templates?: Array<{ id: string; label: string; language: string; name: string }>; warning?: string | null }) => {
+          setInvoiceTemplates(body.templates ?? []);
+          setInvoiceWarning(body.warning ?? null);
+        })
+        .catch(() => {
+          setInvoiceTemplates([]);
+          setInvoiceWarning("Invoice-template availability could not be checked.");
+        });
+    }
   }, [form, selected]);
   const save = async (values: Profile) => {
     if (!storeId) return;
@@ -150,6 +166,17 @@ export default function WhatsAppStoreProfilesPage() {
                 >
                   <Input placeholder="en" />
                 </Form.Item>
+                <Form.Item name="defaultInvoiceTemplateInstanceId" label="Default invoice template">
+                  <Select
+                    allowClear
+                    placeholder="Choose an approved document template"
+                    options={invoiceTemplates.map(template => ({
+                      value: template.id,
+                      label: `${template.label} (${template.language})`,
+                    }))}
+                  />
+                </Form.Item>
+                {invoiceWarning ? <Alert type="warning" showIcon message={invoiceWarning} style={{ marginBottom: 18 }} /> : null}
                 <Alert
                   type="warning"
                   showIcon

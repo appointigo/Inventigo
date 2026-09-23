@@ -13,7 +13,9 @@ import { useBillingProductSearch } from "@/modules/billing/hooks/useBillingProdu
 import { sanitizeScannedBarcode } from "@/shared/services/barcodeService";
 import InvoicePreview from "./InvoicePreview";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
-import type { VariantRow, CreateSaleInput, Sale, PaymentMethodType } from "@/modules/billing/types";
+import type { VariantRow, CreateSaleInput, Sale, PaymentMethodType, WhatsAppInvoiceSelection } from "@/modules/billing/types";
+import { WhatsAppInvoiceSelector } from "@/modules/whatsapp/components/WhatsAppInvoiceSelector";
+import { useStore } from "@/providers/StoreProvider";
 import { PAYMENT_OPTIONS } from "@/modules/billing/constants";
 import { usePromoCodes } from "@/modules/promo-codes/hooks/usePromoCodes";
 import type { PromoCode } from "@/modules/promo-codes/types";
@@ -126,6 +128,7 @@ type SuggestField = "name" | "phone";
 
 const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
   const { message } = App.useApp();
+  const { storeId } = useStore();
 
   // ─── Local UI state ────────────────────────────────────────────────────────
   const {
@@ -140,6 +143,7 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
   const [saleLoading, setSaleLoading] = useState(false);
   const [completedSale, setCompletedSale] = useState<Sale | null>(null);
   const [invoiceOpen, setInvoiceOpen] = useState(false);
+  const [whatsappInvoice, setWhatsAppInvoice] = useState<WhatsAppInvoiceSelection>({ enabled: false });
 
   // ─── Camera scanner state ─────────────────────────────────────────────────
   const [cameraScanOpen, setCameraScanOpen] = useState(false);
@@ -340,11 +344,16 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
 
     setSaleLoading(true);
     try {
-      const sale = await createSale(cart.toCreateInput());
+      const sale = await createSale({ ...cart.toCreateInput(), whatsappInvoice });
       setCompletedSale(sale);
       setInvoiceOpen(true);
       cart.clearCart();
-      message.success(`Sale created: ${sale.invoiceNumber}`);
+      setWhatsAppInvoice({ enabled: false });
+      if (sale.invoiceDelivery?.status === "FAILED")
+        message.warning(`Sale ${sale.invoiceNumber} completed, but its WhatsApp invoice was not submitted.`);
+      else if (sale.invoiceDelivery)
+        message.success(`Sale ${sale.invoiceNumber} completed and its WhatsApp invoice was submitted.`);
+      else message.success(`Sale created: ${sale.invoiceNumber}`);
     } 
     catch (error) {
       console.error(error);
@@ -1003,6 +1012,15 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
               (!cart.customerName.trim() || cart.customerPhone.length < 10) && (
                 <CustWarning>⚠ Enter name &amp; phone to confirm sale</CustWarning>
               )}
+          </CheckoutSection>
+
+          <CheckoutSection>
+            <WhatsAppInvoiceSelector
+              storeId={storeId}
+              recipient={cart.customerPhone}
+              value={whatsappInvoice}
+              onChange={setWhatsAppInvoice}
+            />
           </CheckoutSection>
 
           {/* Payment Method */}

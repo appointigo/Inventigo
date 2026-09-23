@@ -20,6 +20,7 @@ export class WhatsAppTemplateResolver {
       key: input.template.key,
       language: input.template.language,
       version: input.template.version,
+      instanceId: input.template.instanceId,
     });
     if (!template) {
       throw new WhatsAppError("TEMPLATE_NOT_FOUND", "No matching WhatsApp template was found");

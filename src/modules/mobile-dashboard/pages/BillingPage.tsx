@@ -5,7 +5,7 @@ import { App, Badge, Button, Empty, Input, Skeleton, Typography } from "antd";
 import { CameraOutlined, SearchOutlined, ShoppingCartOutlined } from "@ant-design/icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createSaleRequest } from "@/modules/billing/hooks/useBilling";
-import type { VariantRow } from "@/modules/billing/types";
+import type { VariantRow, WhatsAppInvoiceSelection } from "@/modules/billing/types";
 import { useProducts } from "@/modules/products/hooks/useProducts";
 import { useStore } from "@/providers/StoreProvider";
 import { BillingCart } from "../components/BillingCart";
@@ -35,6 +35,7 @@ export default function BillingPage() {
     totalSpend: number;
     lastPurchaseDate: string | null;
   } | null>(null);
+  const [whatsappInvoice, setWhatsAppInvoice] = useState<WhatsAppInvoiceSelection>({ enabled: false });
   const pendingCameraScanRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -127,10 +128,15 @@ export default function BillingPage() {
 
     setCheckoutLoading(true);
     try {
-      await createSaleRequest(cart.toCreateInput());
+      const sale = await createSaleRequest({ ...cart.toCreateInput(), whatsappInvoice });
       cart.clearCart();
+      setWhatsAppInvoice({ enabled: false });
       setCartOpen(false);
-      message.success("Sale completed");
+      if (sale.invoiceDelivery?.status === "FAILED")
+        message.warning("Sale completed, but the WhatsApp invoice was not submitted. You can resend it from Bill History.");
+      else if (sale.invoiceDelivery)
+        message.success("Sale completed and WhatsApp invoice submitted");
+      else message.success("Sale completed");
     } catch (error) {
       message.error(error instanceof Error ? error.message : "Checkout failed");
     } finally {
@@ -336,6 +342,9 @@ export default function BillingPage() {
         checkoutLoading={checkoutLoading}
         transactionDate={cart.transactionDate}
         onTransactionDateChange={cart.setTransactionDate}
+        storeId={storeId}
+        whatsappInvoice={whatsappInvoice}
+        onWhatsAppInvoiceChange={setWhatsAppInvoice}
       />
 
       {cameraScanOpen ? (

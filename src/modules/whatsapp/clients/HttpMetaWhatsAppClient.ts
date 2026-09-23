@@ -1,7 +1,7 @@
 import { WhatsAppError } from "../errors.ts";
 import type { WhatsAppCredentialStore } from "../credentials/WhatsAppCredentialStore.ts";
 import { META_MANUAL_OAUTH_REDIRECT_URI } from "../embeddedSignupRedirect.ts";
-import type { MetaCodeExchangeRequest, MetaCodeExchangeResult, MetaCreateTemplateRequest, MetaDiagnosticReporter, MetaMessageTemplate, MetaPhoneNumber, MetaResponseDiagnostic, MetaSendMessageRequest, MetaSendMessageResult, MetaTemplateContext, MetaTemplateStatus, MetaTokenInspection, MetaWaba, MetaWhatsAppClient } from "./MetaWhatsAppClient.ts";
+import type { MetaCodeExchangeRequest, MetaCodeExchangeResult, MetaCreateTemplateRequest, MetaDiagnosticReporter, MetaMessageTemplate, MetaPhoneNumber, MetaResponseDiagnostic, MetaSendMessageRequest, MetaSendMessageResult, MetaTemplateContext, MetaTemplateStatus, MetaTokenInspection, MetaUploadMediaRequest, MetaWaba, MetaWhatsAppClient } from "./MetaWhatsAppClient.ts";
 
 type Config = { appId: string; appSecret: string; graphApiVersion: string; timeoutMs: number };
 type MetaErrorBody = { error?: { message?: string; code?: number; error_subcode?: number; type?: string; fbtrace_id?: string } };
@@ -87,7 +87,11 @@ export class HttpMetaWhatsAppClient implements MetaWhatsAppClient {
     if (input.content.type === "TEXT") body = { ...common, type: "text", text: { body: input.content.text, preview_url: false } };
     else if (input.content.type === "TEMPLATE" && input.template) {
       const values = Object.entries(input.content.template.variables ?? {}).sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true })).map(([, text]) => ({ type: "text", text }));
-      body = { ...common, type: "template", template: { name: input.template.metaTemplateName, language: { code: input.template.language }, ...(values.length ? { components: [{ type: "body", parameters: values }] } : {}) } };
+      const components = [
+        ...(input.content.template.headerDocument ? [{ type: "header", parameters: [{ type: "document", document: { id: input.content.template.headerDocument.id, filename: input.content.template.headerDocument.filename } }] }] : []),
+        ...(values.length ? [{ type: "body", parameters: values }] : []),
+      ];
+      body = { ...common, type: "template", template: { name: input.template.metaTemplateName, language: { code: input.template.language }, ...(components.length ? { components } : {}) } };
     } else if (["IMAGE", "DOCUMENT", "VIDEO"].includes(input.content.type)) {
       const content = input.content as { type: "IMAGE" | "DOCUMENT" | "VIDEO"; mediaUrl: string; caption?: string; filename?: string };
       const type = content.type.toLowerCase();
@@ -98,6 +102,33 @@ export class HttpMetaWhatsAppClient implements MetaWhatsAppClient {
     const id = result.messages?.[0]?.id;
     if (!id) throw new WhatsAppError("META_INVALID_RESPONSE", "Meta accepted the request without a message id");
     return { providerMessageId: id, acceptedAt: new Date(), httpStatus };
+  }
+
+  async uploadMedia(input: MetaUploadMediaRequest): Promise<{ mediaId: string }> {
+    const accessToken = await this.credentials.resolve(input.credentialRef, input.organizationId);
+    const form = new FormData();
+    form.set("messaging_product", "whatsapp");
+    form.set("type", input.mimeType);
+    form.set("file", new Blob([new Uint8Array(input.data)], { type: input.mimeType }), input.filename);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
+    try {
+      const response = await this.fetcher(
+        `https://graph.facebook.com/${this.config.graphApiVersion}/${input.metaPhoneNumberId}/media`,
+        { method: "POST", headers: { Authorization: `Bearer ${accessToken}` }, body: form, signal: controller.signal }
+      );
+      const body = await response.json().catch(() => ({})) as { id?: string; error?: MetaErrorBody["error"] };
+      if (!response.ok || body.error) throw this.normalize(body.error, response.status, response.headers.get("content-type") ?? undefined);
+      if (!body.id) throw new WhatsAppError("META_INVALID_RESPONSE", "Meta uploaded invoice media without returning an id");
+      return { mediaId: body.id };
+    } catch (error) {
+      if (error instanceof WhatsAppError) throw error;
+      if (error instanceof Error && error.name === "AbortError")
+        throw new WhatsAppError("META_TIMEOUT", "Meta media upload timed out", { retryable: true, cause: error });
+      throw new WhatsAppError("META_PROVIDER_FAILED", "Meta media upload failed", { retryable: true, cause: error });
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   async exchangeEmbeddedSignupCode(input: MetaCodeExchangeRequest): Promise<MetaCodeExchangeResult> {

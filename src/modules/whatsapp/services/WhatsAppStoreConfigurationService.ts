@@ -1,4 +1,5 @@
 import type { PrismaClient, WhatsAppSenderPurpose } from "@prisma/client";
+import { selectSenderMapping } from "../repositories/selectSenderMapping.ts";
 
 export class WhatsAppConfigurationError extends Error {
   constructor(
@@ -27,6 +28,7 @@ export type StoreProfileInput = {
   signature?: string | null;
   supportPhone?: string | null;
   defaultLanguage: string;
+  defaultInvoiceTemplateInstanceId?: string | null;
 };
 
 if (typeof window !== "undefined")
@@ -208,6 +210,39 @@ export class WhatsAppStoreConfigurationService {
   }
   async saveProfile(organizationId: string, storeId: string, input: StoreProfileInput) {
     await this.getProfile(organizationId, storeId);
+    if (input.defaultInvoiceTemplateInstanceId) {
+      const mappings = await this.prisma.storeWhatsAppSender.findMany({
+        where: {
+          storeId,
+          purpose: { in: ["TRANSACTIONAL", "DEFAULT"] },
+          isActive: true,
+          store: { orgId: organizationId, isActive: true },
+          phoneNumber: { waba: { integration: { organizationId } } },
+        },
+        orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
+        select: {
+          purpose: true,
+          isDefault: true,
+          phoneNumber: { select: { wabaId: true } },
+        },
+      });
+      const selected = selectSenderMapping(mappings, "TRANSACTIONAL");
+      const template = selected
+        ? await this.prisma.whatsAppTemplateInstance.findFirst({
+            where: {
+              id: input.defaultInvoiceTemplateInstanceId,
+              status: "APPROVED",
+              wabaId: selected.mapping.phoneNumber.wabaId,
+              waba: { integration: { organizationId } },
+              definition: { isActive: true, category: "UTILITY", purpose: { in: ["INVOICE", "CUSTOM"] } },
+            },
+            select: { definition: { select: { header: true } } },
+          })
+        : null;
+      const header = template?.definition.header as Record<string, unknown> | null | undefined;
+      if (!template || String(header?.type ?? "").toUpperCase() !== "HEADER" || String(header?.format ?? "").toUpperCase() !== "DOCUMENT")
+        throw new WhatsAppConfigurationError("MAPPING_CONFLICT", "Choose an approved document-header invoice template for this Store sender");
+    }
     return this.prisma.storeWhatsAppProfile.upsert({
       where: { storeId },
       create: { storeId, ...input },

@@ -20,6 +20,7 @@ export interface WhatsAppRepository {
     key: string;
     language: string;
     version?: number;
+    instanceId?: string;
   }): Promise<ResolvedWhatsAppTemplate | null>;
 
   createMessage(input: CreateWhatsAppMessageInput): Promise<WhatsAppMessageRecord>;

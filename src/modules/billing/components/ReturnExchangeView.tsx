@@ -11,7 +11,9 @@ import dayjs from "dayjs";
 import { useProducts } from "@/modules/products/hooks/useProducts";
 import { useBrands } from "@/modules/brands/hooks/useBrands";
 import { useCategories } from "@/modules/categories/hooks/useCategories";
-import type { SaleSummary, Sale, SaleItem, VariantRow, CartItem, PaymentMethodType } from "../types";
+import type { SaleSummary, Sale, SaleItem, VariantRow, CartItem, PaymentMethodType, WhatsAppInvoiceSelection, InvoiceDeliveryState } from "../types";
+import { WhatsAppInvoiceSelector } from "@/modules/whatsapp/components/WhatsAppInvoiceSelector";
+import { useStore } from "@/providers/StoreProvider";
 import { PAYMENT_OPTIONS } from "../constants";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
 
@@ -38,8 +40,9 @@ interface ReturnExchangeViewProps {
       discountPercent?: number;
       discountAmount?: number;
       taxRate?: number;
+      whatsappInvoice?: WhatsAppInvoiceSelection;
     }
-  ) => Promise<void>;
+  ) => Promise<{ invoiceDelivery?: InvoiceDeliveryState }>;
   refreshSales: () => Promise<void>;
   initialSaleId?: string;
 }
@@ -55,6 +58,7 @@ const ReturnExchangeView = ({
   initialSaleId,
 }: ReturnExchangeViewProps) => {
   const { message } = App.useApp();
+  const { storeId } = useStore();
   const { token } = theme.useToken();
   const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null);
   const [sale, setSale] = useState<Sale | null>(null);
@@ -89,6 +93,7 @@ const ReturnExchangeView = ({
   
   const [submitting, setSubmitting] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [whatsappInvoice, setWhatsAppInvoice] = useState<WhatsAppInvoiceSelection>({ enabled: false });
 
   const { products, loading: productsLoading } = useProducts(
     {
@@ -127,6 +132,7 @@ const ReturnExchangeView = ({
       setReason("");
       setCondition("");
       setNotes("");
+      setWhatsAppInvoice({ enabled: false });
       return;
     }
 
@@ -480,7 +486,7 @@ const ReturnExchangeView = ({
 
     setSubmitting(true);
     try {
-      await onCreateReturnTransaction(sale.id, {
+      const transaction = await onCreateReturnTransaction(sale.id, {
         type: exchangeType,
         returnedItems,
         exchangedItems: exchangeItems.map((item) => ({
@@ -502,9 +508,14 @@ const ReturnExchangeView = ({
         discountPercent: discountType === "PERCENTAGE" && discountValue > 0 ? discountValue : undefined,
         discountAmount: discountType === "FLAT" && discountValue > 0 ? discountValue : undefined,
         taxRate: taxRate > 0 ? taxRate : undefined,
+        whatsappInvoice,
       });
 
-      message.success("Return / exchange processed successfully.");
+      if (transaction.invoiceDelivery?.status === "FAILED")
+        message.warning("Return / exchange completed, but the WhatsApp invoice was not submitted. You can resend it from Bill History.");
+      else if (transaction.invoiceDelivery)
+        message.success("Return / exchange completed and its WhatsApp invoice was submitted.");
+      else message.success("Return / exchange processed successfully.");
       setSelectedSaleId(null);
       setSale(null);
       setReturnQuantities({});
@@ -520,6 +531,7 @@ const ReturnExchangeView = ({
       setReason("");
       setCondition("");
       setNotes("");
+      setWhatsAppInvoice({ enabled: false });
       setDrawerOpen(false);
       await refreshSales();
     } catch (error) {
@@ -635,6 +647,13 @@ const ReturnExchangeView = ({
                   </div>
                 )}
               </Card>
+
+              <WhatsAppInvoiceSelector
+                storeId={storeId}
+                recipient={sale?.customerPhone ?? ""}
+                value={whatsappInvoice}
+                onChange={setWhatsAppInvoice}
+              />
             </div>
           </Card>
 

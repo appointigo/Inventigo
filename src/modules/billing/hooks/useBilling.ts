@@ -5,7 +5,7 @@ import { roundTo2 } from "@/shared/utils/money";
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
-import type { Sale, SaleFilters, SaleSummary, CartItem, CreateSaleInput, PaymentMethodType, SplitPaymentEntry } from "../types";
+import type { Sale, SaleFilters, SaleSummary, CartItem, CreateSaleInput, PaymentMethodType, SplitPaymentEntry, WhatsAppInvoiceSelection, InvoiceDeliveryState } from "../types";
 
 export async function createSaleRequest(input: CreateSaleInput): Promise<Sale> {
   const res = await fetch("/api/billing", {
@@ -201,6 +201,7 @@ export function useSales(initialFilters?: SaleFilters) {
       reason?: string;
       condition?: string;
       notes?: string;
+      whatsappInvoice?: WhatsAppInvoiceSelection;
     }
   ) => {
     const res = await fetch(`/api/billing/${encodeURIComponent(saleId)}/return`, {
@@ -212,7 +213,9 @@ export function useSales(initialFilters?: SaleFilters) {
       const payload = await res.json().catch(() => ({ error: "Failed to process return/exchange" }));
       throw new Error(payload?.error || "Failed to process return/exchange");
     }
+    const transaction = await res.json();
     await fetchSales();
+    return transaction as { invoiceDelivery?: InvoiceDeliveryState };
   };
 
   return {

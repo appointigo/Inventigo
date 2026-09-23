@@ -74,6 +74,7 @@ export class PrismaWhatsAppRepository implements WhatsAppRepository {
   ): Promise<ResolvedWhatsAppTemplate | null> {
     const instances = await prisma.whatsAppTemplateInstance.findMany({
       where: {
+        ...(input.instanceId ? { id: input.instanceId } : {}),
         wabaId: input.wabaId,
         definition: {
           key: input.key,

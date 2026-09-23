@@ -18,10 +18,12 @@ export type WhatsAppMessagePurpose =
 export type WhatsAppSenderPurpose = "DEFAULT" | "TRANSACTIONAL" | "MARKETING" | "SUPPORT";
 
 export type WhatsAppTemplateReference = {
+  instanceId?: string;
   key: string;
   language: string;
   version?: number;
   variables?: Record<string, string>;
+  headerDocument?: { id: string; filename: string };
 };
 
 export type WhatsAppContent =

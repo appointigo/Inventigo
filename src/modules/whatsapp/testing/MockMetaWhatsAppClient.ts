@@ -25,6 +25,7 @@ export class MockMetaWhatsAppClient implements MetaWhatsAppClient {
     if (this.error) throw this.error;
     return this.result;
   }
+  async uploadMedia(): Promise<{ mediaId: string }> { return { mediaId: "mock-media-id" }; }
 
   async exchangeEmbeddedSignupCode(): Promise<MetaCodeExchangeResult> { return { accessToken: "mock-token" }; }
   async inspectToken(): Promise<MetaTokenInspection> { return { appId: "mock-app", isValid: true, scopes: ["whatsapp_business_management", "whatsapp_business_messaging"], granularScopes: [] }; }

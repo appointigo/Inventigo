@@ -39,6 +39,21 @@ export type CreateSaleInput = {
   customerEmail?: string;
   promoCodeId?: string;
   transactionDate?: string;
+  whatsappInvoice?: WhatsAppInvoiceSelection;
+};
+
+export type WhatsAppInvoiceSelection = {
+  enabled: boolean;
+  recipient?: string;
+  templateInstanceId?: string;
+  consentConfirmed?: boolean;
+};
+
+export type InvoiceDeliveryState = {
+  id: string;
+  status: "QUEUED" | "SUBMITTED" | "SENT" | "DELIVERED" | "READ" | "FAILED";
+  errorCode?: string | null;
+  errorMessage?: string | null;
 };
 
 export type CartItem = ItemPriceAdjustment & {
@@ -90,9 +105,22 @@ export type ReturnTransactionHistory = {
   offsetAmount: number;
   refundAmount: number;
   refundMethod?: PaymentMethodType;
+  discountType?: "PERCENTAGE" | "FLAT";
+  discountPercent?: number;
+  discountAmount?: number;
+  taxRate?: number;
+  calculatedTotal?: number;
+  roundOffAmount?: number;
+  finalPayable?: number;
+  splitPaymentData?: {
+    topUpPayments?: SplitPaymentEntry[];
+    refundPayments?: SplitPaymentEntry[];
+  };
   reason?: string;
   condition?: string;
   notes?: string;
+  transactionDate?: string;
+  businessDate?: string;
   createdAt: string;
 };
 
@@ -135,6 +163,7 @@ export type Sale = {
   returnTransactions: ReturnTransactionHistory[];
   transactionDate: string;
   createdAt: string;
+  invoiceDelivery?: InvoiceDeliveryState;
 };
 
 export type SaleItem = ItemPriceAdjustment & {

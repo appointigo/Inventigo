@@ -1192,16 +1192,19 @@ model StoreWhatsAppSender {
 }
 
 model StoreWhatsAppProfile {
-  id              String   @id @default(uuid())
-  storeId         String   @unique
-  displayName     String
-  signature       String?
-  supportPhone    String?
-  defaultLanguage String   @default("en")
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  store           Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  id                               String                    @id @default(uuid())
+  storeId                          String                    @unique
+  displayName                      String
+  signature                        String?
+  supportPhone                     String?
+  defaultLanguage                  String                    @default("en")
+  defaultInvoiceTemplateInstanceId String?
+  createdAt                        DateTime                  @default(now())
+  updatedAt                        DateTime                  @updatedAt
+  store                            Store                     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  defaultInvoiceTemplate           WhatsAppTemplateInstance? @relation("DefaultInvoiceTemplate", fields: [defaultInvoiceTemplateInstanceId], references: [id], onDelete: SetNull)
 
+  @@index([defaultInvoiceTemplateInstanceId])
   @@map("store_whatsapp_profiles")
 }
 
@@ -1238,23 +1241,24 @@ model WhatsAppTemplateDefinition {
 }
 
 model WhatsAppTemplateInstance {
-  id                 String                      @id @default(uuid())
-  definitionId       String
-  wabaId             String
-  metaTemplateId     String?                     @unique
-  metaTemplateName   String
-  status             WhatsAppTemplateStatus      @default(DRAFT)
-  rejectionReason    String?
-  submittedAt        DateTime?
-  approvedAt         DateTime?
-  rejectedAt         DateTime?
-  lastSyncedAt       DateTime?
-  createdAt          DateTime                    @default(now())
-  updatedAt          DateTime                    @updatedAt
-  definition         WhatsAppTemplateDefinition  @relation(fields: [definitionId], references: [id], onDelete: Restrict)
-  waba               WhatsAppBusinessAccount     @relation(fields: [wabaId], references: [id], onDelete: Cascade)
-  messages           WhatsAppMessage[]
-  campaignRecipients WhatsAppCampaignRecipient[]
+  id                      String                      @id @default(uuid())
+  definitionId            String
+  wabaId                  String
+  metaTemplateId          String?                     @unique
+  metaTemplateName        String
+  status                  WhatsAppTemplateStatus      @default(DRAFT)
+  rejectionReason         String?
+  submittedAt             DateTime?
+  approvedAt              DateTime?
+  rejectedAt              DateTime?
+  lastSyncedAt            DateTime?
+  createdAt               DateTime                    @default(now())
+  updatedAt               DateTime                    @updatedAt
+  definition              WhatsAppTemplateDefinition  @relation(fields: [definitionId], references: [id], onDelete: Restrict)
+  waba                    WhatsAppBusinessAccount     @relation(fields: [wabaId], references: [id], onDelete: Cascade)
+  messages                WhatsAppMessage[]
+  campaignRecipients      WhatsAppCampaignRecipient[]
+  defaultForStoreProfiles StoreWhatsAppProfile[]      @relation("DefaultInvoiceTemplate")
 
   @@unique([wabaId, definitionId])
   @@index([wabaId, status])

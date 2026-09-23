@@ -4,6 +4,8 @@ import { DeleteOutlined, MinusOutlined, PlusOutlined, ShoppingCartOutlined } fro
 import { Button, DatePicker, Drawer, Empty, Input, Typography } from "antd";
 import dayjs from "dayjs";
 import type { CartItem, PaymentMethodType, SplitPaymentEntry } from "@/modules/billing/types";
+import type { WhatsAppInvoiceSelection } from "@/modules/billing/types";
+import { WhatsAppInvoiceSelector } from "@/modules/whatsapp/components/WhatsAppInvoiceSelector";
 import { ItemPriceEditor, type UpdateItemPricing } from "@/modules/billing/components/ItemPriceEditor";
 import { allocatePricingSnapshots } from "@/modules/billing/utils/pricingEngine";
 import { SplitPaymentPanel } from "./SplitPaymentPanel";
@@ -44,6 +46,9 @@ export function BillingCart({
   checkoutLoading,
   transactionDate,
   onTransactionDateChange,
+  storeId,
+  whatsappInvoice,
+  onWhatsAppInvoiceChange,
 }: {
   open: boolean;
   onClose: () => void;
@@ -72,6 +77,9 @@ export function BillingCart({
   checkoutLoading: boolean;
   transactionDate: string;
   onTransactionDateChange: (value: string) => void;
+  storeId?: string | null;
+  whatsappInvoice: WhatsAppInvoiceSelection;
+  onWhatsAppInvoiceChange: (value: WhatsAppInvoiceSelection) => void;
 }) {
   const pricing = allocatePricingSnapshots(items.map((item) => ({ productId: item.productId, quantity: item.quantity, mrp: item.originalUnitPrice ?? item.unitPrice, sellingPrice: item.unitPrice })), { taxRate: taxPct });
   const taxAmount = pricing.taxAmount;
@@ -113,6 +121,13 @@ export function BillingCart({
         <Input value={customerName} onChange={(event) => onCustomerNameChange(event.target.value)} placeholder="Customer name" size="large" />
         <Input value={customerPhone} onChange={(event) => onCustomerPhoneChange(event.target.value.replace(/\D/g, "").slice(0, 10))} placeholder="Customer mobile" size="large" />
         <Input value={customerEmail} onChange={(event) => onCustomerEmailChange(event.target.value)} placeholder="Customer email (optional)" size="large" />
+
+        <WhatsAppInvoiceSelector
+          storeId={storeId}
+          recipient={customerPhone}
+          value={whatsappInvoice}
+          onChange={onWhatsAppInvoiceChange}
+        />
 
         <div>
           <Typography.Text strong style={{ display: "block", marginBottom: 8 }}>Transaction Date</Typography.Text>

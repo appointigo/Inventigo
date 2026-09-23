@@ -21,4 +21,5 @@ export const storeProfileSchema = z.object({
     .string()
     .trim()
     .regex(/^[a-z]{2,3}(?:_[A-Z]{2})?$/, "Use a language code such as en or en_US"),
+  defaultInvoiceTemplateInstanceId: z.string().uuid().nullable().optional(),
 });

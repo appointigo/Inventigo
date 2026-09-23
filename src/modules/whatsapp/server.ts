@@ -25,6 +25,8 @@ import { WhatsAppAutomationService } from "./services/WhatsAppAutomationService"
 import { WhatsAppConversationService } from "./services/WhatsAppConversationService";
 import { WhatsAppIntegrationHealthService } from "./services/WhatsAppIntegrationHealthService";
 import { WhatsAppMerchantTemplateService } from "./services/WhatsAppMerchantTemplateService";
+import { WhatsAppInvoiceTemplateService } from "./services/WhatsAppInvoiceTemplateService";
+import { WhatsAppInvoiceDeliveryService } from "./services/WhatsAppInvoiceDeliveryService";
 
 export const createWhatsAppAssetReader = () => new WhatsAppAssetService(prisma);
 export const createWhatsAppStoreConfigurationService = () =>
@@ -45,6 +47,8 @@ export const createWhatsAppAutomationReader = () => new WhatsAppAutomationServic
 export const createWhatsAppConversationService = () => new WhatsAppConversationService(prisma);
 export const createWhatsAppIntegrationHealthService = () =>
   new WhatsAppIntegrationHealthService(prisma);
+export const createWhatsAppInvoiceTemplateService = () =>
+  new WhatsAppInvoiceTemplateService(prisma);
 
 export function createWhatsAppCampaignExecutionService() {
   const backend = createMetaBackend();
@@ -56,6 +60,10 @@ export function createWhatsAppCampaignExecutionService() {
 }
 export function createWhatsAppAutomationWorker() {
   return new WhatsAppAutomationService(prisma, createMetaBackend().communication);
+}
+
+export function createWhatsAppInvoiceDeliveryService() {
+  return new WhatsAppInvoiceDeliveryService(prisma, createMetaBackend().client);
 }
 
 export function createMetaBackend() {

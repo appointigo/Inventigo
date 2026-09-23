@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient, WhatsAppTemplateCategory, WhatsAppTemplateStatus } from "@prisma/client";
+import { Prisma, type PrismaClient, type WhatsAppTemplateCategory, type WhatsAppTemplateStatus } from "@prisma/client";
 import { isWhatsAppError, WhatsAppError } from "../errors.ts";
 import type { MetaMessageTemplate, MetaWhatsAppClient } from "../clients/MetaWhatsAppClient.ts";
 import { invoiceV1Definition, toMetaTemplateRequest } from "../templates/invoiceV1.ts";
@@ -324,6 +324,8 @@ export class WhatsAppTemplateReconciliationService {
       approvedAt: status === "APPROVED" ? now : null,
       rejectedAt: status === "REJECTED" ? now : null,
     };
+    if (typeof this.db.whatsAppTemplateDefinition.update === "function")
+      await this.db.whatsAppTemplateDefinition.update({ where: { id: definitionId }, data: remoteComponentData(remote) });
     await this.db.whatsAppTemplateInstance.upsert({
       where: { wabaId_definitionId: { wabaId, definitionId } },
       create: { wabaId, definitionId, metaTemplateId: remote.id, metaTemplateName: remote.name, status, rejectionReason: remote.rejectionReason, lastSyncedAt: now, ...timestamps },
@@ -355,7 +357,7 @@ export class WhatsAppTemplateReconciliationService {
       ...(remote.category === "UTILITY" || remote.category === "MARKETING" || remote.category === "AUTHENTICATION"
         ? [this.db.whatsAppTemplateDefinition.update({
             where: { id: definitionId },
-            data: { category: remote.category },
+            data: { category: remote.category, ...remoteComponentData(remote) },
           })]
         : []),
     ]);
@@ -391,7 +393,7 @@ export class WhatsAppTemplateReconciliationService {
           body: componentText(bodyComponent) ?? "",
           footer: componentText(footerComponent),
           buttons: buttonsComponent as Prisma.InputJsonValue | undefined,
-          variables: [],
+          variables: bodyVariables(componentText(bodyComponent) ?? ""),
         },
         select: { id: true },
       });
@@ -432,4 +434,24 @@ function findComponent(components: unknown[], type: string): Record<string, unkn
 
 function componentText(component?: Record<string, unknown>): string | undefined {
   return typeof component?.text === "string" ? component.text : undefined;
+}
+
+function bodyVariables(body: string) {
+  const positions = [...body.matchAll(/\{\{(\d+)\}\}/g)].map(match => Number(match[1]));
+  return [...new Set(positions)].sort((a, b) => a - b).map(position => ({ position, key: `variable${position}` }));
+}
+
+function remoteComponentData(remote: MetaMessageTemplate): Prisma.WhatsAppTemplateDefinitionUpdateInput {
+  const components = remote.components ?? [];
+  const header = findComponent(components, "HEADER");
+  const body = componentText(findComponent(components, "BODY")) ?? "";
+  const footer = componentText(findComponent(components, "FOOTER"));
+  const buttons = findComponent(components, "BUTTONS");
+  return {
+    header: header ? header as Prisma.InputJsonValue : Prisma.JsonNull,
+    body,
+    footer: footer ?? null,
+    buttons: buttons ? buttons as Prisma.InputJsonValue : Prisma.JsonNull,
+    variables: bodyVariables(body),
+  };
 }

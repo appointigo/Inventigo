@@ -3,6 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import {
   createWhatsAppAutomationWorker,
   createWhatsAppCampaignExecutionService,
+  createWhatsAppInvoiceDeliveryService,
 } from "@/modules/whatsapp/server";
 
 export const runtime = "nodejs";
@@ -26,7 +27,8 @@ export async function GET(request: Request) {
     const automation = createWhatsAppAutomationWorker();
     const automationEvents = await automation.scan();
     const automationProcessed = await automation.process();
-    return NextResponse.json({ launched, ...processed, automationEvents, automationProcessed });
+    const invoices = await createWhatsAppInvoiceDeliveryService().processBatch();
+    return NextResponse.json({ launched, ...processed, automationEvents, automationProcessed, invoices });
   } catch {
     return NextResponse.json({ error: "WhatsApp worker failed" }, { status: 500 });
   }

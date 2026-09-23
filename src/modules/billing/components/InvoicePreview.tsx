@@ -1,12 +1,16 @@
 "use client";
 
-import { Modal, Table, Typography } from "antd";
+import { App, Button, Modal, Select, Table, Typography } from "antd";
 import { PrinterOutlined, CheckCircleFilled, CloseOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { ReturnTransactionItem, Sale, SaleItem } from "../types";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
 import dayjs from "dayjs";
 import { useStore } from "@/providers/StoreProvider";
+import { useEffect, useState } from "react";
+import { buildInvoiceDocumentHtml } from "../invoiceDocument";
+import type { WhatsAppInvoiceSelection } from "../types";
+import { WhatsAppInvoiceSelector } from "@/modules/whatsapp/components/WhatsAppInvoiceSelector";
 import {
   InvoiceHeader,
   SuccessRow,
@@ -51,7 +55,16 @@ interface InvoicePreviewProps {
 const { Text } = Typography;
 
 const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
-  const { storeName } = useStore();
+  const { storeName, storeId } = useStore();
+  const { message } = App.useApp();
+  const [whatsappInvoice, setWhatsappInvoice] = useState<WhatsAppInvoiceSelection>({ enabled: false });
+  const [invoiceTarget, setInvoiceTarget] = useState("SALE");
+  const [sendingInvoice, setSendingInvoice] = useState(false);
+
+  useEffect(() => {
+    setInvoiceTarget("SALE");
+    setWhatsappInvoice({ enabled: false, recipient: sale?.customerPhone ?? undefined });
+  }, [sale?.id, sale?.customerPhone]);
 
   if (!sale) return null;
 
@@ -100,199 +113,54 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
 
-    const itemRows = sale.items
-      .map((item, i) => {
-        const { unitMrp, finalUnitPrice, lineTotal, savings, discountPercent } = getItemSnapshot(item);
-        const attrValues = Object.values(item.attributes ?? {})
-          .filter((v) => {
-            const s = String(v).trim().toLowerCase();
-            return s !== "" && !["pcs", "pc", "piece", "pieces", "unit", "units"].includes(s);
-          })
-          .map((v) => `<span style="display:inline-block;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:3px;font-size:9pt;padding:0 5px;margin-left:3px;">${String(v)}</span>`)
-          .join("");
-
-        return `
-          <tr>
-            <td>${i + 1}</td>
-            <td>
-              <div style="font-weight:700;margin-bottom:4px;">${item.productName}</div>
-              <div style="font-size:10pt;color:#666;line-height:1.4;">
-                ${item.sku} · ${item.sizeLabel}${attrValues}
-              </div>
-              <div style="margin-top:6px;font-size:10pt;color:#111;">
-                <span style="font-weight:700;">${formatCurrency(finalUnitPrice)}</span>
-                ${unitMrp > finalUnitPrice ? `<span style="margin-left:8px;text-decoration:line-through;color:#888;">${formatCurrency(unitMrp)}</span>` : ""}
-              </div>
-              ${unitMrp > finalUnitPrice ? `<div style="font-size:10pt;color:#15803d;">${discountPercent}% OFF${savings > 0 ? ` • Save ${formatCurrency(savings)}` : ""}</div>` : ""}
-            </td>
-            <td style="text-align:center">${item.quantity}</td>
-            <td style="text-align:right">${formatCurrency(lineTotal)}</td>
-          </tr>
-        `;
-      })
-      .join("");
-
-    const historySections = sale.returnTransactions.length
-      ? sale.returnTransactions
-          .map((transaction) => {
-            const returnedRows = (transaction.returnedItems ?? [])
-              .map((item, i) => {
-                const product = getHistoryItemDisplay(item);
-
-                return `
-                  <tr>
-                    <td>${i + 1}</td>
-                    <td>
-                      <div style="font-weight:700;margin-bottom:3px;">${product.primary}</div>
-                      <small style="color:#888">
-                        ${product.secondary}
-                        ${product.size ? `<span style="display:inline-block;background:#eff4ff;border:1px solid #bfdbfe;border-radius:3px;font-size:9pt;padding:0 5px;color:#2563eb;">${product.size}</span>` : ""}
-                      </small>
-                    </td>
-                    <td style="text-align:center">${item.quantity}</td>
-                    <td style="text-align:right">${formatCurrency(item.total)}</td>
-                  </tr>
-                `;
-              })
-              .join("");
-
-            const exchangedRows = (transaction.exchangedItems ?? [])
-              .map((item, i) => {
-                const product = getHistoryItemDisplay(item);
-
-                return `
-                  <tr>
-                    <td>${i + 1}</td>
-                    <td>
-                      <div style="font-weight:700;margin-bottom:3px;">${product.primary}</div>
-                      <small style="color:#888">
-                        ${product.secondary}
-                        ${product.size ? `<span style="display:inline-block;background:#eff4ff;border:1px solid #bfdbfe;border-radius:3px;font-size:9pt;padding:0 5px;color:#2563eb;">${product.size}</span>` : ""}
-                      </small>
-                    </td>
-                    <td style="text-align:center">${item.quantity}</td>
-                    <td style="text-align:right">${formatCurrency(item.total)}</td>
-                  </tr>
-                `;
-              })
-              .join("");
-
-            return `
-              <div style="margin-bottom:20px; padding:12px; border:1px solid #ddd; border-radius:8px;">
-                <div style="font-weight:700; margin-bottom:8px;">${transaction.type} · ${dayjs(transaction.createdAt).format("DD MMM YYYY, hh:mm A")}</div>
-                ${returnedRows ? `
-                  <div style="margin-bottom:12px;">
-                    <div style="font-weight:600; margin-bottom:6px;">Returned items</div>
-                    <table style="width:100%; border-collapse:collapse; margin-bottom:0;">
-                      <thead>
-                        <tr>
-                          <th style="text-align:left; padding:4px; border-bottom:1px solid #ddd;">#</th>
-                          <th style="text-align:left; padding:4px; border-bottom:1px solid #ddd;">Product</th>
-                          <th style="text-align:center; padding:4px; border-bottom:1px solid #ddd;">Qty</th>
-                          <th style="text-align:right; padding:4px; border-bottom:1px solid #ddd;">Total</th>
-                        </tr>
-                      </thead>
-                      <tbody>${returnedRows}</tbody>
-                    </table>
-                  </div>
-                ` : ""}
-                ${exchangedRows ? `
-                  <div>
-                    <div style="font-weight:600; margin-bottom:6px;">Exchanged items</div>
-                    <table style="width:100%; border-collapse:collapse; margin-bottom:0;">
-                      <thead>
-                        <tr>
-                          <th style="text-align:left; padding:4px; border-bottom:1px solid #ddd;">#</th>
-                          <th style="text-align:left; padding:4px; border-bottom:1px solid #ddd;">Product</th>
-                          <th style="text-align:center; padding:4px; border-bottom:1px solid #ddd;">Qty</th>
-                          <th style="text-align:right; padding:4px; border-bottom:1px solid #ddd;">Total</th>
-                        </tr>
-                      </thead>
-                      <tbody>${exchangedRows}</tbody>
-                    </table>
-                  </div>
-                ` : ""}
-                <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-top:12px; font-size:11pt;">
-                  <div>Refund: ${formatCurrency(transaction.refundAmount)}</div>
-                  <div>Offset: ${formatCurrency(transaction.offsetAmount)}</div>
-                </div>
-              </div>
-            `;
-          })
-          .join("")
-      : "";
-
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Invoice ${sale.invoiceNumber}</title>
-          <style>
-            @page { size: A4; margin: 15mm; }
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { font-family: Arial, sans-serif; font-size: 12pt; color: #333; padding: 20px; }
-            .header { text-align: center; margin-bottom: 24px; }
-            .header h1 { font-size: 20pt; margin-bottom: 4px; }
-            .header p { color: #666; }
-            .info { display: flex; justify-content: space-between; margin-bottom: 20px; }
-            .info div { font-size: 10pt; }
-            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-            th, td { padding: 8px; border-bottom: 1px solid #ddd; text-align: left; }
-            th { background: #f5f5f5; font-weight: bold; }
-            .totals { text-align: right; }
-            .totals div { margin-bottom: 4px; }
-            .grand-total { font-size: 14pt; font-weight: bold; border-top: 2px solid #333; padding-top: 8px; }
-            .footer { text-align: center; margin-top: 40px; font-size: 10pt; color: #999; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h1>${storeName}</h1>
-            <p>Tax Invoice</p>
-          </div>
-          <div class="info">
-            <div>
-              <strong>Invoice:</strong> ${sale.invoiceNumber}<br>
-              <strong>Date:</strong> ${dayjs(sale.transactionDate).format("DD MMM YYYY, hh:mm A")}<br>
-              <strong>Payment:</strong> ${sale.paymentMethod}<br>
-              <strong>Payment status:</strong> ${sale.paymentStatus}
-            </div>
-            <div style="text-align:right">
-              ${sale.customerName ? `<strong>Customer:</strong> ${sale.customerName}<br>` : ""}
-              ${sale.customerPhone ? `<strong>Phone:</strong> ${sale.customerPhone}<br>` : ""}
-              <strong>Status:</strong> ${sale.status}
-            </div>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Product</th>
-                <th style="text-align:right">Price</th>
-                <th style="text-align:center">Qty</th>
-                <th style="text-align:right">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${itemRows}
-            </tbody>
-          </table>
-          ${historySections}
-          <div class="totals">
-            <div>Subtotal (before bill discount, excl. tax): ${formatCurrency(invoiceSubtotal)}</div>
-            ${sale.discountAmount > 0 ? `<div>Discount: -${formatCurrency(sale.discountAmount)}</div>` : ""}
-            ${totalSavings > 0 ? `<div>You Saved: ${formatCurrency(totalSavings)}</div>` : ""}
-            ${sale.taxAmount > 0 ? `<div>Tax: ${formatCurrency(sale.taxAmount)}</div>` : ""}
-            <div>Amount paid: ${formatCurrency(sale.amountPaid)}</div>
-            ${sale.amountDue > 0 ? `<div>Amount due: ${formatCurrency(sale.amountDue)}</div>` : ""}
-            <div class="grand-total">Final Total: ${formatCurrency(sale.total)}</div>
-          </div>
-          <div class="footer">Thank you for your purchase!</div>
-          <script>window.onload = function() { setTimeout(function() { window.print(); }, 300); }<\/script>
-        </body>
-      </html>
-    `);
+    printWindow.document.write(buildInvoiceDocumentHtml({
+      sale,
+      storeName,
+      kind: invoiceTarget === "SALE" ? "SALE" : "EXCHANGE",
+      returnTransactionId: invoiceTarget === "SALE" ? undefined : invoiceTarget,
+    }));
     printWindow.document.close();
+    printWindow.addEventListener("load", () => printWindow.print(), { once: true });
+  };
+
+  const sendFromHistory = async () => {
+    if (!storeId || !whatsappInvoice.recipient || !whatsappInvoice.templateInstanceId || !whatsappInvoice.consentConfirmed) {
+      message.error("Confirm the recipient, template, and customer authorization first.");
+      return;
+    }
+    const [kind, transactionId] = invoiceTarget === "SALE"
+      ? ["SALE", sale.id]
+      : ["EXCHANGE", invoiceTarget];
+    const submit = async () => {
+      setSendingInvoice(true);
+      try {
+        const response = await fetch("/api/whatsapp/invoices", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ kind, transactionId, storeId, recipient: whatsappInvoice.recipient, templateInstanceId: whatsappInvoice.templateInstanceId, consentConfirmed: true }),
+        });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body.error || "Invoice could not be queued");
+        if (body.status === "FAILED") message.warning("Invoice attempt was recorded but Meta submission failed. Review the failure before resending.");
+        else message.success("Invoice submitted to Meta. Delivery will update asynchronously.");
+      } catch (error) {
+        message.error(error instanceof Error ? error.message : "Invoice could not be sent");
+      } finally {
+        setSendingInvoice(false);
+      }
+    };
+    let previous: { attempts: unknown[] };
+    try {
+      const response = await fetch(`/api/whatsapp/invoices?kind=${kind}&transactionId=${encodeURIComponent(transactionId)}`, { cache: "no-store" });
+      if (!response.ok) throw new Error();
+      previous = await response.json() as { attempts: unknown[] };
+    } catch {
+      message.error("Previous invoice attempts could not be checked. Nothing was sent.");
+      return;
+    }
+    if (previous.attempts.length) {
+      Modal.confirm({ title: "Resend invoice?", content: "A tracked WhatsApp attempt already exists for this transaction. This creates a separate resend attempt.", okText: "Resend", onOk: submit });
+    } else await submit();
   };
 
   const columns: ColumnsType<SaleItem> = [
@@ -593,6 +461,21 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
             <NewSaleBtn onClick={onClose}>New Sale</NewSaleBtn>
           </NewSaleBanner>
         )}
+
+        <div style={{ marginTop: 20, display: "grid", gap: 12 }}>
+          {sale.returnTransactions.length ? (
+            <Select
+              value={invoiceTarget}
+              onChange={setInvoiceTarget}
+              options={[
+                { value: "SALE", label: `Purchase invoice ${sale.invoiceNumber}` },
+                ...sale.returnTransactions.map(transaction => ({ value: transaction.id, label: `${transaction.type} ${transaction.referenceNumber || transaction.id.slice(0, 8)}` })),
+              ]}
+            />
+          ) : null}
+          <WhatsAppInvoiceSelector storeId={storeId} recipient={sale.customerPhone ?? ""} value={whatsappInvoice} onChange={setWhatsappInvoice} />
+          {whatsappInvoice.enabled ? <Button type="primary" loading={sendingInvoice} onClick={() => void sendFromHistory()}>Send / resend finalized PDF</Button> : null}
+        </div>
 
         {/* Footer actions */}
         <FooterActions>

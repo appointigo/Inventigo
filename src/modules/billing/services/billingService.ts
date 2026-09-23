@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import type { CreateSaleInput, Sale, SaleItem, SaleFilters, SaleSummary } from "../types";
-import { createWhatsAppAutomationReader } from "@/modules/whatsapp/server";
+import { createWhatsAppAutomationReader, createWhatsAppInvoiceDeliveryService } from "@/modules/whatsapp/server";
+import { enqueueInvoiceDelivery, prepareInvoiceDelivery, type WhatsAppInvoiceSelection } from "@/modules/whatsapp/services/WhatsAppInvoiceDeliveryService";
 import { customerService } from "@/modules/customers/services/customerService";
 import { syncWhatsAppContactForCustomer } from "@/modules/whatsapp/services/WhatsAppContactService";
 import { allocatePricingSnapshots, resolveItemPrice, validateAmount } from "../utils/pricingEngine";
@@ -310,6 +311,14 @@ type ReturnTransactionRecord = {
   offsetAmount?: Prisma.Decimal | number | string | null;
   refundAmount?: Prisma.Decimal | number | string | null;
   refundMethod?: string | null;
+  discountType?: string | null;
+  discountPercent?: Prisma.Decimal | number | string | null;
+  discountAmount?: Prisma.Decimal | number | string | null;
+  taxRate?: Prisma.Decimal | number | string | null;
+  calculatedTotal?: Prisma.Decimal | number | string | null;
+  roundOffAmount?: Prisma.Decimal | number | string | null;
+  finalPayable?: Prisma.Decimal | number | string | null;
+  splitPaymentData?: Prisma.JsonValue | string | null;
   reason?: string | null;
   condition?: string | null;
   notes?: string | null;
@@ -381,6 +390,17 @@ const toReturnTransactionDto = (
           }))
       : fallbackExchangedItems.map((item) => ({ ...item, total: round2(item.total) }));
 
+  const splitPaymentData = (() => {
+    if (!rt.splitPaymentData) return undefined;
+    try {
+      return typeof rt.splitPaymentData === "string"
+        ? JSON.parse(rt.splitPaymentData)
+        : rt.splitPaymentData;
+    } catch {
+      return undefined;
+    }
+  })();
+
   return {
     id: rt.id,
     referenceNumber: rt.referenceNumber,
@@ -394,6 +414,14 @@ const toReturnTransactionDto = (
     offsetAmount: Number(rt.offsetAmount ?? 0),
     refundAmount: Number(rt.refundAmount ?? 0),
     refundMethod: rt.refundMethod ?? undefined,
+    discountType: rt.discountType ?? undefined,
+    discountPercent: rt.discountPercent != null ? Number(rt.discountPercent) : undefined,
+    discountAmount: rt.discountAmount != null ? Number(rt.discountAmount) : undefined,
+    taxRate: rt.taxRate != null ? Number(rt.taxRate) : undefined,
+    calculatedTotal: rt.calculatedTotal != null ? Number(rt.calculatedTotal) : undefined,
+    roundOffAmount: rt.roundOffAmount != null ? Number(rt.roundOffAmount) : undefined,
+    finalPayable: rt.finalPayable != null ? Number(rt.finalPayable) : undefined,
+    splitPaymentData,
     reason: rt.reason ?? undefined,
     condition: rt.condition ?? undefined,
     notes: rt.notes ?? undefined,
@@ -533,18 +561,43 @@ const toSaleDto = (rawSale: any): Sale => {
             : relationalExchangedItems
           : providedExchangedItems;
 
+      const splitPaymentData = (() => {
+        if (!rt.splitPaymentData) return undefined;
+        try {
+          return typeof rt.splitPaymentData === "string"
+            ? JSON.parse(rt.splitPaymentData)
+            : rt.splitPaymentData;
+        } catch {
+          return undefined;
+        }
+      })();
+
       return {
         id: rt.id,
         type: rt.type,
+        referenceNumber: rt.referenceNumber ?? undefined,
+        saleInvoiceNumber: s.invoiceNumber,
         returnedItems,
         exchangedItems,
         netAmount: Number(rt.netAmount),
         offsetAmount: Number(rt.offsetAmount),
         refundAmount: Number(rt.refundAmount),
         refundMethod: rt.refundMethod ?? undefined,
+        discountType: rt.discountType ?? undefined,
+        discountPercent: rt.discountPercent != null ? Number(rt.discountPercent) : undefined,
+        discountAmount: rt.discountAmount != null ? Number(rt.discountAmount) : undefined,
+        taxRate: rt.taxRate != null ? Number(rt.taxRate) : undefined,
+        calculatedTotal: rt.calculatedTotal != null ? Number(rt.calculatedTotal) : undefined,
+        roundOffAmount: rt.roundOffAmount != null ? Number(rt.roundOffAmount) : undefined,
+        finalPayable: rt.finalPayable != null ? Number(rt.finalPayable) : undefined,
+        splitPaymentData,
         reason: rt.reason ?? undefined,
         condition: rt.condition ?? undefined,
         notes: rt.notes ?? undefined,
+        transactionDate:
+          rt.transactionDate instanceof Date ? rt.transactionDate.toISOString() : (rt.transactionDate ?? undefined),
+        businessDate:
+          rt.businessDate instanceof Date ? rt.businessDate.toISOString() : (rt.businessDate ?? undefined),
         createdAt: rt.createdAt instanceof Date ? rt.createdAt.toISOString() : rt.createdAt,
       };
     }),
@@ -641,6 +694,11 @@ export const billingService = {
       phone: customer.mobile,
       storeId,
     });
+    const preparedInvoiceDelivery = await prepareInvoiceDelivery(prisma, {
+      organizationId: orgId,
+      storeId,
+      selection: input.whatsappInvoice,
+    });
 
     // Server-side promo validation — never trust client discountAmount when a promo is applied
     let discountAmount = input.discountAmount;
@@ -731,7 +789,7 @@ export const billingService = {
       const invoiceNumber = await generateInvoiceNumber(storeId, attempt - 1);
 
       try {
-        const sale = await prisma.$transaction(async (tx) => {
+        const { created: sale, deliveryIntent } = await prisma.$transaction(async (tx) => {
           const created = await tx.sale.create({
             data: {
               storeId,
@@ -857,7 +915,17 @@ export const billingService = {
             },
           });
 
-          return created;
+          const deliveryIntent = preparedInvoiceDelivery
+            ? await enqueueInvoiceDelivery(tx, preparedInvoiceDelivery, {
+                kind: "SALE",
+                id: created.id,
+                reference: created.invoiceNumber,
+                customerName: created.customerName,
+                customerId: created.customerId,
+                amount: Number(created.total),
+              })
+            : null;
+          return { created, deliveryIntent };
         });
 
         await createWhatsAppAutomationReader()
@@ -874,7 +942,17 @@ export const billingService = {
             payload: { invoiceNumber: sale.invoiceNumber, total: Number(sale.total) },
           })
           .catch(() => undefined);
-        return toSaleDto(sale);
+        const result = toSaleDto(sale);
+        if (deliveryIntent) {
+          try {
+            const delivered = await createWhatsAppInvoiceDeliveryService().processMessage(deliveryIntent.id);
+            result.invoiceDelivery = { id: delivered.id, status: delivered.status, errorCode: delivered.errorCode, errorMessage: delivered.errorMessage };
+          } catch {
+            const failed = await prisma.whatsAppMessage.findUnique({ where: { id: deliveryIntent.id }, select: { id: true, status: true, errorCode: true, errorMessage: true } });
+            if (failed) result.invoiceDelivery = failed;
+          }
+        }
+        return result;
       } catch (error) {
         if (attempt < 5 && isInvoiceNumberConflict(error)) {
           continue;
@@ -1612,6 +1690,7 @@ export const billingService = {
       discountPercent?: number;
       discountAmount?: number;
       taxRate?: number;
+      whatsappInvoice?: WhatsAppInvoiceSelection;
     }
   ) {
     const supportsExchangedStatus = await supportsExchangedSaleStatus();
@@ -1628,6 +1707,11 @@ export const billingService = {
     if (!sale) {
       throw new Error("Sale not found");
     }
+    const preparedInvoiceDelivery = await prepareInvoiceDelivery(prisma, {
+      organizationId: orgId,
+      storeId: sale.storeId,
+      selection: input.whatsappInvoice,
+    });
     if (sale.status !== "COMPLETED") {
       throw new Error("Only completed sales can be returned or exchanged");
     }
@@ -1761,7 +1845,7 @@ export const billingService = {
       const referenceNumber = await generateReturnReferenceNumber(sale.storeId, attempt - 1);
 
       try {
-        const transaction = await prisma.$transaction(async (tx) => {
+        const { returnTransaction: transaction, deliveryIntent } = await prisma.$transaction(async (tx) => {
           const locked = await tx.$queryRaw<
             Array<{ updatedAt: Date }>
           >`SELECT "updatedAt" FROM "sales" WHERE id = ${saleId} FOR UPDATE`;
@@ -2030,10 +2114,29 @@ export const billingService = {
             },
           });
 
-          return returnTransaction;
+          const deliveryIntent = preparedInvoiceDelivery
+            ? await enqueueInvoiceDelivery(tx, preparedInvoiceDelivery, {
+                kind: "EXCHANGE",
+                id: returnTransaction.id,
+                reference: returnTransaction.referenceNumber,
+                customerName: sale.customerName,
+                customerId: sale.customerId,
+                amount: Number(netAmount || refundAmount || finalPayable),
+              })
+            : null;
+          return { returnTransaction, deliveryIntent };
         });
-
-        return toReturnTransactionDto(transaction, returnedLineItems, exchangedLineItems);
+        const result = toReturnTransactionDto(transaction, returnedLineItems, exchangedLineItems) as ReturnType<typeof toReturnTransactionDto> & { invoiceDelivery?: { id: string; status: string; errorCode?: string | null; errorMessage?: string | null } };
+        if (deliveryIntent) {
+          try {
+            const delivered = await createWhatsAppInvoiceDeliveryService().processMessage(deliveryIntent.id);
+            result.invoiceDelivery = { id: delivered.id, status: delivered.status, errorCode: delivered.errorCode, errorMessage: delivered.errorMessage };
+          } catch {
+            const failed = await prisma.whatsAppMessage.findUnique({ where: { id: deliveryIntent.id }, select: { id: true, status: true, errorCode: true, errorMessage: true } });
+            if (failed) result.invoiceDelivery = failed;
+          }
+        }
+        return result;
       } catch (error) {
         if (attempt < 5 && isInvoiceNumberConflict(error)) {
           // Retry on reference/invoice unique conflicts

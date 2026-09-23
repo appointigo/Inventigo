@@ -23,6 +23,14 @@ export type MetaSendMessageResult = {
   acceptedAt: Date;
   httpStatus?: number;
 };
+export type MetaUploadMediaRequest = {
+  organizationId: string;
+  credentialRef: string;
+  metaPhoneNumberId: string;
+  data: Buffer;
+  mimeType: string;
+  filename: string;
+};
 
 export type MetaCodeExchangeResult = { accessToken: string; expiresAt?: Date };
 export type MetaCodeExchangeRequest = { code: string };
@@ -59,6 +67,7 @@ export type MetaCreateTemplateRequest = MetaTemplateContext & { name: string; la
 
 export interface MetaWhatsAppClient {
   sendMessage(request: MetaSendMessageRequest): Promise<MetaSendMessageResult>;
+  uploadMedia(request: MetaUploadMediaRequest): Promise<{ mediaId: string }>;
   exchangeEmbeddedSignupCode(request: MetaCodeExchangeRequest): Promise<MetaCodeExchangeResult>;
   inspectToken(accessToken: string): Promise<MetaTokenInspection>;
   getWaba(wabaId: string, accessToken: string, report?: MetaDiagnosticReporter): Promise<MetaWaba>;

@@ -35,7 +35,8 @@ export async function PUT(request: Request, context: { params: Promise<{ storeId
         body.data
       )
     );
-  } catch {
-    return NextResponse.json({ error: "Store not found" }, { status: 404 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Store profile could not be saved";
+    return NextResponse.json({ error: message }, { status: message.includes("template") ? 400 : 404 });
   }
 }

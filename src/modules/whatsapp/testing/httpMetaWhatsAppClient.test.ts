@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { HttpMetaWhatsAppClient } from "../clients/HttpMetaWhatsAppClient.ts";
+import { WhatsAppError } from "../errors.ts";
 
 const credentials = { save: async () => "ref", resolve: async () => "secret-token", remove: async () => undefined };
 const config = { appId: "app", appSecret: "secret", graphApiVersion: "v26.0", timeoutMs: 50 };
@@ -21,6 +22,42 @@ test("sends the verified Cloud API message shape without putting tokens in the U
   assert.equal(seen.url, "https://graph.facebook.com/v26.0/123/messages");
   assert.equal((JSON.parse(String(seen.init?.body)) as { messaging_product: string }).messaging_product, "whatsapp");
   assert.ok(!seen.url.includes("secret-token"));
+});
+
+test("uploads a PDF and attaches its media id to a template document header", async () => {
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  const client = new HttpMetaWhatsAppClient(config, credentials, async (url, init) => {
+    calls.push({ url: String(url), init });
+    return calls.length === 1
+      ? jsonResponse({ id: "media-1" }, { status: 200 })
+      : jsonResponse({ messages: [{ id: "wamid.invoice" }] }, { status: 200 });
+  });
+  const upload = await client.uploadMedia({ organizationId: "org", credentialRef: "ref", metaPhoneNumberId: "123", data: Buffer.from("%PDF-1.4"), mimeType: "application/pdf", filename: "invoice-1001.pdf" });
+  await client.sendMessage({
+    organizationId: "org",
+    credentialRef: "ref",
+    metaPhoneNumberId: "123",
+    recipient: "919999999999",
+    content: { type: "TEMPLATE", template: { key: "invoice", language: "en_US", variables: { "1": "Aarav" }, headerDocument: { id: upload.mediaId, filename: "invoice-1001.pdf" } } },
+    template: { metaTemplateName: "invoice_document", language: "en_US" },
+  });
+  assert.equal(calls[0].url, "https://graph.facebook.com/v26.0/123/media");
+  assert.ok(calls[0].init?.body instanceof FormData);
+  const sent = JSON.parse(String(calls[1].init?.body));
+  assert.equal(sent.template.components[0].parameters[0].document.id, "media-1");
+  assert.equal(sent.template.components[0].parameters[0].document.filename, "invoice-1001.pdf");
+  assert.equal(sent.template.components[1].parameters[0].text, "Aarav");
+});
+
+test("bounds invoice media uploads with the configured Meta timeout", async () => {
+  const client = new HttpMetaWhatsAppClient({ ...config, timeoutMs: 5 }, credentials, async (_url, init) => {
+    await new Promise((_resolve, reject) => init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError"))));
+    throw new Error("unreachable");
+  });
+  await assert.rejects(
+    client.uploadMedia({ organizationId: "org", credentialRef: "ref", metaPhoneNumberId: "123", data: Buffer.from("%PDF-1.4"), mimeType: "application/pdf", filename: "invoice.pdf" }),
+    (error: unknown) => error instanceof WhatsAppError && error.code === "META_TIMEOUT"
+  );
 });
 
 for (const [name, status, code, expected] of [["auth", 401, 190, "META_AUTH_FAILED"], ["rate limit", 429, 4, "META_RATE_LIMITED"], ["provider", 500, 2, "META_PROVIDER_FAILED"]] as const) {
