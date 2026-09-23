@@ -110,6 +110,8 @@ export class WhatsAppWebhookService {
         id: true,
         organizationId: true,
         campaignRecipientId: true,
+        purpose: true,
+        payload: true,
         status: true,
         sentAt: true,
         deliveredAt: true,
@@ -157,6 +159,32 @@ export class WhatsAppWebhookService {
       (!latest || occurredAt >= latest) &&
       (next === "FAILED" || rank[next] >= rank[message.status]);
     const error = item.status.errors?.[0];
+    const storedPayload = message.payload && typeof message.payload === "object" && !Array.isArray(message.payload)
+      ? message.payload as Record<string, unknown>
+      : null;
+    const invoiceDelivery = storedPayload?.invoiceDelivery && typeof storedPayload.invoiceDelivery === "object"
+      ? storedPayload.invoiceDelivery as Record<string, unknown>
+      : null;
+    const diagnostic = storedPayload?.diagnostic && typeof storedPayload.diagnostic === "object"
+      ? storedPayload.diagnostic as Record<string, unknown>
+      : null;
+    const correlationId = typeof invoiceDelivery?.correlationId === "string"
+      ? invoiceDelivery.correlationId
+      : typeof diagnostic?.correlationId === "string"
+        ? diagnostic.correlationId
+        : undefined;
+    if (message.purpose === "INVOICE") {
+      console.info("[WhatsApp Invoice] webhook_status_received", {
+        requestId: correlationId,
+        organizationId: message.organizationId,
+        messageId: message.id,
+        metaStatus: item.status.status,
+        nextStatus: next,
+        shouldUpdate,
+        providerErrorCode: error?.code,
+        occurredAt: occurredAt.toISOString(),
+      });
+    }
     await this.prisma.$transaction([
       this.prisma.whatsAppMessageEvent.create({
         data: {

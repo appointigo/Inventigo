@@ -49,6 +49,41 @@ test("uploads a PDF and attaches its media id to a template document header", as
   assert.equal(sent.template.components[1].parameters[0].text, "Aarav");
 });
 
+test("sends named template variables with Meta parameter_name fields", async () => {
+  let body: { template: { components: Array<{ parameters: Array<Record<string, unknown>> }> } } | undefined;
+  const client = new HttpMetaWhatsAppClient(config, credentials, async (_url, init) => {
+    body = JSON.parse(String(init?.body)) as typeof body;
+    return jsonResponse({ messages: [{ id: "wamid.named" }] }, { status: 200 });
+  });
+  await client.sendMessage({
+    organizationId: "org",
+    credentialRef: "ref",
+    metaPhoneNumberId: "123",
+    recipient: "919999999999",
+    content: {
+      type: "TEMPLATE",
+      template: {
+        key: "invoice_delivery",
+        language: "en_US",
+        variables: {
+          customer_name: "Test Customer",
+          order_id: "INV-TEST-001",
+          order_date: "24 Sept 2026",
+        },
+        headerDocument: { id: "media-1", filename: "invoice-test.pdf" },
+      },
+    },
+    template: { metaTemplateName: "invoice_delivery", language: "en_US" },
+  });
+  const parameters = body?.template.components[1].parameters;
+  assert.deepEqual(parameters.map((parameter: Record<string, unknown>) => parameter.parameter_name), [
+    "customer_name",
+    "order_date",
+    "order_id",
+  ]);
+  assert.ok(parameters.every((parameter: Record<string, unknown>) => parameter.type === "text"));
+});
+
 test("bounds invoice media uploads with the configured Meta timeout", async () => {
   const client = new HttpMetaWhatsAppClient({ ...config, timeoutMs: 5 }, credentials, async (_url, init) => {
     await new Promise((_resolve, reject) => init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError"))));

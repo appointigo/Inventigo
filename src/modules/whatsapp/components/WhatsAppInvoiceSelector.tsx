@@ -27,8 +27,9 @@ export function WhatsAppInvoiceSelector({
   const [loading, setLoading] = useState(false);
   useEffect(() => {
     if (!storeId) return;
+    const requestId = crypto.randomUUID();
     setLoading(true);
-    fetch(`/api/whatsapp/invoices/options?storeId=${encodeURIComponent(storeId)}`, { cache: "no-store" })
+    fetch(`/api/whatsapp/invoices/options?storeId=${encodeURIComponent(storeId)}`, { cache: "no-store", headers: { "x-request-id": requestId } })
       .then(response => response.ok ? response.json() : Promise.reject())
       .then((next: Options) => {
         setOptions(next);

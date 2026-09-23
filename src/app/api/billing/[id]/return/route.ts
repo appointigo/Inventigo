@@ -33,18 +33,20 @@ export const POST = async (
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) => {
+  const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
+  const startedAt = Date.now();
   let user;
   try {
     user = await requireOrgAuth();
   } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: "Unauthorized", requestId }, { status: 401, headers: { "x-request-id": requestId } });
   }
 
   const { id } = await params;
   const body = await request.json();
 
   if (!body || typeof body !== "object") {
-    return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid payload", requestId }, { status: 400, headers: { "x-request-id": requestId } });
   }
 
   const payload = body as Record<string, unknown>;
@@ -56,9 +58,10 @@ export const POST = async (
   const hasExchangedItems = exchangedItemsPayload.length > 0;
 
   if (!hasReturnedItems && !hasExchangedItems) {
-    return NextResponse.json({ error: "Returned or exchanged items are required" }, { status: 400 });
+    return NextResponse.json({ error: "Returned or exchanged items are required", requestId }, { status: 400, headers: { "x-request-id": requestId } });
   }
 
+  console.info("[Billing] request_received", { requestId, organizationId: user.orgId, saleId: id, operation: "CREATE_RETURN_EXCHANGE" });
   try {
     const transaction = await billingService.createReturnTransaction(user.orgId!, id, user.id, {
       type: parseTransactionType(payload.type),
@@ -81,8 +84,10 @@ export const POST = async (
       whatsappInvoice: payload.whatsappInvoice && typeof payload.whatsappInvoice === "object"
         ? payload.whatsappInvoice as WhatsAppInvoiceSelection
         : undefined,
-    });
-    return NextResponse.json(transaction, { status: 201 });
+    }, { correlationId: requestId });
+    if (!transaction) throw new Error("RETURN_EXCHANGE_NOT_CREATED");
+    console.info("[Billing] response_sent", { requestId, organizationId: user.orgId, saleId: id, operation: "CREATE_RETURN_EXCHANGE", transactionId: transaction.id, invoiceDeliveryId: transaction.invoiceDelivery?.id, invoiceDeliveryStatus: transaction.invoiceDelivery?.status, httpStatus: 201, durationMs: Date.now() - startedAt });
+    return NextResponse.json({ ...transaction, requestId }, { status: 201, headers: { "x-request-id": requestId } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal server error";
 
@@ -112,6 +117,7 @@ export const POST = async (
       console.error("/api/billing/[id]/return POST error", error);
     }
 
-    return NextResponse.json({ error: message }, { status });
+    console.warn("[Billing] request_failed", { requestId, organizationId: user.orgId, saleId: id, operation: "CREATE_RETURN_EXCHANGE", errorCode: message, httpStatus: status, durationMs: Date.now() - startedAt });
+    return NextResponse.json({ error: message, requestId }, { status, headers: { "x-request-id": requestId } });
   }
 };

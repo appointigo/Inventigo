@@ -7,6 +7,7 @@ import type { WhatsAppContent } from "../types";
  * payload shapes. Domain/application code must not construct Graph payloads.
  */
 export type MetaSendMessageRequest = {
+  requestId?: string;
   organizationId: string;
   credentialRef: string;
   metaPhoneNumberId: string;
@@ -24,6 +25,7 @@ export type MetaSendMessageResult = {
   httpStatus?: number;
 };
 export type MetaUploadMediaRequest = {
+  requestId?: string;
   organizationId: string;
   credentialRef: string;
   metaPhoneNumberId: string;

@@ -626,7 +626,8 @@ export const billingService = {
     orgId: string,
     storeId: string,
     userId: string,
-    input: CreateSaleInput
+    input: CreateSaleInput,
+    diagnostic?: { correlationId: string }
   ): Promise<Sale> {
     if (!input.customerPhone?.trim()) {
       throw new Error("Customer mobile number is required");
@@ -698,6 +699,7 @@ export const billingService = {
       organizationId: orgId,
       storeId,
       selection: input.whatsappInvoice,
+      correlationId: diagnostic?.correlationId,
     });
 
     // Server-side promo validation — never trust client discountAmount when a promo is applied
@@ -923,9 +925,26 @@ export const billingService = {
                 customerName: created.customerName,
                 customerId: created.customerId,
                 amount: Number(created.total),
+                transactionDate: created.transactionDate,
               })
             : null;
           return { created, deliveryIntent };
+        });
+
+        console.info("[Billing] transaction_committed", {
+          requestId: diagnostic?.correlationId,
+          organizationId: orgId,
+          storeId,
+          transactionType: "SALE",
+          transactionId: sale.id,
+          invoiceNumber: sale.invoiceNumber,
+          transactionStatus: sale.status,
+          paymentStatus: sale.paymentStatus,
+          whatsappSelected: Boolean(preparedInvoiceDelivery),
+          deliveryRecordId: deliveryIntent?.id,
+          deliveryStatus: deliveryIntent?.status,
+          templateInstanceId: preparedInvoiceDelivery?.templateInstanceId,
+          templateName: preparedInvoiceDelivery?.metaTemplateName,
         });
 
         await createWhatsAppAutomationReader()
@@ -1691,7 +1710,8 @@ export const billingService = {
       discountAmount?: number;
       taxRate?: number;
       whatsappInvoice?: WhatsAppInvoiceSelection;
-    }
+    },
+    diagnostic?: { correlationId: string }
   ) {
     const supportsExchangedStatus = await supportsExchangedSaleStatus();
     const hasReturnItemsTable = await hasTable("return_transaction_items");
@@ -1711,6 +1731,7 @@ export const billingService = {
       organizationId: orgId,
       storeId: sale.storeId,
       selection: input.whatsappInvoice,
+      correlationId: diagnostic?.correlationId,
     });
     if (sale.status !== "COMPLETED") {
       throw new Error("Only completed sales can be returned or exchanged");
@@ -2122,9 +2143,25 @@ export const billingService = {
                 customerName: sale.customerName,
                 customerId: sale.customerId,
                 amount: Number(netAmount || refundAmount || finalPayable),
+                transactionDate: returnTransaction.transactionDate ?? returnTransaction.businessDate,
               })
             : null;
           return { returnTransaction, deliveryIntent };
+        });
+        console.info("[Billing] transaction_committed", {
+          requestId: diagnostic?.correlationId,
+          organizationId: orgId,
+          storeId: sale.storeId,
+          transactionType: "EXCHANGE",
+          transactionId: transaction.id,
+          invoiceNumber: transaction.referenceNumber,
+          transactionStatus: transaction.type,
+          settlementSucceeded: true,
+          whatsappSelected: Boolean(preparedInvoiceDelivery),
+          deliveryRecordId: deliveryIntent?.id,
+          deliveryStatus: deliveryIntent?.status,
+          templateInstanceId: preparedInvoiceDelivery?.templateInstanceId,
+          templateName: preparedInvoiceDelivery?.metaTemplateName,
         });
         const result = toReturnTransactionDto(transaction, returnedLineItems, exchangedLineItems) as ReturnType<typeof toReturnTransactionDto> & { invoiceDelivery?: { id: string; status: string; errorCode?: string | null; errorMessage?: string | null } };
         if (deliveryIntent) {

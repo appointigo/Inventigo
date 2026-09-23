@@ -8,9 +8,10 @@ import { useSession } from "next-auth/react";
 import type { Sale, SaleFilters, SaleSummary, CartItem, CreateSaleInput, PaymentMethodType, SplitPaymentEntry, WhatsAppInvoiceSelection, InvoiceDeliveryState } from "../types";
 
 export async function createSaleRequest(input: CreateSaleInput): Promise<Sale> {
+  const requestId = crypto.randomUUID();
   const res = await fetch("/api/billing", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "x-request-id": requestId },
     body: JSON.stringify(input),
   });
   if (!res.ok) {
@@ -204,9 +205,10 @@ export function useSales(initialFilters?: SaleFilters) {
       whatsappInvoice?: WhatsAppInvoiceSelection;
     }
   ) => {
+    const requestId = crypto.randomUUID();
     const res = await fetch(`/api/billing/${encodeURIComponent(saleId)}/return`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-request-id": requestId },
       body: JSON.stringify(payload),
     });
     if (!res.ok) {

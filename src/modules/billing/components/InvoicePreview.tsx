@@ -1,6 +1,6 @@
 "use client";
 
-import { App, Button, Modal, Select, Table, Typography } from "antd";
+import { Alert, App, Button, Modal, Select, Table, Typography } from "antd";
 import { PrinterOutlined, CheckCircleFilled, CloseOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { ReturnTransactionItem, Sale, SaleItem } from "../types";
@@ -60,11 +60,36 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
   const [whatsappInvoice, setWhatsappInvoice] = useState<WhatsAppInvoiceSelection>({ enabled: false });
   const [invoiceTarget, setInvoiceTarget] = useState("SALE");
   const [sendingInvoice, setSendingInvoice] = useState(false);
+  const [latestInvoiceAttempt, setLatestInvoiceAttempt] = useState<{
+    id: string;
+    status: string;
+    errorCode?: string | null;
+    errorMessage?: string | null;
+    templateInstance?: { metaTemplateName: string } | null;
+  } | null>(null);
 
   useEffect(() => {
     setInvoiceTarget("SALE");
     setWhatsappInvoice({ enabled: false, recipient: sale?.customerPhone ?? undefined });
   }, [sale?.id, sale?.customerPhone]);
+
+  useEffect(() => {
+    if (!open || !sale) return;
+    const kind = invoiceTarget === "SALE" ? "SALE" : "EXCHANGE";
+    const transactionId = invoiceTarget === "SALE" ? sale.id : invoiceTarget;
+    const controller = new AbortController();
+    fetch(`/api/whatsapp/invoices?kind=${kind}&transactionId=${encodeURIComponent(transactionId)}`, {
+      cache: "no-store",
+      headers: { "x-request-id": crypto.randomUUID() },
+      signal: controller.signal,
+    })
+      .then(response => response.ok ? response.json() : Promise.reject())
+      .then((body: { attempts?: Array<typeof latestInvoiceAttempt> }) => setLatestInvoiceAttempt(body.attempts?.[0] ?? null))
+      .catch(error => {
+        if (!(error instanceof Error && error.name === "AbortError")) setLatestInvoiceAttempt(null);
+      });
+    return () => controller.abort();
+  }, [open, sale, invoiceTarget]);
 
   if (!sale) return null;
 
@@ -132,15 +157,17 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
       ? ["SALE", sale.id]
       : ["EXCHANGE", invoiceTarget];
     const submit = async () => {
+      const requestId = crypto.randomUUID();
       setSendingInvoice(true);
       try {
         const response = await fetch("/api/whatsapp/invoices", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", "x-request-id": requestId },
           body: JSON.stringify({ kind, transactionId, storeId, recipient: whatsappInvoice.recipient, templateInstanceId: whatsappInvoice.templateInstanceId, consentConfirmed: true }),
         });
         const body = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(body.error || "Invoice could not be queued");
+        setLatestInvoiceAttempt({ id: body.id, status: body.status, errorCode: body.errorCode, errorMessage: body.errorMessage });
         if (body.status === "FAILED") message.warning("Invoice attempt was recorded but Meta submission failed. Review the failure before resending.");
         else message.success("Invoice submitted to Meta. Delivery will update asynchronously.");
       } catch (error) {
@@ -151,7 +178,7 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
     };
     let previous: { attempts: unknown[] };
     try {
-      const response = await fetch(`/api/whatsapp/invoices?kind=${kind}&transactionId=${encodeURIComponent(transactionId)}`, { cache: "no-store" });
+      const response = await fetch(`/api/whatsapp/invoices?kind=${kind}&transactionId=${encodeURIComponent(transactionId)}`, { cache: "no-store", headers: { "x-request-id": crypto.randomUUID() } });
       if (!response.ok) throw new Error();
       previous = await response.json() as { attempts: unknown[] };
     } catch {
@@ -474,6 +501,18 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
             />
           ) : null}
           <WhatsAppInvoiceSelector storeId={storeId} recipient={sale.customerPhone ?? ""} value={whatsappInvoice} onChange={setWhatsappInvoice} />
+          {latestInvoiceAttempt ? (
+            <Alert
+              type={latestInvoiceAttempt.status === "FAILED" ? "error" : latestInvoiceAttempt.status === "DELIVERED" || latestInvoiceAttempt.status === "READ" ? "success" : "info"}
+              showIcon
+              message={`Latest WhatsApp invoice: ${latestInvoiceAttempt.status}`}
+              description={latestInvoiceAttempt.status === "FAILED"
+                ? `${latestInvoiceAttempt.errorCode || "INVOICE_DELIVERY_FAILED"}${latestInvoiceAttempt.errorMessage ? ` — ${latestInvoiceAttempt.errorMessage}` : ""}`
+                : latestInvoiceAttempt.templateInstance?.metaTemplateName
+                  ? `Template: ${latestInvoiceAttempt.templateInstance.metaTemplateName}`
+                  : undefined}
+            />
+          ) : null}
           {whatsappInvoice.enabled ? <Button type="primary" loading={sendingInvoice} onClick={() => void sendFromHistory()}>Send / resend finalized PDF</Button> : null}
         </div>
 

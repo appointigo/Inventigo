@@ -6,11 +6,14 @@ import { buildInvoiceDocumentHtml, type InvoiceDocumentKind } from "../invoiceDo
 export type GeneratedInvoicePdf = { buffer: Buffer; filename: string; reference: string };
 
 export async function generateInvoicePdf(input: {
+  correlationId?: string;
+  messageId?: string;
   organizationId: string;
   storeId: string;
   kind: InvoiceDocumentKind;
   transactionId: string;
 }): Promise<GeneratedInvoicePdf> {
+  const startedAt = Date.now();
   const store = await prisma.store.findFirst({
     where: { id: input.storeId, orgId: input.organizationId },
     select: { id: true, name: true },
@@ -33,19 +36,73 @@ export async function generateInvoicePdf(input: {
     ? sale.returnTransactions.find(item => item.id === input.transactionId)
     : undefined;
   const reference = transaction?.referenceNumber || sale.invoiceNumber;
+  console.info("[WhatsApp Invoice] invoice_data_loaded", {
+    requestId: input.correlationId,
+    organizationId: input.organizationId,
+    storeId: input.storeId,
+    messageId: input.messageId,
+    transactionId: input.transactionId,
+    transactionType: input.kind,
+    reference,
+    transactionStatus: input.kind === "SALE" ? sale.status : transaction?.type,
+    paymentStatus: sale.paymentStatus,
+    elapsedMs: Date.now() - startedAt,
+  });
+  console.info("[WhatsApp Invoice] invoice_render_started", {
+    requestId: input.correlationId,
+    messageId: input.messageId,
+    transactionId: input.transactionId,
+    reference,
+  });
   const html = buildInvoiceDocumentHtml({
     sale,
     storeName: store.name,
     kind: input.kind,
     returnTransactionId: input.kind === "EXCHANGE" ? input.transactionId : undefined,
   });
+  console.info("[WhatsApp Invoice] invoice_render_completed", {
+    requestId: input.correlationId,
+    messageId: input.messageId,
+    transactionId: input.transactionId,
+    reference,
+    elapsedMs: Date.now() - startedAt,
+  });
 
+  console.info("[WhatsApp Invoice] pdf_generation_started", {
+    requestId: input.correlationId,
+    messageId: input.messageId,
+    transactionId: input.transactionId,
+    reference,
+  });
   const browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox", "--disable-setuid-sandbox"] });
   try {
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "domcontentloaded" });
     const pdf = await page.pdf({ format: "A4", printBackground: true, preferCSSPageSize: true });
-    return { buffer: Buffer.from(pdf), filename: `${input.kind === "EXCHANGE" ? "exchange" : "invoice"}-${reference.replace(/[^a-z0-9_-]+/gi, "-")}.pdf`, reference };
+    const buffer = Buffer.from(pdf);
+    const filename = `${input.kind === "EXCHANGE" ? "exchange" : "invoice"}-${reference.replace(/[^a-z0-9_-]+/gi, "-")}.pdf`;
+    console.info("[WhatsApp Invoice] pdf_generation_completed", {
+      requestId: input.correlationId,
+      messageId: input.messageId,
+      transactionId: input.transactionId,
+      reference,
+      filename,
+      byteLength: buffer.byteLength,
+      elapsedMs: Date.now() - startedAt,
+    });
+    const signatureValid = buffer.subarray(0, 5).toString("ascii") === "%PDF-";
+    console.info("[WhatsApp Invoice] pdf_validation_completed", {
+      requestId: input.correlationId,
+      messageId: input.messageId,
+      transactionId: input.transactionId,
+      reference,
+      filename,
+      byteLength: buffer.byteLength,
+      signatureValid,
+      elapsedMs: Date.now() - startedAt,
+    });
+    if (!signatureValid) throw new Error("INVOICE_PDF_INVALID");
+    return { buffer, filename, reference };
   } finally {
     await browser.close();
   }
