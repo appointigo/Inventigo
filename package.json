@@ -16,7 +16,7 @@
     "whatsapp:invoices:worker": "node scripts/trigger-whatsapp-invoice-worker.mjs",
     "test:inventory-intelligence": "node --experimental-transform-types --test src/modules/inventory-intelligence/utils/analyticsPeriod.test.ts src/modules/inventory-intelligence/utils/metrics.test.ts",
     "test:demand-intelligence": "node --experimental-transform-types --test src/modules/demand-intelligence/utils/demandAnalytics.test.ts src/modules/demand-intelligence/utils/demandValidation.test.ts src/modules/demand-intelligence/utils/demandSecurity.test.ts",
-    "test:customers": "node --experimental-transform-types --test src/modules/customers/utils/customerDateWindow.test.ts src/modules/customers/customerQueries.test.ts src/modules/customers/customerNavigation.test.ts src/modules/customers/customerPagination.test.ts src/modules/customers/customerDirectoryState.test.ts src/modules/customers/customerFollowUpSchemas.test.ts",
+    "test:customers": "node --experimental-transform-types --test src/modules/customers/utils/customerDateWindow.test.ts src/modules/customers/customerQueries.test.ts src/modules/customers/customerNavigation.test.ts src/modules/customers/customerPagination.test.ts src/modules/customers/customerDirectoryState.test.ts src/modules/customers/customerInvoiceAccess.test.ts src/modules/customers/customerFollowUpSchemas.test.ts",
     "prisma:fix-exchanged-sales": "node prisma/scripts/fix-exchanged-sales-and-backfill-returns.js",
     "vercel-build": "if [ \"$VERCEL_ENV\" = \"production\" ]; then npx prisma migrate deploy; fi && npm run build",
     "postinstall": "prisma generate"

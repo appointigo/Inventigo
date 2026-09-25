@@ -8,6 +8,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import CustomerDetailView from "./CustomerDetailView";
 import CustomerForm from "./CustomerForm";
 import CustomerFollowUpModal from "./CustomerFollowUpModal";
+import CustomerInvoicePreview from "./CustomerInvoicePreview";
 import { VisitForm } from "@/modules/demand-intelligence/components/DemandIntelligencePage";
 import { customerDetailQueryKey } from "../customerQueries";
 import { safeCustomerReturnPath } from "../customerDirectoryState";
@@ -30,6 +31,7 @@ export default function CustomerFullProfile({ customerId, returnTo, initialTab }
   const [formLoading, setFormLoading] = useState(false);
   const [visitOpen, setVisitOpen] = useState(false);
   const [followUpOpen, setFollowUpOpen] = useState(false);
+  const [invoiceSaleId, setInvoiceSaleId] = useState<string | null>(null);
 
   const detailQuery = useQuery({
     queryKey: customerDetailQueryKey(customerId),
@@ -137,6 +139,13 @@ export default function CustomerFullProfile({ customerId, returnTo, initialTab }
         onRecordVisit={() => setVisitOpen(true)}
         onCreateFollowUp={() => setFollowUpOpen(true)}
         onFollowUpUpdated={refresh}
+        onViewInvoice={setInvoiceSaleId}
+      />
+      <CustomerInvoicePreview
+        customerId={customerId}
+        saleId={invoiceSaleId}
+        open={Boolean(invoiceSaleId)}
+        onClose={() => setInvoiceSaleId(null)}
       />
       <Modal
         open={formOpen}

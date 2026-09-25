@@ -145,6 +145,7 @@ export type SalePayment = {
 
 export type Sale = {
   id: string;
+  storeId: string;
   invoiceNumber: string;
   customerId: string | null;
   customerName: string | null;

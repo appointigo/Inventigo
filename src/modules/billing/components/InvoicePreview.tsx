@@ -1,7 +1,12 @@
 "use client";
 
 import { Alert, App, Button, Modal, Select, Table, Typography } from "antd";
-import { PrinterOutlined, CheckCircleFilled, CloseOutlined } from "@ant-design/icons";
+import {
+  PrinterOutlined,
+  CheckCircleFilled,
+  CloseOutlined,
+  DownloadOutlined,
+} from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { ReturnTransactionItem, Sale, SaleItem } from "../types";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
@@ -50,14 +55,17 @@ interface InvoicePreviewProps {
   sale: Sale | null;
   open: boolean;
   onClose: () => void;
+  getPdfUrl?: (kind: "SALE" | "RETURN" | "EXCHANGE", transactionId: string) => string;
 }
 
 const { Text } = Typography;
 
-const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
+const InvoicePreview = ({ sale, open, onClose, getPdfUrl }: InvoicePreviewProps) => {
   const { storeName, storeId } = useStore();
   const { message } = App.useApp();
-  const [whatsappInvoice, setWhatsappInvoice] = useState<WhatsAppInvoiceSelection>({ enabled: false });
+  const [whatsappInvoice, setWhatsappInvoice] = useState<WhatsAppInvoiceSelection>({
+    enabled: false,
+  });
   const [invoiceTarget, setInvoiceTarget] = useState("SALE");
   const [sendingInvoice, setSendingInvoice] = useState(false);
   const [latestInvoiceAttempt, setLatestInvoiceAttempt] = useState<{
@@ -75,18 +83,28 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
 
   useEffect(() => {
     if (!open || !sale) return;
-    const selectedTransaction = sale.returnTransactions.find(item => item.id === invoiceTarget);
-    const kind = invoiceTarget === "SALE" ? "SALE" : selectedTransaction?.exchangedItems?.length ? "EXCHANGE" : "RETURN";
+    const selectedTransaction = sale.returnTransactions.find((item) => item.id === invoiceTarget);
+    const kind =
+      invoiceTarget === "SALE"
+        ? "SALE"
+        : selectedTransaction?.exchangedItems?.length
+          ? "EXCHANGE"
+          : "RETURN";
     const transactionId = invoiceTarget === "SALE" ? sale.id : invoiceTarget;
     const controller = new AbortController();
-    fetch(`/api/whatsapp/invoices?kind=${kind}&transactionId=${encodeURIComponent(transactionId)}`, {
-      cache: "no-store",
-      headers: { "x-request-id": crypto.randomUUID() },
-      signal: controller.signal,
-    })
-      .then(response => response.ok ? response.json() : Promise.reject())
-      .then((body: { attempts?: Array<typeof latestInvoiceAttempt> }) => setLatestInvoiceAttempt(body.attempts?.[0] ?? null))
-      .catch(error => {
+    fetch(
+      `/api/whatsapp/invoices?kind=${kind}&transactionId=${encodeURIComponent(transactionId)}`,
+      {
+        cache: "no-store",
+        headers: { "x-request-id": crypto.randomUUID() },
+        signal: controller.signal,
+      }
+    )
+      .then((response) => (response.ok ? response.json() : Promise.reject()))
+      .then((body: { attempts?: Array<typeof latestInvoiceAttempt> }) =>
+        setLatestInvoiceAttempt(body.attempts?.[0] ?? null)
+      )
+      .catch((error) => {
         if (!(error instanceof Error && error.name === "AbortError")) setLatestInvoiceAttempt(null);
       });
     return () => controller.abort();
@@ -98,15 +116,18 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
 
   const getItemSnapshot = (item: SaleItem) => {
     const unitMrp = Number(item.originalUnitPrice ?? item.mrp ?? item.unitPrice);
-    const finalUnitPrice = item.finalUnitPrice != null
-      ? Number(item.finalUnitPrice)
-      : item.sellingPrice != null
-        ? Number(item.sellingPrice)
-        : Number(item.unitPrice);
-    const lineTotal = item.finalLineAmount != null ? Number(item.finalLineAmount) : Number(item.total);
+    const finalUnitPrice =
+      item.finalUnitPrice != null
+        ? Number(item.finalUnitPrice)
+        : item.sellingPrice != null
+          ? Number(item.sellingPrice)
+          : Number(item.unitPrice);
+    const lineTotal =
+      item.finalLineAmount != null ? Number(item.finalLineAmount) : Number(item.total);
     const mrpLineTotal = round2(unitMrp * item.quantity);
     const savings = Math.max(0, round2(mrpLineTotal - lineTotal));
-    const discountPercent = unitMrp > 0 ? Math.round(((unitMrp - finalUnitPrice) / unitMrp) * 100) : 0;
+    const discountPercent =
+      unitMrp > 0 ? Math.round(((unitMrp - finalUnitPrice) / unitMrp) * 100) : 0;
 
     return { unitMrp, finalUnitPrice, lineTotal, mrpLineTotal, savings, discountPercent };
   };
@@ -118,8 +139,8 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
     const sizeLabel = item.sizeLabel?.trim();
     const sizeId = item.sizeId?.trim();
     const primary = productName || sku || productId || "Product";
-    const secondaryParts = [sku, productId].filter(
-      (value): value is string => Boolean(value && value !== primary)
+    const secondaryParts = [sku, productId].filter((value): value is string =>
+      Boolean(value && value !== primary)
     );
 
     return {
@@ -129,9 +150,18 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
     };
   };
 
-  const mrpSubtotal = round2(sale.items.reduce((sum, item) => sum + Number(item.originalUnitPrice ?? item.mrp ?? item.unitPrice) * item.quantity, 0));
+  const mrpSubtotal = round2(
+    sale.items.reduce(
+      (sum, item) =>
+        sum + Number(item.originalUnitPrice ?? item.mrp ?? item.unitPrice) * item.quantity,
+      0
+    )
+  );
   const invoiceSubtotal = sale.items.every((item) => item.netLineAmount != null)
-    ? round2(sale.items.reduce((sum, item) => sum + Number(item.taxableAmount ?? 0), 0) + sale.discountAmount)
+    ? round2(
+        sale.items.reduce((sum, item) => sum + Number(item.taxableAmount ?? 0), 0) +
+          sale.discountAmount
+      )
     : sale.subtotal;
   const totalSavings = Math.max(0, round2(mrpSubtotal - Number(sale.total)));
 
@@ -139,27 +169,51 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
 
-    printWindow.document.write(buildInvoiceDocumentHtml({
-      sale,
-      merchant: { name: storeName },
-      kind: invoiceTarget === "SALE" ? "SALE" : sale.returnTransactions.find(item => item.id === invoiceTarget)?.exchangedItems?.length ? "EXCHANGE" : "RETURN",
-      returnTransactionId: invoiceTarget === "SALE" ? undefined : invoiceTarget,
-      configuration: invoiceTarget === "SALE"
-        ? sale.invoiceSnapshot
-        : sale.returnTransactions.find(item => item.id === invoiceTarget)?.invoiceSnapshot,
-    }));
+    printWindow.document.write(
+      buildInvoiceDocumentHtml({
+        sale,
+        merchant: { name: storeName },
+        kind:
+          invoiceTarget === "SALE"
+            ? "SALE"
+            : sale.returnTransactions.find((item) => item.id === invoiceTarget)?.exchangedItems
+                  ?.length
+              ? "EXCHANGE"
+              : "RETURN",
+        returnTransactionId: invoiceTarget === "SALE" ? undefined : invoiceTarget,
+        configuration:
+          invoiceTarget === "SALE"
+            ? sale.invoiceSnapshot
+            : sale.returnTransactions.find((item) => item.id === invoiceTarget)?.invoiceSnapshot,
+      })
+    );
     printWindow.document.close();
     printWindow.addEventListener("load", () => printWindow.print(), { once: true });
   };
+  const selectedTransaction = sale.returnTransactions.find((item) => item.id === invoiceTarget);
+  const selectedKind: "SALE" | "RETURN" | "EXCHANGE" =
+    invoiceTarget === "SALE"
+      ? "SALE"
+      : selectedTransaction?.exchangedItems?.length
+        ? "EXCHANGE"
+        : "RETURN";
+  const selectedTransactionId = invoiceTarget === "SALE" ? sale.id : invoiceTarget;
 
   const sendFromHistory = async () => {
     if (!storeId || !whatsappInvoice.recipient || !whatsappInvoice.consentConfirmed) {
       message.error("Confirm the invoice recipient first.");
       return;
     }
-    const [kind, transactionId] = invoiceTarget === "SALE"
-      ? ["SALE", sale.id]
-      : [sale.returnTransactions.find(item => item.id === invoiceTarget)?.exchangedItems?.length ? "EXCHANGE" : "RETURN", invoiceTarget];
+    const [kind, transactionId] =
+      invoiceTarget === "SALE"
+        ? ["SALE", sale.id]
+        : [
+            sale.returnTransactions.find((item) => item.id === invoiceTarget)?.exchangedItems
+              ?.length
+              ? "EXCHANGE"
+              : "RETURN",
+            invoiceTarget,
+          ];
     const submit = async () => {
       const requestId = crypto.randomUUID();
       setSendingInvoice(true);
@@ -167,12 +221,26 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
         const response = await fetch("/api/whatsapp/invoices", {
           method: "POST",
           headers: { "Content-Type": "application/json", "x-request-id": requestId },
-          body: JSON.stringify({ kind, transactionId, storeId, recipient: whatsappInvoice.recipient, consentConfirmed: true }),
+          body: JSON.stringify({
+            kind,
+            transactionId,
+            storeId,
+            recipient: whatsappInvoice.recipient,
+            consentConfirmed: true,
+          }),
         });
         const body = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(body.error || "Invoice could not be queued");
-        setLatestInvoiceAttempt({ id: body.id, status: body.status, errorCode: body.errorCode, errorMessage: body.errorMessage });
-        if (body.status === "FAILED") message.warning("Invoice attempt was recorded but Meta submission failed. Review the failure before resending.");
+        setLatestInvoiceAttempt({
+          id: body.id,
+          status: body.status,
+          errorCode: body.errorCode,
+          errorMessage: body.errorMessage,
+        });
+        if (body.status === "FAILED")
+          message.warning(
+            "Invoice attempt was recorded but Meta submission failed. Review the failure before resending."
+          );
         else message.success("Invoice submitted to Meta. Delivery will update asynchronously.");
       } catch (error) {
         message.error(error instanceof Error ? error.message : "Invoice could not be sent");
@@ -182,15 +250,24 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
     };
     let previous: { attempts: unknown[] };
     try {
-      const response = await fetch(`/api/whatsapp/invoices?kind=${kind}&transactionId=${encodeURIComponent(transactionId)}`, { cache: "no-store", headers: { "x-request-id": crypto.randomUUID() } });
+      const response = await fetch(
+        `/api/whatsapp/invoices?kind=${kind}&transactionId=${encodeURIComponent(transactionId)}`,
+        { cache: "no-store", headers: { "x-request-id": crypto.randomUUID() } }
+      );
       if (!response.ok) throw new Error();
-      previous = await response.json() as { attempts: unknown[] };
+      previous = (await response.json()) as { attempts: unknown[] };
     } catch {
       message.error("Previous invoice attempts could not be checked. Nothing was sent.");
       return;
     }
     if (previous.attempts.length) {
-      Modal.confirm({ title: "Resend invoice?", content: "A tracked WhatsApp attempt already exists for this transaction. This creates a separate resend attempt.", okText: "Resend", onOk: submit });
+      Modal.confirm({
+        title: "Resend invoice?",
+        content:
+          "A tracked WhatsApp attempt already exists for this transaction. This creates a separate resend attempt.",
+        okText: "Resend",
+        onOk: submit,
+      });
     } else await submit();
   };
 
@@ -198,9 +275,7 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
     {
       title: "#",
       width: 40,
-      render: (_, __, index) => (
-        <Text type="secondary">{index + 1}</Text>
-      ),
+      render: (_, __, index) => <Text type="secondary">{index + 1}</Text>,
     },
     {
       title: "Product",
@@ -233,15 +308,19 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
         return (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
             <Text strong>{formatCurrency(finalUnitPrice)}</Text>
-            {record.originalUnitPrice != null && <Text type="secondary" style={{ fontSize: 12 }}>
-              Agreed {formatCurrency(record.sellingPrice ?? record.unitPrice)} / unit
-            </Text>}
+            {record.originalUnitPrice != null && (
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                Agreed {formatCurrency(record.sellingPrice ?? record.unitPrice)} / unit
+              </Text>
+            )}
             {unitMrp > finalUnitPrice && (
               <>
                 <Text delete type="secondary" style={{ fontSize: 12 }}>
                   {formatCurrency(unitMrp)}
                 </Text>
-                <DiscountText>{discountPercent}% OFF{ savings > 0 ? ` • Save ${formatCurrency(savings)}` : "" }</DiscountText>
+                <DiscountText>
+                  {discountPercent}% OFF{savings > 0 ? ` • Save ${formatCurrency(savings)}` : ""}
+                </DiscountText>
               </>
             )}
           </div>
@@ -260,7 +339,9 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
       dataIndex: "total",
       width: 100,
       align: "right",
-      render: (_total: number, record) => <Text strong>{formatCurrency(record.finalLineAmount ?? record.total)}</Text>,
+      render: (_total: number, record) => (
+        <Text strong>{formatCurrency(record.finalLineAmount ?? record.total)}</Text>
+      ),
     },
   ];
 
@@ -409,7 +490,10 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
           {sale.roundOffAmount !== 0 && (
             <SumRow>
               <span>Round Off</span>
-              <span>{sale.roundOffAmount > 0 ? '+' : ''}{formatCurrency(sale.roundOffAmount)}</span>
+              <span>
+                {sale.roundOffAmount > 0 ? "+" : ""}
+                {formatCurrency(sale.roundOffAmount)}
+              </span>
             </SumRow>
           )}
           <SumRow>
@@ -441,10 +525,20 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
                   marginTop: 16,
                 }}
               >
-                <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 12 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    flexWrap: "wrap",
+                    gap: 12,
+                    marginBottom: 12,
+                  }}
+                >
                   <div>
                     <Text strong>{transaction.type}</Text>
-                    <div style={{ color: "#6b7280", fontSize: 12 }}>{dayjs(transaction.createdAt).format("DD MMM YYYY · hh:mm A")}</div>
+                    <div style={{ color: "#6b7280", fontSize: 12 }}>
+                      {dayjs(transaction.createdAt).format("DD MMM YYYY · hh:mm A")}
+                    </div>
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <Text type="secondary">Refund</Text>
@@ -500,24 +594,46 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
               onChange={setInvoiceTarget}
               options={[
                 { value: "SALE", label: `Purchase invoice ${sale.invoiceNumber}` },
-                ...sale.returnTransactions.map(transaction => ({ value: transaction.id, label: `${transaction.type} ${transaction.referenceNumber || transaction.id.slice(0, 8)}` })),
+                ...sale.returnTransactions.map((transaction) => ({
+                  value: transaction.id,
+                  label: `${transaction.type} ${transaction.referenceNumber || transaction.id.slice(0, 8)}`,
+                })),
               ]}
             />
           ) : null}
-          <WhatsAppInvoiceSelector storeId={storeId} recipient={sale.customerPhone ?? ""} value={whatsappInvoice} onChange={setWhatsappInvoice} transactionKind={invoiceTarget === "SALE" ? "SALE" : "EXCHANGE"} />
+          <WhatsAppInvoiceSelector
+            storeId={storeId}
+            recipient={sale.customerPhone ?? ""}
+            value={whatsappInvoice}
+            onChange={setWhatsappInvoice}
+            transactionKind={invoiceTarget === "SALE" ? "SALE" : "EXCHANGE"}
+          />
           {latestInvoiceAttempt ? (
             <Alert
-              type={latestInvoiceAttempt.status === "FAILED" ? "error" : latestInvoiceAttempt.status === "DELIVERED" || latestInvoiceAttempt.status === "READ" ? "success" : "info"}
+              type={
+                latestInvoiceAttempt.status === "FAILED"
+                  ? "error"
+                  : latestInvoiceAttempt.status === "DELIVERED" ||
+                      latestInvoiceAttempt.status === "READ"
+                    ? "success"
+                    : "info"
+              }
               showIcon
               message={`Latest WhatsApp invoice: ${latestInvoiceAttempt.status}`}
-              description={latestInvoiceAttempt.status === "FAILED"
-                ? `${latestInvoiceAttempt.errorCode || "INVOICE_DELIVERY_FAILED"}${latestInvoiceAttempt.errorMessage ? ` — ${latestInvoiceAttempt.errorMessage}` : ""}`
-                : latestInvoiceAttempt.templateInstance?.metaTemplateName
-                  ? `Template: ${latestInvoiceAttempt.templateInstance.metaTemplateName}`
-                  : undefined}
+              description={
+                latestInvoiceAttempt.status === "FAILED"
+                  ? `${latestInvoiceAttempt.errorCode || "INVOICE_DELIVERY_FAILED"}${latestInvoiceAttempt.errorMessage ? ` — ${latestInvoiceAttempt.errorMessage}` : ""}`
+                  : latestInvoiceAttempt.templateInstance?.metaTemplateName
+                    ? `Template: ${latestInvoiceAttempt.templateInstance.metaTemplateName}`
+                    : undefined
+              }
             />
           ) : null}
-          {whatsappInvoice.enabled ? <Button type="primary" loading={sendingInvoice} onClick={() => void sendFromHistory()}>Send / resend finalized PDF</Button> : null}
+          {whatsappInvoice.enabled ? (
+            <Button type="primary" loading={sendingInvoice} onClick={() => void sendFromHistory()}>
+              Send / resend finalized PDF
+            </Button>
+          ) : null}
         </div>
 
         {/* Footer actions */}
@@ -526,6 +642,15 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
             <CloseOutlined />
             Close
           </ActionButton>
+          {getPdfUrl ? (
+            <ActionButton
+              icon={<DownloadOutlined />}
+              href={getPdfUrl(selectedKind, selectedTransactionId)}
+              target="_blank"
+            >
+              Download PDF
+            </ActionButton>
+          ) : null}
           <PrintButton type="primary" icon={<PrinterOutlined />} onClick={handlePrint}>
             Print Invoice
           </PrintButton>
@@ -533,6 +658,6 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
       </InvoiceBodyContent>
     </Modal>
   );
-}
+};
 
 export default InvoicePreview;

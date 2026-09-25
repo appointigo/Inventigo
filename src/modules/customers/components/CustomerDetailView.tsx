@@ -1,5 +1,11 @@
 "use client";
-import { CalendarOutlined, EditOutlined, FlagOutlined, UserOutlined } from "@ant-design/icons";
+import {
+  CalendarOutlined,
+  EditOutlined,
+  EyeOutlined,
+  FlagOutlined,
+  UserOutlined,
+} from "@ant-design/icons";
 import {
   Avatar,
   Button,
@@ -26,6 +32,7 @@ type Props = {
   onFollowUpUpdated: () => void;
   activeTab?: string;
   onActiveTabChange?: (key: string) => void;
+  onViewInvoice?: (saleId: string) => void;
 };
 const money = (value: number) =>
   `₹${value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -56,6 +63,7 @@ export default function CustomerDetailView({
   onFollowUpUpdated,
   activeTab = "overview",
   onActiveTabChange,
+  onViewInvoice,
 }: Props) {
   if (!customer)
     return (
@@ -65,7 +73,18 @@ export default function CustomerDetailView({
     );
   const lastPurchase = customer.sales[0]?.createdAt ?? null;
   const salesColumns: ColumnsType<CustomerSaleSummaryDto> = [
-    { title: "Invoice", dataIndex: "invoiceNumber" },
+    {
+      title: "Invoice",
+      dataIndex: "invoiceNumber",
+      render: (value, sale) =>
+        onViewInvoice ? (
+          <Button type="link" style={{ padding: 0 }} onClick={() => onViewInvoice(sale.id)}>
+            {value}
+          </Button>
+        ) : (
+          value
+        ),
+    },
     { title: "Store", dataIndex: "storeName" },
     {
       title: "Items",
@@ -75,6 +94,21 @@ export default function CustomerDetailView({
           .map((item) => `${item.name}${item.size ? ` (${item.size})` : ""} ×${item.quantity}`)
           .join(", ") || "—",
     },
+    ...(onViewInvoice
+      ? [
+          {
+            title: "Action",
+            key: "action",
+            fixed: "right" as const,
+            width: 120,
+            render: (_: unknown, sale: CustomerSaleSummaryDto) => (
+              <Button size="small" icon={<EyeOutlined />} onClick={() => onViewInvoice(sale.id)}>
+                View Invoice
+              </Button>
+            ),
+          } as ColumnsType<CustomerSaleSummaryDto>[number],
+        ]
+      : []),
     { title: "Amount", dataIndex: "total", align: "right", render: money },
     {
       title: "Status",
@@ -205,6 +239,7 @@ export default function CustomerDetailView({
           size="small"
           columns={salesColumns}
           dataSource={customer.sales}
+          scroll={{ x: "max-content" }}
           pagination={{ pageSize: 5 }}
         />
       ),

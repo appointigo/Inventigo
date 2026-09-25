@@ -2,7 +2,11 @@ import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import type { CreateSaleInput, Sale, SaleItem, SaleFilters, SaleSummary } from "../types";
 import { createWhatsAppAutomationReader } from "@/modules/whatsapp/server";
-import { enqueueInvoiceDelivery, prepareInvoiceDelivery, type WhatsAppInvoiceSelection } from "@/modules/whatsapp/services/WhatsAppInvoiceDeliveryService";
+import {
+  enqueueInvoiceDelivery,
+  prepareInvoiceDelivery,
+  type WhatsAppInvoiceSelection,
+} from "@/modules/whatsapp/services/WhatsAppInvoiceDeliveryService";
 import { customerService } from "@/modules/customers/services/customerService";
 import { syncWhatsAppContactForCustomer } from "@/modules/whatsapp/services/WhatsAppContactService";
 import { allocatePricingSnapshots, resolveItemPrice, validateAmount } from "../utils/pricingEngine";
@@ -445,6 +449,7 @@ const toSaleDto = (rawSale: any): Sale => {
   const s = normalizeSaleCompatibility(rawSale);
   return {
     id: s.id,
+    storeId: s.storeId,
     invoiceNumber: s.invoiceNumber,
     customerId: s.customerId ?? null,
     customerName: s.customerName ?? null,
@@ -598,9 +603,13 @@ const toSaleDto = (rawSale: any): Sale => {
         condition: rt.condition ?? undefined,
         notes: rt.notes ?? undefined,
         transactionDate:
-          rt.transactionDate instanceof Date ? rt.transactionDate.toISOString() : (rt.transactionDate ?? undefined),
+          rt.transactionDate instanceof Date
+            ? rt.transactionDate.toISOString()
+            : (rt.transactionDate ?? undefined),
         businessDate:
-          rt.businessDate instanceof Date ? rt.businessDate.toISOString() : (rt.businessDate ?? undefined),
+          rt.businessDate instanceof Date
+            ? rt.businessDate.toISOString()
+            : (rt.businessDate ?? undefined),
         createdAt: rt.createdAt instanceof Date ? rt.createdAt.toISOString() : rt.createdAt,
       };
     }),
@@ -707,8 +716,7 @@ export const billingService = {
       selection: input.whatsappInvoice?.enabled
         ? {
             ...input.whatsappInvoice,
-            recipient:
-              input.whatsappInvoice.recipient?.trim() || input.customerPhone.trim(),
+            recipient: input.whatsappInvoice.recipient?.trim() || input.customerPhone.trim(),
           }
         : input.whatsappInvoice,
       correlationId: diagnostic?.correlationId,
@@ -1743,7 +1751,11 @@ export const billingService = {
       selection: input.whatsappInvoice,
       correlationId: diagnostic?.correlationId,
     });
-    const invoiceConfiguration = await resolveInvoiceConfigurationSnapshot(prisma, orgId, sale.storeId);
+    const invoiceConfiguration = await resolveInvoiceConfigurationSnapshot(
+      prisma,
+      orgId,
+      sale.storeId
+    );
     if (sale.status !== "COMPLETED") {
       throw new Error("Only completed sales can be returned or exchanged");
     }
@@ -1877,290 +1889,294 @@ export const billingService = {
       const referenceNumber = await generateReturnReferenceNumber(sale.storeId, attempt - 1);
 
       try {
-        const { returnTransaction: transaction, deliveryIntent } = await prisma.$transaction(async (tx) => {
-          const locked = await tx.$queryRaw<
-            Array<{ updatedAt: Date }>
-          >`SELECT "updatedAt" FROM "sales" WHERE id = ${saleId} FOR UPDATE`;
-          if (locked[0]?.updatedAt.getTime() !== sale.updatedAt.getTime())
-            throw new Error("Invalid stale sale; reload before returning items");
-          const returnTransactionData: any = {
-            referenceNumber,
-            originalSaleId: saleId,
-            storeId: sale.storeId,
-            customerId: sale.customerId ?? undefined,
-            type: input.type as any,
-            netAmount: new Prisma.Decimal(netAmount),
-            offsetAmount: new Prisma.Decimal(offsetAmount),
-            refundAmount: new Prisma.Decimal(refundAmount),
-            refundMethod: input.refundMethod,
-            reason: input.reason,
-            condition: input.condition,
-            notes: input.notes,
-            discountType: discountType || undefined,
-            discountPercent: discountPercent > 0 ? new Prisma.Decimal(discountPercent) : undefined,
-            discountAmount: discountAmount > 0 ? new Prisma.Decimal(discountAmount) : undefined,
-            taxRate: taxRate > 0 ? new Prisma.Decimal(taxRate) : undefined,
-            calculatedTotal: new Prisma.Decimal(calculatedWithTax),
-            roundOffAmount: new Prisma.Decimal(roundOffAmount),
-            finalPayable: new Prisma.Decimal(finalPayable),
-            splitPaymentData:
-              input.topUpPayments || input.refundPayments
-                ? JSON.stringify({
-                    topUpPayments: input.topUpPayments,
-                    refundPayments: input.refundPayments,
-                  })
-                : undefined,
-            transactionDate,
-            businessDate,
-            createdBy: userId,
-            invoicePolicyVersionId: invoiceConfiguration.policyVersionId,
-            invoiceSnapshot: invoiceConfiguration as Prisma.InputJsonValue,
-          };
-
-          if (hasReturnItemsTable) {
-            returnTransactionData.items = {
-              create: [
-                ...returnedLineItems.map((ri) => ({
-                  returnedProductId: ri.productId,
-                  returnedSizeId: ri.sizeId,
-                  returnedQuantity: ri.quantity,
-                  returnedUnitPrice: new Prisma.Decimal(round2(ri.historicalUnitAmount)),
-                  returnedLineAmount: new Prisma.Decimal(ri.total),
-                })),
-                ...exchangedLineItems.map((ei) => ({
-                  returnedQuantity: 0,
-                  returnedUnitPrice: new Prisma.Decimal(0),
-                  newProductId: ei.productId,
-                  newSizeId: ei.sizeId,
-                  newQuantity: ei.quantity,
-                  newUnitPrice: new Prisma.Decimal(Number(ei.total) / (ei.quantity || 1)),
-                })),
-              ],
+        const { returnTransaction: transaction, deliveryIntent } = await prisma.$transaction(
+          async (tx) => {
+            const locked = await tx.$queryRaw<
+              Array<{ updatedAt: Date }>
+            >`SELECT "updatedAt" FROM "sales" WHERE id = ${saleId} FOR UPDATE`;
+            if (locked[0]?.updatedAt.getTime() !== sale.updatedAt.getTime())
+              throw new Error("Invalid stale sale; reload before returning items");
+            const returnTransactionData: any = {
+              referenceNumber,
+              originalSaleId: saleId,
+              storeId: sale.storeId,
+              customerId: sale.customerId ?? undefined,
+              type: input.type as any,
+              netAmount: new Prisma.Decimal(netAmount),
+              offsetAmount: new Prisma.Decimal(offsetAmount),
+              refundAmount: new Prisma.Decimal(refundAmount),
+              refundMethod: input.refundMethod,
+              reason: input.reason,
+              condition: input.condition,
+              notes: input.notes,
+              discountType: discountType || undefined,
+              discountPercent:
+                discountPercent > 0 ? new Prisma.Decimal(discountPercent) : undefined,
+              discountAmount: discountAmount > 0 ? new Prisma.Decimal(discountAmount) : undefined,
+              taxRate: taxRate > 0 ? new Prisma.Decimal(taxRate) : undefined,
+              calculatedTotal: new Prisma.Decimal(calculatedWithTax),
+              roundOffAmount: new Prisma.Decimal(roundOffAmount),
+              finalPayable: new Prisma.Decimal(finalPayable),
+              splitPaymentData:
+                input.topUpPayments || input.refundPayments
+                  ? JSON.stringify({
+                      topUpPayments: input.topUpPayments,
+                      refundPayments: input.refundPayments,
+                    })
+                  : undefined,
+              transactionDate,
+              businessDate,
+              createdBy: userId,
+              invoicePolicyVersionId: invoiceConfiguration.policyVersionId,
+              invoiceSnapshot: invoiceConfiguration as Prisma.InputJsonValue,
             };
-          }
 
-          const returnTransaction = await tx.returnTransaction.create({
-            data: returnTransactionData,
-            ...(hasReturnItemsTable
-              ? {
-                  include: {
-                    items: {
-                      include: {
-                        returnedProduct: { select: { name: true, sku: true } },
-                        returnedSize: { select: { label: true } },
-                        newProduct: { select: { name: true, sku: true } },
-                        newSize: { select: { label: true } },
+            if (hasReturnItemsTable) {
+              returnTransactionData.items = {
+                create: [
+                  ...returnedLineItems.map((ri) => ({
+                    returnedProductId: ri.productId,
+                    returnedSizeId: ri.sizeId,
+                    returnedQuantity: ri.quantity,
+                    returnedUnitPrice: new Prisma.Decimal(round2(ri.historicalUnitAmount)),
+                    returnedLineAmount: new Prisma.Decimal(ri.total),
+                  })),
+                  ...exchangedLineItems.map((ei) => ({
+                    returnedQuantity: 0,
+                    returnedUnitPrice: new Prisma.Decimal(0),
+                    newProductId: ei.productId,
+                    newSizeId: ei.sizeId,
+                    newQuantity: ei.quantity,
+                    newUnitPrice: new Prisma.Decimal(Number(ei.total) / (ei.quantity || 1)),
+                  })),
+                ],
+              };
+            }
+
+            const returnTransaction = await tx.returnTransaction.create({
+              data: returnTransactionData,
+              ...(hasReturnItemsTable
+                ? {
+                    include: {
+                      items: {
+                        include: {
+                          returnedProduct: { select: { name: true, sku: true } },
+                          returnedSize: { select: { label: true } },
+                          newProduct: { select: { name: true, sku: true } },
+                          newSize: { select: { label: true } },
+                        },
                       },
                     },
-                  },
-                }
-              : {}),
-          });
+                  }
+                : {}),
+            });
 
-          if (hasLegacyReturnedItemsColumn && hasLegacyExchangedItemsColumn) {
-            await tx.$executeRaw`
+            if (hasLegacyReturnedItemsColumn && hasLegacyExchangedItemsColumn) {
+              await tx.$executeRaw`
               UPDATE "return_transactions"
               SET
                 "returnedItems" = CAST(${JSON.stringify(returnedItemsJson)} AS jsonb),
                 "exchangedItems" = CAST(${JSON.stringify(exchangedItemsJson)} AS jsonb)
               WHERE "id" = ${returnTransaction.id}
             `;
-          }
-
-          // Normalize and persist top-up (customer pays) and refund payments
-          let topUpEntries: NormalizedPaymentEntry[] = [];
-          let topUpTotal = 0;
-          let refundEntries: NormalizedPaymentEntry[] = [];
-          let refundTotal = 0;
-
-          if (netAmount > 0) {
-            topUpEntries = normalizePaymentEntries(
-              input.topUpPayments,
-              input.refundMethod,
-              netAmount
-            );
-            topUpTotal = round2(topUpEntries.reduce((sum, entry) => sum + entry.amount, 0));
-            if (topUpTotal - netAmount > EPSILON) {
-              throw new Error("Top-up split payment total cannot exceed exchange payable amount");
             }
 
-            await tx.salePayment.createMany({
-              data: topUpEntries.map((entry) => ({
-                saleId,
-                amount: entry.amount,
-                method: entry.method,
-                note: `Exchange top-up payment for ${returnTransaction.id}`,
-                businessDate,
-                createdBy: userId,
-              })),
-            });
-          }
+            // Normalize and persist top-up (customer pays) and refund payments
+            let topUpEntries: NormalizedPaymentEntry[] = [];
+            let topUpTotal = 0;
+            let refundEntries: NormalizedPaymentEntry[] = [];
+            let refundTotal = 0;
 
-          if (refundAmount > 0) {
-            refundEntries = normalizePaymentEntries(
-              input.refundPayments,
-              input.refundMethod,
-              refundAmount
-            );
-            refundTotal = round2(refundEntries.reduce((sum, entry) => sum + entry.amount, 0));
-            if (refundTotal - refundAmount > EPSILON) {
-              throw new Error("Refund split payment total cannot exceed refund amount");
+            if (netAmount > 0) {
+              topUpEntries = normalizePaymentEntries(
+                input.topUpPayments,
+                input.refundMethod,
+                netAmount
+              );
+              topUpTotal = round2(topUpEntries.reduce((sum, entry) => sum + entry.amount, 0));
+              if (topUpTotal - netAmount > EPSILON) {
+                throw new Error("Top-up split payment total cannot exceed exchange payable amount");
+              }
+
+              await tx.salePayment.createMany({
+                data: topUpEntries.map((entry) => ({
+                  saleId,
+                  amount: entry.amount,
+                  method: entry.method,
+                  note: `Exchange top-up payment for ${returnTransaction.id}`,
+                  businessDate,
+                  createdBy: userId,
+                })),
+              });
             }
 
-            await tx.salePayment.createMany({
-              data: refundEntries.map((entry) => ({
-                saleId,
-                amount: -entry.amount,
-                method: entry.method,
-                note: `Refund for return ${returnTransaction.id}`,
-                businessDate,
-                createdBy: userId,
-              })),
-            });
-          }
+            if (refundAmount > 0) {
+              refundEntries = normalizePaymentEntries(
+                input.refundPayments,
+                input.refundMethod,
+                refundAmount
+              );
+              refundTotal = round2(refundEntries.reduce((sum, entry) => sum + entry.amount, 0));
+              if (refundTotal - refundAmount > EPSILON) {
+                throw new Error("Refund split payment total cannot exceed refund amount");
+              }
 
-          if (sale.customerId) {
-            await tx.customer.update({
-              where: { id: sale.customerId },
-              data: {
-                totalSpent: { increment: netAmount },
-              },
-            });
-          }
+              await tx.salePayment.createMany({
+                data: refundEntries.map((entry) => ({
+                  saleId,
+                  amount: -entry.amount,
+                  method: entry.method,
+                  note: `Refund for return ${returnTransaction.id}`,
+                  businessDate,
+                  createdBy: userId,
+                })),
+              });
+            }
 
-          const isExchangeFlow = (input.exchangedItems?.length ?? 0) > 0;
+            if (sale.customerId) {
+              await tx.customer.update({
+                where: { id: sale.customerId },
+                data: {
+                  totalSpent: { increment: netAmount },
+                },
+              });
+            }
 
-          for (const item of input.returnedItems) {
-            const stockEntry = await tx.stockEntry.findUnique({
-              where: {
-                productId_sizeId_storeId: {
+            const isExchangeFlow = (input.exchangedItems?.length ?? 0) > 0;
+
+            for (const item of input.returnedItems) {
+              const stockEntry = await tx.stockEntry.findUnique({
+                where: {
+                  productId_sizeId_storeId: {
+                    productId: item.productId,
+                    sizeId: item.sizeId,
+                    storeId: sale.storeId,
+                  },
+                },
+              });
+              if (!stockEntry) {
+                throw new Error(
+                  `Stock entry not found for returned item ${item.productId} / ${item.sizeId}`
+                );
+              }
+
+              await tx.stockEntry.update({
+                where: {
+                  productId_sizeId_storeId: {
+                    productId: item.productId,
+                    sizeId: item.sizeId,
+                    storeId: sale.storeId,
+                  },
+                },
+                data: { quantity: { increment: item.quantity } },
+              });
+
+              await tx.stockMovement.create({
+                data: {
                   productId: item.productId,
                   sizeId: item.sizeId,
                   storeId: sale.storeId,
+
+                  type: "RETURN",
+                  quantity: item.quantity,
+                  reason: `Return for sale ${sale.invoiceNumber}`,
+                  referenceType: "SALE",
+                  referenceId: returnTransaction.id,
+                  movementDate: businessDate,
+                  createdBy: userId,
                 },
-              },
-            });
-            if (!stockEntry) {
-              throw new Error(
-                `Stock entry not found for returned item ${item.productId} / ${item.sizeId}`
-              );
+              });
             }
 
-            await tx.stockEntry.update({
-              where: {
-                productId_sizeId_storeId: {
+            for (const item of input.exchangedItems ?? []) {
+              const reserved = await tx.stockEntry.updateMany({
+                where: {
                   productId: item.productId,
                   sizeId: item.sizeId,
                   storeId: sale.storeId,
+                  quantity: { gte: item.quantity },
                 },
-              },
-              data: { quantity: { increment: item.quantity } },
-            });
+                data: { quantity: { decrement: item.quantity } },
+              });
+              if (reserved.count !== 1) {
+                throw new Error(
+                  `Insufficient stock for exchange item ${item.productId} size ${item.sizeId}`
+                );
+              }
 
-            await tx.stockMovement.create({
-              data: {
-                productId: item.productId,
-                sizeId: item.sizeId,
-                storeId: sale.storeId,
-
-                type: "RETURN",
-                quantity: item.quantity,
-                reason: `Return for sale ${sale.invoiceNumber}`,
-                referenceType: "SALE",
-                referenceId: returnTransaction.id,
-                movementDate: businessDate,
-                createdBy: userId,
-              },
-            });
-          }
-
-          for (const item of input.exchangedItems ?? []) {
-            const reserved = await tx.stockEntry.updateMany({
-              where: {
-                productId: item.productId,
-                sizeId: item.sizeId,
-                storeId: sale.storeId,
-                quantity: { gte: item.quantity },
-              },
-              data: { quantity: { decrement: item.quantity } },
-            });
-            if (reserved.count !== 1) {
-              throw new Error(
-                `Insufficient stock for exchange item ${item.productId} size ${item.sizeId}`
-              );
+              await tx.stockMovement.create({
+                data: {
+                  productId: item.productId,
+                  sizeId: item.sizeId,
+                  storeId: sale.storeId,
+                  type: "SALE",
+                  quantity: item.quantity,
+                  reason: `Exchange for sale ${sale.invoiceNumber}`,
+                  referenceType: "SALE",
+                  referenceId: returnTransaction.id,
+                  movementDate: businessDate,
+                  createdBy: userId,
+                },
+              });
             }
 
-            await tx.stockMovement.create({
+            // Compute payment delta from top-ups and refunds and update sale payment aggregates
+            const paymentDelta = round2(topUpTotal - refundTotal);
+            const currentAmountPaid = Number(compatibleSale.amountPaid ?? 0);
+            const finalPayableAmount = Number(sale.finalPayableAmount ?? sale.total);
+            const newAmountPaid = round2(currentAmountPaid + paymentDelta);
+            const newAmountDue = Math.max(finalPayableAmount - newAmountPaid, 0);
+            const newPaymentStatus =
+              newAmountPaid >= finalPayableAmount
+                ? "PAID"
+                : newAmountPaid > 0
+                  ? "PARTIAL"
+                  : "PENDING";
+
+            // Determine primary payment method from top-up entries if present
+            const primaryMethodForSale =
+              topUpEntries.length > 0
+                ? getPrimaryPaymentMethod(topUpEntries, input.refundMethod ?? undefined)
+                : ((sale.paymentMethod as any) ?? undefined);
+
+            const saleStatus =
+              input.type === "RETURN"
+                ? returnStatus === "FULL"
+                  ? "REFUNDED"
+                  : sale.status
+                : supportsExchangedStatus
+                  ? "EXCHANGED"
+                  : "COMPLETED";
+
+            await tx.sale.update({
+              where: { id: saleId },
               data: {
-                productId: item.productId,
-                sizeId: item.sizeId,
-                storeId: sale.storeId,
-                type: "SALE",
-                quantity: item.quantity,
-                reason: `Exchange for sale ${sale.invoiceNumber}`,
-                referenceType: "SALE",
-                referenceId: returnTransaction.id,
-                movementDate: businessDate,
-                createdBy: userId,
+                returnStatus,
+                status: saleStatus,
+                ...(Math.abs(paymentDelta) > EPSILON
+                  ? { amountPaid: { increment: paymentDelta } }
+                  : {}),
+                amountDue: newAmountDue,
+                paymentStatus: newPaymentStatus,
+                ...(primaryMethodForSale ? { paymentMethod: primaryMethodForSale } : {}),
               },
             });
+
+            const deliveryIntent = preparedInvoiceDelivery
+              ? await enqueueInvoiceDelivery(tx, preparedInvoiceDelivery, {
+                  kind: isExchangeFlow ? "EXCHANGE" : "RETURN",
+                  id: returnTransaction.id,
+                  reference: returnTransaction.referenceNumber,
+                  customerName: sale.customerName,
+                  customerId: sale.customerId,
+                  amount: Number(netAmount || refundAmount || finalPayable),
+                  transactionDate:
+                    returnTransaction.transactionDate ?? returnTransaction.businessDate,
+                })
+              : null;
+            return { returnTransaction, deliveryIntent };
           }
-
-          // Compute payment delta from top-ups and refunds and update sale payment aggregates
-          const paymentDelta = round2(topUpTotal - refundTotal);
-          const currentAmountPaid = Number(compatibleSale.amountPaid ?? 0);
-          const finalPayableAmount = Number(sale.finalPayableAmount ?? sale.total);
-          const newAmountPaid = round2(currentAmountPaid + paymentDelta);
-          const newAmountDue = Math.max(finalPayableAmount - newAmountPaid, 0);
-          const newPaymentStatus =
-            newAmountPaid >= finalPayableAmount
-              ? "PAID"
-              : newAmountPaid > 0
-                ? "PARTIAL"
-                : "PENDING";
-
-          // Determine primary payment method from top-up entries if present
-          const primaryMethodForSale =
-            topUpEntries.length > 0
-              ? getPrimaryPaymentMethod(topUpEntries, input.refundMethod ?? undefined)
-              : ((sale.paymentMethod as any) ?? undefined);
-
-          const saleStatus =
-            input.type === "RETURN"
-              ? returnStatus === "FULL"
-                ? "REFUNDED"
-                : sale.status
-              : supportsExchangedStatus
-                ? "EXCHANGED"
-                : "COMPLETED";
-
-          await tx.sale.update({
-            where: { id: saleId },
-            data: {
-              returnStatus,
-              status: saleStatus,
-              ...(Math.abs(paymentDelta) > EPSILON
-                ? { amountPaid: { increment: paymentDelta } }
-                : {}),
-              amountDue: newAmountDue,
-              paymentStatus: newPaymentStatus,
-              ...(primaryMethodForSale ? { paymentMethod: primaryMethodForSale } : {}),
-            },
-          });
-
-          const deliveryIntent = preparedInvoiceDelivery
-            ? await enqueueInvoiceDelivery(tx, preparedInvoiceDelivery, {
-                kind: isExchangeFlow ? "EXCHANGE" : "RETURN",
-                id: returnTransaction.id,
-                reference: returnTransaction.referenceNumber,
-                customerName: sale.customerName,
-                customerId: sale.customerId,
-                amount: Number(netAmount || refundAmount || finalPayable),
-                transactionDate: returnTransaction.transactionDate ?? returnTransaction.businessDate,
-              })
-            : null;
-          return { returnTransaction, deliveryIntent };
-        });
+        );
         console.info("[Billing] transaction_committed", {
           requestId: diagnostic?.correlationId,
           organizationId: orgId,
@@ -2176,7 +2192,18 @@ export const billingService = {
           templateInstanceId: preparedInvoiceDelivery?.templateInstanceId,
           templateName: preparedInvoiceDelivery?.metaTemplateName,
         });
-        const result = toReturnTransactionDto(transaction, returnedLineItems, exchangedLineItems) as ReturnType<typeof toReturnTransactionDto> & { invoiceDelivery?: { id: string; status: string; errorCode?: string | null; errorMessage?: string | null } };
+        const result = toReturnTransactionDto(
+          transaction,
+          returnedLineItems,
+          exchangedLineItems
+        ) as ReturnType<typeof toReturnTransactionDto> & {
+          invoiceDelivery?: {
+            id: string;
+            status: string;
+            errorCode?: string | null;
+            errorMessage?: string | null;
+          };
+        };
         if (deliveryIntent) {
           result.invoiceDelivery = deliveryIntent;
         }
