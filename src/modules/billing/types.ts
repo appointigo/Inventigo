@@ -63,6 +63,7 @@ export type CartItem = ItemPriceAdjustment & {
   originalUnitPrice?: number;
   productId: string;
   productName: string;
+  imageUrl?: string | null;
   sku: string;
   sizeId: string;
   sizeLabel: string;
@@ -206,6 +207,7 @@ export type VariantRow = {
   rowKey: string;
   productId: string;
   productName: string;
+  imageUrl?: string | null;
   sku: string;
   externalBarcode: string | null;
   variantSku: string | null;

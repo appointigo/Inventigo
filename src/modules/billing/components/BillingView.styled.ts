@@ -17,10 +17,21 @@ const blink = keyframes`
 // ─── Root layout ──────────────────────────────────────────────────────────────
 
 export const ViewAWrapper = styled.div`
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 28%);
+  gap: clamp(8px, 1vw, 16px);
   height: 100%;
+  max-height: 100%;
+  width: 100%;
+  min-height: 0;
+  min-width: 0;
+  padding: clamp(8px, 1vw, 16px);
   overflow: hidden;
   background: ${p => p.theme.bg.layout};
+
+  @media (max-width: 1020px) {
+    grid-template-columns: minmax(0, 1fr) minmax(310px, 34%);
+  }
 `;
 
 export const ScanProductPane = styled.div`
@@ -29,21 +40,27 @@ export const ScanProductPane = styled.div`
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 20px 20px 16px;
-  overflow-y: auto;
+  overflow: hidden;
+  container: cart-pane / inline-size;
 
   &::-webkit-scrollbar { width: 4px; }
   &::-webkit-scrollbar-thumb { background: ${p => p.theme.border.primary}; border-radius: 2px; }
+
+  @media (max-height: 820px) { gap: 9px; }
+  @media (max-height: 740px) { gap: 7px; }
 `;
 
 export const CheckoutPane = styled.div`
-  width: 380px;
-  flex-shrink: 0;
-  border-left: 1.5px solid ${p => p.theme.border.primary};
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid ${p => p.theme.border.primary};
+  border-radius: 14px;
   background: ${p => p.theme.bg.surface};
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+  container: checkout-pane / inline-size;
 `;
 
 // ─── Scan hero box ────────────────────────────────────────────────────────────
@@ -51,10 +68,12 @@ export const CheckoutPane = styled.div`
 export const ScanHeroBox = styled.div`
   background: ${p => p.theme.bg.surface};
   border: 2px solid #2563eb;
-  border-radius: 16px;
-  padding: 20px 22px 16px;
-  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.07);
+  border-radius: 12px;
+  padding: clamp(10px, 1vw, 14px) clamp(12px, 1.2vw, 16px) clamp(9px, 0.9vw, 12px);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.06), 0 8px 20px rgba(37, 99, 235, 0.05);
   flex-shrink: 0;
+
+  @media (max-height: 740px) { padding-block: 8px 7px; }
 `;
 
 export const ScanHeroLabelRow = styled.div`
@@ -62,6 +81,8 @@ export const ScanHeroLabelRow = styled.div`
   align-items: center;
   gap: 8px;
   margin-bottom: 10px;
+
+  @media (max-height: 820px) { margin-bottom: 6px; }
 `;
 
 export const ScanBlinker = styled.span`
@@ -82,9 +103,9 @@ export const ScanHeroLabelText = styled.span`
 `;
 
 export const ScanHeroInput = styled(Input)`
-  height: 52px;
-  font-size: 16px;
-  border-radius: 12px;
+  height: 48px;
+  font-size: 14px;
+  border-radius: 10px;
   border: 1.5px solid ${p => p.theme.border.primary};
   background: ${p => p.theme.bg.subtle};
 
@@ -98,6 +119,9 @@ export const ScanHeroInput = styled(Input)`
   }
 
   .ant-input-prefix { color: #9ca3af; margin-right: 8px; }
+
+  @media (max-height: 820px) { height: 44px; }
+  @media (max-height: 740px) { height: 42px; }
 `;
 
 export const ScanHeroHint = styled.div`
@@ -108,6 +132,9 @@ export const ScanHeroHint = styled.div`
   align-items: center;
   gap: 5px;
   flex-wrap: wrap;
+
+  @media (max-height: 820px) { margin-top: 5px; }
+  @media (max-height: 740px) { font-size: 11px; }
 `;
 
 export const KbdKey = styled.kbd`
@@ -316,22 +343,26 @@ export const CartSectionWrap = styled.div`
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+  background: ${p => p.theme.bg.surface};
+  border: 1px solid ${p => p.theme.border.primary};
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.035);
 `;
 
 export const CartListHeader = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  padding: clamp(9px, 1vw, 13px) clamp(12px, 1.2vw, 16px);
+  border-bottom: 1px solid ${p => p.theme.border.subtle};
   flex-shrink: 0;
 `;
 
 export const CartListTitle = styled.span`
-  font-size: 11.5px;
+  font-size: 15px;
   font-weight: 700;
   color: ${p => p.theme.text.secondary};
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: -0.1px;
 `;
 
 export const ClearAllBtn = styled.button`
@@ -340,7 +371,7 @@ export const ClearAllBtn = styled.button`
   font-size: 12px;
   color: #9ca3af;
   cursor: pointer;
-  padding: 0;
+  padding: 4px 6px;
 
   &:hover { color: #dc2626; text-decoration: underline; }
 `;
@@ -350,32 +381,68 @@ export const CartRows = styled.div`
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  padding: 0 clamp(10px, 1.2vw, 16px) clamp(10px, 1vw, 14px);
+  min-height: 0;
+  overscroll-behavior: contain;
 
   &::-webkit-scrollbar { width: 3px; }
   &::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 2px; }
 `;
 
-export const CartRowItem = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
+export const CartRowItem = styled.div<{ $hasImage: boolean }>`
+  display: grid;
+  grid-template-columns: ${({ $hasImage }) => $hasImage
+    ? "28px 52px minmax(0, 1fr) auto minmax(86px, auto) 24px"
+    : "28px minmax(0, 1fr) auto minmax(86px, auto) 24px"};
+  grid-template-areas: ${({ $hasImage }) => $hasImage
+    ? '"number image info quantity total delete" ". pricing pricing pricing pricing pricing"'
+    : '"number info quantity total delete" ". pricing pricing pricing pricing"'};
+  align-items: start;
+  column-gap: clamp(7px, 0.8vw, 12px);
+  row-gap: clamp(7px, 0.7vw, 10px);
+  padding: clamp(10px, 1vw, 14px) 0;
   background: ${p => p.theme.bg.surface};
-  border: 1px solid ${p => p.theme.border.subtle};
-  border-radius: 8px;
+  border-bottom: 1px solid ${p => p.theme.border.subtle};
   transition: background 0.12s;
 
-  &:hover { background: ${p => p.theme.bg.subtle}; }
+  &:last-child { border-bottom: none; }
+
+  @container cart-pane (max-width: 720px) {
+    grid-template-columns: ${({ $hasImage }) => $hasImage
+      ? "28px 44px minmax(0, 1fr) auto 24px"
+      : "28px minmax(0, 1fr) auto 24px"};
+    grid-template-areas: ${({ $hasImage }) => $hasImage
+      ? '"number image info quantity delete" ". image total total total" ". pricing pricing pricing pricing"'
+      : '"number info quantity delete" ". total total total" ". pricing pricing pricing"'};
+  }
+`;
+
+export const RowProductThumb = styled.div`
+  grid-area: image;
+  position: relative;
+  width: 52px;
+  height: 52px;
+  overflow: hidden;
+  border: 1px solid ${p => p.theme.border.subtle};
+  border-radius: 9px;
+  background: ${p => p.theme.bg.subtle};
+
+  img { object-fit: cover; }
+
+  @container cart-pane (max-width: 720px) {
+    width: 44px;
+    height: 44px;
+  }
 `;
 
 export const RowNumber = styled.span`
-  width: 20px;
-  height: 20px;
+  grid-area: number;
+  width: 28px;
+  height: 28px;
   background: #eff4ff;
   color: #2563eb;
   border-radius: 50%;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   display: flex;
   align-items: center;
@@ -384,13 +451,13 @@ export const RowNumber = styled.span`
 `;
 
 export const RowInfoWrap = styled.div`
-  flex: 1;
+  grid-area: info;
   min-width: 0;
 `;
 
 export const RowProductName = styled.div`
-  font-size: 12.5px;
-  font-weight: 600;
+  font-size: 13.5px;
+  font-weight: 700;
   color: ${p => p.theme.text.primary};
   white-space: nowrap;
   overflow: hidden;
@@ -400,7 +467,7 @@ export const RowProductName = styled.div`
 export const RowMetaLine = styled.div`
   font-size: 11px;
   color: #9ca3af;
-  margin-top: 2px;
+  margin-top: 5px;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -433,9 +500,11 @@ export const RowAttrPill = styled.span`
 `;
 
 export const RowQtyCtrl = styled.div`
+  grid-area: quantity;
   display: flex;
   align-items: center;
   gap: 2px;
+  align-self: center;
 `;
 
 export const RowQtyBtn = styled.button`
@@ -465,15 +534,18 @@ export const RowQtyVal = styled.span`
 `;
 
 export const RowTotal = styled.span`
+  grid-area: total;
   font-size: 13px;
   font-weight: 700;
   color: ${p => p.theme.text.primary};
   min-width: 62px;
   text-align: right;
   white-space: nowrap;
+  align-self: center;
 `;
 
 export const RowDelBtn = styled.button`
+  grid-area: delete;
   background: none;
   border: none;
   color: #d1d5db;
@@ -481,8 +553,32 @@ export const RowDelBtn = styled.button`
   font-size: 12px;
   padding: 0 2px;
   line-height: 1;
+  align-self: center;
 
   &:hover { color: #dc2626; }
+`;
+
+export const RowPricingBar = styled.div`
+  grid-area: pricing;
+  border-radius: 8px;
+  background: ${p => p.theme.bg.subtle};
+  padding: 7px 10px;
+
+  > div {
+    margin-top: 0;
+    gap: 6px;
+  }
+
+  .ant-select { min-width: 120px; }
+  .ant-input-number { width: 96px; }
+
+  @container cart-pane (max-width: 560px) {
+    padding: 6px 8px;
+
+    > div { row-gap: 6px; }
+    .ant-select { min-width: 108px; }
+    .ant-input-number { width: 88px; }
+  }
 `;
 
 export const CartEmptyState = styled.div`
@@ -513,13 +609,16 @@ export const CheckoutHeader = styled.div`
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 14px 18px 12px;
+  padding: 13px 16px 11px;
   border-bottom: 1.5px solid ${p => p.theme.border.primary};
   flex-shrink: 0;
+
+  @media (max-height: 820px) { padding-block: 9px 8px; }
+  @media (max-height: 740px) { padding-block: 7px; }
 `;
 
 export const CheckoutHeaderTitle = styled.span`
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 700;
   color: ${p => p.theme.text.primary};
 `;
@@ -537,41 +636,55 @@ export const CheckoutItemCount = styled.span`
 
 export const CheckoutScrollBody = styled.div`
   flex: 1;
+  min-height: 0;
+  min-width: 0;
   overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
 
   &::-webkit-scrollbar { width: 3px; }
   &::-webkit-scrollbar-thumb { background: ${p => p.theme.border.primary}; border-radius: 2px; }
 `;
 
 export const CheckoutSection = styled.div`
-  padding: 14px 18px 12px;
+  padding: clamp(8px, 1vw, 11px) clamp(10px, 1.1vw, 14px);
   border-bottom: 1px solid #f0f0f0;
 
   &:last-child { border-bottom: none; }
+
+  @media (max-height: 820px) { padding-block: 8px; }
+  @media (max-height: 740px) { padding-block: 7px; }
 `;
 
 export const CheckoutSectionLabel = styled.div`
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 700;
   color: #9ca3af;
-  text-transform: uppercase;
-  letter-spacing: 0.7px;
-  margin-bottom: 10px;
+  letter-spacing: 0;
+  margin-bottom: 8px;
   display: flex;
   align-items: center;
   gap: 5px;
+
+  @media (max-height: 820px) { margin-bottom: 6px; }
 `;
 
 export const CustomerGrid = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 6px 8px;
+
+  @container checkout-pane (max-width: 340px) {
+    grid-template-columns: minmax(0, 1fr);
+
+    > div { grid-column: 1; }
+  }
 `;
 
 export const CustomerField = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
 `;
 
 export const CustomerFieldFull = styled(CustomerField)`
@@ -602,11 +715,12 @@ export const CustWarning = styled.div`
 
 export const PayPillsGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(3px, 0.45vw, 6px);
 `;
 
-export const APayPill = styled.div<{ $active: boolean }>`
+export const APayPill = styled.button<{ $active: boolean }>`
+  appearance: none;
   border: 1.5px solid ${({ $active }) => ($active ? "#2563eb" : "#e5e7eb")};
   border-radius: 9px;
   background: ${({ $active, theme }) => ($active ? "#eff4ff" : theme.bg.subtle)};
@@ -614,19 +728,51 @@ export const APayPill = styled.div<{ $active: boolean }>`
   font-size: 12px;
   font-weight: ${({ $active }) => ($active ? "700" : "500")};
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   justify-content: center;
-  padding: 8px 4px;
-  gap: 2px;
+  min-height: 34px;
+  padding: 4px clamp(4px, 0.5vw, 7px);
+  gap: 4px;
+  white-space: nowrap;
   cursor: pointer;
   transition: all 0.15s;
 
   &:hover { border-color: #93c5fd; background: ${({ $active }) => ($active ? "#eff4ff" : "#f0f7ff")}; }
+  &:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+  }
+
+  @container checkout-pane (max-width: 350px) {
+    min-height: 32px;
+    padding-inline: 3px;
+    gap: 3px;
+    font-size: 11.5px;
+  }
 `;
 
 export const PayPillEmoji = styled.span`
-  font-size: 17px;
+  font-size: 14px;
+  line-height: 1;
+`;
+
+export const SplitPaymentsWrap = styled.div`
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+`;
+
+export const SplitPaymentRow = styled.div`
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(88px, 1fr) auto;
+  gap: 8px;
+
+  @container checkout-pane (max-width: 340px) {
+    grid-template-columns: minmax(0, 1fr) minmax(88px, 1fr);
+
+    > .ant-btn { grid-column: 1 / -1; }
+  }
 `;
 
 export const APromoRow = styled.div`
@@ -657,6 +803,31 @@ export const APromoSuccessPill = styled.div`
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+`;
+
+export const DiscountHeader = styled.span`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
+`;
+
+export const AppliedOfferChip = styled.span`
+  min-width: 0;
+  max-width: 48%;
+  margin-left: auto;
+  padding: 2px 7px;
+  border: 1px solid #bbf7d0;
+  border-radius: 999px;
+  background: #f0fdf4;
+  color: #15803d;
+  font-size: 10.5px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 `;
 
 export const APromoClearBtn = styled.button`
@@ -673,13 +844,13 @@ export const APromoClearBtn = styled.button`
 `;
 
 export const SummaryCardWrap = styled.div`
-  background: ${p => p.theme.bg.subtle};
-  border: 1px solid ${p => p.theme.border.primary};
-  border-radius: 10px;
-  padding: 12px 14px;
+  background: transparent;
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
+
+  @media (max-height: 820px) { gap: 5px; }
 `;
 
 export const ASumRow = styled.div`
@@ -723,13 +894,21 @@ export const ATotalRow = styled.div`
   padding-top: 10px;
   border-top: 1.5px solid ${p => p.theme.border.primary};
   margin-top: 2px;
+
+  @media (max-height: 820px) { padding-top: 7px; }
 `;
 
 export const CheckoutFooter = styled.div`
-  padding: 14px 18px;
+  padding: clamp(8px, 0.9vw, 11px) clamp(10px, 1.1vw, 14px);
   border-top: 1.5px solid ${p => p.theme.border.primary};
   flex-shrink: 0;
   background: ${p => p.theme.bg.surface};
+
+  .ant-btn-lg {
+    height: clamp(40px, 5.5dvh, 46px) !important;
+  }
+
+  @media (max-height: 740px) { padding-block: 7px 6px; }
 `;
 
 export const ConfirmHint = styled.div`
@@ -748,6 +927,8 @@ export const SecureText = styled.div`
   align-items: center;
   justify-content: center;
   gap: 4px;
+
+  @media (max-height: 820px) { margin-top: 3px; }
 `;
 
 // ─── Camera scan button (shown in ScanHeroBox) ────────────────────────────────
@@ -760,11 +941,11 @@ export const ScanHeroInputRow = styled.div`
 
 export const CameraScanBtn = styled.button`
   flex-shrink: 0;
-  height: 52px;
+  height: 48px;
   padding: 0 16px;
   background: linear-gradient(135deg, #2563eb, #4f46e5);
   border: none;
-  border-radius: 12px;
+  border-radius: 10px;
   color: #fff;
   font-size: 13px;
   font-weight: 700;
@@ -781,5 +962,56 @@ export const CameraScanBtn = styled.button`
     opacity: 0.45;
     cursor: not-allowed;
     background: #9ca3af;
+  }
+
+  @media (max-height: 820px) { height: 44px; }
+  @media (max-height: 740px) { height: 42px; }
+`;
+
+export const CheckoutToolsRow = styled.div`
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+
+  @container checkout-pane (max-width: 320px) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+`;
+
+export const MoreOptionsButton = styled(Button)`
+  height: 32px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+`;
+
+export const MoreOptionsContent = styled.div`
+  width: min(330px, calc(100vw - 40px));
+  padding: 2px;
+`;
+
+export const DiscountsWrap = styled.div`
+  .ant-collapse {
+    border: 0;
+    background: transparent;
+  }
+
+  .ant-collapse-header {
+    padding: 0 !important;
+    align-items: center !important;
+    font-size: 12px;
+    font-weight: 700;
+    color: ${p => p.theme.text.primary} !important;
+    min-width: 0;
+  }
+
+  .ant-collapse-content {
+    border-top: 0;
+    background: transparent;
+  }
+
+  .ant-collapse-content-box {
+    padding: 10px 0 0 !important;
   }
 `;

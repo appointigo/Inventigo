@@ -18,6 +18,8 @@ export const addPulse = keyframes`
 
 export const PageWrapper = styled.div`
   height: 100%;
+  min-height: 0;
+  min-width: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -300,12 +302,14 @@ export const SizeSelect = styled(Select)`
 
 export const BillingPageTabs = styled(Tabs)`
   height: 100%;
+  min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
 
   .ant-tabs-nav {
     margin: 0;
-    padding: 0 24px;
+    padding-inline: clamp(12px, 1.7vw, 24px);
     flex-shrink: 0;
     /* Let Ant Design token control the background — do NOT hardcode #ffffff
        (dark algorithm sets tab text to white; white text on white bg = invisible) */
@@ -325,6 +329,8 @@ export const BillingPageTabs = styled(Tabs)`
 
   .ant-tabs-content {
     height: 100%;
+    min-height: 0;
+    min-width: 0;
   }
 
   .ant-tabs-tabpane {
