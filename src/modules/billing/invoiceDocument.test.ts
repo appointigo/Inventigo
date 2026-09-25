@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { buildInvoiceDocumentHtml } from "./invoiceDocument.ts";
-import { launchInvoiceBrowser } from "../../lib/server/browser.ts";
+import { buildInvoiceDocumentModel } from "./invoiceDocumentModel.ts";
+import { renderInvoicePdf } from "./invoicePdfDocument.ts";
 import type { Sale } from "./types.ts";
 
 const sale: Sale = {
@@ -36,17 +37,17 @@ const sale: Sale = {
 };
 
 test("renders finalized discounted partial-payment sale data and escapes customer content", () => {
-  const html = buildInvoiceDocumentHtml({ sale, storeName: "Rare Thread" });
+  const html = buildInvoiceDocumentHtml({ sale, merchant: { name: "Rare Thread" } });
   assert.match(html, /INV-1001/);
   assert.match(html, /Amount due/);
   assert.match(html, /Discount/);
-  assert.match(html, /Payment · UPI/);
+  assert.match(html, /Payment - UPI/);
   assert.match(html, /Aarav &lt;script&gt;/);
   assert.doesNotMatch(html, /Aarav <script>/);
 });
 for (const [id, expected] of [["exchange-pay", "Additional payment"], ["exchange-even", "Equal value"], ["exchange-refund", "Refund"]] as const) {
   test(`renders ${id} settlement without unrelated exchange rows`, () => {
-    const html = buildInvoiceDocumentHtml({ sale, storeName: "Rare Thread", kind: "EXCHANGE", returnTransactionId: id });
+    const html = buildInvoiceDocumentHtml({ sale, merchant: { name: "Rare Thread" }, kind: "EXCHANGE", returnTransactionId: id });
     assert.match(html, new RegExp(expected));
     assert.match(html, new RegExp(sale.returnTransactions.find(item => item.id === id)!.referenceNumber!));
     assert.doesNotMatch(html, /INV-1001<\/title>/);
@@ -54,33 +55,53 @@ for (const [id, expected] of [["exchange-pay", "Additional payment"], ["exchange
 }
 
 test("renders finalized exchange pricing and settlement payment details", () => {
-  const html = buildInvoiceDocumentHtml({ sale, storeName: "Rare Thread", kind: "EXCHANGE", returnTransactionId: "exchange-pay" });
+  const html = buildInvoiceDocumentHtml({ sale, merchant: { name: "Rare Thread" }, kind: "EXCHANGE", returnTransactionId: "exchange-pay" });
   assert.match(html, /Replacement subtotal/);
   assert.match(html, /Exchange discount/);
   assert.match(html, /Tax \(10%\)/);
-  assert.match(html, /Top-up · UPI/);
+  assert.match(html, /Top-up - UPI/);
 });
 
 test("generates non-empty sale and exchange PDF documents at runtime", async () => {
-  const browser = await launchInvoiceBrowser();
-  try {
-    for (const document of [
-      { name: "sale", html: buildInvoiceDocumentHtml({ sale, storeName: "Rare Thread" }) },
-      { name: "exchange", html: buildInvoiceDocumentHtml({ sale, storeName: "Rare Thread", kind: "EXCHANGE", returnTransactionId: "exchange-pay" }) },
-    ]) {
-      const page = await browser.newPage();
-      await page.setContent(document.html, { waitUntil: "domcontentloaded" });
-      const pdf = await page.pdf({ format: "A4", printBackground: true, preferCSSPageSize: true });
-      assert.equal(Buffer.from(pdf).subarray(0, 4).toString(), "%PDF");
-      assert.ok(pdf.byteLength > 1_000);
-      if (process.env.INVOICE_PDF_OUTPUT_DIR) {
-        const outputDirectory = path.resolve(process.env.INVOICE_PDF_OUTPUT_DIR);
-        await mkdir(outputDirectory, { recursive: true });
-        await writeFile(path.join(outputDirectory, `${document.name}.pdf`), pdf);
-      }
-      await page.close();
+  for (const document of [
+    { name: "sale", input: { sale, merchant: { name: "Rare Thread", address: "12 Market Road", phone: "+91 98765 43210" } } },
+    { name: "exchange", input: { sale, merchant: { name: "Rare Thread" }, kind: "EXCHANGE" as const, returnTransactionId: "exchange-pay" } },
+  ]) {
+    const pdf = await renderInvoicePdf(document.input);
+    assert.equal(pdf.subarray(0, 4).toString(), "%PDF");
+    assert.ok(pdf.byteLength > 1_000);
+    if (process.env.INVOICE_PDF_OUTPUT_DIR) {
+      const outputDirectory = path.resolve(process.env.INVOICE_PDF_OUTPUT_DIR);
+      await mkdir(outputDirectory, { recursive: true });
+      await writeFile(path.join(outputDirectory, `${document.name}.pdf`), pdf);
     }
-  } finally {
-    await browser.close();
+  }
+});
+
+test("paginates long item lists and preserves finalized values in the shared model", async () => {
+  const longSale: Sale = {
+    ...sale,
+    subtotal: 70_200,
+    total: 70_050,
+    amountPaid: 70_050,
+    amountDue: 0,
+    paymentStatus: "PAID",
+    items: Array.from({ length: 70 }, (_, index) => ({
+      ...sale.items[0],
+      id: `item-${index}`,
+      productName: `Long product ${index + 1} with a descriptive name that must wrap without clipping`,
+      sku: `LONG-SKU-${index + 1}`,
+    })),
+  };
+  const model = buildInvoiceDocumentModel({ sale: longSale, merchant: { name: "Rare Thread" } });
+  assert.equal(model.sections[0].rows.length, 70);
+  assert.equal(model.totals.at(-1)?.value, "INR 70,050.00");
+  const pdf = await renderInvoicePdf({ sale: longSale, merchant: { name: "Rare Thread" } });
+  assert.equal(pdf.subarray(0, 4).toString(), "%PDF");
+  assert.ok(pdf.byteLength > 10_000);
+  if (process.env.INVOICE_PDF_OUTPUT_DIR) {
+    const outputDirectory = path.resolve(process.env.INVOICE_PDF_OUTPUT_DIR);
+    await mkdir(outputDirectory, { recursive: true });
+    await writeFile(path.join(outputDirectory, "long-sale.pdf"), pdf);
   }
 });

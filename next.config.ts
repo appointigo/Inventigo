@@ -4,11 +4,7 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ["*.trycloudflare.com"],
 
   outputFileTracingIncludes: {
-    "/api/billing": ["./node_modules/@sparticuz/chromium/bin/**/*"],
-    "/api/billing/*": ["./node_modules/@sparticuz/chromium/bin/**/*"],
     "/api/barcode/export-pdf": ["./node_modules/@sparticuz/chromium/bin/**/*"],
-    "/api/whatsapp/invoices": ["./node_modules/@sparticuz/chromium/bin/**/*"],
-    "/api/cron/whatsapp-campaigns": ["./node_modules/@sparticuz/chromium/bin/**/*"],
   },
 
   transpilePackages: ["antd", "@ant-design/icons"],

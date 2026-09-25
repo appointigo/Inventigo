@@ -1,14 +1,21 @@
 import "server-only";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import type { MetaWhatsAppClient } from "../clients/MetaWhatsAppClient";
-import { normalizeWhatsAppPhone } from "./WhatsAppContactService";
-import { WhatsAppInvoiceTemplateService } from "./WhatsAppInvoiceTemplateService";
-import { generateInvoicePdf } from "@/modules/billing/services/invoicePdfService";
-import { isWhatsAppError } from "../errors";
+import { normalizeWhatsAppPhone } from "./WhatsAppContactService.ts";
+import { isWhatsAppError } from "../errors.ts";
 import { resolveInvoiceTemplateVariables } from "./invoiceTemplateVariables.ts";
 import { getDeploymentEnvironmentLabel } from "../invoiceDiagnostics.ts";
 
 const ABANDONED_CLAIM_AFTER_MS = 15 * 60_000;
+
+type InvoicePdfGenerator = (input: {
+  correlationId?: string;
+  messageId?: string;
+  organizationId: string;
+  storeId: string;
+  kind: "SALE" | "EXCHANGE";
+  transactionId: string;
+}) => Promise<{ buffer: Buffer; filename: string; reference: string }>;
 
 export type WhatsAppInvoiceSelection = {
   enabled: boolean;
@@ -67,6 +74,7 @@ export async function prepareInvoiceDelivery(
   if (!input.selection.recipient?.trim()) throw new Error("WHATSAPP_INVOICE_RECIPIENT_REQUIRED");
   if (!input.selection.templateInstanceId) throw new Error("WHATSAPP_INVOICE_TEMPLATE_REQUIRED");
   const recipient = normalizeWhatsAppPhone(input.selection.recipient).replace(/^\+/, "");
+  const { WhatsAppInvoiceTemplateService } = await import("./WhatsAppInvoiceTemplateService.ts");
   const eligibility = await new WhatsAppInvoiceTemplateService(prisma).assertEligible(
     input.organizationId,
     input.storeId,
@@ -180,7 +188,17 @@ export async function enqueueInvoiceDelivery(
 }
 
 export class WhatsAppInvoiceDeliveryService {
-  constructor(private readonly prisma: PrismaClient, private readonly meta: MetaWhatsAppClient) {}
+  constructor(
+    private readonly prisma: PrismaClient,
+    private readonly meta: MetaWhatsAppClient,
+    private readonly invoicePdfGenerator?: InvoicePdfGenerator
+  ) {}
+
+  private async generatePdf(input: Parameters<InvoicePdfGenerator>[0]) {
+    if (this.invoicePdfGenerator) return this.invoicePdfGenerator(input);
+    const { generateInvoicePdf } = await import("@/modules/billing/services/invoicePdfService");
+    return generateInvoicePdf(input);
+  }
 
   async processMessage(messageId: string) {
     const processingStartedAt = Date.now();
@@ -194,24 +212,13 @@ export class WhatsAppInvoiceDeliveryService {
     if (!message) throw new Error("INVOICE_DELIVERY_NOT_FOUND");
     if (["SUBMITTED", "SENT", "DELIVERED", "READ"].includes(message.status)) return message;
     const payload = asPayload(message.payload);
-    if (!payload || !message.templateInstance) {
-      console.warn("[WhatsApp Invoice] delivery_blocked", {
-        deliveryId: message.id,
-        deploymentEnvironment: getDeploymentEnvironmentLabel(),
-        organizationId: message.organizationId,
-        stage: "PRE_CLAIM_VALIDATION",
-        errorCode: "INVOICE_DELIVERY_INVALID",
-      });
-      throw new Error("INVOICE_DELIVERY_INVALID");
-    }
-    const integration = message.phoneNumber.waba.integration;
     const correlationId = payload?.invoiceDelivery.correlationId ?? message.id;
     const deploymentEnvironment = getDeploymentEnvironmentLabel();
     console.info("[WhatsApp Invoice] delivery_loaded", {
       requestId: correlationId,
       deliveryId: message.id,
       deploymentEnvironment,
-      queuedEnvironment: payload.invoiceDelivery.deploymentEnvironment,
+      queuedEnvironment: payload?.invoiceDelivery.deploymentEnvironment,
       organizationId: message.organizationId,
       storeId: message.storeId,
       transactionId: payload?.invoiceDelivery.transactionId,
@@ -225,53 +232,52 @@ export class WhatsAppInvoiceDeliveryService {
       wabaId: message.phoneNumber.wabaId,
       elapsedMs: Date.now() - processingStartedAt,
     });
-    if (integration.organizationId !== message.organizationId || integration.status !== "CONNECTED" || !integration.credentialRef) {
-      console.warn("[WhatsApp Invoice] delivery_blocked", {
-        requestId: correlationId,
-        deliveryId: message.id,
-        deploymentEnvironment,
-        organizationId: message.organizationId,
-        stage: "PRE_CLAIM_VALIDATION",
-        errorCode: "WHATSAPP_NOT_CONNECTED",
-      });
-      throw new Error("WHATSAPP_NOT_CONNECTED");
-    }
-    if (message.phoneNumber.wabaId !== message.templateInstance.wabaId || message.templateInstance.status !== "APPROVED") {
-      console.warn("[WhatsApp Invoice] delivery_blocked", {
-        requestId: correlationId,
-        deliveryId: message.id,
-        deploymentEnvironment,
-        organizationId: message.organizationId,
-        stage: "PRE_CLAIM_VALIDATION",
-        errorCode: "INVOICE_TEMPLATE_NOT_ELIGIBLE",
-      });
-      throw new Error("INVOICE_TEMPLATE_NOT_ELIGIBLE");
-    }
-
     const claimed = await this.prisma.whatsAppMessage.updateMany({
       where: { id: message.id, status: "QUEUED", metaMessageId: null, dispatchClaimedAt: null },
       data: { dispatchClaimedAt: new Date(), errorCode: null, errorMessage: null },
     });
     if (!claimed.count) return message;
+    const attemptCount = await this.prisma.whatsAppMessage.count({
+      where: {
+        organizationId: message.organizationId,
+        purpose: "INVOICE",
+        referenceType: message.referenceType,
+        referenceId: message.referenceId,
+        createdAt: { lte: message.createdAt },
+      },
+    });
     console.info("[WhatsApp Invoice] delivery_claimed", {
       requestId: correlationId,
       deliveryId: message.id,
       deploymentEnvironment,
+      stage: "CLAIMED",
+      attemptCount,
       status: "QUEUED",
       elapsedMs: Date.now() - processingStartedAt,
     });
     let providerSubmissionStarted = false;
-    let currentOperation = "PDF_GENERATION";
+    let currentOperation = "VALIDATE_DELIVERY";
     let persistedPayload: Record<string, unknown> = message.payload && typeof message.payload === "object" && !Array.isArray(message.payload)
       ? { ...(message.payload as Record<string, unknown>) }
       : {};
     try {
+      if (!payload || !message.templateInstance || !message.storeId) {
+        throw new Error("INVOICE_DELIVERY_INVALID");
+      }
+      const integration = message.phoneNumber.waba.integration;
+      if (integration.organizationId !== message.organizationId || integration.status !== "CONNECTED" || !integration.credentialRef) {
+        throw new Error("WHATSAPP_NOT_CONNECTED");
+      }
+      if (message.phoneNumber.wabaId !== message.templateInstance.wabaId || message.templateInstance.status !== "APPROVED") {
+        throw new Error("INVOICE_TEMPLATE_NOT_ELIGIBLE");
+      }
       const invoice = payload.invoiceDelivery;
-      const pdf = await generateInvoicePdf({
+      currentOperation = "PDF_GENERATION";
+      const pdf = await this.generatePdf({
         correlationId,
         messageId: message.id,
         organizationId: message.organizationId,
-        storeId: message.storeId!,
+        storeId: message.storeId,
         kind: invoice.kind,
         transactionId: invoice.transactionId,
       });
@@ -280,6 +286,8 @@ export class WhatsAppInvoiceDeliveryService {
         requestId: correlationId,
         deliveryId: message.id,
         deploymentEnvironment,
+        stage: currentOperation,
+        attemptCount,
         filename: pdf.filename,
         byteLength: pdf.buffer.byteLength,
       });
@@ -296,6 +304,8 @@ export class WhatsAppInvoiceDeliveryService {
         requestId: correlationId,
         deliveryId: message.id,
         deploymentEnvironment,
+        stage: currentOperation,
+        attemptCount,
         mediaIdPresent: Boolean(media.mediaId),
         elapsedMs: Date.now() - processingStartedAt,
       });
@@ -319,6 +329,7 @@ export class WhatsAppInvoiceDeliveryService {
           correlationId,
           queuedEnvironment: payload.invoiceDelivery.deploymentEnvironment,
           processingEnvironment: deploymentEnvironment,
+          attemptCount,
           invoiceFilename: pdf.filename,
           pdfByteLength: pdf.buffer.byteLength,
           pdfSignatureValid: pdf.buffer.subarray(0, 5).toString("ascii") === "%PDF-",
@@ -337,6 +348,8 @@ export class WhatsAppInvoiceDeliveryService {
         requestId: correlationId,
         deliveryId: message.id,
         deploymentEnvironment,
+        stage: currentOperation,
+        attemptCount,
       });
       const result = await this.meta.sendMessage({
         requestId: correlationId,
@@ -361,6 +374,8 @@ export class WhatsAppInvoiceDeliveryService {
         providerMessageIdPresent: Boolean(result.providerMessageId),
         httpStatus: result.httpStatus,
         status: "SUBMITTED",
+        stage: "SUBMITTED",
+        attemptCount,
         elapsedMs: Date.now() - processingStartedAt,
       });
       return this.prisma.whatsAppMessage.update({
@@ -409,8 +424,10 @@ export class WhatsAppInvoiceDeliveryService {
         deploymentEnvironment,
         organizationId: message.organizationId,
         storeId: message.storeId,
-        transactionId: payload.invoiceDelivery.transactionId,
+        transactionId: payload?.invoiceDelivery.transactionId,
         status: "FAILED",
+        stage: currentOperation,
+        attemptCount,
         providerSubmissionStarted,
         ...providerError,
         elapsedMs: Date.now() - processingStartedAt,
@@ -428,8 +445,9 @@ export class WhatsAppInvoiceDeliveryService {
             diagnostic: {
               ...(persistedPayload.diagnostic && typeof persistedPayload.diagnostic === "object" ? persistedPayload.diagnostic : {}),
               correlationId,
-              queuedEnvironment: payload.invoiceDelivery.deploymentEnvironment,
+              queuedEnvironment: payload?.invoiceDelivery.deploymentEnvironment,
               processingEnvironment: deploymentEnvironment,
+              attemptCount,
               providerError,
             },
           })),
@@ -456,18 +474,38 @@ export class WhatsAppInvoiceDeliveryService {
         dispatchClaimedAt: null,
       },
     });
+    if (recovered.count) {
+      console.warn("[WhatsApp Invoice] abandoned_claims_recovered", {
+        deploymentEnvironment: getDeploymentEnvironmentLabel(),
+        stage: "RECOVER_ABANDONED_CLAIMS",
+        recovered: recovered.count,
+      });
+    }
     return recovered.count;
   }
 
   async processBatch(limit = 10) {
+    const deploymentEnvironment = getDeploymentEnvironmentLabel();
+    console.info("[WhatsApp Invoice] batch_started", { deploymentEnvironment, stage: "BATCH_DISCOVERY", limit });
     const abandoned = await this.recoverAbandonedClaims();
     const queued = await this.prisma.whatsAppMessage.findMany({
       where: { purpose: "INVOICE", status: "QUEUED", metaMessageId: null, dispatchClaimedAt: null },
       orderBy: { queuedAt: "asc" },
       take: limit,
-      select: { id: true },
+      select: { id: true, queuedAt: true },
+    });
+    console.info("[WhatsApp Invoice] batch_discovered", {
+      deploymentEnvironment,
+      stage: "BATCH_DISCOVERY",
+      queued: queued.length,
+      oldestQueuedAt: queued[0]?.queuedAt?.toISOString(),
+      abandoned,
     });
     const results = await Promise.allSettled(queued.map(item => this.processMessage(item.id)));
-    return { abandoned, attempted: results.length, submitted: results.filter(item => item.status === "fulfilled").length, failed: results.filter(item => item.status === "rejected").length };
+    const submitted = results.filter(item => item.status === "fulfilled" && ["SUBMITTED", "SENT", "DELIVERED", "READ"].includes(item.value.status)).length;
+    const skipped = results.filter(item => item.status === "fulfilled").length - submitted;
+    const summary = { abandoned, attempted: results.length, submitted, skipped, failed: results.filter(item => item.status === "rejected").length };
+    console.info("[WhatsApp Invoice] batch_completed", { deploymentEnvironment, stage: "BATCH_COMPLETE", ...summary });
+    return summary;
   }
 }

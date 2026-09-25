@@ -140,7 +140,7 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
 
     printWindow.document.write(buildInvoiceDocumentHtml({
       sale,
-      storeName,
+      merchant: { name: storeName },
       kind: invoiceTarget === "SALE" ? "SALE" : "EXCHANGE",
       returnTransactionId: invoiceTarget === "SALE" ? undefined : invoiceTarget,
     }));

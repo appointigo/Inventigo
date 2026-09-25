@@ -13,6 +13,7 @@
     "lint": "eslint",
     "whatsapp:bootstrap:test-tenant": "node --experimental-transform-types scripts/bootstrap-whatsapp-test-tenant.ts",
     "whatsapp:seed:templates": "node --experimental-transform-types scripts/seed-whatsapp-templates.ts",
+    "whatsapp:invoices:worker": "node scripts/trigger-whatsapp-invoice-worker.mjs",
     "test:inventory-intelligence": "node --experimental-transform-types --test src/modules/inventory-intelligence/utils/analyticsPeriod.test.ts src/modules/inventory-intelligence/utils/metrics.test.ts",
     "test:demand-intelligence": "node --experimental-transform-types --test src/modules/demand-intelligence/utils/demandAnalytics.test.ts src/modules/demand-intelligence/utils/demandValidation.test.ts src/modules/demand-intelligence/utils/demandSecurity.test.ts",
     "prisma:fix-exchanged-sales": "node prisma/scripts/fix-exchanged-sales-and-backfill-returns.js",
@@ -28,6 +29,7 @@
     "@prisma/adapter-pg": "^7.5.0",
     "@prisma/client": "^7.5.0",
     "@puppeteer/browsers": "3.2.2",
+    "@react-pdf/renderer": "^4.9.0",
     "@sparticuz/chromium": "153.0.0",
     "@tanstack/react-query": "^5.91.2",
     "@types/chroma-js": "^3.1.2",
@@ -53,6 +55,7 @@
     "react-barcode": "^1.6.1",
     "react-dom": "19.2.4",
     "recharts": "^3.8.0",
+    "server-only": "^0.0.1",
     "xlsx": "^0.18.5",
     "zod": "^4.3.6"
   },

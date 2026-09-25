@@ -1,31 +1,51 @@
-# Invoice PDF browser deployment
+# Invoice PDF and delivery worker deployment
 
-Stockiva uses one HTML invoice renderer and `puppeteer-core` in every environment.
-Only browser discovery differs:
+Stockiva invoice attachments are rendered directly in Node.js with
+`@react-pdf/renderer`. Invoice generation does not launch Chrome, load HTML, or
+call an external PDF service. The renderer uses React PDF's built-in Helvetica
+font and therefore has no runtime font download or font asset requirement.
 
-- Local development downloads the Chrome for Testing revision pinned by
-  Puppeteer into `.cache/puppeteer` during `npm install`.
-- Railway builds `Dockerfile`, downloads that same pinned browser into the
-  image, installs its Linux libraries, and keeps the browser in the final image.
-- Vercel skips the Chrome download and uses the bundled `@sparticuz/chromium`
-  executable. The invoice routes explicitly use the Node.js runtime with a
-  60-second maximum duration.
+The barcode PDF export still uses `puppeteer-core`. Keep the pinned browser,
+`@sparticuz/chromium`, `.puppeteerrc.cjs`, the Docker Chrome libraries, and the
+barcode route's output-file tracing until that separate feature is migrated.
 
 ## Runtime requirements
 
 - Node.js `>=22.17 <23`.
-- Keep Vercel function memory at its current 2 GB default (or higher on plans
-  that support it). Configure memory in the Vercel dashboard when Fluid
-  Compute is enabled.
-- `CRON_SECRET` must be configured so the durable WhatsApp worker can retry
-  queued invoice deliveries via `/api/cron/whatsapp-campaigns`.
+- `DATABASE_URL` must be present at runtime, not during the Docker image build.
+- WhatsApp/Meta credentials remain runtime-only variables.
+- `CRON_SECRET` must be the same long random value on the web service and every
+  scheduler that calls an authenticated cron route.
 - `PUPPETEER_EXECUTABLE_PATH` is optional and is only intended for a custom
-  self-hosted Chrome installation. It is not needed on local, Railway, or
-  Vercel deployments.
+  self-hosted Chrome installation used by the barcode exporter.
 
-Do not set `PUPPETEER_SKIP_DOWNLOAD=1` on Railway. The browser is intentionally
-downloaded at image build time so a fresh runtime never depends on an ephemeral
-cache or a manual server installation.
+## Vercel
+
+`vercel.json` invokes `/api/cron/whatsapp-invoices` every minute. The route is
+Node-only, validates Vercel's `Authorization: Bearer <CRON_SECRET>` header, and
+awaits the durable database batch before returning. Invoice processing is kept
+separate from campaign and automation processing so a failure in those workers
+cannot starve the invoice queue.
+
+## Railway
+
+`next start` only serves HTTP requests; it does not execute `vercel.json` cron
+configuration. Create a second Railway service from the same repository/image,
+configure it as a cron service (recommended schedule: `* * * * *`), and set its
+start command to:
+
+```bash
+npm run whatsapp:invoices:worker
+```
+
+Give that cron service the same `CRON_SECRET` and set `STOCKIVA_APP_URL` to the
+web service's HTTPS origin. As a fallback, a Railway variable reference may
+expose the web service's `RAILWAY_PUBLIC_DOMAIN` to the cron service. The command
+makes one authenticated request, waits for its result, and exits non-zero on an
+HTTP failure. Do not run it as an unawaited task inside the web request that
+creates a sale.
 
 Railway automatically detects the root `Dockerfile`; no deprecated
-`railway.json` config-as-code opt-in is required.
+`railway.json` opt-in is required. The web service keeps `npm run start` as its
+start command. Because barcode export still needs Chrome, do not set
+`PUPPETEER_SKIP_DOWNLOAD=1` on Railway.

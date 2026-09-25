@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db";
-import { launchInvoiceBrowser } from "@/lib/server/browser";
-import { buildInvoiceDocumentHtml, type InvoiceDocumentKind } from "../invoiceDocument";
+import { renderInvoicePdf } from "../invoicePdfDocument";
+import type { InvoiceDocumentKind } from "../invoiceDocumentModel";
 import { getDeploymentEnvironmentLabel } from "@/modules/whatsapp/invoiceDiagnostics";
 
 export type GeneratedInvoicePdf = { buffer: Buffer; filename: string; reference: string };
@@ -18,7 +18,7 @@ export async function generateInvoicePdf(input: {
   const deploymentEnvironment = getDeploymentEnvironmentLabel();
   const store = await prisma.store.findFirst({
     where: { id: input.storeId, orgId: input.organizationId },
-    select: { id: true, name: true },
+    select: { id: true, name: true, address: true, phone: true },
   });
   if (!store) throw new Error("INVOICE_STORE_NOT_FOUND");
 
@@ -58,9 +58,9 @@ export async function generateInvoicePdf(input: {
     transactionId: input.transactionId,
     reference,
   });
-  const html = buildInvoiceDocumentHtml({
+  const buffer = await renderInvoicePdf({
     sale,
-    storeName: store.name,
+    merchant: store,
     kind: input.kind,
     returnTransactionId: input.kind === "EXCHANGE" ? input.transactionId : undefined,
   });
@@ -80,38 +80,29 @@ export async function generateInvoicePdf(input: {
     transactionId: input.transactionId,
     reference,
   });
-  const browser = await launchInvoiceBrowser();
-  try {
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "domcontentloaded" });
-    const pdf = await page.pdf({ format: "A4", printBackground: true, preferCSSPageSize: true });
-    const buffer = Buffer.from(pdf);
-    const filename = `${input.kind === "EXCHANGE" ? "exchange" : "invoice"}-${reference.replace(/[^a-z0-9_-]+/gi, "-")}.pdf`;
-    console.info("[WhatsApp Invoice] pdf_generation_completed", {
-      requestId: input.correlationId,
-      deliveryId: input.messageId,
-      deploymentEnvironment,
-      transactionId: input.transactionId,
-      reference,
-      filename,
-      byteLength: buffer.byteLength,
-      elapsedMs: Date.now() - startedAt,
-    });
-    const signatureValid = buffer.subarray(0, 5).toString("ascii") === "%PDF-";
-    console.info("[WhatsApp Invoice] pdf_validation_completed", {
-      requestId: input.correlationId,
-      deliveryId: input.messageId,
-      deploymentEnvironment,
-      transactionId: input.transactionId,
-      reference,
-      filename,
-      byteLength: buffer.byteLength,
-      signatureValid,
-      elapsedMs: Date.now() - startedAt,
-    });
-    if (!signatureValid) throw new Error("INVOICE_PDF_INVALID");
-    return { buffer, filename, reference };
-  } finally {
-    await browser.close();
-  }
+  const filename = `${input.kind === "EXCHANGE" ? "exchange" : "invoice"}-${reference.replace(/[^a-z0-9_-]+/gi, "-")}.pdf`;
+  console.info("[WhatsApp Invoice] pdf_generation_completed", {
+    requestId: input.correlationId,
+    deliveryId: input.messageId,
+    deploymentEnvironment,
+    transactionId: input.transactionId,
+    reference,
+    filename,
+    byteLength: buffer.byteLength,
+    elapsedMs: Date.now() - startedAt,
+  });
+  const signatureValid = buffer.subarray(0, 5).toString("ascii") === "%PDF-";
+  console.info("[WhatsApp Invoice] pdf_validation_completed", {
+    requestId: input.correlationId,
+    deliveryId: input.messageId,
+    deploymentEnvironment,
+    transactionId: input.transactionId,
+    reference,
+    filename,
+    byteLength: buffer.byteLength,
+    signatureValid,
+    elapsedMs: Date.now() - startedAt,
+  });
+  if (!signatureValid) throw new Error("INVOICE_PDF_INVALID");
+  return { buffer, filename, reference };
 }
