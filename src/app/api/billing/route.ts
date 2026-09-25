@@ -3,6 +3,9 @@ import { billingService } from "@/modules/billing/services/billingService";
 import { requireOrgAuth } from "@/lib/auth.middleware";
 import type { SaleHistoryStatusFilter } from "@/modules/billing/types";
 
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
 export const GET = async (request: NextRequest) => {
   let user;
   try { 
@@ -30,7 +33,6 @@ export const GET = async (request: NextRequest) => {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
-
 export const POST = async (request: NextRequest) => {
   const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
   const startedAt = Date.now();

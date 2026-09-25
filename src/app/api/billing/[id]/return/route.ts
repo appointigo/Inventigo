@@ -3,6 +3,9 @@ import { billingService } from "@/modules/billing/services/billingService";
 import { requireOrgAuth } from "@/lib/auth.middleware";
 import type { WhatsAppInvoiceSelection } from "@/modules/billing/types";
 
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
 const parseTransactionItem = (item: unknown) => {
   const record = item && typeof item === "object" ? item as Record<string, unknown> : {};
 
@@ -13,7 +16,6 @@ const parseTransactionItem = (item: unknown) => {
     total: Number(record.total) || 0,
   };
 };
-
 const parsePaymentEntry = (entry: unknown) => {
   const record = entry && typeof entry === "object" ? entry as Record<string, unknown> : {};
 

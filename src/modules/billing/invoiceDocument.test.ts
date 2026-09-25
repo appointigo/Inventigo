@@ -1,8 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { buildInvoiceDocumentHtml } from "./invoiceDocument.ts";
+import { launchInvoiceBrowser } from "../../lib/server/browser.ts";
 import type { Sale } from "./types.ts";
-import puppeteer from "puppeteer";
 
 const sale: Sale = {
   id: "sale-1",
@@ -42,7 +44,6 @@ test("renders finalized discounted partial-payment sale data and escapes custome
   assert.match(html, /Aarav &lt;script&gt;/);
   assert.doesNotMatch(html, /Aarav <script>/);
 });
-
 for (const [id, expected] of [["exchange-pay", "Additional payment"], ["exchange-even", "Equal value"], ["exchange-refund", "Refund"]] as const) {
   test(`renders ${id} settlement without unrelated exchange rows`, () => {
     const html = buildInvoiceDocumentHtml({ sale, storeName: "Rare Thread", kind: "EXCHANGE", returnTransactionId: id });
@@ -61,17 +62,22 @@ test("renders finalized exchange pricing and settlement payment details", () => 
 });
 
 test("generates non-empty sale and exchange PDF documents at runtime", async () => {
-  const browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox", "--disable-setuid-sandbox"] });
+  const browser = await launchInvoiceBrowser();
   try {
-    for (const html of [
-      buildInvoiceDocumentHtml({ sale, storeName: "Rare Thread" }),
-      buildInvoiceDocumentHtml({ sale, storeName: "Rare Thread", kind: "EXCHANGE", returnTransactionId: "exchange-pay" }),
+    for (const document of [
+      { name: "sale", html: buildInvoiceDocumentHtml({ sale, storeName: "Rare Thread" }) },
+      { name: "exchange", html: buildInvoiceDocumentHtml({ sale, storeName: "Rare Thread", kind: "EXCHANGE", returnTransactionId: "exchange-pay" }) },
     ]) {
       const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: "domcontentloaded" });
+      await page.setContent(document.html, { waitUntil: "domcontentloaded" });
       const pdf = await page.pdf({ format: "A4", printBackground: true, preferCSSPageSize: true });
       assert.equal(Buffer.from(pdf).subarray(0, 4).toString(), "%PDF");
       assert.ok(pdf.byteLength > 1_000);
+      if (process.env.INVOICE_PDF_OUTPUT_DIR) {
+        const outputDirectory = path.resolve(process.env.INVOICE_PDF_OUTPUT_DIR);
+        await mkdir(outputDirectory, { recursive: true });
+        await writeFile(path.join(outputDirectory, `${document.name}.pdf`), pdf);
+      }
       await page.close();
     }
   } finally {

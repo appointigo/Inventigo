@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import puppeteer from "puppeteer";
+import type { PDFOptions } from "puppeteer-core";
+import { launchInvoiceBrowser } from "@/lib/server/browser";
 import { generateBarcodeLabelHTML } from "@/modules/barcode/services/barcodeExportService";
 
 export const runtime = "nodejs"; // Ensure Node.js runtime
+export const maxDuration = 60;
 
 interface RequestBody {
   labels: Array<{
@@ -16,7 +18,6 @@ interface RequestBody {
   }>;
   format?: "a4" | "12x18" | "13x19" | "coreldraw";
 }
-
 /**
  * POST /api/barcode/export-pdf
  * Generate barcode label PDF with embedded fonts and vector graphics
@@ -61,19 +62,13 @@ export async function POST(request: NextRequest) {
     const htmlContent = generateBarcodeLabelHTML(body.labels);
 
     // Launch Puppeteer browser
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-      ],
-    });
+    const browser = await launchInvoiceBrowser();
+    try {
+      const page = await browser.newPage();
 
-    const page = await browser.newPage();
-
-    // Set content and wait for fonts to load
-    await page.setContent(htmlContent, { waitUntil: "networkidle2" });
+      // Set content and wait for fonts to load
+      await page.setContent(htmlContent, { waitUntil: "domcontentloaded" });
+      await page.waitForNetworkIdle({ idleTime: 500, timeout: 10_000 });
 
     // Wait for all barcodes to be generated
     await page.waitForFunction(
@@ -93,12 +88,12 @@ export async function POST(request: NextRequest) {
     );
 
     // Wait for fonts to be loaded
-    await page.evaluate(() => {
-      return (document as any).fonts.ready;
-    });
+      await page.evaluate(async () => {
+        await document.fonts.ready;
+      });
 
-    // Generate PDF with format-specific settings
-    let pdfOptions: any = {
+      // Generate PDF with format-specific settings
+      const pdfOptions: PDFOptions = {
       margin: {
         top: "0in",
         right: "0in",
@@ -128,20 +123,20 @@ export async function POST(request: NextRequest) {
       pdfOptions.height = "45.72cm";
     }
 
-    const pdfBuffer = await page.pdf(pdfOptions);
+      const pdfBuffer = await page.pdf(pdfOptions);
 
-    // Close browser
-    await browser.close();
-
-    // Return PDF as binary with appropriate headers
-    return new NextResponse(Buffer.from(pdfBuffer), {
-      status: 200,
-      headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="barcode-labels-${Date.now()}.pdf"`,
-        "Cache-Control": "no-store",
-      },
-    });
+      // Return PDF as binary with appropriate headers
+      return new NextResponse(Buffer.from(pdfBuffer), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `attachment; filename="barcode-labels-${Date.now()}.pdf"`,
+          "Cache-Control": "no-store",
+        },
+      });
+    } finally {
+      await browser.close();
+    }
   } catch (error) {
     console.error("[barcode-export-pdf]", error);
 

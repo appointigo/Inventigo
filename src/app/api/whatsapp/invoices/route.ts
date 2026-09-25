@@ -4,6 +4,9 @@ import { prisma } from "@/lib/db";
 import { createWhatsAppInvoiceDeliveryService } from "@/modules/whatsapp/server";
 import { enqueueInvoiceDelivery, prepareInvoiceDelivery } from "@/modules/whatsapp/services/WhatsAppInvoiceDeliveryService";
 
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
 export async function GET(request: Request) {
   const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
   const user = await requireOrgAuth().catch(() => null);
@@ -24,7 +27,6 @@ export async function GET(request: Request) {
   });
   return NextResponse.json({ attempts, requestId }, { headers: { "x-request-id": requestId } });
 }
-
 export async function POST(request: Request) {
   const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
   const startedAt = Date.now();

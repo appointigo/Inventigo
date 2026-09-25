@@ -1,6 +1,6 @@
 import "server-only";
-import puppeteer from "puppeteer";
 import { prisma } from "@/lib/db";
+import { launchInvoiceBrowser } from "@/lib/server/browser";
 import { buildInvoiceDocumentHtml, type InvoiceDocumentKind } from "../invoiceDocument";
 
 export type GeneratedInvoicePdf = { buffer: Buffer; filename: string; reference: string };
@@ -74,7 +74,7 @@ export async function generateInvoicePdf(input: {
     transactionId: input.transactionId,
     reference,
   });
-  const browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox", "--disable-setuid-sandbox"] });
+  const browser = await launchInvoiceBrowser();
   try {
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "domcontentloaded" });
