@@ -651,6 +651,7 @@ const ReturnExchangeView = ({
                 recipient={sale?.customerPhone ?? ""}
                 value={whatsappInvoice}
                 onChange={setWhatsAppInvoice}
+                transactionKind="EXCHANGE"
               />
             </div>
           </Card>

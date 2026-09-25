@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { PrismaClient } from "@prisma/client";
-import { WhatsAppInvoiceDeliveryService } from "../services/WhatsAppInvoiceDeliveryService.ts";
+import { enqueueInvoiceDelivery, WhatsAppInvoiceDeliveryService } from "../services/WhatsAppInvoiceDeliveryService.ts";
 import { MockMetaWhatsAppClient } from "./MockMetaWhatsAppClient.ts";
 import { WhatsAppError } from "../errors.ts";
 
@@ -160,4 +160,59 @@ test("keeps ambiguous provider timeouts outcome-unknown to prevent an automatic 
     "INVOICE_PROVIDER_OUTCOME_UNKNOWN"
   );
   assert.equal(meta.requests.length, 1);
+});
+
+test("preserves a transactional opt-out and records a failed delivery without queuing it", async () => {
+  let consentUpserts = 0;
+  let createdMessage: Record<string, unknown> | undefined;
+  const tx = {
+    whatsAppContact: {
+      findFirst: async () => ({ id: "contact-1" }),
+    },
+    whatsAppConsent: {
+      findUnique: async () => ({ status: "REVOKED" }),
+      upsert: async () => { consentUpserts += 1; },
+    },
+    whatsAppMessage: {
+      upsert: async ({ create }: { create: Record<string, unknown> }) => {
+        createdMessage = create;
+        return {
+          id: "delivery-revoked",
+          status: create.status,
+          errorCode: create.errorCode,
+          errorMessage: create.errorMessage,
+        };
+      },
+    },
+  };
+
+  const result = await enqueueInvoiceDelivery(tx as never, {
+    correlationId: "request-revoked",
+    deploymentEnvironment: "test",
+    organizationId: "org-1",
+    storeId: "store-1",
+    recipient: "919876543210",
+    phoneNumberId: "phone-1",
+    templateInstanceId: "template-1",
+    metaTemplateName: "invoice_delivery",
+    templateKey: "invoice_delivery",
+    templateVersion: 1,
+    language: "en_US",
+    variableCount: 4,
+    variableKeys: ["1", "2", "3", "4"],
+    storeName: "Test Store",
+  }, {
+    kind: "SALE",
+    id: "sale-revoked",
+    reference: "INV-REVOKED",
+    customerId: "customer-1",
+    customerName: "Test Customer",
+    amount: 100,
+    transactionDate: new Date("2026-09-25T08:00:00.000Z"),
+  });
+
+  assert.equal(consentUpserts, 0);
+  assert.equal(result.status, "FAILED");
+  assert.equal(result.errorCode, "WHATSAPP_TRANSACTIONAL_CONSENT_REVOKED");
+  assert.equal(createdMessage?.queuedAt, null);
 });

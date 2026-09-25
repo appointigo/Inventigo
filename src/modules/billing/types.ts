@@ -1,4 +1,5 @@
 import type { ItemPriceAdjustment } from "./utils/pricingEngine";
+import type { InvoiceConfigurationSnapshot } from "@/modules/invoice-management/types";
 
 export type PaymentMethodType = "CASH" | "CARD" | "UPI";
 export type SaleStatusType = "COMPLETED" | "REFUNDED" | "EXCHANGED";
@@ -124,6 +125,7 @@ export type ReturnTransactionHistory = {
   transactionDate?: string;
   businessDate?: string;
   createdAt: string;
+  invoiceSnapshot?: InvoiceConfigurationSnapshot;
 };
 
 /**
@@ -166,6 +168,7 @@ export type Sale = {
   transactionDate: string;
   createdAt: string;
   invoiceDelivery?: InvoiceDeliveryState;
+  invoiceSnapshot?: InvoiceConfigurationSnapshot;
 };
 
 export type SaleItem = ItemPriceAdjustment & {

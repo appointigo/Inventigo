@@ -78,6 +78,44 @@ test("generates non-empty sale and exchange PDF documents at runtime", async () 
   }
 });
 
+test("renders every supported design with the immutable policy snapshot", async () => {
+  for (const designKey of ["CLASSIC", "PREMIUM", "COMPACT"] as const) {
+    const invoiceSnapshot = {
+      design: { key: designKey, version: 1 as const },
+      policy: {
+        id: "policy-1",
+        version: 3,
+        effectiveFrom: "2026-09-25T00:00:00.000Z",
+        termsText: "Payment terms captured at billing.",
+        returnPolicyText: "Returns accepted within seven days.",
+        thankYouMessage: "Thank you from the snapshot.",
+      },
+    };
+    const snapshottedSale: Sale = { ...sale, invoiceSnapshot };
+    const model = buildInvoiceDocumentModel({
+      sale: snapshottedSale,
+      merchant: { name: "Rare Thread" },
+    });
+    assert.equal(model.designKey, designKey);
+    assert.equal(model.termsText, invoiceSnapshot.policy.termsText);
+
+    const html = buildInvoiceDocumentHtml({
+      sale: snapshottedSale,
+      merchant: { name: "Rare Thread" },
+    });
+    assert.match(html, new RegExp(`<body class="${designKey}">`));
+    assert.match(html, /Payment terms captured at billing/);
+    assert.match(html, /Thank you from the snapshot/);
+
+    const pdf = await renderInvoicePdf({
+      sale: snapshottedSale,
+      merchant: { name: "Rare Thread" },
+    });
+    assert.equal(pdf.subarray(0, 4).toString(), "%PDF");
+    assert.ok(pdf.byteLength > 1_000);
+  }
+});
+
 test("paginates long item lists and preserves finalized values in the shared model", async () => {
   const longSale: Sale = {
     ...sale,

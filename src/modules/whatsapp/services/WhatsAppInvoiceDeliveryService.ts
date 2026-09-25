@@ -67,25 +67,30 @@ const asPayload = (value: unknown): InvoicePayload | null => {
 
 export async function prepareInvoiceDelivery(
   prisma: PrismaClient,
-  input: { organizationId: string; storeId: string; selection?: WhatsAppInvoiceSelection; correlationId?: string }
+  input: { organizationId: string; storeId: string; transactionKind?: "SALE" | "EXCHANGE"; selection?: WhatsAppInvoiceSelection; correlationId?: string }
 ): Promise<PreparedInvoiceDelivery | null> {
   if (!input.selection?.enabled) return null;
   if (!input.selection.consentConfirmed) throw new Error("WHATSAPP_INVOICE_CONSENT_REQUIRED");
   if (!input.selection.recipient?.trim()) throw new Error("WHATSAPP_INVOICE_RECIPIENT_REQUIRED");
-  if (!input.selection.templateInstanceId) throw new Error("WHATSAPP_INVOICE_TEMPLATE_REQUIRED");
   const recipient = normalizeWhatsAppPhone(input.selection.recipient).replace(/^\+/, "");
+  const store = await prisma.store.findFirst({
+    where: { id: input.storeId, orgId: input.organizationId },
+    select: { name: true, whatsappProfile: true },
+  });
+  if (!store) throw new Error("STORE_NOT_FOUND");
+  const transactionKind = input.transactionKind ?? "SALE";
+  const templateInstanceId = input.selection.templateInstanceId ??
+    (transactionKind === "EXCHANGE"
+      ? store.whatsappProfile?.defaultExchangeInvoiceTemplateInstanceId
+      : store.whatsappProfile?.defaultInvoiceTemplateInstanceId);
+  if (!templateInstanceId) throw new Error("WHATSAPP_INVOICE_DEFAULT_TEMPLATE_REQUIRED");
   const { WhatsAppInvoiceTemplateService } = await import("./WhatsAppInvoiceTemplateService.ts");
   const eligibility = await new WhatsAppInvoiceTemplateService(prisma).assertEligible(
     input.organizationId,
     input.storeId,
-    input.selection.templateInstanceId,
+    templateInstanceId,
     input.correlationId
   );
-  const store = await prisma.store.findFirst({
-    where: { id: input.storeId, orgId: input.organizationId },
-    select: { name: true },
-  });
-  if (!store) throw new Error("STORE_NOT_FOUND");
   return {
     correlationId: input.correlationId ?? crypto.randomUUID(),
     deploymentEnvironment: getDeploymentEnvironmentLabel(),
@@ -122,6 +127,7 @@ export async function enqueueInvoiceDelivery(
   const idempotencyKey = resend
     ? `invoice:${transaction.kind}:${transaction.id}:resend:${crypto.randomUUID()}`
     : `invoice:${transaction.kind}:${transaction.id}:initial`;
+  let consentRevoked = false;
   if (transaction.customerId) {
     const contact = await tx.whatsAppContact.findFirst({
       where: { organizationId: prepared.organizationId, customerId: transaction.customerId },
@@ -129,11 +135,18 @@ export async function enqueueInvoiceDelivery(
     });
     if (contact) {
       const now = new Date();
-      await tx.whatsAppConsent.upsert({
+      const existingConsent = await tx.whatsAppConsent.findUnique({
         where: { contactId_purpose: { contactId: contact.id, purpose: "TRANSACTIONAL" } },
-        create: { contactId: contact.id, purpose: "TRANSACTIONAL", status: "GRANTED", source: "BILLING_INVOICE", evidence: { reference: transaction.reference, channel: "WHATSAPP" }, recordedAt: now, grantedAt: now },
-        update: { status: "GRANTED", source: "BILLING_INVOICE", evidence: { reference: transaction.reference, channel: "WHATSAPP" }, recordedAt: now, grantedAt: now, revokedAt: null },
+        select: { status: true },
       });
+      consentRevoked = existingConsent?.status === "REVOKED";
+      if (!consentRevoked) {
+        await tx.whatsAppConsent.upsert({
+          where: { contactId_purpose: { contactId: contact.id, purpose: "TRANSACTIONAL" } },
+          create: { contactId: contact.id, purpose: "TRANSACTIONAL", status: "GRANTED", source: "BILLING_INVOICE", evidence: { reference: transaction.reference, channel: "WHATSAPP" }, recordedAt: now, grantedAt: now },
+          update: { status: "GRANTED", source: "BILLING_INVOICE", evidence: { reference: transaction.reference, channel: "WHATSAPP" }, recordedAt: now, grantedAt: now, revokedAt: null },
+        });
+      }
     }
   }
   const message = await tx.whatsAppMessage.upsert({
@@ -167,8 +180,13 @@ export async function enqueueInvoiceDelivery(
           resend,
         },
       },
-      status: "QUEUED",
-      queuedAt: new Date(),
+      status: consentRevoked ? "FAILED" : "QUEUED",
+      queuedAt: consentRevoked ? null : new Date(),
+      failedAt: consentRevoked ? new Date() : null,
+      errorCode: consentRevoked ? "WHATSAPP_TRANSACTIONAL_CONSENT_REVOKED" : null,
+      errorMessage: consentRevoked
+        ? "The customer has opted out of transactional WhatsApp messages."
+        : null,
     },
     update: {},
     select: { id: true, status: true, errorCode: true, errorMessage: true },

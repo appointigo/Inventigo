@@ -1,4 +1,5 @@
 import type { ReturnTransactionHistory, ReturnTransactionItem, Sale, SaleItem } from "./types";
+import type { InvoiceConfigurationSnapshot } from "@/modules/invoice-management/types";
 
 export type InvoiceDocumentKind = "SALE" | "EXCHANGE";
 
@@ -13,6 +14,7 @@ export type InvoiceDocumentInput = {
   merchant: InvoiceMerchant;
   kind?: InvoiceDocumentKind;
   returnTransactionId?: string;
+  configuration?: InvoiceConfigurationSnapshot;
 };
 
 export type InvoiceTableRow = {
@@ -49,6 +51,10 @@ export type InvoiceDocumentModel = {
   status: string;
   sections: InvoiceSection[];
   totals: InvoiceTotalRow[];
+  designKey: InvoiceConfigurationSnapshot["design"]["key"];
+  termsText?: string;
+  returnPolicyText?: string;
+  thankYouMessage?: string;
 };
 
 export const formatInvoiceMoney = (value: number) =>
@@ -157,6 +163,7 @@ export function buildInvoiceDocumentModel(input: InvoiceDocumentInput): InvoiceD
     ? input.sale.returnTransactions.find(item => item.id === input.returnTransactionId)
     : undefined;
   if (kind === "EXCHANGE" && !transaction) throw new Error("Exchange transaction was not found on the sale");
+  const configuration = input.configuration ?? transaction?.invoiceSnapshot ?? input.sale.invoiceSnapshot;
 
   return {
     kind,
@@ -175,5 +182,9 @@ export function buildInvoiceDocumentModel(input: InvoiceDocumentInput): InvoiceD
       ? buildExchangeSections(transaction)
       : [{ rows: saleRows(input.sale.items), showUnitPrice: true }],
     totals: transaction ? buildExchangeTotals(transaction) : buildSaleTotals(input.sale),
+    designKey: configuration?.design.key ?? "CLASSIC",
+    termsText: configuration?.policy.termsText ?? undefined,
+    returnPolicyText: configuration?.policy.returnPolicyText ?? undefined,
+    thankYouMessage: configuration?.policy.thankYouMessage ?? undefined,
   };
 }

@@ -33,6 +33,22 @@ const styles = StyleSheet.create({
   totalValue: { textAlign: "right" },
   grand: { borderTopWidth: 2, borderTopColor: "#172033", marginTop: 4, paddingTop: 7, fontFamily: "Helvetica-Bold", fontSize: 11 },
   footer: { position: "absolute", bottom: 22, left: 38, right: 38, flexDirection: "row", justifyContent: "space-between", color: "#667085", fontSize: 7.5 },
+  policy: { marginTop: 18, paddingTop: 10, borderTopWidth: 1, borderTopColor: "#d7dde5", color: "#566074", fontSize: 7.5, lineHeight: 1.45 },
+  policyTitle: { fontFamily: "Helvetica-Bold", color: "#172033", marginBottom: 3 },
+  policyBlock: { marginBottom: 7 },
+});
+
+const designStyles = StyleSheet.create({
+  premiumPage: { paddingTop: 30, paddingHorizontal: 44, color: "#172554" },
+  premiumHeader: { borderBottomColor: "#c59a3d", borderBottomWidth: 3, textAlign: "left", backgroundColor: "#f8f5ec", padding: 16 },
+  premiumTableHeader: { backgroundColor: "#172554", color: "#ffffff", borderBottomColor: "#172554" },
+  premiumGrand: { borderTopColor: "#c59a3d", color: "#172554" },
+  compactPage: { paddingTop: 24, paddingBottom: 34, paddingHorizontal: 28, fontSize: 8 },
+  compactHeader: { paddingBottom: 7, marginBottom: 10, textAlign: "left", borderBottomWidth: 1 },
+  compactMeta: { marginBottom: 8 },
+  compactTableHeader: { paddingVertical: 4 },
+  compactTableRow: { paddingVertical: 4, minHeight: 20 },
+  compactTotals: { marginTop: 10, width: 250 },
 });
 
 function textLine(label: string, value?: string) {
@@ -43,18 +59,20 @@ function textLine(label: string, value?: string) {
   );
 }
 
-function table(section: InvoiceSection, sectionIndex: number) {
+function table(section: InvoiceSection, sectionIndex: number, designKey: string) {
   const productStyle = section.showUnitPrice ? styles.product : styles.productWide;
+  const compact = designKey === "COMPACT";
+  const premium = designKey === "PREMIUM";
   return h(View, { style: styles.section, key: `section-${sectionIndex}` },
     section.title ? h(Text, { style: styles.sectionTitle }, section.title) : null,
-    h(View, { style: styles.tableHeader, wrap: false },
+    h(View, { style: [styles.tableHeader, ...(premium ? [designStyles.premiumTableHeader] : []), ...(compact ? [designStyles.compactTableHeader] : [])], wrap: false },
       h(Text, { style: [styles.index, styles.label] }, "#"),
       h(Text, { style: [productStyle, styles.label] }, "Product"),
       section.showUnitPrice ? h(Text, { style: [styles.unit, styles.label] }, "Price") : null,
       h(Text, { style: [styles.quantity, styles.label] }, "Qty"),
       h(Text, { style: [styles.total, styles.label] }, "Total")
     ),
-    ...section.rows.map(row => h(View, { style: styles.tableRow, wrap: false, key: `${sectionIndex}-${row.index}` },
+    ...section.rows.map(row => h(View, { style: [styles.tableRow, ...(compact ? [designStyles.compactTableRow] : [])], wrap: false, key: `${sectionIndex}-${row.index}` },
       h(Text, { style: styles.index }, String(row.index)),
       h(View, { style: productStyle },
         h(Text, { style: styles.productName }, row.name),
@@ -70,14 +88,16 @@ function table(section: InvoiceSection, sectionIndex: number) {
 export function InvoicePdfDocument(input: InvoiceDocumentInput) {
   const model = buildInvoiceDocumentModel(input);
   const merchantContact = [model.merchant.address, model.merchant.phone].filter(Boolean).join(" | ");
+  const premium = model.designKey === "PREMIUM";
+  const compact = model.designKey === "COMPACT";
   return h(Document, { title: `${model.title} ${model.reference}`, author: model.merchant.name },
-    h(Page, { size: "A4", style: styles.page, wrap: true },
-      h(View, { style: styles.header, wrap: false },
+    h(Page, { size: "A4", style: [styles.page, ...(premium ? [designStyles.premiumPage] : []), ...(compact ? [designStyles.compactPage] : [])], wrap: true },
+      h(View, { style: [styles.header, ...(premium ? [designStyles.premiumHeader] : []), ...(compact ? [designStyles.compactHeader] : [])], wrap: false },
         h(Text, { style: styles.merchantName }, model.merchant.name),
         h(Text, { style: styles.title }, model.title),
         merchantContact ? h(Text, { style: styles.merchantDetail }, merchantContact) : null
       ),
-      h(View, { style: styles.meta, wrap: false },
+      h(View, { style: [styles.meta, ...(compact ? [designStyles.compactMeta] : [])], wrap: false },
         h(View, { style: styles.metaColumn },
           textLine("Reference", model.reference),
           textLine("Date", model.issuedAt),
@@ -90,18 +110,28 @@ export function InvoicePdfDocument(input: InvoiceDocumentInput) {
           textLine("Status", model.status)
         )
       ),
-      ...model.sections.map(table),
-      h(View, { style: styles.totals, wrap: false },
+      ...model.sections.map((section, index) => table(section, index, model.designKey)),
+      h(View, { style: [styles.totals, ...(compact ? [designStyles.compactTotals] : [])], wrap: false },
         ...model.totals.map((row, index) => h(View, {
-          style: row.emphasis ? [styles.totalRow, styles.grand] : styles.totalRow,
+          style: row.emphasis ? [styles.totalRow, styles.grand, ...(premium ? [designStyles.premiumGrand] : [])] : styles.totalRow,
           wrap: false,
           key: `total-${index}`,
         },
         h(Text, { style: styles.totalLabel }, row.label),
         h(Text, { style: styles.totalValue }, row.value)))
       ),
+      model.termsText || model.returnPolicyText ? h(View, { style: styles.policy, wrap: false },
+        model.termsText ? h(View, { style: styles.policyBlock },
+          h(Text, { style: styles.policyTitle }, "Terms & Conditions"),
+          h(Text, null, model.termsText)
+        ) : null,
+        model.returnPolicyText ? h(View, { style: styles.policyBlock },
+          h(Text, { style: styles.policyTitle }, "Exchange / Return Policy"),
+          h(Text, null, model.returnPolicyText)
+        ) : null
+      ) : null,
       h(View, { style: styles.footer, fixed: true },
-        h(Text, null, "Thank you for shopping with us."),
+        h(Text, null, model.thankYouMessage || "Thank you for shopping with us."),
         h(Text, { render: ({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}` })
       )
     )

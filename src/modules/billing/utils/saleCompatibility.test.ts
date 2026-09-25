@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeSaleCompatibility } from "./saleCompatibility";
+import { normalizeSaleCompatibility } from "./saleCompatibility.ts";
 
 test("reconstructs a legacy discounted paid invoice", () => {
   const sale = normalizeSaleCompatibility({

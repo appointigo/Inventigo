@@ -43,7 +43,7 @@ export class WhatsAppInvoiceTemplateService {
     const startedAt = Date.now();
     const store = await this.prisma.store.findFirst({
       where: { id: storeId, orgId: organizationId, isActive: true },
-      select: { id: true, name: true, whatsappProfile: true },
+      select: { id: true, name: true, whatsappProfile: true, invoiceSettings: true },
     });
     if (!store) throw new Error("STORE_NOT_FOUND");
 
@@ -69,6 +69,8 @@ export class WhatsAppInvoiceTemplateService {
         sender: null,
         templates: [] as EligibleInvoiceTemplate[],
         defaultTemplateInstanceId: store.whatsappProfile?.defaultInvoiceTemplateInstanceId ?? null,
+        defaultExchangeTemplateInstanceId: store.whatsappProfile?.defaultExchangeInvoiceTemplateInstanceId ?? null,
+        defaultWhatsAppEnabled: store.invoiceSettings?.defaultWhatsAppEnabled ?? false,
         warning: error instanceof Error ? error.message : "WhatsApp sender is unavailable",
       };
     }
@@ -155,7 +157,11 @@ export class WhatsAppInvoiceTemplateService {
       variableKeys: extractBodyVariableKeys(item.definition.body),
     }));
     const configuredDefault = store.whatsappProfile?.defaultInvoiceTemplateInstanceId ?? null;
+    const configuredExchangeDefault =
+      store.whatsappProfile?.defaultExchangeInvoiceTemplateInstanceId ?? null;
     const defaultAvailable = configuredDefault && templates.some(item => item.id === configuredDefault);
+    const exchangeDefaultAvailable = configuredExchangeDefault &&
+      templates.some(item => item.id === configuredExchangeDefault);
     return {
       enabled: templates.length > 0,
       storeId,
@@ -164,10 +170,16 @@ export class WhatsAppInvoiceTemplateService {
       templates,
       diagnostics,
       defaultTemplateInstanceId: defaultAvailable ? configuredDefault : null,
+      defaultExchangeTemplateInstanceId: exchangeDefaultAvailable
+        ? configuredExchangeDefault
+        : null,
+      defaultWhatsAppEnabled: store.invoiceSettings?.defaultWhatsAppEnabled ?? false,
       warning: templates.length === 0
         ? "No approved Utility template with a document header is available for this Store sender."
         : configuredDefault && !defaultAvailable
           ? "The configured default invoice template is no longer approved or compatible. Choose another template."
+          : configuredExchangeDefault && !exchangeDefaultAvailable
+            ? "The configured default exchange invoice template is no longer approved or compatible. Choose another template."
           : null,
     };
   }

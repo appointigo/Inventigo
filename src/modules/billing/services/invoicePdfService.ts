@@ -63,6 +63,7 @@ export async function generateInvoicePdf(input: {
     merchant: store,
     kind: input.kind,
     returnTransactionId: input.kind === "EXCHANGE" ? input.transactionId : undefined,
+    configuration: transaction?.invoiceSnapshot ?? sale.invoiceSnapshot,
   });
   console.info("[WhatsApp Invoice] invoice_render_completed", {
     requestId: input.correlationId,

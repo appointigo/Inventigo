@@ -42,6 +42,7 @@ export async function POST(request: Request) {
     const prepared = await prepareInvoiceDelivery(prisma, {
       organizationId: user.orgId,
       storeId,
+      transactionKind: kind,
       selection: {
         enabled: true,
         recipient: typeof body?.recipient === "string" ? body.recipient : undefined,

@@ -88,10 +88,47 @@ model Store {
   whatsappCampaignRecipients WhatsAppCampaignRecipient[]
   whatsappAutomations        WhatsAppAutomation[]
   whatsappConversations      WhatsAppConversation[]
+  invoiceSettings            StoreInvoiceSettings?
+  invoicePolicyVersions      InvoicePolicyVersion[]
 
   @@unique([code, orgId])
   @@index([orgId])
   @@map("stores")
+}
+
+model StoreInvoiceSettings {
+  id                     String                @id @default(uuid())
+  storeId                String                @unique
+  designKey              String                @default("CLASSIC")
+  designVersion          Int                   @default(1)
+  defaultWhatsAppEnabled Boolean               @default(false)
+  activePolicyVersionId  String?
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+  store                  Store                 @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  activePolicyVersion    InvoicePolicyVersion? @relation("ActiveInvoicePolicy", fields: [activePolicyVersionId], references: [id], onDelete: SetNull)
+
+  @@index([activePolicyVersionId])
+  @@map("store_invoice_settings")
+}
+
+model InvoicePolicyVersion {
+  id                 String                 @id @default(uuid())
+  storeId            String
+  version            Int
+  termsText          String?
+  returnPolicyText   String?
+  thankYouMessage    String?
+  effectiveFrom      DateTime               @default(now())
+  createdAt          DateTime               @default(now())
+  store              Store                  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  activeForSettings  StoreInvoiceSettings[] @relation("ActiveInvoicePolicy")
+  sales              Sale[]
+  returnTransactions ReturnTransaction[]
+
+  @@unique([storeId, version])
+  @@index([storeId, effectiveFrom])
+  @@map("invoice_policy_versions")
 }
 
 model User {
@@ -447,40 +484,43 @@ model PurchaseItemOption {
 }
 
 model Sale {
-  id                 String              @id @default(uuid())
-  storeId            String
-  invoiceNumber      String              @unique
-  customerName       String?
-  customerPhone      String?
-  customerEmail      String?
-  subtotal           Decimal             @db.Decimal(10, 2)
-  discountAmount     Decimal             @default(0) @db.Decimal(10, 2)
-  taxAmount          Decimal             @default(0) @db.Decimal(10, 2)
-  total              Decimal             @db.Decimal(10, 2)
-  calculatedTotal    Decimal?            @db.Decimal(10, 2)
-  roundOffAmount     Decimal?            @default(0) @db.Decimal(10, 2)
-  finalPayableAmount Decimal?            @db.Decimal(10, 2)
-  paymentMethod      PaymentMethod       @default(CASH)
-  status             SaleStatus          @default(COMPLETED)
-  paymentStatus      PaymentStatus       @default(PAID)
-  amountPaid         Decimal             @default(0) @db.Decimal(10, 2)
-  amountDue          Decimal             @default(0) @db.Decimal(10, 2)
-  returnStatus       ReturnStatus        @default(NONE)
-  promoVoided        Boolean             @default(false)
-  createdBy          String
-  transactionDate    DateTime            @default(now())
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
-  promoCodeId        String?
-  customerId         String?
-  items              SaleItem[]
-  payments           SalePayment[]
-  returnTransactions ReturnTransaction[]
-  customerVisit      CustomerVisit?
-  user               User                @relation(fields: [createdBy], references: [id])
-  customer           Customer?           @relation(fields: [customerId], references: [id])
-  promoCode          PromoCode?          @relation(fields: [promoCodeId], references: [id])
-  store              Store               @relation(fields: [storeId], references: [id])
+  id                     String                @id @default(uuid())
+  storeId                String
+  invoiceNumber          String                @unique
+  customerName           String?
+  customerPhone          String?
+  customerEmail          String?
+  subtotal               Decimal               @db.Decimal(10, 2)
+  discountAmount         Decimal               @default(0) @db.Decimal(10, 2)
+  taxAmount              Decimal               @default(0) @db.Decimal(10, 2)
+  total                  Decimal               @db.Decimal(10, 2)
+  calculatedTotal        Decimal?              @db.Decimal(10, 2)
+  roundOffAmount         Decimal?              @default(0) @db.Decimal(10, 2)
+  finalPayableAmount     Decimal?              @db.Decimal(10, 2)
+  paymentMethod          PaymentMethod         @default(CASH)
+  status                 SaleStatus            @default(COMPLETED)
+  paymentStatus          PaymentStatus         @default(PAID)
+  amountPaid             Decimal               @default(0) @db.Decimal(10, 2)
+  amountDue              Decimal               @default(0) @db.Decimal(10, 2)
+  returnStatus           ReturnStatus          @default(NONE)
+  promoVoided            Boolean               @default(false)
+  createdBy              String
+  transactionDate        DateTime              @default(now())
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+  promoCodeId            String?
+  customerId             String?
+  invoicePolicyVersionId String?
+  invoiceSnapshot        Json?
+  items                  SaleItem[]
+  payments               SalePayment[]
+  returnTransactions     ReturnTransaction[]
+  customerVisit          CustomerVisit?
+  user                   User                  @relation(fields: [createdBy], references: [id])
+  customer               Customer?             @relation(fields: [customerId], references: [id])
+  promoCode              PromoCode?            @relation(fields: [promoCodeId], references: [id])
+  store                  Store                 @relation(fields: [storeId], references: [id])
+  invoicePolicyVersion   InvoicePolicyVersion? @relation(fields: [invoicePolicyVersionId], references: [id], onDelete: SetNull)
 
   @@index([storeId])
   @@index([storeId, transactionDate])
@@ -489,6 +529,7 @@ model Sale {
   @@index([createdAt])
   @@index([status])
   @@index([promoCodeId])
+  @@index([invoicePolicyVersionId])
   @@map("sales")
 }
 
@@ -545,38 +586,41 @@ model SalePayment {
 }
 
 model ReturnTransaction {
-  id               String                  @id @default(uuid())
-  referenceNumber  String                  @unique
-  originalSaleId   String
-  storeId          String
-  customerId       String?
-  type             ReturnType
-  returnedItems    Json                    @default("[]")
-  exchangedItems   Json                    @default("[]")
-  netAmount        Decimal                 @db.Decimal(10, 2)
-  offsetAmount     Decimal                 @default(0) @db.Decimal(10, 2)
-  refundAmount     Decimal                 @db.Decimal(10, 2)
-  discountType     String?
-  discountPercent  Decimal?                @db.Decimal(5, 2)
-  discountAmount   Decimal?                @default(0) @db.Decimal(10, 2)
-  taxRate          Decimal?                @db.Decimal(5, 2)
-  calculatedTotal  Decimal?                @db.Decimal(10, 2)
-  roundOffAmount   Decimal?                @default(0) @db.Decimal(10, 2)
-  finalPayable     Decimal?                @db.Decimal(10, 2)
-  splitPaymentData Json?
-  refundMethod     String?
-  reason           String?
-  condition        String?
-  notes            String?
-  transactionDate  DateTime?
-  businessDate     DateTime                @default(now())
-  createdAt        DateTime                @default(now())
-  createdBy        String
-  items            ReturnTransactionItem[]
-  sale             Sale                    @relation(fields: [originalSaleId], references: [id])
-  customer         Customer?               @relation(fields: [customerId], references: [id])
-  user             User                    @relation(fields: [createdBy], references: [id])
-  store            Store                   @relation(fields: [storeId], references: [id])
+  id                     String                  @id @default(uuid())
+  referenceNumber        String                  @unique
+  originalSaleId         String
+  storeId                String
+  customerId             String?
+  type                   ReturnType
+  returnedItems          Json                    @default("[]")
+  exchangedItems         Json                    @default("[]")
+  netAmount              Decimal                 @db.Decimal(10, 2)
+  offsetAmount           Decimal                 @default(0) @db.Decimal(10, 2)
+  refundAmount           Decimal                 @db.Decimal(10, 2)
+  discountType           String?
+  discountPercent        Decimal?                @db.Decimal(5, 2)
+  discountAmount         Decimal?                @default(0) @db.Decimal(10, 2)
+  taxRate                Decimal?                @db.Decimal(5, 2)
+  calculatedTotal        Decimal?                @db.Decimal(10, 2)
+  roundOffAmount         Decimal?                @default(0) @db.Decimal(10, 2)
+  finalPayable           Decimal?                @db.Decimal(10, 2)
+  splitPaymentData       Json?
+  refundMethod           String?
+  reason                 String?
+  condition              String?
+  notes                  String?
+  transactionDate        DateTime?
+  businessDate           DateTime                @default(now())
+  createdAt              DateTime                @default(now())
+  createdBy              String
+  invoicePolicyVersionId String?
+  invoiceSnapshot        Json?
+  items                  ReturnTransactionItem[]
+  sale                   Sale                    @relation(fields: [originalSaleId], references: [id])
+  customer               Customer?               @relation(fields: [customerId], references: [id])
+  user                   User                    @relation(fields: [createdBy], references: [id])
+  store                  Store                   @relation(fields: [storeId], references: [id])
+  invoicePolicyVersion   InvoicePolicyVersion?   @relation(fields: [invoicePolicyVersionId], references: [id], onDelete: SetNull)
 
   @@index([originalSaleId])
   @@index([storeId])
@@ -584,6 +628,7 @@ model ReturnTransaction {
   @@index([customerId])
   @@index([businessDate])
   @@index([createdAt])
+  @@index([invoicePolicyVersionId])
   @@map("return_transactions")
 }
 
@@ -1196,19 +1241,22 @@ model StoreWhatsAppSender {
 }
 
 model StoreWhatsAppProfile {
-  id                               String                    @id @default(uuid())
-  storeId                          String                    @unique
-  displayName                      String
-  signature                        String?
-  supportPhone                     String?
-  defaultLanguage                  String                    @default("en")
-  defaultInvoiceTemplateInstanceId String?
-  createdAt                        DateTime                  @default(now())
-  updatedAt                        DateTime                  @updatedAt
-  store                            Store                     @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  defaultInvoiceTemplate           WhatsAppTemplateInstance? @relation("DefaultInvoiceTemplate", fields: [defaultInvoiceTemplateInstanceId], references: [id], onDelete: SetNull)
+  id                                       String                    @id @default(uuid())
+  storeId                                  String                    @unique
+  displayName                              String
+  signature                                String?
+  supportPhone                             String?
+  defaultLanguage                          String                    @default("en")
+  defaultInvoiceTemplateInstanceId         String?
+  defaultExchangeInvoiceTemplateInstanceId String?
+  createdAt                                DateTime                  @default(now())
+  updatedAt                                DateTime                  @updatedAt
+  store                                    Store                     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  defaultInvoiceTemplate                   WhatsAppTemplateInstance? @relation("DefaultInvoiceTemplate", fields: [defaultInvoiceTemplateInstanceId], references: [id], onDelete: SetNull)
+  defaultExchangeInvoiceTemplate           WhatsAppTemplateInstance? @relation("DefaultExchangeInvoiceTemplate", fields: [defaultExchangeInvoiceTemplateInstanceId], references: [id], onDelete: SetNull)
 
   @@index([defaultInvoiceTemplateInstanceId])
+  @@index([defaultExchangeInvoiceTemplateInstanceId])
   @@map("store_whatsapp_profiles")
 }
 
@@ -1245,24 +1293,25 @@ model WhatsAppTemplateDefinition {
 }
 
 model WhatsAppTemplateInstance {
-  id                      String                      @id @default(uuid())
-  definitionId            String
-  wabaId                  String
-  metaTemplateId          String?                     @unique
-  metaTemplateName        String
-  status                  WhatsAppTemplateStatus      @default(DRAFT)
-  rejectionReason         String?
-  submittedAt             DateTime?
-  approvedAt              DateTime?
-  rejectedAt              DateTime?
-  lastSyncedAt            DateTime?
-  createdAt               DateTime                    @default(now())
-  updatedAt               DateTime                    @updatedAt
-  definition              WhatsAppTemplateDefinition  @relation(fields: [definitionId], references: [id], onDelete: Restrict)
-  waba                    WhatsAppBusinessAccount     @relation(fields: [wabaId], references: [id], onDelete: Cascade)
-  messages                WhatsAppMessage[]
-  campaignRecipients      WhatsAppCampaignRecipient[]
-  defaultForStoreProfiles StoreWhatsAppProfile[]      @relation("DefaultInvoiceTemplate")
+  id                              String                      @id @default(uuid())
+  definitionId                    String
+  wabaId                          String
+  metaTemplateId                  String?                     @unique
+  metaTemplateName                String
+  status                          WhatsAppTemplateStatus      @default(DRAFT)
+  rejectionReason                 String?
+  submittedAt                     DateTime?
+  approvedAt                      DateTime?
+  rejectedAt                      DateTime?
+  lastSyncedAt                    DateTime?
+  createdAt                       DateTime                    @default(now())
+  updatedAt                       DateTime                    @updatedAt
+  definition                      WhatsAppTemplateDefinition  @relation(fields: [definitionId], references: [id], onDelete: Restrict)
+  waba                            WhatsAppBusinessAccount     @relation(fields: [wabaId], references: [id], onDelete: Cascade)
+  messages                        WhatsAppMessage[]
+  campaignRecipients              WhatsAppCampaignRecipient[]
+  defaultForStoreProfiles         StoreWhatsAppProfile[]      @relation("DefaultInvoiceTemplate")
+  defaultForExchangeStoreProfiles StoreWhatsAppProfile[]      @relation("DefaultExchangeInvoiceTemplate")
 
   @@unique([wabaId, definitionId])
   @@index([wabaId, status])

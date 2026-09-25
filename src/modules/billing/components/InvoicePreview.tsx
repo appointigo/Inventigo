@@ -143,14 +143,17 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
       merchant: { name: storeName },
       kind: invoiceTarget === "SALE" ? "SALE" : "EXCHANGE",
       returnTransactionId: invoiceTarget === "SALE" ? undefined : invoiceTarget,
+      configuration: invoiceTarget === "SALE"
+        ? sale.invoiceSnapshot
+        : sale.returnTransactions.find(item => item.id === invoiceTarget)?.invoiceSnapshot,
     }));
     printWindow.document.close();
     printWindow.addEventListener("load", () => printWindow.print(), { once: true });
   };
 
   const sendFromHistory = async () => {
-    if (!storeId || !whatsappInvoice.recipient || !whatsappInvoice.templateInstanceId || !whatsappInvoice.consentConfirmed) {
-      message.error("Confirm the recipient, template, and customer authorization first.");
+    if (!storeId || !whatsappInvoice.recipient || !whatsappInvoice.consentConfirmed) {
+      message.error("Confirm the invoice recipient first.");
       return;
     }
     const [kind, transactionId] = invoiceTarget === "SALE"
@@ -163,7 +166,7 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
         const response = await fetch("/api/whatsapp/invoices", {
           method: "POST",
           headers: { "Content-Type": "application/json", "x-request-id": requestId },
-          body: JSON.stringify({ kind, transactionId, storeId, recipient: whatsappInvoice.recipient, templateInstanceId: whatsappInvoice.templateInstanceId, consentConfirmed: true }),
+          body: JSON.stringify({ kind, transactionId, storeId, recipient: whatsappInvoice.recipient, consentConfirmed: true }),
         });
         const body = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(body.error || "Invoice could not be queued");
@@ -500,7 +503,7 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
               ]}
             />
           ) : null}
-          <WhatsAppInvoiceSelector storeId={storeId} recipient={sale.customerPhone ?? ""} value={whatsappInvoice} onChange={setWhatsappInvoice} />
+          <WhatsAppInvoiceSelector storeId={storeId} recipient={sale.customerPhone ?? ""} value={whatsappInvoice} onChange={setWhatsappInvoice} transactionKind={invoiceTarget === "SALE" ? "SALE" : "EXCHANGE"} />
           {latestInvoiceAttempt ? (
             <Alert
               type={latestInvoiceAttempt.status === "FAILED" ? "error" : latestInvoiceAttempt.status === "DELIVERED" || latestInvoiceAttempt.status === "READ" ? "success" : "info"}

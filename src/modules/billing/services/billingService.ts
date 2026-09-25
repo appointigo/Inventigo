@@ -11,6 +11,7 @@ import {
   getHistoricalUnitAmount,
   normalizeSaleCompatibility,
 } from "../utils/saleCompatibility";
+import { resolveInvoiceConfigurationSnapshot } from "@/modules/invoice-management/services/invoiceManagementService";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -325,6 +326,7 @@ type ReturnTransactionRecord = {
   transactionDate?: Date | string | null;
   businessDate?: Date | string | null;
   createdAt?: Date | string | null;
+  invoiceSnapshot?: Prisma.JsonValue | null;
 };
 
 type LegacyReturnTransactionItems = {
@@ -434,6 +436,7 @@ const toReturnTransactionDto = (
         ? rt.businessDate.toISOString()
         : (rt.businessDate ?? undefined),
     createdAt: rt.createdAt instanceof Date ? rt.createdAt.toISOString() : rt.createdAt,
+    invoiceSnapshot: rt.invoiceSnapshot ?? undefined,
   };
 };
 
@@ -604,6 +607,7 @@ const toSaleDto = (rawSale: any): Sale => {
     transactionDate:
       s.transactionDate instanceof Date ? s.transactionDate.toISOString() : s.transactionDate,
     createdAt: s.createdAt instanceof Date ? s.createdAt.toISOString() : s.createdAt,
+    invoiceSnapshot: s.invoiceSnapshot ?? undefined,
   };
 };
 
@@ -698,9 +702,11 @@ export const billingService = {
     const preparedInvoiceDelivery = await prepareInvoiceDelivery(prisma, {
       organizationId: orgId,
       storeId,
+      transactionKind: "SALE",
       selection: input.whatsappInvoice,
       correlationId: diagnostic?.correlationId,
     });
+    const invoiceConfiguration = await resolveInvoiceConfigurationSnapshot(prisma, orgId, storeId);
 
     // Server-side promo validation — never trust client discountAmount when a promo is applied
     let discountAmount = input.discountAmount;
@@ -797,6 +803,8 @@ export const billingService = {
               storeId,
               invoiceNumber,
               customerId: customer.id,
+              invoicePolicyVersionId: invoiceConfiguration.policyVersionId,
+              invoiceSnapshot: invoiceConfiguration as Prisma.InputJsonValue,
               customerName: customer.name,
               customerPhone: customer.mobile,
               customerEmail: customer.email,
@@ -1724,9 +1732,11 @@ export const billingService = {
     const preparedInvoiceDelivery = await prepareInvoiceDelivery(prisma, {
       organizationId: orgId,
       storeId: sale.storeId,
+      transactionKind: "EXCHANGE",
       selection: input.whatsappInvoice,
       correlationId: diagnostic?.correlationId,
     });
+    const invoiceConfiguration = await resolveInvoiceConfigurationSnapshot(prisma, orgId, sale.storeId);
     if (sale.status !== "COMPLETED") {
       throw new Error("Only completed sales can be returned or exchanged");
     }
@@ -1896,6 +1906,8 @@ export const billingService = {
             transactionDate,
             businessDate,
             createdBy: userId,
+            invoicePolicyVersionId: invoiceConfiguration.policyVersionId,
+            invoiceSnapshot: invoiceConfiguration as Prisma.InputJsonValue,
           };
 
           if (hasReturnItemsTable) {
