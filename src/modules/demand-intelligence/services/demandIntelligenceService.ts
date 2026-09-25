@@ -121,6 +121,12 @@ async function validateReferences(
   });
 }
 
+async function validateCustomer(orgId: string, customerId?: string) {
+  if (!customerId) return;
+  const customer = await prisma.customer.findFirst({ where: { id: customerId, orgId }, select: { id: true } });
+  if (!customer) throw new DemandAccessError("Customer access denied");
+}
+
 const visitInclude = {
   demandRequests: {
     include: {
@@ -140,6 +146,7 @@ export const demandIntelligenceService = {
     input: CustomerVisitInput
   ) {
     await ensureStoreAccess(orgId, userStoreId, input.storeId);
+    await validateCustomer(orgId, input.customerId);
     if (input.idempotencyKey) {
       const existing = await prisma.customerVisit.findFirst({
         where: { idempotencyKey: input.idempotencyKey, orgId, storeId: input.storeId },
@@ -148,10 +155,11 @@ export const demandIntelligenceService = {
       if (existing) return existing;
     }
     await validateReferences(orgId, input.storeId, input.requests, input.linkedSaleId);
-    return prisma.customerVisit.create({
-      data: {
+    return prisma.$transaction(async (tx) => {
+      const visit = await tx.customerVisit.create({ data: {
         orgId,
         storeId: input.storeId,
+        customerId: input.customerId,
         visitedAt: input.visitedAt ? new Date(input.visitedAt) : undefined,
         outcome: input.outcome,
         linkedSaleId: input.linkedSaleId,
@@ -176,6 +184,9 @@ export const demandIntelligenceService = {
         },
       },
       include: visitInclude,
+      });
+      if (input.customerId) await tx.customer.update({ where: { id: input.customerId }, data: { lastVisitAt: input.visitedAt ? new Date(input.visitedAt) : new Date() } });
+      return visit;
     });
   },
 
@@ -205,6 +216,7 @@ export const demandIntelligenceService = {
     input: Partial<Omit<CustomerVisitInput, "storeId" | "idempotencyKey">>
   ) {
     const existing = await this.get(orgId, userStoreId, id);
+    await validateCustomer(orgId, input.customerId);
     const finalOutcome = input.outcome ?? existing.outcome;
     const finalRequestCount = input.requests?.length ?? existing.demandRequests.length;
     if (
@@ -229,6 +241,7 @@ export const demandIntelligenceService = {
           linkedSaleId: input.linkedSaleId,
           source: input.source,
           notes: input.notes,
+          customerId: input.customerId,
           ...(input.requests
             ? {
                 demandRequests: {

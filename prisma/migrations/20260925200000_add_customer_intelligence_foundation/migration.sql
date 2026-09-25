@@ -1,0 +1,16 @@
+CREATE TYPE "CustomerFollowUpType" AS ENUM ('GENERAL', 'REPEAT_PURCHASE', 'AT_RISK', 'RESTOCK', 'RETURN_RESOLUTION');
+CREATE TYPE "CustomerFollowUpStatus" AS ENUM ('OPEN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED');
+ALTER TABLE "customers" ADD COLUMN "preferredStoreId" TEXT, ADD COLUMN "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE "customer_visits" ADD COLUMN "customerId" TEXT;
+CREATE TABLE "customer_follow_ups" ("id" TEXT NOT NULL, "orgId" TEXT NOT NULL, "customerId" TEXT NOT NULL, "storeId" TEXT NOT NULL, "assignedUserId" TEXT, "type" "CustomerFollowUpType" NOT NULL, "status" "CustomerFollowUpStatus" NOT NULL DEFAULT 'OPEN', "reason" TEXT, "note" TEXT, "dueAt" TIMESTAMP(3), "completedAt" TIMESTAMP(3), "dedupeKey" TEXT, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL, CONSTRAINT "customer_follow_ups_pkey" PRIMARY KEY ("id"));
+CREATE UNIQUE INDEX "customer_follow_ups_dedupeKey_key" ON "customer_follow_ups"("dedupeKey");
+CREATE INDEX "customers_orgId_preferredStoreId_idx" ON "customers"("orgId", "preferredStoreId");
+CREATE INDEX "customer_visits_orgId_customerId_visitedAt_idx" ON "customer_visits"("orgId", "customerId", "visitedAt");
+CREATE INDEX "customer_follow_ups_orgId_storeId_status_dueAt_idx" ON "customer_follow_ups"("orgId", "storeId", "status", "dueAt");
+CREATE INDEX "customer_follow_ups_customerId_createdAt_idx" ON "customer_follow_ups"("customerId", "createdAt");
+ALTER TABLE "customers" ADD CONSTRAINT "customers_preferredStoreId_fkey" FOREIGN KEY ("preferredStoreId") REFERENCES "stores"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "customer_visits" ADD CONSTRAINT "customer_visits_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "customers"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "customer_follow_ups" ADD CONSTRAINT "customer_follow_ups_orgId_fkey" FOREIGN KEY ("orgId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "customer_follow_ups" ADD CONSTRAINT "customer_follow_ups_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "customers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "customer_follow_ups" ADD CONSTRAINT "customer_follow_ups_storeId_fkey" FOREIGN KEY ("storeId") REFERENCES "stores"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "customer_follow_ups" ADD CONSTRAINT "customer_follow_ups_assignedUserId_fkey" FOREIGN KEY ("assignedUserId") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;

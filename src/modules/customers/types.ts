@@ -13,6 +13,8 @@ export type CustomerDto = {
   tags: string[];
   metadata: Record<string, unknown> | null;
   createdAt: string;
+  preferredStoreId: string | null;
+  preferredStoreName: string | null;
 };
 
 export type CustomerStatsDto = {
@@ -31,6 +33,10 @@ export type CustomerSaleSummaryDto = {
 
 export type CustomerDetailDto = CustomerDto & {
   sales: CustomerSaleSummaryDto[];
+  firstPurchaseDate: string | null;
+  insights: { topCategories: string[]; commonSizes: string[]; preferredBrands: string[] };
+  demandRequests: Array<{ id: string; visitId: string; storeName: string; requirement: string; reason: string; status: string; requestedQuantity: number; fulfilledQuantity: number; attributes: Record<string, unknown>; createdAt: string; followUpStatus: string | null; restockAvailable: boolean }>;
+  followUps: Array<{ id: string; title: string; type: string; status: string; priority: string; reason: string | null; note: string | null; dueAt: string | null; storeName: string; assigneeName: string | null }>;
 };
 
 export type CustomerListItemDto = {
@@ -42,6 +48,11 @@ export type CustomerListItemDto = {
   avgOrderValue: number;
   lastVisitAt: string | null;
   isInactive: boolean;
+  preferredStoreId: string | null;
+  preferredStoreName: string | null;
+  segment: "Recent" | "Repeat" | "High Value" | "At Risk" | "Lead" | "Inactive";
+  relationshipStatus: "Active" | "Cooling" | "Inactive";
+  lastPurchaseAt: string | null;
 };
 
 export type CustomerListType = "all" | "recent" | "high_spenders" | "inactive";
@@ -61,4 +72,5 @@ export type CustomerUpsertInput = {
   notes?: string | null;
   tags?: string[];
   metadata?: Record<string, unknown> | null;
+  preferredStoreId?: string | null;
 };

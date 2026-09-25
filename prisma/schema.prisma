@@ -46,6 +46,7 @@ model Organization {
   whatsappAutomations         WhatsAppAutomation[]
   whatsappConversations       WhatsAppConversation[]
   whatsappWebhookEvents       WhatsAppWebhookEvent[]
+  customerFollowUps           CustomerFollowUp[]
 
   @@map("organizations")
 }
@@ -90,6 +91,8 @@ model Store {
   whatsappConversations      WhatsAppConversation[]
   invoiceSettings            StoreInvoiceSettings?
   invoicePolicyVersions      InvoicePolicyVersion[]
+  preferredCustomers         Customer[]                  @relation("PreferredCustomerStore")
+  customerFollowUps          CustomerFollowUp[]
 
   @@unique([code, orgId])
   @@index([orgId])
@@ -137,33 +140,35 @@ model InvoicePolicyVersion {
 }
 
 model User {
-  id                 String              @id @default(uuid())
-  orgId              String?
-  name               String
-  email              String              @unique
-  passwordHash       String
-  role               Role                @default(STAFF)
-  storeId            String?
-  isActive           Boolean             @default(true)
-  emailVerified      Boolean             @default(false)
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
-  createdColors      Color[]
-  sentInvitations    Invitation[]        @relation("SentInvitations")
-  leaveBalances      LeaveBalance[]
-  reviewedLeaves     LeaveRequest[]      @relation("LeaveReviewer")
-  leaveRequests      LeaveRequest[]      @relation("LeaveRequester")
-  purchaseOrders     PurchaseOrder[]
-  purchases          Purchase[]
-  sales              Sale[]
-  salePayments       SalePayment[]
-  returnTransactions ReturnTransaction[]
-  attendances        StaffAttendance[]
-  stockMovements     StockMovement[]
-  createdVisits      CustomerVisit[]     @relation("VisitCreator")
-  storeExpenses      StoreExpense[]
-  org                Organization?       @relation(fields: [orgId], references: [id])
-  store              Store?              @relation(fields: [storeId], references: [id])
+  id                        String              @id @default(uuid())
+  orgId                     String?
+  name                      String
+  email                     String              @unique
+  passwordHash              String
+  role                      Role                @default(STAFF)
+  storeId                   String?
+  isActive                  Boolean             @default(true)
+  emailVerified             Boolean             @default(false)
+  createdAt                 DateTime            @default(now())
+  updatedAt                 DateTime            @updatedAt
+  createdColors             Color[]
+  sentInvitations           Invitation[]        @relation("SentInvitations")
+  leaveBalances             LeaveBalance[]
+  reviewedLeaves            LeaveRequest[]      @relation("LeaveReviewer")
+  leaveRequests             LeaveRequest[]      @relation("LeaveRequester")
+  purchaseOrders            PurchaseOrder[]
+  purchases                 Purchase[]
+  sales                     Sale[]
+  salePayments              SalePayment[]
+  returnTransactions        ReturnTransaction[]
+  attendances               StaffAttendance[]
+  stockMovements            StockMovement[]
+  createdVisits             CustomerVisit[]     @relation("VisitCreator")
+  assignedCustomerFollowUps CustomerFollowUp[]
+  createdCustomerFollowUps  CustomerFollowUp[]  @relation("FollowUpCreator")
+  storeExpenses             StoreExpense[]
+  org                       Organization?       @relation(fields: [orgId], references: [id])
+  store                     Store?              @relation(fields: [storeId], references: [id])
 
   @@index([orgId])
   @@map("users")
@@ -676,40 +681,89 @@ model Customer {
   tags               String[]            @default([])
   metadata           Json?
   createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  preferredStoreId   String?
   org                Organization        @relation(fields: [orgId], references: [id])
   sales              Sale[]
   returnTransactions ReturnTransaction[]
   whatsappContact    WhatsAppContact?
+  preferredStore     Store?              @relation("PreferredCustomerStore", fields: [preferredStoreId], references: [id], onDelete: SetNull)
+  visits             CustomerVisit[]
+  followUps          CustomerFollowUp[]
 
   @@unique([orgId, mobile])
   @@index([orgId])
   @@index([mobile])
+  @@index([orgId, preferredStoreId])
   @@map("customers")
 }
 
 model CustomerVisit {
-  id             String          @id @default(uuid())
+  id             String             @id @default(uuid())
   orgId          String
   storeId        String
-  visitedAt      DateTime        @default(now())
+  visitedAt      DateTime           @default(now())
   outcome        VisitOutcome
-  linkedSaleId   String?         @unique
+  linkedSaleId   String?            @unique
   source         String?
   notes          String?
   createdBy      String?
-  idempotencyKey String?         @unique
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  org            Organization    @relation(fields: [orgId], references: [id])
-  store          Store           @relation(fields: [storeId], references: [id])
-  linkedSale     Sale?           @relation(fields: [linkedSaleId], references: [id])
-  creator        User?           @relation("VisitCreator", fields: [createdBy], references: [id])
+  customerId     String?
+  idempotencyKey String?            @unique
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  org            Organization       @relation(fields: [orgId], references: [id])
+  store          Store              @relation(fields: [storeId], references: [id])
+  linkedSale     Sale?              @relation(fields: [linkedSaleId], references: [id])
+  creator        User?              @relation("VisitCreator", fields: [createdBy], references: [id])
+  customer       Customer?          @relation(fields: [customerId], references: [id], onDelete: SetNull)
   demandRequests DemandRequest[]
+  followUps      CustomerFollowUp[]
 
   @@index([orgId])
   @@index([storeId, visitedAt])
   @@index([outcome])
+  @@index([orgId, customerId, visitedAt])
   @@map("customer_visits")
+}
+
+model CustomerFollowUp {
+  id              String                   @id @default(uuid())
+  orgId           String
+  customerId      String
+  storeId         String
+  assignedUserId  String?
+  createdBy       String
+  visitId         String?
+  demandRequestId String?
+  type            CustomerFollowUpType
+  status          CustomerFollowUpStatus   @default(OPEN)
+  priority        CustomerFollowUpPriority @default(NORMAL)
+  title           String
+  description     String?
+  reason          String?
+  note            String?
+  dueAt           DateTime?
+  completedAt     DateTime?
+  lastContactedAt DateTime?
+  sourceReference String?
+  dedupeKey       String?                  @unique
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  org             Organization             @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  customer        Customer                 @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  store           Store                    @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  assignee        User?                    @relation(fields: [assignedUserId], references: [id], onDelete: SetNull)
+  creator         User                     @relation("FollowUpCreator", fields: [createdBy], references: [id], onDelete: Restrict)
+  visit           CustomerVisit?           @relation(fields: [visitId], references: [id], onDelete: SetNull)
+  demandRequest   DemandRequest?           @relation(fields: [demandRequestId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, storeId, status, dueAt])
+  @@index([customerId, createdAt])
+  @@index([visitId])
+  @@index([demandRequestId])
+  @@index([createdBy])
+  @@map("customer_follow_ups")
 }
 
 model DemandRequest {
@@ -734,6 +788,7 @@ model DemandRequest {
   category          Category?           @relation(fields: [categoryId], references: [id])
   brand             Brand?              @relation(fields: [brandId], references: [id])
   product           Product?            @relation(fields: [productId], references: [id])
+  followUps         CustomerFollowUp[]
 
   @@index([storeId, createdAt])
   @@index([visitId])
@@ -1736,6 +1791,28 @@ enum VisitOutcome {
   NOT_CONVERTED
   PARTIALLY_CONVERTED
   BROWSING
+}
+
+enum CustomerFollowUpType {
+  GENERAL
+  REPEAT_PURCHASE
+  AT_RISK
+  RESTOCK
+  RETURN_RESOLUTION
+  OTHER
+}
+
+enum CustomerFollowUpPriority {
+  LOW
+  NORMAL
+  HIGH
+}
+
+enum CustomerFollowUpStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
 }
 
 enum DemandRequestStatus {

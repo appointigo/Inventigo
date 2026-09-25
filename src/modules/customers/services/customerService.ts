@@ -11,7 +11,7 @@ import type {
 import { syncWhatsAppContactForCustomer } from "@/modules/whatsapp/services/WhatsAppContactService";
 
 const RECENT_DAYS = 7;
-const INACTIVE_DAYS = 60;
+const INACTIVE_DAYS = 180;
 const DEFAULT_HIGH_SPENDER_THRESHOLD = 10000;
 
 const normalizeMobile = (value: string): string => {
@@ -101,11 +101,13 @@ const toCustomerDto = (row: any): CustomerDto => ({
       tags: Array.isArray(row.tags) ? row.tags : [],
       metadata: toMetadataObject(row.metadata),
       createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
+      preferredStoreId: row.preferredStoreId ?? null,
+      preferredStoreName: row.preferredStore?.name ?? null,
     };
   })(),
 });
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+/* eslint-disable @typescript-eslint/no-explicit-any -- Prisma detail projection is normalized at this API boundary. */
 const toCustomerDetailDto = (row: any): CustomerDetailDto => ({
   ...toCustomerDto(row),
   sales: (row.sales ?? []).map((sale: any) => ({
@@ -115,7 +117,18 @@ const toCustomerDetailDto = (row: any): CustomerDetailDto => ({
     status: sale.status,
     createdAt: sale.transactionDate instanceof Date ? sale.transactionDate.toISOString() : sale.transactionDate,
   })),
+  firstPurchaseDate: row.sales?.length ? row.sales[row.sales.length - 1].transactionDate.toISOString() : null,
+  insights: {
+    topCategories: topValues((row.sales ?? []).flatMap((sale: any) => sale.items ?? []).map((item: any) => item.product?.category?.name)),
+    commonSizes: topValues((row.sales ?? []).flatMap((sale: any) => sale.items ?? []).map((item: any) => item.size?.label)),
+    preferredBrands: topValues((row.sales ?? []).flatMap((sale: any) => sale.items ?? []).map((item: any) => item.product?.brand?.name)),
+  },
+  demandRequests: (row.visits ?? []).flatMap((visit: any) => (visit.demandRequests ?? []).map((request: any) => { const attributes = toMetadataObject(request.attributes) ?? {}; const requestedSize = typeof attributes.size === "string" ? attributes.size.toLocaleLowerCase("en-IN") : null; return { id: request.id, visitId: visit.id, storeName: visit.store?.name ?? "Unknown store", requirement: request.product?.name || request.category?.name || "Customer request", reason: request.reasonCode, status: request.status, requestedQuantity: request.requestedQuantity, fulfilledQuantity: request.fulfilledQuantity, attributes, createdAt: request.createdAt.toISOString(), followUpStatus: request.followUps?.[0]?.status ?? null, restockAvailable: Boolean(request.productId && request.product?.stockEntries?.some((entry: any) => entry.quantity > 0 && entry.storeId === visit.storeId && (!requestedSize || entry.size?.label?.toLocaleLowerCase("en-IN") === requestedSize))) }; })),
+  followUps: (row.followUps ?? []).map((item: any) => ({ id: item.id, title: item.title, type: item.type, status: item.status, priority: item.priority, reason: item.reason, note: item.note, dueAt: item.dueAt?.toISOString() ?? null, storeName: item.store?.name ?? "Unknown store", assigneeName: item.assignee?.name ?? null })),
 });
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
+const topValues = (values: Array<string | null | undefined>) => [...values.filter((value): value is string => Boolean(value)).reduce((counts, value) => counts.set(value, (counts.get(value) ?? 0) + 1), new Map<string, number>())].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([value]) => value);
 
 export const customerService = {
   normalizeMobile,
@@ -124,11 +137,16 @@ export const customerService = {
     orgId: string,
     mobileRaw: string,
     name?: string,
-    email?: string
+    email?: string,
+    preferredStoreId?: string
   ): Promise<CustomerDto> {
     const mobile = normalizeMobile(mobileRaw);
     const cleanName = normalizeOptionalText(name);
     const cleanEmail = normalizeOptionalText(email);
+    if (preferredStoreId) {
+      const store = await prisma.store.findFirst({ where: { id: preferredStoreId, orgId, isActive: true }, select: { id: true } });
+      if (!store) throw new Error("Invalid preferred store");
+    }
 
     const existing = await prisma.customer.findUnique({
       where: { orgId_mobile: { orgId, mobile } },
@@ -144,6 +162,7 @@ export const customerService = {
           data: {
             ...(cleanName !== undefined ? { name: cleanName } : {}),
             ...(cleanEmail !== undefined ? { email: cleanEmail } : {}),
+            ...(!existing.preferredStoreId && preferredStoreId ? { preferredStoreId } : {}),
           },
         });
         await syncWhatsAppContactForCustomer({ organizationId: orgId, customerId: updated.id, phone: updated.mobile });
@@ -159,6 +178,7 @@ export const customerService = {
         name: cleanName ?? null,
         mobile,
         email: cleanEmail ?? null,
+        preferredStoreId: preferredStoreId ?? null,
       },
     });
 
@@ -240,6 +260,8 @@ export const customerService = {
           totalSpent: true,
           totalVisits: true,
           lastVisitAt: true,
+          preferredStoreId: true,
+          preferredStore: { select: { name: true } },
         },
       }),
       prisma.customer.count({ where }),
@@ -260,6 +282,11 @@ export const customerService = {
           avgOrderValue: totalVisits > 0 ? totalSpent / totalVisits : 0,
           lastVisitAt,
           isInactive,
+          preferredStoreId: row.preferredStoreId,
+          preferredStoreName: row.preferredStore?.name ?? null,
+          segment: totalVisits === 0 ? "Lead" : totalSpent > highSpenderThreshold ? "High Value" : totalVisits >= 2 ? "Repeat" : isInactive ? "Inactive" : "Recent",
+          relationshipStatus: !row.lastVisitAt || row.lastVisitAt < inactiveCutoff ? "Inactive" : row.lastVisitAt < new Date(Date.now() - 90 * 86_400_000) ? "Cooling" : "Active",
+          lastPurchaseAt: lastVisitAt,
         };
       }),
       total,
@@ -272,6 +299,7 @@ export const customerService = {
     const row = await prisma.customer.findFirst({
       where: { id: customerId, orgId },
       include: {
+        preferredStore: { select: { name: true } },
         sales: {
           orderBy: { transactionDate: "desc" },
           select: {
@@ -281,9 +309,12 @@ export const customerService = {
             status: true,
             transactionDate: true,
             createdAt: true,
+            items: { select: { product: { select: { category: { select: { name: true } }, brand: { select: { name: true } } } }, size: { select: { label: true } } } },
           },
           take: 50,
         },
+        visits: { orderBy: { visitedAt: "desc" }, take: 20, include: { store: { select: { name: true } }, demandRequests: { include: { product: { select: { name: true, stockEntries: { where: { quantity: { gt: 0 } }, select: { quantity: true, storeId: true, size: { select: { label: true } } } } } }, category: { select: { name: true } }, followUps: { where: { status: { in: ["OPEN", "IN_PROGRESS"] } }, select: { status: true }, take: 1 } } } } },
+        followUps: { orderBy: { createdAt: "desc" }, take: 20, include: { store: { select: { name: true } }, assignee: { select: { name: true } } } },
       },
     });
 
@@ -303,6 +334,8 @@ export const customerService = {
     const dateOfBirth = normalizeDateOfBirth(input.dateOfBirth);
     const tags = normalizeTags(input.tags);
     const metadata = normalizeMetadata(input.metadata);
+    const preferredStoreId = input.preferredStoreId ?? null;
+    if (preferredStoreId && !await prisma.store.findFirst({ where: { id: preferredStoreId, orgId }, select: { id: true } })) throw new Error("Invalid preferred store");
 
     try {
       const row = await prisma.customer.create({
@@ -315,6 +348,7 @@ export const customerService = {
           dateOfBirth: dateOfBirth ?? null,
           ...(tags !== undefined ? { tags } : {}),
           ...(metadata !== undefined ? { metadata } : {}),
+          preferredStoreId,
         },
       });
       await syncWhatsAppContactForCustomer({ organizationId: orgId, customerId: row.id, phone: row.mobile });
@@ -356,6 +390,7 @@ export const customerService = {
     const dateOfBirth = normalizeDateOfBirth(input.dateOfBirth);
     const tags = normalizeTags(input.tags);
     const metadata = normalizeMetadata(input.metadata);
+    if (input.preferredStoreId && !await prisma.store.findFirst({ where: { id: input.preferredStoreId, orgId }, select: { id: true } })) throw new Error("Invalid preferred store");
 
     const updated = await prisma.customer.update({
       where: { id: existing.id },
@@ -367,6 +402,7 @@ export const customerService = {
         ...(dateOfBirth !== undefined ? { dateOfBirth } : {}),
         ...(tags !== undefined ? { tags } : {}),
         ...(metadata !== undefined ? { metadata } : {}),
+        ...(input.preferredStoreId !== undefined ? { preferredStoreId: input.preferredStoreId } : {}),
       },
     });
 

@@ -1,100 +1,17 @@
 "use client";
-
-import { Button, Card, Descriptions, Empty, Space, Table, Tag, Typography } from "antd";
+import { CalendarOutlined, EditOutlined, FlagOutlined, UserOutlined } from "@ant-design/icons";
+import { Avatar, Button, Card, Descriptions, Empty, List, Space, Statistic, Table, Tabs, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { CustomerDetailDto, CustomerSaleSummaryDto } from "../types";
-
-type CustomerDetailViewProps = {
-  customer: CustomerDetailDto | null;
-  loading: boolean;
-  onEdit: () => void;
-};
-
-export default function CustomerDetailView({ customer, loading, onEdit }: CustomerDetailViewProps) {
-  const salesColumns: ColumnsType<CustomerSaleSummaryDto> = [
-    {
-      title: "Invoice",
-      dataIndex: "invoiceNumber",
-      width: 170,
-    },
-    {
-      title: "Amount",
-      dataIndex: "total",
-      width: 120,
-      align: "right",
-      render: (value: number) => `Rs ${value.toFixed(2)}`,
-    },
-    {
-      title: "Status",
-      dataIndex: "status",
-      width: 120,
-      render: (status: string) => <Tag color={status === "COMPLETED" ? "green" : "orange"}>{status}</Tag>,
-    },
-    {
-      title: "Date",
-      dataIndex: "createdAt",
-      width: 130,
-      render: (value: string) => new Date(value).toLocaleDateString("en-IN"),
-    },
-  ];
-
-  if (!customer) {
-    return (
-      <Card title="Customer Details" loading={loading}>
-        <Empty description="Select a customer to view details" />
-      </Card>
-    );
-  }
-
-  return (
-    <Space orientation="vertical" size={16} style={{ width: "100%" }}>
-      <Card
-        title="Customer Details"
-        extra={<Button onClick={onEdit}>Edit</Button>}
-        loading={loading}
-      >
-        <Descriptions column={1} size="small" bordered>
-          <Descriptions.Item label="Name">{customer.name || "-"}</Descriptions.Item>
-          <Descriptions.Item label="Mobile">{customer.mobile}</Descriptions.Item>
-          <Descriptions.Item label="Email">{customer.email || "-"}</Descriptions.Item>
-          <Descriptions.Item label="Date of Birth">
-            {customer.dateOfBirth ? new Date(customer.dateOfBirth).toLocaleDateString("en-IN") : "-"}
-          </Descriptions.Item>
-          <Descriptions.Item label="Last Visit">
-            {customer.lastVisitAt ? new Date(customer.lastVisitAt).toLocaleString("en-IN") : "-"}
-          </Descriptions.Item>
-          <Descriptions.Item label="Total Visits">{customer.totalVisits}</Descriptions.Item>
-          <Descriptions.Item label="Avg Order Value">Rs {customer.avgOrderValue.toFixed(2)}</Descriptions.Item>
-          <Descriptions.Item label="Status">{customer.isInactive ? "🔴 Inactive" : "🟢 Active"}</Descriptions.Item>
-          <Descriptions.Item label="Total Spent">Rs {customer.totalSpent.toFixed(2)}</Descriptions.Item>
-          <Descriptions.Item label="Notes">{customer.notes || "-"}</Descriptions.Item>
-          <Descriptions.Item label="Tags">
-            {customer.tags.length ? customer.tags.map((tag) => <Tag key={tag}>{tag}</Tag>) : "-"}
-          </Descriptions.Item>
-          <Descriptions.Item label="Dynamic Fields">
-            {customer.metadata && Object.keys(customer.metadata).length ? (
-              Object.entries(customer.metadata).map(([key, value]) => (
-                <div key={key}>
-                  <Typography.Text strong>{key}: </Typography.Text>
-                  <Typography.Text>{String(value)}</Typography.Text>
-                </div>
-              ))
-            ) : (
-              "-"
-            )}
-          </Descriptions.Item>
-        </Descriptions>
-      </Card>
-
-      <Card title="Recent Sales" loading={loading}>
-        <Table<CustomerSaleSummaryDto>
-          rowKey="id"
-          size="small"
-          columns={salesColumns}
-          dataSource={customer.sales}
-          pagination={{ pageSize: 5 }}
-        />
-      </Card>
-    </Space>
-  );
+type Props = { customer: CustomerDetailDto | null; loading: boolean; onEdit: () => void; onRecordVisit: () => void; onCreateFollowUp: () => void; onFollowUpUpdated: () => void };
+const money = (value: number) => `₹${value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const InsightBlock = ({ title, values }: { title: string; values: string[] }) => <Card size="small" title={title} style={{ height: "100%" }}>{values.length ? <Space wrap>{values.map(value => <Tag key={value}>{value}</Tag>)}</Space> : <Typography.Text type="secondary">No sufficient data</Typography.Text>}</Card>;
+export default function CustomerDetailView({ customer, loading, onEdit, onRecordVisit, onCreateFollowUp, onFollowUpUpdated }: Props) {
+  if (!customer) return <Card loading={loading} style={{ borderRadius: 14 }}><Empty description="Select a customer to view their profile" /></Card>;
+  const lastPurchase = customer.sales[0]?.createdAt ?? null;
+  const salesColumns: ColumnsType<CustomerSaleSummaryDto> = [{ title: "Invoice", dataIndex: "invoiceNumber" }, { title: "Amount", dataIndex: "total", align: "right", render: money }, { title: "Status", dataIndex: "status", render: value => <Tag color={value === "COMPLETED" ? "green" : "orange"}>{value}</Tag> }, { title: "Date", dataIndex: "createdAt", render: value => new Date(value).toLocaleDateString("en-IN") }];
+  const overview = <Space direction="vertical" size={16} style={{ width: "100%" }}><Card size="small" title="Basic information"><Descriptions column={1} size="small"><Descriptions.Item label="Name">{customer.name || "—"}</Descriptions.Item><Descriptions.Item label="Mobile">{customer.mobile}</Descriptions.Item><Descriptions.Item label="Email">{customer.email || "—"}</Descriptions.Item><Descriptions.Item label="Date of birth">{customer.dateOfBirth ? new Date(customer.dateOfBirth).toLocaleDateString("en-IN") : "—"}</Descriptions.Item><Descriptions.Item label="Preferred store">{customer.preferredStoreName || "Unassigned"}</Descriptions.Item><Descriptions.Item label="First purchase">{customer.firstPurchaseDate ? new Date(customer.firstPurchaseDate).toLocaleDateString("en-IN") : "Never"}</Descriptions.Item><Descriptions.Item label="Last visit">{customer.lastVisitAt ? new Date(customer.lastVisitAt).toLocaleString("en-IN") : "Unknown"}</Descriptions.Item><Descriptions.Item label="Tags">{customer.tags.length ? customer.tags.map(tag => <Tag key={tag}>{tag}</Tag>) : "—"}</Descriptions.Item><Descriptions.Item label="Notes">{customer.notes || "—"}</Descriptions.Item></Descriptions></Card><Typography.Title level={5} style={{ margin: 0 }}>Shopping insights</Typography.Title><div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 10 }}><InsightBlock title="Top Categories" values={customer.insights.topCategories} /><InsightBlock title="Common Sizes" values={customer.insights.commonSizes} /><InsightBlock title="Preferred Brands" values={customer.insights.preferredBrands} /></div><Card size="small" title="Unfulfilled demand" extra={<Button type="link">View all</Button>}>{customer.demandRequests.length ? <List size="small" dataSource={customer.demandRequests.slice(0, 3)} renderItem={item => <List.Item extra={<Tag>{item.status}</Tag>}><List.Item.Meta title={item.requirement} description={item.reason.replaceAll("_", " ")} /></List.Item>} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No customer-linked demand yet" />}</Card></Space>;
+  const updateFollowUp = async (id: string, status: string) => { const response = await fetch(`/api/customer-follow-ups/${encodeURIComponent(id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) }); if (response.ok) onFollowUpUpdated(); };
+  const tabs = [{ key: "overview", label: "Overview", children: overview }, { key: "purchases", label: "Purchase History", children: <Table rowKey="id" size="small" columns={salesColumns} dataSource={customer.sales} pagination={{ pageSize: 5 }} /> }, { key: "preferences", label: "Preferences", children: <div style={{ display: "grid", gap: 12 }}><InsightBlock title="Frequent categories" values={customer.insights.topCategories} /><InsightBlock title="Observed sizes" values={customer.insights.commonSizes} /><InsightBlock title="Preferred brands" values={customer.insights.preferredBrands} /></div> }, { key: "demand", label: "Demand", children: customer.demandRequests.length ? <List dataSource={customer.demandRequests} renderItem={item => <List.Item extra={<Space><Tag>{item.status}</Tag>{item.followUpStatus ? <Tag color="blue">{item.followUpStatus}</Tag> : null}{item.restockAvailable ? <Tag color="green">Restock available at {item.storeName}</Tag> : null}</Space>}><List.Item.Meta title={item.requirement} description={`${new Date(item.createdAt).toLocaleDateString("en-IN")} · ${item.storeName} · ${item.fulfilledQuantity}/${item.requestedQuantity} fulfilled · ${item.reason.replaceAll("_", " ")}${Object.keys(item.attributes).length ? ` · ${Object.entries(item.attributes).map(([key, value]) => `${key}: ${String(value)}`).join(", ")}` : ""}`} /></List.Item>} /> : <Empty description="No demand or restock opportunities" /> }, { key: "engagement", label: "Engagement", children: customer.followUps.length ? <List dataSource={customer.followUps} renderItem={item => <List.Item actions={item.status === "OPEN" ? [<Button size="small" key="start" onClick={() => updateFollowUp(item.id, "IN_PROGRESS")}>Start</Button>] : item.status === "IN_PROGRESS" ? [<Button size="small" type="primary" key="complete" onClick={() => updateFollowUp(item.id, "COMPLETED")}>Complete</Button>] : item.status === "COMPLETED" || item.status === "CANCELLED" ? [<Button size="small" key="reopen" onClick={() => updateFollowUp(item.id, "OPEN")}>Reopen</Button>] : []} extra={<Tag>{item.status}</Tag>}><List.Item.Meta title={item.title} description={`${item.type.replaceAll("_", " ")} · ${item.priority} · ${item.storeName}${item.assigneeName ? ` · ${item.assigneeName}` : ""}${item.dueAt ? ` · due ${new Date(item.dueAt).toLocaleString("en-IN")}` : ""}${item.note ? ` · ${item.note}` : ""}`} /></List.Item>} /> : <Empty description="No follow-ups recorded" /> }];
+  return <Card loading={loading} styles={{ body: { padding: 18 } }} style={{ borderRadius: 14, boxShadow: "0 8px 30px rgba(15,23,42,.05)" }}><Space align="start" style={{ width: "100%", justifyContent: "space-between" }}><Space align="start"><Avatar size={56} style={{ background: "#2563eb" }} icon={<UserOutlined />}>{customer.name?.slice(0, 1)}</Avatar><div><Typography.Title level={4} style={{ margin: 0 }}>{customer.name || "Unnamed Customer"}</Typography.Title><Space wrap style={{ marginTop: 5 }}><Tag color={customer.isInactive ? "red" : "green"}>{customer.isInactive ? "Inactive" : "Active"}</Tag>{customer.tags.map(tag => <Tag key={tag}>{tag}</Tag>)}</Space><Typography.Text type="secondary" style={{ fontSize: 11 }}>Customer #{customer.id.slice(0, 8)}</Typography.Text></div></Space></Space><Space wrap style={{ margin: "16px 0" }}><Button icon={<EditOutlined />} onClick={onEdit}>Edit Customer</Button><Button icon={<CalendarOutlined />} onClick={onRecordVisit}>Record Visit</Button><Button type="primary" icon={<FlagOutlined />} onClick={onCreateFollowUp}>Create Follow-up</Button></Space><div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 8, marginBottom: 14 }}>{[["Total Spent", money(customer.totalSpent)], ["Total Orders", customer.totalVisits], ["Avg Order Value", money(customer.avgOrderValue)], ["Last Purchase", lastPurchase ? new Date(lastPurchase).toLocaleDateString("en-IN") : "Never"]].map(([title, value]) => <Card size="small" key={title}><Statistic title={title} value={value} valueStyle={{ fontSize: 16, fontWeight: 700 }} /></Card>)}</div><Tabs size="small" items={tabs} /></Card>;
 }

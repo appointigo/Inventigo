@@ -1,10 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { App, Col, Modal, Row, Typography } from "antd";
+import { App, Card, Col, Modal, Row, Statistic, Typography } from "antd";
 import CustomerList from "@/modules/customers/components/CustomerList";
 import CustomerForm from "@/modules/customers/components/CustomerForm";
 import CustomerDetailView from "@/modules/customers/components/CustomerDetailView";
+import CustomerFollowUpModal from "@/modules/customers/components/CustomerFollowUpModal";
+import { VisitForm } from "@/modules/demand-intelligence/components/DemandIntelligencePage";
+import { useStore } from "@/providers/StoreProvider";
 import type {
   CustomerDetailDto,
   CustomerListType,
@@ -22,6 +25,7 @@ const INITIAL_LIST: PaginatedCustomersDto = {
 
 export default function CustomersPage() {
   const { message } = App.useApp();
+  const { storeId } = useStore();
   const [listData, setListData] = useState<PaginatedCustomersDto>(INITIAL_LIST);
   const [loadingList, setLoadingList] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -34,6 +38,9 @@ export default function CustomersPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [formLoading, setFormLoading] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<CustomerDto | null>(null);
+  const [visitOpen, setVisitOpen] = useState(false);
+  const [followUpOpen, setFollowUpOpen] = useState(false);
+  const [insights, setInsights] = useState<{ totalCustomers: number; activeCustomers: number; repeatCustomers: number; highValueCustomers: number; atRiskCustomers: number } | null>(null);
 
   const selectedFromList = useMemo(
     () => listData.items.find((row) => row.id === selectedCustomerId) ?? null,
@@ -58,8 +65,8 @@ export default function CustomersPage() {
       const payload = (await response.json()) as PaginatedCustomersDto;
       setListData(payload);
 
-      if (!selectedCustomerId && payload.items.length) {
-        setSelectedCustomerId(payload.items[0].id);
+      if (!selectedCustomerId || !payload.items.some(item => item.id === selectedCustomerId)) {
+        setSelectedCustomerId(payload.items[0]?.id ?? null);
       }
     } catch (error) {
       const text = error instanceof Error ? error.message : "Failed to load customers";
@@ -95,6 +102,8 @@ export default function CustomersPage() {
   useEffect(() => {
     fetchList();
   }, [fetchList]);
+
+  useEffect(() => { fetch("/api/customers/insights", { cache: "no-store" }).then(response => response.ok ? response.json() : null).then(setInsights).catch(() => setInsights(null)); }, []);
 
   useEffect(() => {
     if (!selectedCustomerId) {
@@ -146,9 +155,13 @@ export default function CustomersPage() {
       <Typography.Title level={3} style={{ marginTop: 0, marginBottom: 20 }}>
         Customers
       </Typography.Title>
+      <Typography.Paragraph type="secondary">Customer activity, buying behavior and opportunities</Typography.Paragraph>
+      <Row gutter={[12, 12]} style={{ marginBottom: 20 }}>
+        {[["Total Customers", insights?.totalCustomers ?? 0, "All customer records"], ["Active Customers", insights?.activeCustomers ?? 0, "Purchased in last 90 days"], ["Repeat Customers", insights?.repeatCustomers ?? 0, "2+ qualifying orders"], ["High Value Customers", insights?.highValueCustomers ?? 0, "Top 20% by spend"], ["At Risk Customers", insights?.atRiskCustomers ?? 0, "Overdue customers"]].map(([title, value, helper]) => <Col xs={12} lg={8} flex="1 1 190px" key={String(title)}><Card size="small" style={{ borderRadius: 12, boxShadow: "0 6px 20px rgba(15,23,42,.04)" }}><Statistic title={title} value={value} /><Typography.Text type="secondary" style={{ fontSize: 11 }}>{helper}</Typography.Text></Card></Col>)}
+      </Row>
 
       <Row gutter={16}>
-        <Col xs={24} lg={14}>
+        <Col xs={24} xl={14}>
           <CustomerList
             customers={listData.items}
             loading={loadingList}
@@ -157,6 +170,7 @@ export default function CustomersPage() {
             pageSize={pageSize}
             search={search}
             activeType={activeType}
+            selectedCustomerId={selectedCustomerId}
             onSearchChange={(value) => {
               setSearch(value);
               setPage(1);
@@ -177,7 +191,7 @@ export default function CustomersPage() {
           />
         </Col>
 
-        <Col xs={24} lg={10}>
+        <Col xs={24} xl={10}>
           <CustomerDetailView
             customer={selectedCustomer}
             loading={loadingDetail}
@@ -186,6 +200,9 @@ export default function CustomersPage() {
               setEditingCustomer(selectedCustomer);
               setFormOpen(true);
             }}
+            onRecordVisit={() => setVisitOpen(true)}
+            onCreateFollowUp={() => setFollowUpOpen(true)}
+            onFollowUpUpdated={() => selectedCustomerId && fetchCustomerDetail(selectedCustomerId)}
           />
         </Col>
       </Row>
@@ -204,6 +221,10 @@ export default function CustomersPage() {
           onSubmit={handleSaveCustomer}
         />
       </Modal>
+      <Modal open={visitOpen} title="Record Customer Visit" footer={null} width={760} onCancel={() => setVisitOpen(false)} destroyOnHidden>
+        {selectedCustomer && storeId ? <VisitForm storeId={storeId} inline customer={{ id: selectedCustomer.id, name: selectedCustomer.name, mobile: selectedCustomer.mobile }} onClose={() => setVisitOpen(false)} onSaved={() => fetchCustomerDetail(selectedCustomer.id)} /> : <Typography.Text type="secondary">Select a store and customer before recording a visit.</Typography.Text>}
+      </Modal>
+      <CustomerFollowUpModal open={followUpOpen} customer={selectedCustomer} currentStoreId={storeId} onClose={() => setFollowUpOpen(false)} onSaved={() => selectedCustomerId ? fetchCustomerDetail(selectedCustomerId) : undefined} />
     </div>
   );
 }

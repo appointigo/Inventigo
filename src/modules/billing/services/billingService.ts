@@ -691,7 +691,8 @@ export const billingService = {
       orgId,
       input.customerPhone,
       input.customerName,
-      input.customerEmail
+      input.customerEmail,
+      storeId
     );
     await syncWhatsAppContactForCustomer({
       organizationId: orgId,

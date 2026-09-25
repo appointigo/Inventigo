@@ -962,7 +962,7 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
               </CustomerField>
               <CustomerField>
                 <FieldLabel>
-                  Phone <RequiredStar>*</RequiredStar>
+                  Mobile number <RequiredStar>*</RequiredStar>
                 </FieldLabel>
                 <div ref={phoneSuggestWrapRef} style={{ position: "relative" }}>
                   <Input
@@ -1074,8 +1074,10 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
                 )}
               >
                 <MoreOptionsButton
+                  htmlType="button"
                   icon={<SettingOutlined />}
                   aria-expanded={invoiceOptionsOpen}
+                  aria-haspopup="dialog"
                 >
                   More
                 </MoreOptionsButton>

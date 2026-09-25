@@ -27,6 +27,7 @@ export type DemandRequestInput = {
 
 export type CustomerVisitInput = {
   storeId: string;
+  customerId?: string;
   visitedAt?: string;
   outcome: VisitOutcome;
   linkedSaleId?: string;

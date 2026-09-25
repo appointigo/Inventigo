@@ -192,7 +192,7 @@ export default function BillingPage() {
           cart.setCustomerEmail(customer.email);
         }
 
-        const statsRes = await fetch(`/api/customers/${encodeURIComponent(customer.mobile)}/stats`);
+        const statsRes = await fetch(`/api/customers/by-mobile/${encodeURIComponent(customer.mobile)}/stats`);
         if (!statsRes.ok) {
           setCustomerStats({ totalVisits: 0, totalSpend: 0, lastPurchaseDate: null });
           return;

@@ -96,14 +96,18 @@ function Field({
   );
 }
 
-function VisitForm({
+export function VisitForm({
   storeId,
   inline,
   onClose,
+  customer,
+  onSaved,
 }: {
   storeId: string;
   inline: boolean;
   onClose: () => void;
+  customer?: { id: string; name: string | null; mobile: string };
+  onSaved?: () => void | Promise<void>;
 }) {
   const { message } = App.useApp();
   const { categories } = useCategories(storeId);
@@ -116,10 +120,22 @@ function VisitForm({
   const [outcome, setOutcome] = useState<VisitOutcome>();
   const [requests, setRequests] = useState<DemandRequestInput[]>([]);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
-  const canSave = outcome === "CONVERTED" || requests.length > 0;
+  const [visitedAt, setVisitedAt] = useState<Dayjs>(() => dayjs());
+  const [source, setSource] = useState("WALK_IN");
+  const [notes, setNotes] = useState("");
+  const [visitorMode, setVisitorMode] = useState<"ANONYMOUS" | "EXISTING" | "NEW">(customer ? "EXISTING" : "ANONYMOUS");
+  const [customerOptions, setCustomerOptions] = useState<Array<{ value: string; label: string }>>([]);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>();
+  const [newCustomerName, setNewCustomerName] = useState("");
+  const [newCustomerMobile, setNewCustomerMobile] = useState("");
+  const identityReady = Boolean(customer) || visitorMode === "ANONYMOUS" || (visitorMode === "EXISTING" ? selectedCustomerId : newCustomerMobile.length === 10);
+  const canSave = identityReady && (outcome === "CONVERTED" || requests.length > 0);
   const reset = () => {
     setOutcome(undefined);
     setRequests([]);
+    setVisitedAt(dayjs());
+    setSource("WALK_IN");
+    setNotes("");
     setIdempotencyKey(crypto.randomUUID());
   };
   const close = () => {
@@ -150,13 +166,25 @@ function VisitForm({
       return;
     }
     try {
+      let resolvedCustomerId = customer?.id ?? selectedCustomerId;
+      if (!customer && visitorMode === "NEW") {
+        const customerResponse = await fetch("/api/customers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: newCustomerName, mobile: newCustomerMobile, preferredStoreId: storeId }) });
+        const customerBody = await customerResponse.json().catch(() => null);
+        if (!customerResponse.ok) throw new Error(customerBody?.error || "Unable to create customer");
+        resolvedCustomerId = customerBody.id;
+      }
       await mutation.mutateAsync({
         storeId,
+        customerId: visitorMode === "ANONYMOUS" ? undefined : resolvedCustomerId,
+        visitedAt: visitedAt.toISOString(),
+        source,
+        notes: notes.trim() || undefined,
         outcome: finalOutcome,
         idempotencyKey,
         requests: finalRequests,
       });
       message.success("Customer visit recorded");
+      await onSaved?.();
       reset();
       if (!saveAndNew) onClose();
     } catch (error) {
@@ -177,6 +205,19 @@ function VisitForm({
           </div>
         </div>
       ) : null}
+      {customer ? <Alert type="info" showIcon title={customer.name || "Unnamed customer"} description={`${customer.mobile} · linked customer visit`} style={{ marginBottom: 16 }} /> : null}
+      {!customer ? <section className={styles.formSection}>
+        <Field label="Visitor identity"><Select value={visitorMode} onChange={setVisitorMode} options={[{ value: "ANONYMOUS", label: "Anonymous visitor" }, { value: "EXISTING", label: "Existing customer" }, { value: "NEW", label: "Register new customer" }]} /></Field>
+        {visitorMode === "EXISTING" ? <Field label="Customer" required><Select showSearch filterOption={false} value={selectedCustomerId} options={customerOptions} placeholder="Search name or mobile" onSearch={value => { const query = value.trim(); if (query.length < 2) return; const key = /^\d+$/.test(query) ? "phone" : "name"; fetch(`/api/customers/search?${key}=${encodeURIComponent(query)}`).then(r => r.ok ? r.json() : []).then(items => setCustomerOptions(items.map((item: { id: string; name: string | null; mobile: string }) => ({ value: item.id, label: `${item.name || "Unnamed"} · ${item.mobile}` })))); }} onChange={setSelectedCustomerId} /></Field> : null}
+        {visitorMode === "NEW" ? <div className={styles.formGrid}><Field label="Customer name"><Input value={newCustomerName} onChange={event => setNewCustomerName(event.target.value)} /></Field><Field label="Mobile number" required><Input value={newCustomerMobile} maxLength={10} onChange={event => setNewCustomerMobile(event.target.value.replace(/\D/g, "").slice(0, 10))} /></Field></div> : null}
+      </section> : null}
+      <section className={styles.formSection}>
+        <div className={styles.formGrid}>
+          <Field label="Visit date and time" required><DatePicker showTime value={visitedAt} onChange={(value) => value && setVisitedAt(value)} style={{ width: "100%" }} /></Field>
+          <Field label="Source"><Select value={source} onChange={setSource} options={[{ value: "WALK_IN", label: "Walk-in" }, { value: "PHONE", label: "Phone enquiry" }, { value: "WHATSAPP", label: "WhatsApp" }, { value: "OTHER", label: "Other" }]} /></Field>
+          <Field label="Visit notes" wide><Input.TextArea value={notes} onChange={event => setNotes(event.target.value)} maxLength={1000} autoSize={{ minRows: 2, maxRows: 4 }} /></Field>
+        </div>
+      </section>
       <section className={styles.formSection}>
         <div className={styles.stepTitle}>
           <span>1</span>

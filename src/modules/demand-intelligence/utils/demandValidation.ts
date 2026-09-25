@@ -96,6 +96,7 @@ export const demandRequestInputSchema = z
 
 const customerVisitBaseSchema = z.object({
   storeId: z.string().uuid(),
+  customerId: z.string().uuid().optional(),
   visitedAt: z.iso.datetime().optional(),
   outcome: visitOutcomeSchema,
   linkedSaleId: z.string().uuid().optional(),
