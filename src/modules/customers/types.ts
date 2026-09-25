@@ -32,6 +32,8 @@ export type CustomerSaleSummaryDto = {
 };
 
 export type CustomerDetailDto = CustomerDto & {
+  groups: string[];
+  activityStatus: "Recently purchased" | "Past customer" | "Never purchased";
   sales: CustomerSaleSummaryDto[];
   firstPurchaseDate: string | null;
   insights: { topCategories: string[]; commonSizes: string[]; preferredBrands: string[] };
@@ -53,15 +55,23 @@ export type CustomerListItemDto = {
   segment: "Recent" | "Repeat" | "High Value" | "At Risk" | "Lead" | "Inactive";
   relationshipStatus: "Active" | "Cooling" | "Inactive";
   lastPurchaseAt: string | null;
+  totalOrders: number;
+  groups: string[];
+  activityStatus: "Recently purchased" | "Past customer" | "Never purchased";
 };
 
-export type CustomerListType = "all" | "recent" | "high_spenders" | "inactive";
+export type CustomerGroupFilter = "all" | "recent" | "repeat" | "high_spenders" | "attention" | "never_purchased";
+export type CustomerListType = CustomerGroupFilter;
+export type CustomerSortField = "name" | "spend" | "orders" | "lastPurchase";
+export type SortDirection = "asc" | "desc";
 
 export type PaginatedCustomersDto = {
   items: CustomerListItemDto[];
   total: number;
   page: number;
   pageSize: number;
+  counts?: Record<CustomerGroupFilter, number>;
+  scope?: "store" | "organization";
 };
 
 export type CustomerUpsertInput = {

@@ -9,6 +9,7 @@ import type {
   PaginatedCustomersDto,
 } from "../types";
 import { syncWhatsAppContactForCustomer } from "@/modules/whatsapp/services/WhatsAppContactService";
+import { customerIntelligenceService } from "./customerIntelligenceService";
 
 const RECENT_DAYS = 7;
 const INACTIVE_DAYS = 180;
@@ -110,6 +111,8 @@ const toCustomerDto = (row: any): CustomerDto => ({
 /* eslint-disable @typescript-eslint/no-explicit-any -- Prisma detail projection is normalized at this API boundary. */
 const toCustomerDetailDto = (row: any): CustomerDetailDto => ({
   ...toCustomerDto(row),
+  groups: [],
+  activityStatus: "Never purchased",
   sales: (row.sales ?? []).map((sale: any) => ({
     id: sale.id,
     invoiceNumber: sale.invoiceNumber,
@@ -120,7 +123,7 @@ const toCustomerDetailDto = (row: any): CustomerDetailDto => ({
   firstPurchaseDate: row.sales?.length ? row.sales[row.sales.length - 1].transactionDate.toISOString() : null,
   insights: {
     topCategories: topValues((row.sales ?? []).flatMap((sale: any) => sale.items ?? []).map((item: any) => item.product?.category?.name)),
-    commonSizes: topValues((row.sales ?? []).flatMap((sale: any) => sale.items ?? []).map((item: any) => item.size?.label)),
+    commonSizes: topValues((row.sales ?? []).flatMap((sale: any) => sale.items ?? []).map((item: any) => item.size?.label ? `${item.product?.category?.name ?? "Other"}: ${item.size.label}` : null)),
     preferredBrands: topValues((row.sales ?? []).flatMap((sale: any) => sale.items ?? []).map((item: any) => item.product?.brand?.name)),
   },
   demandRequests: (row.visits ?? []).flatMap((visit: any) => (visit.demandRequests ?? []).map((request: any) => { const attributes = toMetadataObject(request.attributes) ?? {}; const requestedSize = typeof attributes.size === "string" ? attributes.size.toLocaleLowerCase("en-IN") : null; return { id: request.id, visitId: visit.id, storeName: visit.store?.name ?? "Unknown store", requirement: request.product?.name || request.category?.name || "Customer request", reason: request.reasonCode, status: request.status, requestedQuantity: request.requestedQuantity, fulfilledQuantity: request.fulfilledQuantity, attributes, createdAt: request.createdAt.toISOString(), followUpStatus: request.followUps?.[0]?.status ?? null, restockAvailable: Boolean(request.productId && request.product?.stockEntries?.some((entry: any) => entry.quantity > 0 && entry.storeId === visit.storeId && (!requestedSize || entry.size?.label?.toLocaleLowerCase("en-IN") === requestedSize))) }; })),
@@ -235,10 +238,8 @@ export const customerService = {
       andFilters.push({ totalSpent: { gt: highSpenderThreshold } });
     }
 
-    if (type === "inactive") {
-      andFilters.push({
-        OR: [{ lastVisitAt: null }, { lastVisitAt: { lt: inactiveCutoff } }],
-      });
+    if (type === "never_purchased") {
+      andFilters.push({ sales: { none: { status: { in: ["COMPLETED", "EXCHANGED", "REFUNDED"] } } } });
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -287,6 +288,9 @@ export const customerService = {
           segment: totalVisits === 0 ? "Lead" : totalSpent > highSpenderThreshold ? "High Value" : totalVisits >= 2 ? "Repeat" : isInactive ? "Inactive" : "Recent",
           relationshipStatus: !row.lastVisitAt || row.lastVisitAt < inactiveCutoff ? "Inactive" : row.lastVisitAt < new Date(Date.now() - 90 * 86_400_000) ? "Cooling" : "Active",
           lastPurchaseAt: lastVisitAt,
+          totalOrders: totalVisits,
+          groups: totalVisits === 0 ? ["Never Purchased"] : totalVisits >= 2 ? ["Repeat Customer"] : ["Recently Purchased"],
+          activityStatus: totalVisits === 0 ? "Never purchased" as const : row.lastVisitAt && row.lastVisitAt >= new Date(Date.now() - 90 * 86_400_000) ? "Recently purchased" as const : "Past customer" as const,
         };
       }),
       total,
@@ -295,9 +299,9 @@ export const customerService = {
     };
   },
 
-  async getCustomerById(orgId: string, customerId: string): Promise<CustomerDetailDto | null> {
+  async getCustomerById(orgId: string, customerId: string, storeId?: string | null): Promise<CustomerDetailDto | null> {
     const row = await prisma.customer.findFirst({
-      where: { id: customerId, orgId },
+      where: { id: customerId, orgId, ...(storeId ? { OR: [{ preferredStoreId: storeId }, { sales: { some: { storeId } } }, { visits: { some: { storeId } } }] } : {}) },
       include: {
         preferredStore: { select: { name: true } },
         sales: {
@@ -318,7 +322,12 @@ export const customerService = {
       },
     });
 
-    return row ? toCustomerDetailDto(row) : null;
+    if (!row) return null;
+    const detail = toCustomerDetailDto(row);
+    const metrics = await customerIntelligenceService.query(orgId, { search: row.mobile, page: 1, pageSize: 10 });
+    const metric = metrics.items.find(item => item.id === customerId);
+    if (!metric) return detail;
+    return { ...detail, totalSpent: metric.totalSpent, totalVisits: metric.totalOrders, avgOrderValue: metric.totalOrders ? metric.totalSpent / metric.totalOrders : 0, lastVisitAt: detail.lastVisitAt, groups: metric.groups, activityStatus: metric.activityStatus };
   },
 
   async createCustomer(orgId: string, input: CustomerUpsertInput): Promise<CustomerDto> {
@@ -365,9 +374,10 @@ export const customerService = {
   async updateCustomer(
     orgId: string,
     customerId: string,
-    input: CustomerUpsertInput
+    input: CustomerUpsertInput,
+    storeId?: string | null
   ): Promise<CustomerDto | null> {
-    const existing = await prisma.customer.findFirst({ where: { id: customerId, orgId } });
+    const existing = await prisma.customer.findFirst({ where: { id: customerId, orgId, ...(storeId ? { OR: [{ preferredStoreId: storeId }, { sales: { some: { storeId } } }, { visits: { some: { storeId } } }] } : {}) } });
     if (!existing) return null;
 
     let normalizedMobile: string | undefined;

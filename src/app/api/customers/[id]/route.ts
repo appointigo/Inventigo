@@ -8,7 +8,7 @@ export async function GET(_request: Request, context: RouteContext<"/api/custome
 
   try {
     const { id } = await context.params;
-    const customer = await customerService.getCustomerById(user.orgId, decodeURIComponent(id));
+    const customer = await customerService.getCustomerById(user.orgId, decodeURIComponent(id), user.storeId);
     if (!customer) return NextResponse.json({ error: "Customer not found" }, { status: 404 });
     return NextResponse.json(customer);
   } catch (error) {
@@ -26,7 +26,8 @@ export async function PATCH(request: Request, context: RouteContext<"/api/custom
     const updated = await customerService.updateCustomer(
       user.orgId,
       decodeURIComponent(id),
-      await request.json()
+      await request.json(),
+      user.storeId
     );
     if (!updated) return NextResponse.json({ error: "Customer not found" }, { status: 404 });
     return NextResponse.json(updated);
