@@ -49,6 +49,8 @@ COPY prisma ./prisma
 RUN npm ci --include=dev
 
 COPY . .
+# Runtime secrets such as DATABASE_URL are deliberately not build arguments;
+# Railway injects them when the finished container starts.
 RUN npm run build
 RUN npm prune --omit=dev --ignore-scripts
 
