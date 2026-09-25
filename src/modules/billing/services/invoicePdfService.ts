@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import { launchInvoiceBrowser } from "@/lib/server/browser";
 import { buildInvoiceDocumentHtml, type InvoiceDocumentKind } from "../invoiceDocument";
+import { getDeploymentEnvironmentLabel } from "@/modules/whatsapp/invoiceDiagnostics";
 
 export type GeneratedInvoicePdf = { buffer: Buffer; filename: string; reference: string };
 
@@ -14,6 +15,7 @@ export async function generateInvoicePdf(input: {
   transactionId: string;
 }): Promise<GeneratedInvoicePdf> {
   const startedAt = Date.now();
+  const deploymentEnvironment = getDeploymentEnvironmentLabel();
   const store = await prisma.store.findFirst({
     where: { id: input.storeId, orgId: input.organizationId },
     select: { id: true, name: true },
@@ -38,9 +40,10 @@ export async function generateInvoicePdf(input: {
   const reference = transaction?.referenceNumber || sale.invoiceNumber;
   console.info("[WhatsApp Invoice] invoice_data_loaded", {
     requestId: input.correlationId,
+    deliveryId: input.messageId,
+    deploymentEnvironment,
     organizationId: input.organizationId,
     storeId: input.storeId,
-    messageId: input.messageId,
     transactionId: input.transactionId,
     transactionType: input.kind,
     reference,
@@ -50,7 +53,8 @@ export async function generateInvoicePdf(input: {
   });
   console.info("[WhatsApp Invoice] invoice_render_started", {
     requestId: input.correlationId,
-    messageId: input.messageId,
+    deliveryId: input.messageId,
+    deploymentEnvironment,
     transactionId: input.transactionId,
     reference,
   });
@@ -62,7 +66,8 @@ export async function generateInvoicePdf(input: {
   });
   console.info("[WhatsApp Invoice] invoice_render_completed", {
     requestId: input.correlationId,
-    messageId: input.messageId,
+    deliveryId: input.messageId,
+    deploymentEnvironment,
     transactionId: input.transactionId,
     reference,
     elapsedMs: Date.now() - startedAt,
@@ -70,7 +75,8 @@ export async function generateInvoicePdf(input: {
 
   console.info("[WhatsApp Invoice] pdf_generation_started", {
     requestId: input.correlationId,
-    messageId: input.messageId,
+    deliveryId: input.messageId,
+    deploymentEnvironment,
     transactionId: input.transactionId,
     reference,
   });
@@ -83,7 +89,8 @@ export async function generateInvoicePdf(input: {
     const filename = `${input.kind === "EXCHANGE" ? "exchange" : "invoice"}-${reference.replace(/[^a-z0-9_-]+/gi, "-")}.pdf`;
     console.info("[WhatsApp Invoice] pdf_generation_completed", {
       requestId: input.correlationId,
-      messageId: input.messageId,
+      deliveryId: input.messageId,
+      deploymentEnvironment,
       transactionId: input.transactionId,
       reference,
       filename,
@@ -93,7 +100,8 @@ export async function generateInvoicePdf(input: {
     const signatureValid = buffer.subarray(0, 5).toString("ascii") === "%PDF-";
     console.info("[WhatsApp Invoice] pdf_validation_completed", {
       requestId: input.correlationId,
-      messageId: input.messageId,
+      deliveryId: input.messageId,
+      deploymentEnvironment,
       transactionId: input.transactionId,
       reference,
       filename,

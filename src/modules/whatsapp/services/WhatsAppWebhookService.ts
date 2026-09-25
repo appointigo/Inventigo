@@ -11,6 +11,7 @@ import {
   parseMetaStatuses,
   type ParsedMetaInboundMessage,
 } from "../webhooks/metaWebhook.ts";
+import { getDeploymentEnvironmentLabel } from "../invoiceDiagnostics.ts";
 
 const rank: Record<WhatsAppMessageStatus, number> = {
   QUEUED: 0,
@@ -126,6 +127,12 @@ export class WhatsAppWebhookService {
       },
     });
     if (!message) {
+      console.warn("[WhatsApp Invoice] webhook_status_unmatched", {
+        deploymentEnvironment: getDeploymentEnvironmentLabel(),
+        metaMessageId: item.status.id,
+        metaStatus: item.status.status,
+        occurredAt: item.status.timestamp,
+      });
       await this.prisma.whatsAppWebhookEvent.update({
         where: { id: webhookEventId },
         data: {
@@ -176,8 +183,10 @@ export class WhatsAppWebhookService {
     if (message.purpose === "INVOICE") {
       console.info("[WhatsApp Invoice] webhook_status_received", {
         requestId: correlationId,
+        deliveryId: message.id,
+        deploymentEnvironment: getDeploymentEnvironmentLabel(),
+        metaMessageId: item.status.id,
         organizationId: message.organizationId,
-        messageId: message.id,
         metaStatus: item.status.status,
         nextStatus: next,
         shouldUpdate,

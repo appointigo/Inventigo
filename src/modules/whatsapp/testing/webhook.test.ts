@@ -67,6 +67,17 @@ test("parses status callbacks and ignores inbound messages", () => {
   );
 });
 
+test("preserves one Meta message id across SENT, DELIVERED, and READ callbacks", () => {
+  const providerId = "wamid.same-delivery";
+  const statuses = [
+    ...parseMetaStatuses(envelope("sent", "1700000000", providerId)),
+    ...parseMetaStatuses(envelope("delivered", "1700000001", providerId)),
+    ...parseMetaStatuses(envelope("read", "1700000002", providerId)),
+  ];
+  assert.deepEqual(statuses.map(item => item.status.status), ["sent", "delivered", "read"]);
+  assert.deepEqual([...new Set(statuses.map(item => item.status.id))], [providerId]);
+});
+
 test("parses inbound messages with receiving number, contact profile, and reply context", () => {
   const parsed = parseMetaInboundMessages({
     object: "whatsapp_business_account",
