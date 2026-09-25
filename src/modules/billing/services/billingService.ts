@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import type { CreateSaleInput, Sale, SaleItem, SaleFilters, SaleSummary } from "../types";
-import { createWhatsAppAutomationReader, createWhatsAppInvoiceDeliveryService } from "@/modules/whatsapp/server";
+import { createWhatsAppAutomationReader } from "@/modules/whatsapp/server";
 import { enqueueInvoiceDelivery, prepareInvoiceDelivery, type WhatsAppInvoiceSelection } from "@/modules/whatsapp/services/WhatsAppInvoiceDeliveryService";
 import { customerService } from "@/modules/customers/services/customerService";
 import { syncWhatsAppContactForCustomer } from "@/modules/whatsapp/services/WhatsAppContactService";
@@ -963,13 +963,7 @@ export const billingService = {
           .catch(() => undefined);
         const result = toSaleDto(sale);
         if (deliveryIntent) {
-          try {
-            const delivered = await createWhatsAppInvoiceDeliveryService().processMessage(deliveryIntent.id);
-            result.invoiceDelivery = { id: delivered.id, status: delivered.status, errorCode: delivered.errorCode, errorMessage: delivered.errorMessage };
-          } catch {
-            const failed = await prisma.whatsAppMessage.findUnique({ where: { id: deliveryIntent.id }, select: { id: true, status: true, errorCode: true, errorMessage: true } });
-            if (failed) result.invoiceDelivery = failed;
-          }
+          result.invoiceDelivery = deliveryIntent;
         }
         return result;
       } catch (error) {
@@ -2165,13 +2159,7 @@ export const billingService = {
         });
         const result = toReturnTransactionDto(transaction, returnedLineItems, exchangedLineItems) as ReturnType<typeof toReturnTransactionDto> & { invoiceDelivery?: { id: string; status: string; errorCode?: string | null; errorMessage?: string | null } };
         if (deliveryIntent) {
-          try {
-            const delivered = await createWhatsAppInvoiceDeliveryService().processMessage(deliveryIntent.id);
-            result.invoiceDelivery = { id: delivered.id, status: delivered.status, errorCode: delivered.errorCode, errorMessage: delivered.errorMessage };
-          } catch {
-            const failed = await prisma.whatsAppMessage.findUnique({ where: { id: deliveryIntent.id }, select: { id: true, status: true, errorCode: true, errorMessage: true } });
-            if (failed) result.invoiceDelivery = failed;
-          }
+          result.invoiceDelivery = deliveryIntent;
         }
         return result;
       } catch (error) {

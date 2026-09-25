@@ -13,6 +13,7 @@ import { useBillingProductSearch } from "@/modules/billing/hooks/useBillingProdu
 import { sanitizeScannedBarcode } from "@/shared/services/barcodeService";
 import InvoicePreview from "./InvoicePreview";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
+import { getInvoiceDeliveryFeedback } from "@/modules/billing/utils/invoiceDeliveryFeedback";
 import type { VariantRow, CreateSaleInput, Sale, PaymentMethodType, WhatsAppInvoiceSelection } from "@/modules/billing/types";
 import { WhatsAppInvoiceSelector } from "@/modules/whatsapp/components/WhatsAppInvoiceSelector";
 import { useStore } from "@/providers/StoreProvider";
@@ -349,11 +350,8 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
       setInvoiceOpen(true);
       cart.clearCart();
       setWhatsAppInvoice({ enabled: false });
-      if (sale.invoiceDelivery?.status === "FAILED")
-        message.warning(`Sale ${sale.invoiceNumber} completed, but its WhatsApp invoice was not submitted.`);
-      else if (sale.invoiceDelivery)
-        message.success(`Sale ${sale.invoiceNumber} completed and its WhatsApp invoice was submitted.`);
-      else message.success(`Sale created: ${sale.invoiceNumber}`);
+      const feedback = getInvoiceDeliveryFeedback(`Sale ${sale.invoiceNumber}`, sale.invoiceDelivery);
+      message[feedback.level](feedback.text);
     } 
     catch (error) {
       console.error(error);

@@ -1,7 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { billingService } from "@/modules/billing/services/billingService";
 import { requireOrgAuth } from "@/lib/auth.middleware";
 import type { WhatsAppInvoiceSelection } from "@/modules/billing/types";
+import { prisma } from "@/lib/db";
+import { createWhatsAppInvoiceDeliveryService } from "@/modules/whatsapp/server";
+import { beginImmediateInvoiceDispatch } from "@/modules/whatsapp/services/immediateInvoiceDispatch";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -88,6 +91,15 @@ export const POST = async (
         : undefined,
     }, { correlationId: requestId });
     if (!transaction) throw new Error("RETURN_EXCHANGE_NOT_CREATED");
+    if (transaction.invoiceDelivery) {
+      const dispatch = beginImmediateInvoiceDispatch(
+        prisma,
+        transaction.invoiceDelivery.id,
+        createWhatsAppInvoiceDeliveryService
+      );
+      after(() => dispatch.completion.then(() => undefined));
+      transaction.invoiceDelivery = await dispatch.initial;
+    }
     console.info("[Billing] response_sent", { requestId, organizationId: user.orgId, saleId: id, operation: "CREATE_RETURN_EXCHANGE", transactionId: transaction.id, invoiceDeliveryId: transaction.invoiceDelivery?.id, invoiceDeliveryStatus: transaction.invoiceDelivery?.status, httpStatus: 201, durationMs: Date.now() - startedAt });
     return NextResponse.json({ ...transaction, requestId }, { status: 201, headers: { "x-request-id": requestId } });
   } catch (error) {

@@ -95,6 +95,38 @@ test("claims, renders, uploads, and submits an invoice exactly once", async () =
   assert.equal(meta.requests.length, 1);
 });
 
+test("concurrent dispatch requests submit the invoice only once", async () => {
+  const prisma = fakePrisma();
+  const meta = new MockMetaWhatsAppClient();
+  let renders = 0;
+  const service = new WhatsAppInvoiceDeliveryService(prisma.client, meta, async () => {
+    renders += 1;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    return { buffer: Buffer.from("%PDF-test"), filename: "invoice-INV-1.pdf", reference: "INV-1" };
+  });
+
+  await Promise.all([
+    service.processMessage("delivery-1"),
+    service.processMessage("delivery-1"),
+  ]);
+  assert.equal(renders, 1);
+  assert.equal(meta.requests.length, 1);
+});
+
+test("records PDF generation failures and releases the claim for manual retry", async () => {
+  const prisma = fakePrisma();
+  const meta = new MockMetaWhatsAppClient();
+  const service = new WhatsAppInvoiceDeliveryService(prisma.client, meta, async () => {
+    throw new Error("PDF_RENDER_FAILED");
+  });
+
+  await assert.rejects(service.processMessage("delivery-1"), /PDF_RENDER_FAILED/);
+  assert.equal(prisma.state.status, "FAILED");
+  assert.equal((prisma.state as typeof prisma.state & { errorCode?: string }).errorCode, "PDF_RENDER_FAILED");
+  assert.equal(prisma.state.dispatchClaimedAt, null);
+  assert.equal(meta.requests.length, 0);
+});
+
 test("claimed configuration failures become FAILED instead of remaining QUEUED", async () => {
   const message = queuedMessage();
   message.phoneNumber.waba.integration.status = "DISCONNECTED";

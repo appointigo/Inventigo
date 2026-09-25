@@ -6,6 +6,7 @@ import { CameraOutlined, SearchOutlined, ShoppingCartOutlined } from "@ant-desig
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createSaleRequest } from "@/modules/billing/hooks/useBilling";
 import type { VariantRow, WhatsAppInvoiceSelection } from "@/modules/billing/types";
+import { getInvoiceDeliveryFeedback } from "@/modules/billing/utils/invoiceDeliveryFeedback";
 import { useProducts } from "@/modules/products/hooks/useProducts";
 import { useStore } from "@/providers/StoreProvider";
 import { BillingCart } from "../components/BillingCart";
@@ -132,11 +133,8 @@ export default function BillingPage() {
       cart.clearCart();
       setWhatsAppInvoice({ enabled: false });
       setCartOpen(false);
-      if (sale.invoiceDelivery?.status === "FAILED")
-        message.warning("Sale completed, but the WhatsApp invoice was not submitted. You can resend it from Bill History.");
-      else if (sale.invoiceDelivery)
-        message.success("Sale completed and WhatsApp invoice submitted");
-      else message.success("Sale completed");
+      const feedback = getInvoiceDeliveryFeedback("Sale", sale.invoiceDelivery);
+      message[feedback.level](feedback.text);
     } catch (error) {
       message.error(error instanceof Error ? error.message : "Checkout failed");
     } finally {

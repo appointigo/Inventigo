@@ -16,6 +16,7 @@ import { WhatsAppInvoiceSelector } from "@/modules/whatsapp/components/WhatsAppI
 import { useStore } from "@/providers/StoreProvider";
 import { PAYMENT_OPTIONS } from "../constants";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
+import { getInvoiceDeliveryFeedback } from "../utils/invoiceDeliveryFeedback";
 
 interface ReturnExchangeViewProps {
   sales: SaleSummary[];
@@ -511,11 +512,8 @@ const ReturnExchangeView = ({
         whatsappInvoice,
       });
 
-      if (transaction.invoiceDelivery?.status === "FAILED")
-        message.warning("Return / exchange completed, but the WhatsApp invoice was not submitted. You can resend it from Bill History.");
-      else if (transaction.invoiceDelivery)
-        message.success("Return / exchange completed and its WhatsApp invoice was submitted.");
-      else message.success("Return / exchange processed successfully.");
+      const feedback = getInvoiceDeliveryFeedback("Return / exchange", transaction.invoiceDelivery);
+      message[feedback.level](feedback.text);
       setSelectedSaleId(null);
       setSale(null);
       setReturnQuantities({});

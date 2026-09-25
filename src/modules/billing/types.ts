@@ -52,8 +52,10 @@ export type WhatsAppInvoiceSelection = {
 export type InvoiceDeliveryState = {
   id: string;
   status: "QUEUED" | "SUBMITTED" | "SENT" | "DELIVERED" | "READ" | "FAILED";
+  phase?: "QUEUED" | "PROCESSING" | "META_SUBMITTED" | "SENT" | "DELIVERED" | "READ" | "FAILED";
   errorCode?: string | null;
   errorMessage?: string | null;
+  timedOut?: boolean;
 };
 
 export type CartItem = ItemPriceAdjustment & {

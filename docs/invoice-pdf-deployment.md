@@ -1,4 +1,4 @@
-# Invoice PDF and delivery worker deployment
+# Invoice PDF and immediate delivery deployment
 
 Stockiva invoice attachments are rendered directly in Node.js with
 `@react-pdf/renderer`. Invoice generation does not launch Chrome, load HTML, or
@@ -21,19 +21,28 @@ barcode route's output-file tracing until that separate feature is migrated.
 
 ## Vercel
 
-`vercel.json` invokes `/api/cron/whatsapp-invoices` every minute. The route is
-Node-only, validates Vercel's `Authorization: Bearer <CRON_SECRET>` header, and
-awaits the durable database batch before returning. Invoice processing is kept
-separate from campaign and automation processing so a failure in those workers
-cannot starve the invoice queue.
+After a sale or eligible exchange commits, its specific delivery record is
+dispatched immediately. Checkout waits up to eight seconds by default for a
+persisted result. If PDF generation or Meta takes longer, Next.js `after()`
+keeps that same in-flight attempt alive after the HTTP response through
+Vercel's supported `waitUntil` integration. Set
+`WHATSAPP_INVOICE_INITIAL_WAIT_MS` to a value from `0` through `15000` to tune
+the response wait; this does not change Meta's own request timeout.
+
+`vercel.json` may still invoke `/api/cron/whatsapp-invoices` for interruption
+recovery, but scheduled execution is not part of ordinary invoice delivery.
+The route remains Node-only, validates Vercel's
+`Authorization: Bearer <CRON_SECRET>` header, and processes the durable queue.
 
 ## Railway
 
-`next start` only serves HTTP requests; it does not execute `vercel.json` cron
-configuration. Create a second Railway service from the same repository/image,
-configure it as a cron service (recommended schedule: `*/5 * * * *`, Railway's
-minimum supported interval; schedules run in UTC), and set its
-start command to:
+`next start` supports Next.js `after()`, so the Railway web service performs the
+same immediate, single-record post-commit dispatch as localhost and Vercel. A
+second Railway cron service is optional interruption recovery; it is not needed
+for ordinary invoice delivery. If recovery is required, configure a cron
+service from the same repository/image (recommended schedule: `*/5 * * * *`,
+Railway's minimum supported interval; schedules run in UTC), and set its start
+command to:
 
 ```bash
 npm run whatsapp:invoices:worker
@@ -43,8 +52,13 @@ Give that cron service the same `CRON_SECRET` and set `STOCKIVA_APP_URL` to the
 web service's HTTPS origin. As a fallback, a Railway variable reference may
 expose the web service's `RAILWAY_PUBLIC_DOMAIN` to the cron service. The command
 makes one authenticated request, waits for its result, and exits non-zero on an
-HTTP failure. Do not run it as an unawaited task inside the web request that
-creates a sale.
+HTTP failure. Normal checkout uses the platform-supported post-response
+lifecycle rather than an unawaited promise.
+
+Without this optional scheduler or another persistent worker, a hard process
+termination after the database commit but before `after()` finishes can leave a
+claimed delivery awaiting manual retry/reconciliation. The durable claim still
+prevents an automatic duplicate after an uncertain Meta submission.
 
 Before enabling the recurring schedule, verify the shared secret without
 touching the queue:

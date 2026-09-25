@@ -1,7 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { billingService } from "@/modules/billing/services/billingService";
 import { requireOrgAuth } from "@/lib/auth.middleware";
 import type { SaleHistoryStatusFilter } from "@/modules/billing/types";
+import { prisma } from "@/lib/db";
+import { createWhatsAppInvoiceDeliveryService } from "@/modules/whatsapp/server";
+import { beginImmediateInvoiceDispatch } from "@/modules/whatsapp/services/immediateInvoiceDispatch";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -52,6 +55,17 @@ export const POST = async (request: NextRequest) => {
   try {
     const body = await request.json();
     const sale = await billingService.createSale(user.orgId!, user.storeId, user.id, body, { correlationId: requestId });
+    if (sale.invoiceDelivery) {
+      const dispatch = beginImmediateInvoiceDispatch(
+        prisma,
+        sale.invoiceDelivery.id,
+        createWhatsAppInvoiceDeliveryService
+      );
+      // Keep the invocation alive on Vercel and `next start` if the bounded
+      // response wait expires. The promise starts immediately after commit.
+      after(() => dispatch.completion.then(() => undefined));
+      sale.invoiceDelivery = await dispatch.initial;
+    }
     console.info("[Billing] response_sent", { requestId, organizationId: user.orgId, storeId: user.storeId, operation: "CREATE_SALE", transactionId: sale.id, invoiceNumber: sale.invoiceNumber, invoiceDeliveryId: sale.invoiceDelivery?.id, invoiceDeliveryStatus: sale.invoiceDelivery?.status, httpStatus: 201, durationMs: Date.now() - startedAt });
     return NextResponse.json({ ...sale, requestId }, { status: 201, headers: { "x-request-id": requestId } });
   }
