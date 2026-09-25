@@ -86,7 +86,11 @@ export default function CustomerQuickView({
           ],
         ].map(([title, value]) => (
           <Card size="small" key={title}>
-            <Statistic title={title} value={value} valueStyle={{ fontSize: 15, fontWeight: 700 }} />
+            <Statistic
+              title={title}
+              value={value}
+              styles={{ content: { fontSize: 15, fontWeight: 700 } }}
+            />
           </Card>
         ))}
       </div>

@@ -12,7 +12,10 @@ import {
   Card,
   Descriptions,
   Empty,
+  Grid,
   List,
+  Pagination,
+  Popover,
   Space,
   Statistic,
   Table,
@@ -21,8 +24,11 @@ import {
   Tooltip,
   Typography,
 } from "antd";
+import { useState } from "react";
 import type { ColumnsType } from "antd/es/table";
 import type { CustomerDetailDto, CustomerSaleSummaryDto } from "../types";
+import { formatPurchaseItem, getAdditionalItemCount } from "../customerPurchasePresentation";
+import styles from "./CustomerPurchaseHistory.module.css";
 type Props = {
   customer: CustomerDetailDto | null;
   loading: boolean;
@@ -54,6 +60,40 @@ const InsightBlock = ({ title, values }: { title: string; values: string[] }) =>
     )}
   </Card>
 );
+const ItemList = ({ items }: { items: CustomerSaleSummaryDto["items"] }) => (
+  <div className={styles.itemList} role="list" aria-label="Invoice items">
+    {items.map((item, index) => (
+      <div
+        className={styles.itemListRow}
+        role="listitem"
+        key={`${item.name}-${item.size}-${index}`}
+      >
+        {formatPurchaseItem(item)}
+      </div>
+    ))}
+  </div>
+);
+const PurchaseItemsSummary = ({ items }: { items: CustomerSaleSummaryDto["items"] }) => {
+  if (!items.length) return <Typography.Text type="secondary">—</Typography.Text>;
+  const firstItem = formatPurchaseItem(items[0]);
+  const additionalCount = getAdditionalItemCount(items);
+  return (
+    <div className={styles.itemSummary}>
+      <Popover content={<ItemList items={items} />} trigger={["hover", "focus", "click"]}>
+        <span className={styles.itemTrigger} tabIndex={0} aria-label={`Item: ${firstItem}`}>
+          {firstItem}
+        </span>
+      </Popover>
+      {additionalCount ? (
+        <Popover content={<ItemList items={items} />} trigger={["hover", "focus", "click"]}>
+          <Button className={styles.moreButton} type="link" size="small">
+            +{additionalCount} more {additionalCount === 1 ? "item" : "items"}
+          </Button>
+        </Popover>
+      ) : null}
+    </div>
+  );
+};
 export default function CustomerDetailView({
   customer,
   loading,
@@ -65,6 +105,9 @@ export default function CustomerDetailView({
   onActiveTabChange,
   onViewInvoice,
 }: Props) {
+  const screens = Grid.useBreakpoint();
+  const [purchasePage, setPurchasePage] = useState(1);
+  const purchasePageSize = 5;
   if (!customer)
     return (
       <Card loading={loading} style={{ borderRadius: 14 }}>
@@ -76,60 +119,87 @@ export default function CustomerDetailView({
     {
       title: "Invoice",
       dataIndex: "invoiceNumber",
-      render: (value, sale) =>
-        onViewInvoice ? (
-          <Button type="link" style={{ padding: 0 }} onClick={() => onViewInvoice(sale.id)}>
+      width: "11%",
+      render: (value: string) => (
+        <Tooltip title={value}>
+          <span className={styles.ellipsis} tabIndex={0}>
             {value}
-          </Button>
-        ) : (
-          value
-        ),
+          </span>
+        </Tooltip>
+      ),
     },
-    { title: "Store", dataIndex: "storeName" },
+    {
+      title: "Store",
+      dataIndex: "storeName",
+      width: "10%",
+      responsive: ["xl"],
+      render: (value: string) => (
+        <Tooltip title={value}>
+          <span className={styles.ellipsis}>{value}</span>
+        </Tooltip>
+      ),
+    },
     {
       title: "Items",
       dataIndex: "items",
-      render: (items: CustomerSaleSummaryDto["items"]) =>
-        items
-          .map((item) => `${item.name}${item.size ? ` (${item.size})` : ""} ×${item.quantity}`)
-          .join(", ") || "—",
+      width: "24%",
+      render: (items: CustomerSaleSummaryDto["items"]) => <PurchaseItemsSummary items={items} />,
+    },
+    {
+      title: "Amount",
+      dataIndex: "total",
+      width: "10%",
+      align: "right",
+      render: (value) => <span className={styles.nowrap}>{money(value)}</span>,
+    },
+    {
+      title: "Status",
+      dataIndex: "status",
+      width: "10%",
+      render: (value) => <Tag color={value === "COMPLETED" ? "green" : "orange"}>{value}</Tag>,
+    },
+    {
+      title: "Payment",
+      dataIndex: "paymentStatus",
+      width: "10%",
+      responsive: ["lg"],
+      render: (value) => <Tag>{plainLabel(value)}</Tag>,
+    },
+    {
+      title: "Return / exchange",
+      dataIndex: "returnStatus",
+      width: "12%",
+      responsive: ["xl"],
+      render: (value) => (value === "NONE" ? "—" : <Tag color="orange">{plainLabel(value)}</Tag>),
+    },
+    {
+      title: "Date",
+      dataIndex: "createdAt",
+      width: "8%",
+      render: (value) => (
+        <span className={styles.nowrap}>{new Date(value).toLocaleDateString("en-IN")}</span>
+      ),
     },
     ...(onViewInvoice
       ? [
           {
             title: "Action",
             key: "action",
-            fixed: "right" as const,
-            width: 120,
+            width: "5%",
+            align: "center" as const,
             render: (_: unknown, sale: CustomerSaleSummaryDto) => (
-              <Button size="small" icon={<EyeOutlined />} onClick={() => onViewInvoice(sale.id)}>
-                View Invoice
-              </Button>
+              <Tooltip title="View Invoice">
+                <Button
+                  aria-label="View invoice"
+                  type="text"
+                  icon={<EyeOutlined />}
+                  onClick={() => onViewInvoice(sale.id)}
+                />
+              </Tooltip>
             ),
           } as ColumnsType<CustomerSaleSummaryDto>[number],
         ]
       : []),
-    { title: "Amount", dataIndex: "total", align: "right", render: money },
-    {
-      title: "Status",
-      dataIndex: "status",
-      render: (value) => <Tag color={value === "COMPLETED" ? "green" : "orange"}>{value}</Tag>,
-    },
-    {
-      title: "Payment",
-      dataIndex: "paymentStatus",
-      render: (value) => <Tag>{plainLabel(value)}</Tag>,
-    },
-    {
-      title: "Return / exchange",
-      dataIndex: "returnStatus",
-      render: (value) => (value === "NONE" ? "—" : <Tag color="orange">{plainLabel(value)}</Tag>),
-    },
-    {
-      title: "Date",
-      dataIndex: "createdAt",
-      render: (value) => new Date(value).toLocaleDateString("en-IN"),
-    },
   ];
   const overview = (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
@@ -233,15 +303,70 @@ export default function CustomerDetailView({
     {
       key: "purchases",
       label: "Purchase History",
-      children: (
-        <Table
-          rowKey="id"
-          size="small"
-          columns={salesColumns}
-          dataSource={customer.sales}
-          scroll={{ x: "max-content" }}
-          pagination={{ pageSize: 5 }}
-        />
+      children: screens.md ? (
+        <div className={styles.tableWrap}>
+          <Table
+            rowKey="id"
+            size="small"
+            tableLayout="fixed"
+            columns={salesColumns}
+            dataSource={customer.sales}
+            pagination={{
+              current: purchasePage,
+              pageSize: purchasePageSize,
+              onChange: setPurchasePage,
+            }}
+          />
+        </div>
+      ) : (
+        <div className={styles.mobileList}>
+          {customer.sales
+            .slice((purchasePage - 1) * purchasePageSize, purchasePage * purchasePageSize)
+            .map((sale) => (
+              <Card size="small" key={sale.id}>
+                <div className={styles.mobileCardRow}>
+                  <div className={styles.mobileCardMain}>
+                    <Typography.Text strong className={styles.ellipsis}>
+                      {sale.invoiceNumber}
+                    </Typography.Text>
+                    <div>
+                      <Typography.Text type="secondary">
+                        {new Date(sale.createdAt).toLocaleDateString("en-IN")} · {sale.storeName}
+                      </Typography.Text>
+                    </div>
+                    <div>
+                      <Tag color={sale.status === "COMPLETED" ? "green" : "orange"}>
+                        {sale.status}
+                      </Tag>
+                    </div>
+                  </div>
+                  <Space direction="vertical" align="end">
+                    <Typography.Text strong>{money(sale.total)}</Typography.Text>
+                    {onViewInvoice ? (
+                      <Tooltip title="View Invoice">
+                        <Button
+                          aria-label="View invoice"
+                          type="text"
+                          icon={<EyeOutlined />}
+                          onClick={() => onViewInvoice(sale.id)}
+                        />
+                      </Tooltip>
+                    ) : null}
+                  </Space>
+                </div>
+              </Card>
+            ))}
+          {customer.sales.length > purchasePageSize ? (
+            <Pagination
+              current={purchasePage}
+              pageSize={purchasePageSize}
+              total={customer.sales.length}
+              showSizeChanger={false}
+              onChange={setPurchasePage}
+              size="small"
+            />
+          ) : null}
+        </div>
       ),
     },
     {
@@ -472,7 +597,11 @@ export default function CustomerDetailView({
           ],
         ].map(([title, value]) => (
           <Card size="small" key={title}>
-            <Statistic title={title} value={value} valueStyle={{ fontSize: 16, fontWeight: 700 }} />
+            <Statistic
+              title={title}
+              value={value}
+              styles={{ content: { fontSize: 16, fontWeight: 700 } }}
+            />
           </Card>
         ))}
       </div>

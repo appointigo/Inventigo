@@ -9,10 +9,11 @@ import {
   Grid,
   Input,
   InputNumber,
-  List,
+  Pagination,
   Popover,
   Select,
   Space,
+  Spin,
   Table,
   Tag,
   Tooltip,
@@ -369,11 +370,77 @@ export default function CustomerList(props: Props) {
           }}
         />
       ) : (
-        <List
-          loading={props.loading}
-          dataSource={props.customers}
-          locale={{
-            emptyText: (
+        <Spin spinning={props.loading}>
+          {props.customers.length ? (
+            <div role="list" aria-label="Customers">
+              {props.customers.map((row) => (
+                <div
+                  role="listitem"
+                  key={row.id}
+                  onClick={() => props.onSelectCustomer(row.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      props.onSelectCustomer(row.id);
+                    }
+                  }}
+                  tabIndex={0}
+                  aria-label={`Quick view for ${row.name || row.mobile}`}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    minWidth: 0,
+                    padding: "12px 16px",
+                    cursor: "pointer",
+                    borderBlockEnd: "1px solid #f0f0f0",
+                    background: row.id === props.selectedCustomerId ? "#f0f6ff" : undefined,
+                  }}
+                >
+                  <Space style={{ minWidth: 0 }}>
+                    <Avatar>{row.name?.slice(0, 1) || <UserOutlined />}</Avatar>
+                    <div style={{ minWidth: 0 }}>
+                      <Link
+                        href={props.profileHref(row.id)}
+                        onClick={(event) => event.stopPropagation()}
+                        style={{ fontWeight: 600 }}
+                      >
+                        {row.name || "Unnamed customer"}
+                      </Link>
+                      <div>
+                        <Typography.Text type="secondary">{row.mobile}</Typography.Text>
+                      </div>
+                      <div>
+                        {row.groups.slice(0, 2).map((group) => (
+                          <Tag key={group} color={groupColor[group]}>
+                            {group}
+                          </Tag>
+                        ))}
+                        {row.groups.length > 2 ? <Tag>+{row.groups.length - 2}</Tag> : null}
+                      </div>
+                    </div>
+                  </Space>
+                  <Typography.Text strong style={{ flex: "0 0 auto" }}>
+                    {money(row.totalSpent)}
+                  </Typography.Text>
+                </div>
+              ))}
+              {props.total > props.pageSize ? (
+                <div style={{ display: "flex", justifyContent: "center", padding: 16 }}>
+                  <Pagination
+                    current={props.page}
+                    pageSize={props.pageSize}
+                    total={props.total}
+                    showSizeChanger={false}
+                    showLessItems
+                    onChange={(page) => props.onPageChange(page, props.pageSize)}
+                  />
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div style={{ padding: 24 }}>
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
                 description="No customers match the current filters."
@@ -382,50 +449,9 @@ export default function CustomerList(props: Props) {
                   Clear filters
                 </Button>
               </Empty>
-            ),
-          }}
-          pagination={{
-            current: props.page,
-            pageSize: props.pageSize,
-            total: props.total,
-            onChange: (page) => props.onPageChange(page, props.pageSize),
-          }}
-          renderItem={(row) => (
-            <List.Item
-              onClick={() => props.onSelectCustomer(row.id)}
-              style={{
-                paddingInline: 16,
-                cursor: "pointer",
-                background: row.id === props.selectedCustomerId ? "#f0f6ff" : undefined,
-              }}
-              extra={<Typography.Text strong>{money(row.totalSpent)}</Typography.Text>}
-            >
-              <List.Item.Meta
-                avatar={<Avatar>{row.name?.slice(0, 1) || <UserOutlined />}</Avatar>}
-                title={
-                  <Link
-                    href={props.profileHref(row.id)}
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    {row.name || "Unnamed customer"}
-                  </Link>
-                }
-                description={
-                  <>
-                    {row.mobile}
-                    <br />
-                    {row.groups.slice(0, 2).map((group) => (
-                      <Tag key={group} color={groupColor[group]}>
-                        {group}
-                      </Tag>
-                    ))}
-                    {row.groups.length > 2 ? <Tag>+{row.groups.length - 2}</Tag> : null}
-                  </>
-                }
-              />
-            </List.Item>
+            </div>
           )}
-        />
+        </Spin>
       )}
     </Card>
   );

@@ -560,7 +560,7 @@ export default function CustomersPage() {
         closable={false}
         open={!isDocked && drawerOpen}
         onClose={closeProfile}
-        width={screens.md ? "min(620px, calc(100vw - 24px))" : "100vw"}
+        size={screens.md ? "min(620px, calc(100vw - 24px))" : "100vw"}
         styles={{ body: { padding: 0, overflow: "hidden" } }}
       >
         {!isDocked ? (

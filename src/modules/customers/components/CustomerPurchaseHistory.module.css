@@ -1,0 +1,74 @@
+.tableWrap {
+  min-width: 0;
+  width: 100%;
+}
+
+.tableWrap :global(.ant-table) {
+  table-layout: fixed;
+}
+
+.tableWrap :global(.ant-table-cell) {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.ellipsis,
+.itemTrigger {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itemTrigger {
+  border-radius: 3px;
+  cursor: help;
+  outline: none;
+}
+
+.itemTrigger:focus-visible {
+  box-shadow: 0 0 0 2px #1677ff;
+}
+
+.itemSummary {
+  min-width: 0;
+}
+
+.moreButton {
+  height: auto;
+  padding: 0;
+  font-size: 12px;
+}
+
+.itemList {
+  max-height: min(320px, 60vh);
+  max-width: min(360px, calc(100vw - 48px));
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.itemListRow {
+  overflow-wrap: anywhere;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.mobileList {
+  display: grid;
+  gap: 10px;
+}
+
+.mobileCardRow {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.mobileCardMain {
+  min-width: 0;
+}
