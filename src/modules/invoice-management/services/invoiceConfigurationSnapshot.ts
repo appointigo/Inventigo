@@ -32,8 +32,13 @@ export async function resolveInvoiceConfigurationSnapshot(
       version: policy?.version ?? null,
       effectiveFrom: policy?.effectiveFrom.toISOString() ?? null,
       termsText: policy?.termsText ?? null,
+      exchangePolicyText: policy?.exchangePolicyText ?? null,
       returnPolicyText: policy?.returnPolicyText ?? null,
       thankYouMessage: policy?.thankYouMessage ?? null,
+      storeSubtitle: policy?.storeSubtitle ?? null,
+      footerNote: policy?.footerNote ?? null,
+      signatureText: policy?.signatureText ?? null,
+      qrHelperText: policy?.qrHelperText ?? null,
     },
     policyVersionId: policy?.id ?? null,
   };

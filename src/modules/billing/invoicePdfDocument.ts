@@ -94,6 +94,7 @@ export function InvoicePdfDocument(input: InvoiceDocumentInput) {
     h(Page, { size: "A4", style: [styles.page, ...(premium ? [designStyles.premiumPage] : []), ...(compact ? [designStyles.compactPage] : [])], wrap: true },
       h(View, { style: [styles.header, ...(premium ? [designStyles.premiumHeader] : []), ...(compact ? [designStyles.compactHeader] : [])], wrap: false },
         h(Text, { style: styles.merchantName }, model.merchant.name),
+        model.merchant.subtitle ? h(Text, { style: styles.merchantDetail }, model.merchant.subtitle) : null,
         h(Text, { style: styles.title }, model.title),
         merchantContact ? h(Text, { style: styles.merchantDetail }, merchantContact) : null
       ),
@@ -131,7 +132,7 @@ export function InvoicePdfDocument(input: InvoiceDocumentInput) {
         ) : null
       ) : null,
       h(View, { style: styles.footer, fixed: true },
-        h(Text, null, model.thankYouMessage || "Thank you for shopping with us."),
+        h(Text, null, [model.thankYouMessage || "Thank you for shopping with us.", model.signatureText, model.footerNote, model.qrHelperText].filter(Boolean).join(" | ")),
         h(Text, { render: ({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}` })
       )
     )

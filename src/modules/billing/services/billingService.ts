@@ -703,7 +703,13 @@ export const billingService = {
       organizationId: orgId,
       storeId,
       transactionKind: "SALE",
-      selection: input.whatsappInvoice,
+      selection: input.whatsappInvoice?.enabled
+        ? {
+            ...input.whatsappInvoice,
+            recipient:
+              input.whatsappInvoice.recipient?.trim() || input.customerPhone.trim(),
+          }
+        : input.whatsappInvoice,
       correlationId: diagnostic?.correlationId,
     });
     const invoiceConfiguration = await resolveInvoiceConfigurationSnapshot(prisma, orgId, storeId);
@@ -1732,7 +1738,7 @@ export const billingService = {
     const preparedInvoiceDelivery = await prepareInvoiceDelivery(prisma, {
       organizationId: orgId,
       storeId: sale.storeId,
-      transactionKind: "EXCHANGE",
+      transactionKind: (input.exchangedItems?.length ?? 0) > 0 ? "EXCHANGE" : "RETURN",
       selection: input.whatsappInvoice,
       correlationId: diagnostic?.correlationId,
     });
@@ -2143,7 +2149,7 @@ export const billingService = {
 
           const deliveryIntent = preparedInvoiceDelivery
             ? await enqueueInvoiceDelivery(tx, preparedInvoiceDelivery, {
-                kind: "EXCHANGE",
+                kind: isExchangeFlow ? "EXCHANGE" : "RETURN",
                 id: returnTransaction.id,
                 reference: returnTransaction.referenceNumber,
                 customerName: sale.customerName,

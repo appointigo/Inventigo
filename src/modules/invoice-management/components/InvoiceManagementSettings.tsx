@@ -11,6 +11,7 @@ import {
   Form,
   Input,
   Select,
+  Segmented,
   Space,
   Spin,
   Switch,
@@ -40,8 +41,13 @@ type FormValues = {
   designKey: InvoiceDesignKey;
   defaultWhatsAppEnabled: boolean;
   termsText: string | null;
+  exchangePolicyText: string | null;
   returnPolicyText: string | null;
   thankYouMessage: string | null;
+  storeSubtitle: string | null;
+  footerNote: string | null;
+  signatureText: string | null;
+  qrHelperText: string | null;
   effectiveFrom?: ReturnType<typeof dayjs> | null;
   saleTemplateInstanceId: string | null;
   exchangeTemplateInstanceId: string | null;
@@ -61,11 +67,13 @@ const blueprints = [
 
 function SyntheticInvoice({
   design,
+  documentType,
   termsText,
   returnPolicyText,
   thankYouMessage,
 }: {
   design: InvoiceDesignKey;
+  documentType: "SALE" | "EXCHANGE" | "RETURN";
   termsText?: string | null;
   returnPolicyText?: string | null;
   thankYouMessage?: string | null;
@@ -74,15 +82,15 @@ function SyntheticInvoice({
     <div className={`${styles.preview} ${styles[design.toLowerCase()]}`}>
       <div className={styles.previewHeader}>
         <strong>Stockiva Store</strong>
-        <span>Tax Invoice</span>
+        <span>{documentType === "SALE" ? "Tax Invoice" : documentType === "EXCHANGE" ? "Exchange Receipt" : "Return Receipt"}</span>
       </div>
       <div className={styles.previewMeta}>
         <span>INV-20260925-0001</span>
         <span>25 Sep 2026</span>
       </div>
-      <div className={styles.previewRow}><span>Classic Shirt × 1</span><strong>₹1,250.00</strong></div>
-      <div className={styles.previewRow}><span>Linen Trousers × 1</span><strong>₹1,800.00</strong></div>
-      <div className={styles.previewTotal}><span>Total</span><strong>₹3,050.00</strong></div>
+      <div className={styles.previewRow}><span>{documentType === "EXCHANGE" ? "Returned · Classic Shirt × 1" : "Classic Shirt × 1"}</span><strong>₹1,250.00</strong></div>
+      {documentType !== "RETURN" ? <div className={styles.previewRow}><span>{documentType === "EXCHANGE" ? "Replacement · Linen Trousers × 1" : "Linen Trousers × 1"}</span><strong>₹1,800.00</strong></div> : null}
+      <div className={styles.previewTotal}><span>{documentType === "RETURN" ? "Refund" : documentType === "EXCHANGE" ? "Settlement" : "Total"}</span><strong>{documentType === "RETURN" ? "₹1,250.00" : "₹3,050.00"}</strong></div>
       {termsText || returnPolicyText ? <div className={styles.previewPolicy}>
         {termsText ? <span><strong>Terms:</strong> {termsText}</span> : null}
         {returnPolicyText ? <span><strong>Returns:</strong> {returnPolicyText}</span> : null}
@@ -100,6 +108,7 @@ export default function InvoiceManagementSettings() {
   const [data, setData] = useState<ResponseBody | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [previewKind, setPreviewKind] = useState<"SALE" | "EXCHANGE" | "RETURN">("SALE");
   const selectedDesign = Form.useWatch("designKey", form) ?? "CLASSIC";
   const termsText = Form.useWatch("termsText", form);
   const returnPolicyText = Form.useWatch("returnPolicyText", form);
@@ -120,8 +129,13 @@ export default function InvoiceManagementSettings() {
         designKey: next.settings.designKey,
         defaultWhatsAppEnabled: next.settings.defaultWhatsAppEnabled,
         termsText: next.settings.policy.termsText,
+        exchangePolicyText: next.settings.policy.exchangePolicyText,
         returnPolicyText: next.settings.policy.returnPolicyText,
         thankYouMessage: next.settings.policy.thankYouMessage,
+        storeSubtitle: next.settings.policy.storeSubtitle,
+        footerNote: next.settings.policy.footerNote,
+        signatureText: next.settings.policy.signatureText,
+        qrHelperText: next.settings.policy.qrHelperText,
         effectiveFrom: next.settings.policy.effectiveFrom ? dayjs(next.settings.policy.effectiveFrom) : dayjs(),
         saleTemplateInstanceId: next.settings.saleTemplateInstanceId,
         exchangeTemplateInstanceId: next.settings.exchangeTemplateInstanceId,
@@ -186,14 +200,14 @@ export default function InvoiceManagementSettings() {
               label: "Invoice Designs",
               children: <div className={styles.designGrid}>
                 <div className={styles.designChoices}>{designs.map(design => <Card key={design.key} size="small" className={selectedDesign === design.key ? styles.selectedCard : undefined} onClick={() => form.setFieldValue("designKey", design.key)} hoverable><Space direction="vertical" size={2}><Space><strong>{design.name}</strong>{selectedDesign === design.key ? <Tag color="blue">Default</Tag> : null}</Space><Text type="secondary">{design.description}</Text></Space></Card>)}</div>
-                <SyntheticInvoice design={selectedDesign} termsText={termsText} returnPolicyText={returnPolicyText} thankYouMessage={thankYouMessage} />
+                <div><Segmented block value={previewKind} onChange={value => setPreviewKind(value as typeof previewKind)} options={[{ label: "Sale", value: "SALE" }, { label: "Exchange", value: "EXCHANGE" }, { label: "Return", value: "RETURN" }]} style={{ marginBottom: 12 }} /><SyntheticInvoice design={selectedDesign} documentType={previewKind} termsText={termsText} returnPolicyText={returnPolicyText} thankYouMessage={thankYouMessage} /></div>
                 <Form.Item name="designKey" hidden><Input /></Form.Item>
               </div>,
             },
             {
               key: "terms",
               label: "Terms & Conditions",
-              children: <Card><Alert type="info" showIcon message={`Policy version ${data.settings.policy.version ?? "new"}`} description="Saving changed policy text creates a new immutable version. Existing invoices keep their original snapshot." style={{ marginBottom: 18 }} /><Form.Item name="termsText" label="Invoice terms"><TextArea rows={4} placeholder="Optional store-specific invoice terms" /></Form.Item><Form.Item name="returnPolicyText" label="Exchange / return policy"><TextArea rows={4} placeholder="Optional exchange and return policy" /></Form.Item><Form.Item name="thankYouMessage" label="Thank-you message"><Input placeholder="Optional closing message" /></Form.Item><Form.Item name="effectiveFrom" label="Effective from"><DatePicker showTime style={{ width: "100%" }} /></Form.Item></Card>,
+              children: <Card><Alert type="info" showIcon message={`Policy version ${data.settings.policy.version ?? "new"}`} description="Saving changed content creates a new immutable version. Existing documents keep their original snapshot." style={{ marginBottom: 18 }} /><Form.Item name="storeSubtitle" label="Store subtitle / tagline"><Input /></Form.Item><Form.Item name="termsText" label="Sale terms & conditions"><TextArea rows={4} /></Form.Item><Form.Item name="exchangePolicyText" label="Exchange policy"><TextArea rows={4} /></Form.Item><Form.Item name="returnPolicyText" label="Return policy"><TextArea rows={4} /></Form.Item><Form.Item name="thankYouMessage" label="Thank-you message"><Input /></Form.Item><Form.Item name="signatureText" label="Signature / sign-off text"><Input /></Form.Item><Form.Item name="qrHelperText" label="QR / online-view helper text"><Input /></Form.Item><Form.Item name="footerNote" label="Footer note"><Input /></Form.Item><Form.Item name="effectiveFrom" label="Effective from"><DatePicker showTime style={{ width: "100%" }} /></Form.Item></Card>,
             },
             {
               key: "templates",

@@ -1,12 +1,13 @@
 import type { ReturnTransactionHistory, ReturnTransactionItem, Sale, SaleItem } from "./types";
 import type { InvoiceConfigurationSnapshot } from "@/modules/invoice-management/types";
 
-export type InvoiceDocumentKind = "SALE" | "EXCHANGE";
+export type InvoiceDocumentKind = "SALE" | "EXCHANGE" | "RETURN";
 
 export type InvoiceMerchant = {
   name: string;
   address?: string | null;
   phone?: string | null;
+  subtitle?: string | null;
 };
 
 export type InvoiceDocumentInput = {
@@ -54,6 +55,9 @@ export type InvoiceDocumentModel = {
   designKey: InvoiceConfigurationSnapshot["design"]["key"];
   termsText?: string;
   returnPolicyText?: string;
+  footerNote?: string;
+  signatureText?: string;
+  qrHelperText?: string;
   thankYouMessage?: string;
 };
 
@@ -139,6 +143,23 @@ function buildExchangeTotals(transaction: ReturnTransactionHistory): InvoiceTota
   return totals;
 }
 
+function buildReturnTotals(transaction: ReturnTransactionHistory): InvoiceTotalRow[] {
+  const subtotal = (transaction.returnedItems ?? []).reduce((sum, item) => sum + Number(item.total || 0), 0);
+  const discount = Number(transaction.discountAmount ?? 0);
+  const total = Number(transaction.finalPayable ?? transaction.calculatedTotal ?? subtotal - discount);
+  const tax = Math.max(total - Math.max(subtotal - discount, 0), 0);
+  const totals: InvoiceTotalRow[] = [{ label: "Returned subtotal", value: formatInvoiceMoney(subtotal) }];
+  if (discount > 0) totals.push({ label: "Discount", value: `-${formatInvoiceMoney(discount)}` });
+  if (tax > 0) totals.push({ label: `Tax${transaction.taxRate ? ` (${transaction.taxRate}%)` : ""}`, value: formatInvoiceMoney(tax) });
+  totals.push({ label: "Refund amount", value: formatInvoiceMoney(transaction.refundAmount), emphasis: true });
+  const refunds = transaction.splitPaymentData?.refundPayments ?? [];
+  if (refunds.length) totals.push(...paymentTotals(refunds, "Refunded via"));
+  else if (transaction.refundMethod) totals.push({ label: "Refunded via", value: transaction.refundMethod });
+  const balance = Math.max(total - Number(transaction.refundAmount || 0), 0);
+  if (balance > 0) totals.push({ label: "Balance due", value: formatInvoiceMoney(balance) });
+  return totals;
+}
+
 function buildSaleTotals(sale: Sale): InvoiceTotalRow[] {
   const invoiceSubtotal = sale.items.every(item => item.netLineAmount != null)
     ? sale.items.reduce((sum, item) => sum + Number(item.taxableAmount ?? 0), 0) + sale.discountAmount
@@ -159,16 +180,16 @@ function buildSaleTotals(sale: Sale): InvoiceTotalRow[] {
 
 export function buildInvoiceDocumentModel(input: InvoiceDocumentInput): InvoiceDocumentModel {
   const kind = input.kind ?? "SALE";
-  const transaction = kind === "EXCHANGE"
+  const transaction = kind !== "SALE"
     ? input.sale.returnTransactions.find(item => item.id === input.returnTransactionId)
     : undefined;
-  if (kind === "EXCHANGE" && !transaction) throw new Error("Exchange transaction was not found on the sale");
+  if (kind !== "SALE" && !transaction) throw new Error(`${kind === "RETURN" ? "Return" : "Exchange"} transaction was not found on the sale`);
   const configuration = input.configuration ?? transaction?.invoiceSnapshot ?? input.sale.invoiceSnapshot;
 
   return {
     kind,
-    title: transaction ? "Exchange / Return Receipt" : "Tax Invoice",
-    merchant: input.merchant,
+    title: kind === "RETURN" ? "Return Receipt" : kind === "EXCHANGE" ? "Exchange Receipt" : "Tax Invoice",
+    merchant: { ...input.merchant, subtitle: configuration?.policy.storeSubtitle ?? input.merchant.subtitle },
     reference: transaction?.referenceNumber || input.sale.invoiceNumber,
     issuedAt: formatInvoiceDateTime(
       transaction?.transactionDate || transaction?.businessDate || transaction?.createdAt || input.sale.transactionDate
@@ -179,12 +200,17 @@ export function buildInvoiceDocumentModel(input: InvoiceDocumentInput): InvoiceD
     customerPhone: input.sale.customerPhone || undefined,
     status: transaction?.type || input.sale.status,
     sections: transaction
-      ? buildExchangeSections(transaction)
+      ? kind === "RETURN"
+        ? [{ title: "Returned items", rows: transactionRows(transaction.returnedItems ?? []), showUnitPrice: false }]
+        : buildExchangeSections(transaction)
       : [{ rows: saleRows(input.sale.items), showUnitPrice: true }],
-    totals: transaction ? buildExchangeTotals(transaction) : buildSaleTotals(input.sale),
+    totals: transaction ? (kind === "RETURN" ? buildReturnTotals(transaction) : buildExchangeTotals(transaction)) : buildSaleTotals(input.sale),
     designKey: configuration?.design.key ?? "CLASSIC",
-    termsText: configuration?.policy.termsText ?? undefined,
-    returnPolicyText: configuration?.policy.returnPolicyText ?? undefined,
+    termsText: kind === "SALE" ? configuration?.policy.termsText ?? undefined : undefined,
+    returnPolicyText: kind === "EXCHANGE" ? configuration?.policy.exchangePolicyText ?? configuration?.policy.returnPolicyText ?? undefined : kind === "RETURN" ? configuration?.policy.returnPolicyText ?? undefined : undefined,
     thankYouMessage: configuration?.policy.thankYouMessage ?? undefined,
+    footerNote: configuration?.policy.footerNote ?? undefined,
+    signatureText: configuration?.policy.signatureText ?? undefined,
+    qrHelperText: configuration?.policy.qrHelperText ?? undefined,
   };
 }

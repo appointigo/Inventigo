@@ -12,7 +12,7 @@ export async function GET(request: Request) {
   const user = await requireOrgAuth().catch(() => null);
   if (!user) return NextResponse.json({ error: "Unauthorized", requestId }, { status: 401, headers: { "x-request-id": requestId } });
   const search = new URL(request.url).searchParams;
-  const kind = search.get("kind") === "EXCHANGE" ? "EXCHANGE" : "SALE";
+  const kind = search.get("kind") === "EXCHANGE" ? "EXCHANGE" : search.get("kind") === "RETURN" ? "RETURN" : "SALE";
   const transactionId = search.get("transactionId");
   if (!transactionId) return NextResponse.json({ error: "Transaction is required", requestId }, { status: 400, headers: { "x-request-id": requestId } });
   const attempts = await prisma.whatsAppMessage.findMany({
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
   const user = await requireOrgAuth().catch(() => null);
   if (!user) return NextResponse.json({ error: "Unauthorized", requestId }, { status: 401, headers: { "x-request-id": requestId } });
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
-  const kind = body?.kind === "EXCHANGE" ? "EXCHANGE" : body?.kind === "SALE" ? "SALE" : null;
+  const kind = body?.kind === "EXCHANGE" ? "EXCHANGE" : body?.kind === "RETURN" ? "RETURN" : body?.kind === "SALE" ? "SALE" : null;
   const transactionId = typeof body?.transactionId === "string" ? body.transactionId : null;
   const storeId = typeof body?.storeId === "string" ? body.storeId : user.storeId;
   if (!kind || !transactionId || !storeId) return NextResponse.json({ error: "Transaction and Store are required", requestId }, { status: 400, headers: { "x-request-id": requestId } });

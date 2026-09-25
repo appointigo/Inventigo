@@ -23,7 +23,7 @@ export async function generateInvoicePdf(input: {
   if (!store) throw new Error("INVOICE_STORE_NOT_FOUND");
 
   let saleId = input.transactionId;
-  if (input.kind === "EXCHANGE") {
+  if (input.kind !== "SALE") {
     const transaction = await prisma.returnTransaction.findFirst({
       where: { id: input.transactionId, storeId: input.storeId, store: { orgId: input.organizationId } },
       select: { originalSaleId: true },
@@ -34,7 +34,7 @@ export async function generateInvoicePdf(input: {
   const { billingService } = await import("./billingService");
   const sale = await billingService.getSaleById(input.organizationId, saleId);
   if (!sale) throw new Error("INVOICE_TRANSACTION_NOT_FOUND");
-  const transaction = input.kind === "EXCHANGE"
+  const transaction = input.kind !== "SALE"
     ? sale.returnTransactions.find(item => item.id === input.transactionId)
     : undefined;
   const reference = transaction?.referenceNumber || sale.invoiceNumber;
@@ -62,7 +62,7 @@ export async function generateInvoicePdf(input: {
     sale,
     merchant: store,
     kind: input.kind,
-    returnTransactionId: input.kind === "EXCHANGE" ? input.transactionId : undefined,
+    returnTransactionId: input.kind !== "SALE" ? input.transactionId : undefined,
     configuration: transaction?.invoiceSnapshot ?? sale.invoiceSnapshot,
   });
   console.info("[WhatsApp Invoice] invoice_render_completed", {
@@ -81,7 +81,7 @@ export async function generateInvoicePdf(input: {
     transactionId: input.transactionId,
     reference,
   });
-  const filename = `${input.kind === "EXCHANGE" ? "exchange" : "invoice"}-${reference.replace(/[^a-z0-9_-]+/gi, "-")}.pdf`;
+  const filename = `${input.kind === "SALE" ? "invoice" : input.kind.toLowerCase()}-${reference.replace(/[^a-z0-9_-]+/gi, "-")}.pdf`;
   console.info("[WhatsApp Invoice] pdf_generation_completed", {
     requestId: input.correlationId,
     deliveryId: input.messageId,

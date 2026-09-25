@@ -370,7 +370,16 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
 
     setSaleLoading(true);
     try {
-      const sale = await createSale({ ...cart.toCreateInput(), whatsappInvoice });
+      const resolvedWhatsAppInvoice = whatsappInvoice.enabled
+        ? {
+            ...whatsappInvoice,
+            recipient: whatsappInvoice.recipient?.trim() || cart.customerPhone.trim(),
+          }
+        : whatsappInvoice;
+      const sale = await createSale({
+        ...cart.toCreateInput(),
+        whatsappInvoice: resolvedWhatsAppInvoice,
+      });
       setCompletedSale(sale);
       setInvoiceOpen(true);
       cart.clearCart();

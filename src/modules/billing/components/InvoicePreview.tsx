@@ -75,7 +75,8 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
 
   useEffect(() => {
     if (!open || !sale) return;
-    const kind = invoiceTarget === "SALE" ? "SALE" : "EXCHANGE";
+    const selectedTransaction = sale.returnTransactions.find(item => item.id === invoiceTarget);
+    const kind = invoiceTarget === "SALE" ? "SALE" : selectedTransaction?.exchangedItems?.length ? "EXCHANGE" : "RETURN";
     const transactionId = invoiceTarget === "SALE" ? sale.id : invoiceTarget;
     const controller = new AbortController();
     fetch(`/api/whatsapp/invoices?kind=${kind}&transactionId=${encodeURIComponent(transactionId)}`, {
@@ -141,7 +142,7 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
     printWindow.document.write(buildInvoiceDocumentHtml({
       sale,
       merchant: { name: storeName },
-      kind: invoiceTarget === "SALE" ? "SALE" : "EXCHANGE",
+      kind: invoiceTarget === "SALE" ? "SALE" : sale.returnTransactions.find(item => item.id === invoiceTarget)?.exchangedItems?.length ? "EXCHANGE" : "RETURN",
       returnTransactionId: invoiceTarget === "SALE" ? undefined : invoiceTarget,
       configuration: invoiceTarget === "SALE"
         ? sale.invoiceSnapshot
@@ -158,7 +159,7 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
     }
     const [kind, transactionId] = invoiceTarget === "SALE"
       ? ["SALE", sale.id]
-      : ["EXCHANGE", invoiceTarget];
+      : [sale.returnTransactions.find(item => item.id === invoiceTarget)?.exchangedItems?.length ? "EXCHANGE" : "RETURN", invoiceTarget];
     const submit = async () => {
       const requestId = crypto.randomUUID();
       setSendingInvoice(true);

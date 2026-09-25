@@ -170,8 +170,13 @@ export class InvoiceManagementService {
 
     const touchesPolicy = [
       "termsText",
+      "exchangePolicyText",
       "returnPolicyText",
       "thankYouMessage",
+      "storeSubtitle",
+      "footerNote",
+      "signatureText",
+      "qrHelperText",
       "effectiveFrom",
     ].some(field => hasOwn(input, field));
     const touchesSettings =
@@ -194,12 +199,19 @@ export class InvoiceManagementService {
             termsText: hasOwn(input, "termsText")
               ? normalizeText(input.termsText)
               : active?.termsText ?? null,
+            exchangePolicyText: hasOwn(input, "exchangePolicyText")
+              ? normalizeText(input.exchangePolicyText)
+              : active?.exchangePolicyText ?? null,
             returnPolicyText: hasOwn(input, "returnPolicyText")
               ? normalizeText(input.returnPolicyText)
               : active?.returnPolicyText ?? null,
             thankYouMessage: hasOwn(input, "thankYouMessage")
               ? normalizeText(input.thankYouMessage)
               : active?.thankYouMessage ?? null,
+            storeSubtitle: hasOwn(input, "storeSubtitle") ? normalizeText(input.storeSubtitle) : active?.storeSubtitle ?? null,
+            footerNote: hasOwn(input, "footerNote") ? normalizeText(input.footerNote) : active?.footerNote ?? null,
+            signatureText: hasOwn(input, "signatureText") ? normalizeText(input.signatureText) : active?.signatureText ?? null,
+            qrHelperText: hasOwn(input, "qrHelperText") ? normalizeText(input.qrHelperText) : active?.qrHelperText ?? null,
           };
           const effectiveFrom = input.effectiveFrom
             ? new Date(input.effectiveFrom)

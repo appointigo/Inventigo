@@ -13,7 +13,7 @@ type InvoicePdfGenerator = (input: {
   messageId?: string;
   organizationId: string;
   storeId: string;
-  kind: "SALE" | "EXCHANGE";
+  kind: "SALE" | "EXCHANGE" | "RETURN";
   transactionId: string;
 }) => Promise<{ buffer: Buffer; filename: string; reference: string }>;
 
@@ -45,7 +45,7 @@ type InvoicePayload = {
   invoiceDelivery: {
     correlationId: string;
     deploymentEnvironment?: string;
-    kind: "SALE" | "EXCHANGE";
+    kind: "SALE" | "EXCHANGE" | "RETURN";
     transactionId: string;
     recipient: string;
     filename?: string;
@@ -67,7 +67,7 @@ const asPayload = (value: unknown): InvoicePayload | null => {
 
 export async function prepareInvoiceDelivery(
   prisma: PrismaClient,
-  input: { organizationId: string; storeId: string; transactionKind?: "SALE" | "EXCHANGE"; selection?: WhatsAppInvoiceSelection; correlationId?: string }
+  input: { organizationId: string; storeId: string; transactionKind?: "SALE" | "EXCHANGE" | "RETURN"; selection?: WhatsAppInvoiceSelection; correlationId?: string }
 ): Promise<PreparedInvoiceDelivery | null> {
   if (!input.selection?.enabled) return null;
   if (!input.selection.consentConfirmed) throw new Error("WHATSAPP_INVOICE_CONSENT_REQUIRED");
@@ -80,7 +80,7 @@ export async function prepareInvoiceDelivery(
   if (!store) throw new Error("STORE_NOT_FOUND");
   const transactionKind = input.transactionKind ?? "SALE";
   const templateInstanceId = input.selection.templateInstanceId ??
-    (transactionKind === "EXCHANGE"
+    (transactionKind !== "SALE"
       ? store.whatsappProfile?.defaultExchangeInvoiceTemplateInstanceId
       : store.whatsappProfile?.defaultInvoiceTemplateInstanceId);
   if (!templateInstanceId) throw new Error("WHATSAPP_INVOICE_DEFAULT_TEMPLATE_REQUIRED");
@@ -113,7 +113,7 @@ export async function enqueueInvoiceDelivery(
   tx: Prisma.TransactionClient,
   prepared: PreparedInvoiceDelivery,
   transaction: {
-    kind: "SALE" | "EXCHANGE";
+    kind: "SALE" | "EXCHANGE" | "RETURN";
     id: string;
     reference: string;
     customerName?: string | null;

@@ -117,8 +117,13 @@ model InvoicePolicyVersion {
   storeId            String
   version            Int
   termsText          String?
+  exchangePolicyText String?
   returnPolicyText   String?
   thankYouMessage    String?
+  storeSubtitle      String?
+  footerNote         String?
+  signatureText      String?
+  qrHelperText       String?
   effectiveFrom      DateTime               @default(now())
   createdAt          DateTime               @default(now())
   store              Store                  @relation(fields: [storeId], references: [id], onDelete: Cascade)

@@ -5,8 +5,13 @@ export type InvoicePolicySnapshot = {
   version: number | null;
   effectiveFrom: string | null;
   termsText: string | null;
+  exchangePolicyText: string | null;
   returnPolicyText: string | null;
   thankYouMessage: string | null;
+  storeSubtitle: string | null;
+  footerNote: string | null;
+  signatureText: string | null;
+  qrHelperText: string | null;
 };
 
 export type InvoiceConfigurationSnapshot = {

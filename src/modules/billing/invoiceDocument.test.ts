@@ -31,6 +31,7 @@ const sale: Sale = {
     { id: "exchange-pay", type: "RETURN_EXCHANGE", referenceNumber: "RET-1", returnedItems: [{ productId: "product-1", sizeId: "size-1", productName: "Shirt", quantity: 1, total: 1000 }], exchangedItems: [{ productId: "product-2", sizeId: "size-2", productName: "Jacket", quantity: 1, total: 1200 }], netAmount: 200, offsetAmount: 200, refundAmount: 0, discountType: "FLAT", discountAmount: 100, taxRate: 10, calculatedTotal: 1210, finalPayable: 1210, splitPaymentData: { topUpPayments: [{ method: "UPI", amount: 200 }] }, createdAt: "2026-09-23T10:00:00Z" },
     { id: "exchange-even", type: "RETURN_EXCHANGE", referenceNumber: "RET-2", returnedItems: [{ productId: "product-1", sizeId: "size-1", quantity: 1, total: 1000 }], exchangedItems: [{ productId: "product-3", sizeId: "size-3", quantity: 1, total: 1000 }], netAmount: 0, offsetAmount: 0, refundAmount: 0, createdAt: "2026-09-23T11:00:00Z" },
     { id: "exchange-refund", type: "RETURN_EXCHANGE", referenceNumber: "RET-3", returnedItems: [{ productId: "product-1", sizeId: "size-1", quantity: 1, total: 1000 }], exchangedItems: [{ productId: "product-4", sizeId: "size-4", quantity: 1, total: 800 }], netAmount: 0, offsetAmount: 0, refundAmount: 200, createdAt: "2026-09-23T12:00:00Z" },
+    { id: "return-refund", type: "RETURN", referenceNumber: "RET-4", returnedItems: [{ productId: "product-1", sizeId: "size-1", productName: "Shirt", quantity: 1, total: 1000 }], exchangedItems: [], netAmount: -1000, offsetAmount: 0, refundAmount: 1000, refundMethod: "UPI", createdAt: "2026-09-23T13:00:00Z" },
   ],
   transactionDate: "2026-09-23T09:00:00Z",
   createdAt: "2026-09-23T09:00:00Z",
@@ -62,10 +63,21 @@ test("renders finalized exchange pricing and settlement payment details", () => 
   assert.match(html, /Top-up - UPI/);
 });
 
+test("renders a distinct return receipt with refund settlement", () => {
+  const model = buildInvoiceDocumentModel({ sale, merchant: { name: "Rare Thread" }, kind: "RETURN", returnTransactionId: "return-refund" });
+  assert.equal(model.title, "Return Receipt");
+  assert.equal(model.sections.length, 1);
+  assert.match(model.totals.map(row => row.label).join(" "), /Refund amount/);
+  const html = buildInvoiceDocumentHtml({ sale, merchant: { name: "Rare Thread" }, kind: "RETURN", returnTransactionId: "return-refund" });
+  assert.match(html, /Return Receipt/);
+  assert.doesNotMatch(html, /Replacement items/);
+});
+
 test("generates non-empty sale and exchange PDF documents at runtime", async () => {
   for (const document of [
     { name: "sale", input: { sale, merchant: { name: "Rare Thread", address: "12 Market Road", phone: "+91 98765 43210" } } },
     { name: "exchange", input: { sale, merchant: { name: "Rare Thread" }, kind: "EXCHANGE" as const, returnTransactionId: "exchange-pay" } },
+    { name: "return", input: { sale, merchant: { name: "Rare Thread" }, kind: "RETURN" as const, returnTransactionId: "return-refund" } },
   ]) {
     const pdf = await renderInvoicePdf(document.input);
     assert.equal(pdf.subarray(0, 4).toString(), "%PDF");
