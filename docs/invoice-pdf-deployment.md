@@ -31,7 +31,8 @@ cannot starve the invoice queue.
 
 `next start` only serves HTTP requests; it does not execute `vercel.json` cron
 configuration. Create a second Railway service from the same repository/image,
-configure it as a cron service (recommended schedule: `* * * * *`), and set its
+configure it as a cron service (recommended schedule: `*/5 * * * *`, Railway's
+minimum supported interval; schedules run in UTC), and set its
 start command to:
 
 ```bash
@@ -44,6 +45,42 @@ expose the web service's `RAILWAY_PUBLIC_DOMAIN` to the cron service. The comman
 makes one authenticated request, waits for its result, and exits non-zero on an
 HTTP failure. Do not run it as an unawaited task inside the web request that
 creates a sale.
+
+Before enabling the recurring schedule, verify the shared secret without
+touching the queue:
+
+```bash
+curl -I -H "Authorization: Bearer $CRON_SECRET" \
+  "$STOCKIVA_APP_URL/api/cron/whatsapp-invoices"
+```
+
+The expected response is `204`. This `HEAD` handler performs no database query
+and cannot claim an invoice.
+
+For a controlled one-record smoke test, keep the recurring cron service
+disabled and temporarily set these variables on the web service:
+
+```text
+WHATSAPP_INVOICE_SMOKE_TEST_DELIVERY_ID=<exact reviewed delivery UUID>
+WHATSAPP_INVOICE_SMOKE_TEST_RECIPIENT=<exact reviewed E.164 recipient>
+```
+
+First inspect the allowlisted record with an authenticated `GET` to
+`/api/cron/whatsapp-invoices/<delivery-id>`. Only after reviewing that response
+and obtaining explicit send authorization, submit:
+
+```json
+{
+  "deliveryId": "<same delivery UUID>",
+  "expectedReference": "<same invoice reference>",
+  "confirmation": "SEND_SINGLE_WHATSAPP_INVOICE"
+}
+```
+
+to the same URL with `POST` and the bearer secret. The route rejects any other
+delivery, recipient, reference, previously claimed record, provider message,
+media upload, provider-error history, or revoked/missing transactional consent.
+Remove both smoke-test variables after the test.
 
 Railway automatically detects the root `Dockerfile`; no deprecated
 `railway.json` opt-in is required. The web service keeps `npm run start` as its

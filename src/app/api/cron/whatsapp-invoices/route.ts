@@ -6,6 +6,17 @@ import { createWhatsAppInvoiceDeliveryService } from "@/modules/whatsapp/server"
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+export function HEAD(request: Request) {
+  const authorized = hasValidCronAuthorization(
+    process.env.CRON_SECRET,
+    request.headers.get("authorization")
+  );
+  return new Response(null, {
+    status: authorized ? 204 : 401,
+    headers: { "cache-control": "no-store" },
+  });
+}
+
 export async function GET(request: Request) {
   const deploymentEnvironment = getDeploymentEnvironmentLabel();
   if (!hasValidCronAuthorization(process.env.CRON_SECRET, request.headers.get("authorization"))) {
