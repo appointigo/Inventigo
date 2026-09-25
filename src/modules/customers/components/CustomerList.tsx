@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { FilterOutlined, PlusOutlined, SearchOutlined, UserOutlined } from "@ant-design/icons";
 import {
   Avatar,
@@ -20,6 +21,7 @@ import {
 import type { ColumnsType, TableProps } from "antd/es/table";
 import type { CustomerListItemDto, CustomerSortField, SortDirection } from "../types";
 import type { CustomerDatePreset } from "../utils/customerDateWindow";
+import { shouldApplyCustomerSort } from "../customerPagination";
 
 export type DirectoryFilters = {
   lastPurchaseDays?: CustomerDatePreset;
@@ -47,6 +49,8 @@ type Props = {
   onSelectCustomer: (id: string) => void;
   onCreateCustomer: () => void;
   onClearFilters: () => void;
+  compact?: boolean;
+  profileHref: (customerId: string) => string;
 };
 const groupColor: Record<string, string> = {
   "Recently Purchased": "blue",
@@ -77,14 +81,22 @@ export default function CustomerList(props: Props) {
         {row.name?.slice(0, 1).toUpperCase()}
       </Avatar>
       <div style={{ minWidth: 0 }}>
-        <Typography.Text
-          strong
-          ellipsis={{ tooltip: row.name || "Unnamed customer" }}
-          style={{ display: "block", maxWidth: screens.lg ? 220 : 190, whiteSpace: "nowrap" }}
+        <Link
+          href={props.profileHref(row.id)}
+          onClick={(event) => event.stopPropagation()}
+          title={row.name || "Unnamed customer"}
+          style={{
+            display: "block",
+            maxWidth: screens.lg && !props.compact ? 220 : 190,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            fontWeight: 600,
+          }}
         >
           {row.name || "Unnamed customer"}
-        </Typography.Text>
-        {!screens.lg ? (
+        </Link>
+        {!screens.lg || props.compact ? (
           <Typography.Text
             type="secondary"
             style={{ display: "block", fontSize: 12, whiteSpace: "nowrap" }}
@@ -99,13 +111,13 @@ export default function CustomerList(props: Props) {
     {
       title: "Customer",
       dataIndex: "name",
-      width: screens.lg ? 250 : 230,
+      width: screens.lg && !props.compact ? 250 : 230,
       sorter: true,
       sortDirections: sorter(),
       sortOrder: sortOrder("name"),
       render: customerCell,
     },
-    ...(screens.lg
+    ...(screens.lg && !props.compact
       ? [
           {
             title: "Mobile",
@@ -144,7 +156,7 @@ export default function CustomerList(props: Props) {
         </span>
       ),
     },
-    ...(screens.xl
+    ...(screens.xl && !props.compact
       ? [
           {
             title: "Preferred store",
@@ -155,34 +167,38 @@ export default function CustomerList(props: Props) {
           } as ColumnsType<CustomerListItemDto>[number],
         ]
       : []),
-    {
-      title: "Customer group",
-      dataIndex: "groups",
-      width: 245,
-      render: (groups: string[]) => (
-        <div
-          style={{
-            display: "flex",
-            gap: 4,
-            alignItems: "center",
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-          }}
-        >
-          {groups.slice(0, 2).map((group) => (
-            <Tag key={group} color={groupColor[group]} style={{ marginInlineEnd: 0 }}>
-              {group}
-            </Tag>
-          ))}
-          {groups.length > 2 ? (
-            <Tooltip title={groups.slice(2).join(", ")}>
-              <Tag style={{ marginInlineEnd: 0 }}>+{groups.length - 2}</Tag>
-            </Tooltip>
-          ) : null}
-        </div>
-      ),
-    },
-    ...(screens.xl
+    ...(!props.compact
+      ? [
+          {
+            title: "Customer group",
+            dataIndex: "groups",
+            width: 245,
+            render: (groups: string[]) => (
+              <div
+                style={{
+                  display: "flex",
+                  gap: 4,
+                  alignItems: "center",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                }}
+              >
+                {groups.slice(0, 2).map((group) => (
+                  <Tag key={group} color={groupColor[group]} style={{ marginInlineEnd: 0 }}>
+                    {group}
+                  </Tag>
+                ))}
+                {groups.length > 2 ? (
+                  <Tooltip title={groups.slice(2).join(", ")}>
+                    <Tag style={{ marginInlineEnd: 0 }}>+{groups.length - 2}</Tag>
+                  </Tooltip>
+                ) : null}
+              </div>
+            ),
+          } as ColumnsType<CustomerListItemDto>[number],
+        ]
+      : []),
+    ...(screens.xl && !props.compact
       ? [
           {
             title: "Activity",
@@ -296,8 +312,9 @@ export default function CustomerList(props: Props) {
           columns={columns}
           dataSource={props.customers}
           loading={props.loading}
-          scroll={{ x: "max-content" }}
-          onChange={(_, __, sorterValue) => {
+          scroll={{ x: "max-content", y: props.compact ? "calc(100vh - 410px)" : undefined }}
+          onChange={(_, __, sorterValue, extra) => {
+            if (!shouldApplyCustomerSort(extra.action)) return;
             const sorterItem = Array.isArray(sorterValue) ? sorterValue[0] : sorterValue;
             if (!sorterItem?.order) return;
             const field =
@@ -312,6 +329,14 @@ export default function CustomerList(props: Props) {
           }}
           onRow={(row) => ({
             onClick: () => props.onSelectCustomer(row.id),
+            onKeyDown: (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                props.onSelectCustomer(row.id);
+              }
+            },
+            tabIndex: 0,
+            "aria-label": `Quick view for ${row.name || row.mobile}`,
             style: {
               cursor: "pointer",
               background: row.id === props.selectedCustomerId ? "#f0f6ff" : undefined,
@@ -338,6 +363,7 @@ export default function CustomerList(props: Props) {
             pageSize: props.pageSize,
             total: props.total,
             showSizeChanger: true,
+            showLessItems: true,
             showTotal: (count) => `${count} customers`,
             onChange: props.onPageChange,
           }}
@@ -376,7 +402,14 @@ export default function CustomerList(props: Props) {
             >
               <List.Item.Meta
                 avatar={<Avatar>{row.name?.slice(0, 1) || <UserOutlined />}</Avatar>}
-                title={row.name || "Unnamed customer"}
+                title={
+                  <Link
+                    href={props.profileHref(row.id)}
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    {row.name || "Unnamed customer"}
+                  </Link>
+                }
                 description={
                   <>
                     {row.mobile}

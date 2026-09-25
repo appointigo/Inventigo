@@ -66,11 +66,30 @@ export default function CustomerDetailView({
   const lastPurchase = customer.sales[0]?.createdAt ?? null;
   const salesColumns: ColumnsType<CustomerSaleSummaryDto> = [
     { title: "Invoice", dataIndex: "invoiceNumber" },
+    { title: "Store", dataIndex: "storeName" },
+    {
+      title: "Items",
+      dataIndex: "items",
+      render: (items: CustomerSaleSummaryDto["items"]) =>
+        items
+          .map((item) => `${item.name}${item.size ? ` (${item.size})` : ""} ×${item.quantity}`)
+          .join(", ") || "—",
+    },
     { title: "Amount", dataIndex: "total", align: "right", render: money },
     {
       title: "Status",
       dataIndex: "status",
       render: (value) => <Tag color={value === "COMPLETED" ? "green" : "orange"}>{value}</Tag>,
+    },
+    {
+      title: "Payment",
+      dataIndex: "paymentStatus",
+      render: (value) => <Tag>{plainLabel(value)}</Tag>,
+    },
+    {
+      title: "Return / exchange",
+      dataIndex: "returnStatus",
+      render: (value) => (value === "NONE" ? "—" : <Tag color="orange">{plainLabel(value)}</Tag>),
     },
     {
       title: "Date",
@@ -134,7 +153,17 @@ export default function CustomerDetailView({
           values={customer.insights.preferredBrands}
         />
       </div>
-      <Card size="small" title="Items Customer Couldn't Buy">
+      <Card
+        size="small"
+        title="Recent Unfulfilled Demand"
+        extra={
+          customer.demandRequests.length ? (
+            <Button type="link" size="small" onClick={() => onActiveTabChange?.("demand")}>
+              View All
+            </Button>
+          ) : null
+        }
+      >
         {customer.demandRequests.length ? (
           <List
             size="small"
@@ -185,6 +214,10 @@ export default function CustomerDetailView({
       label: "Preferences",
       children: (
         <div style={{ display: "grid", gap: 12 }}>
+          <Typography.Text type="secondary">
+            Observed buying patterns derived from this customer&apos;s recorded purchases. No
+            unconfirmed preferences are inferred.
+          </Typography.Text>
           <InsightBlock title="Top purchased categories" values={customer.insights.topCategories} />
           <InsightBlock title="Common purchased sizes" values={customer.insights.commonSizes} />
           <InsightBlock
@@ -234,57 +267,83 @@ export default function CustomerDetailView({
     {
       key: "engagement",
       label: "Engagement",
-      children: customer.followUps.length ? (
-        <List
-          dataSource={customer.followUps}
-          renderItem={(item) => (
-            <List.Item
-              actions={
-                item.status === "OPEN"
-                  ? [
-                      <Button
-                        size="small"
-                        key="start"
-                        onClick={() => updateFollowUp(item.id, "IN_PROGRESS")}
-                      >
-                        Start
-                      </Button>,
-                    ]
-                  : item.status === "IN_PROGRESS"
-                    ? [
-                        <Button
-                          size="small"
-                          type="primary"
-                          key="complete"
-                          onClick={() => updateFollowUp(item.id, "COMPLETED")}
-                        >
-                          Complete
-                        </Button>,
-                      ]
-                    : item.status === "COMPLETED" || item.status === "CANCELLED"
-                      ? [
-                          <Button
-                            size="small"
-                            key="reopen"
-                            onClick={() => updateFollowUp(item.id, "OPEN")}
-                          >
-                            Reopen
-                          </Button>,
-                        ]
-                      : []
-              }
-              extra={<Tag>{plainLabel(item.status)}</Tag>}
-            >
-              <List.Item.Meta
-                title={item.title}
-                description={`${plainLabel(item.type)} · ${plainLabel(item.priority)} · ${item.storeName}${item.assigneeName ? ` · ${item.assigneeName}` : ""}${item.dueAt ? ` · due ${new Date(item.dueAt).toLocaleString("en-IN")}` : ""}${item.note ? ` · ${item.note}` : ""}`}
-              />
-            </List.Item>
-          )}
-        />
-      ) : (
-        <Empty description="No follow-ups recorded" />
-      ),
+      children:
+        customer.followUps.length || customer.visits.length ? (
+          <Space direction="vertical" style={{ width: "100%" }} size={16}>
+            <Card size="small" title="Recorded visits">
+              {customer.visits.length ? (
+                <List
+                  dataSource={customer.visits}
+                  renderItem={(visit) => (
+                    <List.Item>
+                      <List.Item.Meta
+                        title={`${plainLabel(visit.outcome)} · ${visit.storeName}`}
+                        description={`${new Date(visit.visitedAt).toLocaleString("en-IN")}${visit.notes ? ` · ${visit.notes}` : ""}`}
+                      />
+                    </List.Item>
+                  )}
+                />
+              ) : (
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No visits recorded" />
+              )}
+            </Card>
+            <Card size="small" title="Follow-ups">
+              {customer.followUps.length ? (
+                <List
+                  dataSource={customer.followUps}
+                  renderItem={(item) => (
+                    <List.Item
+                      actions={
+                        item.status === "OPEN"
+                          ? [
+                              <Button
+                                size="small"
+                                key="start"
+                                onClick={() => updateFollowUp(item.id, "IN_PROGRESS")}
+                              >
+                                Start
+                              </Button>,
+                            ]
+                          : item.status === "IN_PROGRESS"
+                            ? [
+                                <Button
+                                  size="small"
+                                  type="primary"
+                                  key="complete"
+                                  onClick={() => updateFollowUp(item.id, "COMPLETED")}
+                                >
+                                  Complete
+                                </Button>,
+                              ]
+                            : item.status === "COMPLETED" || item.status === "CANCELLED"
+                              ? [
+                                  <Button
+                                    size="small"
+                                    key="reopen"
+                                    onClick={() => updateFollowUp(item.id, "OPEN")}
+                                  >
+                                    Reopen
+                                  </Button>,
+                                ]
+                              : []
+                      }
+                      extra={<Tag>{plainLabel(item.status)}</Tag>}
+                    >
+                      <List.Item.Meta
+                        title={item.title}
+                        description={`${plainLabel(item.type)} · ${plainLabel(item.priority)} · ${item.storeName}${item.assigneeName ? ` · ${item.assigneeName}` : ""}${item.dueAt ? ` · due ${new Date(item.dueAt).toLocaleString("en-IN")}` : ""}${item.note ? ` · ${item.note}` : ""}`}
+                      />
+                    </List.Item>
+                  )}
+                />
+              ) : (
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No follow-ups recorded" />
+              )}
+            </Card>
+          </Space>
+        ) : (
+          <Empty description="No follow-ups recorded" />
+        ),
     },
   ];
   return (
@@ -302,6 +361,7 @@ export default function CustomerDetailView({
             <Typography.Title level={4} style={{ margin: 0 }}>
               {customer.name || "Unnamed Customer"}
             </Typography.Title>
+            <Typography.Text type="secondary">{customer.mobile}</Typography.Text>
             <Space wrap style={{ marginTop: 5 }}>
               <Tag
                 color={
@@ -314,21 +374,27 @@ export default function CustomerDetailView({
               >
                 {customer.activityStatus}
               </Tag>
-              {customer.groups.map((group) => (
-                <Tooltip key={group} title={`Customer group: ${group}`}>
-                  <Tag
-                    color={
-                      group === "Need Attention"
-                        ? "red"
-                        : group === "High Spender"
-                          ? "gold"
-                          : "blue"
-                    }
-                  >
-                    {group}
-                  </Tag>
-                </Tooltip>
-              ))}
+              {customer.groups
+                .filter(
+                  (group) =>
+                    group.toLocaleLowerCase("en-IN") !==
+                    customer.activityStatus.toLocaleLowerCase("en-IN")
+                )
+                .map((group) => (
+                  <Tooltip key={group} title={`Customer group: ${group}`}>
+                    <Tag
+                      color={
+                        group === "Need Attention"
+                          ? "red"
+                          : group === "High Spender"
+                            ? "gold"
+                            : "blue"
+                      }
+                    >
+                      {group}
+                    </Tag>
+                  </Tooltip>
+                ))}
               {customer.preferredStoreName ? <Tag>{customer.preferredStoreName}</Tag> : null}
               {customer.tags.map((tag) => (
                 <Tag key={tag}>{tag}</Tag>
@@ -375,7 +441,7 @@ export default function CustomerDetailView({
           </Card>
         ))}
       </div>
-      <Tabs size="small" activeKey={activeTab} onChange={onActiveTabChange} items={tabs} />
+      <Tabs centered size="small" activeKey={activeTab} onChange={onActiveTabChange} items={tabs} />
     </Card>
   );
 }

@@ -29,6 +29,10 @@ export type CustomerSaleSummaryDto = {
   total: number;
   status: string;
   createdAt: string;
+  storeName: string;
+  paymentStatus: string;
+  returnStatus: string;
+  items: Array<{ name: string; size: string | null; quantity: number }>;
 };
 
 export type CustomerDetailDto = CustomerDto & {
@@ -37,8 +41,39 @@ export type CustomerDetailDto = CustomerDto & {
   sales: CustomerSaleSummaryDto[];
   firstPurchaseDate: string | null;
   insights: { topCategories: string[]; commonSizes: string[]; preferredBrands: string[] };
-  demandRequests: Array<{ id: string; visitId: string; storeName: string; requirement: string; reason: string; status: string; requestedQuantity: number; fulfilledQuantity: number; attributes: Record<string, unknown>; createdAt: string; followUpStatus: string | null; restockAvailable: boolean }>;
-  followUps: Array<{ id: string; title: string; type: string; status: string; priority: string; reason: string | null; note: string | null; dueAt: string | null; storeName: string; assigneeName: string | null }>;
+  demandRequests: Array<{
+    id: string;
+    visitId: string;
+    storeName: string;
+    requirement: string;
+    reason: string;
+    status: string;
+    requestedQuantity: number;
+    fulfilledQuantity: number;
+    attributes: Record<string, unknown>;
+    createdAt: string;
+    followUpStatus: string | null;
+    restockAvailable: boolean;
+  }>;
+  followUps: Array<{
+    id: string;
+    title: string;
+    type: string;
+    status: string;
+    priority: string;
+    reason: string | null;
+    note: string | null;
+    dueAt: string | null;
+    storeName: string;
+    assigneeName: string | null;
+  }>;
+  visits: Array<{
+    id: string;
+    visitedAt: string;
+    outcome: string;
+    storeName: string;
+    notes: string | null;
+  }>;
 };
 
 export type CustomerListItemDto = {
@@ -60,7 +95,13 @@ export type CustomerListItemDto = {
   activityStatus: "Recently purchased" | "Past customer" | "Never purchased";
 };
 
-export type CustomerGroupFilter = "all" | "recent" | "repeat" | "high_spenders" | "attention" | "never_purchased";
+export type CustomerGroupFilter =
+  | "all"
+  | "recent"
+  | "repeat"
+  | "high_spenders"
+  | "attention"
+  | "never_purchased";
 export type CustomerListType = CustomerGroupFilter;
 export type CustomerSortField = "name" | "spend" | "orders" | "lastPurchase";
 export type SortDirection = "asc" | "desc";
@@ -70,6 +111,7 @@ export type PaginatedCustomersDto = {
   total: number;
   page: number;
   pageSize: number;
+  totalPages?: number;
   counts?: Record<CustomerGroupFilter, number>;
   scope?: "store" | "organization";
 };

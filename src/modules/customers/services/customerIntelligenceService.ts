@@ -7,6 +7,7 @@ import {
   isInCustomerDateWindow,
   type CustomerDatePreset,
 } from "../utils/customerDateWindow";
+import { paginateCustomerRows } from "../customerPagination";
 
 const DAY_MS = 86_400_000;
 const toPaise = (value: { toFixed(digits: number): string } | number | string | null) => {
@@ -206,28 +207,24 @@ export const customerIntelligenceService = {
     );
     const direction = query.sortDirection === "asc" ? 1 : -1;
     const sortBy = query.sortBy ?? "lastPurchase";
-    rows.sort(
-      (a, b) =>
-        direction *
-        (sortBy === "name"
+    rows.sort((a, b) => {
+      const primary =
+        sortBy === "name"
           ? (a.name ?? "").localeCompare(b.name ?? "")
           : sortBy === "spend"
             ? a.totalSpent - b.totalSpent
             : sortBy === "orders"
               ? a.totalOrders - b.totalOrders
               : (a.lastPurchaseAt ? Date.parse(a.lastPurchaseAt) : 0) -
-                (b.lastPurchaseAt ? Date.parse(b.lastPurchaseAt) : 0))
-    );
-    const page = Math.max(1, query.page ?? 1);
-    const pageSize = Math.min(100, Math.max(1, query.pageSize ?? 10));
+                (b.lastPurchaseAt ? Date.parse(b.lastPurchaseAt) : 0);
+      return primary ? direction * primary : a.id.localeCompare(b.id);
+    });
+    const pagination = paginateCustomerRows(rows, query.page ?? 1, query.pageSize ?? 10);
     return {
       generatedAt: new Date().toISOString(),
       scope: query.storeId ? "store" : "organization",
       counts,
-      items: rows.slice((page - 1) * pageSize, page * pageSize),
-      total: rows.length,
-      page,
-      pageSize,
+      ...pagination,
     };
   },
   async insights(orgId: string, storeId?: string | null) {

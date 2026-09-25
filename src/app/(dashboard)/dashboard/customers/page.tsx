@@ -4,7 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, App, Button, Card, Drawer, Grid, Modal, Skeleton, Tooltip, Typography } from "antd";
 import {
   ClockCircleOutlined,
+  CloseOutlined,
   CrownOutlined,
+  LeftOutlined,
+  RightOutlined,
   TeamOutlined,
   UsergroupAddOutlined,
   WarningOutlined,
@@ -12,13 +15,22 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import CustomerList, { type DirectoryFilters } from "@/modules/customers/components/CustomerList";
 import CustomerForm from "@/modules/customers/components/CustomerForm";
-import CustomerDetailView from "@/modules/customers/components/CustomerDetailView";
+import CustomerQuickView from "@/modules/customers/components/CustomerQuickView";
 import CustomerFollowUpModal from "@/modules/customers/components/CustomerFollowUpModal";
 import {
   customerDetailQueryKey,
   customerDirectoryQueryKey,
   customerDirectorySearchParams,
 } from "@/modules/customers/customerQueries";
+import {
+  getCustomerNavigationTargets,
+  type CustomerNavigationTarget,
+} from "@/modules/customers/customerNavigation";
+import {
+  customerProfileHref,
+  parseCustomerDirectoryState,
+  serializeCustomerDirectoryState,
+} from "@/modules/customers/customerDirectoryState";
 import { VisitForm } from "@/modules/demand-intelligence/components/DemandIntelligencePage";
 import { useStore } from "@/providers/StoreProvider";
 import type {
@@ -31,7 +43,13 @@ import type {
   SortDirection,
 } from "@/modules/customers/types";
 
-const EMPTY_LIST: PaginatedCustomersDto = { items: [], total: 0, page: 1, pageSize: 10 };
+const EMPTY_LIST: PaginatedCustomersDto = {
+  items: [],
+  total: 0,
+  page: 1,
+  pageSize: 10,
+  totalPages: 0,
+};
 const GROUP_LABELS = {
   all: "All Customers",
   recent: "Recently Purchased",
@@ -43,10 +61,12 @@ const GROUP_LABELS = {
 
 export default function CustomersPage() {
   const { message } = App.useApp();
-  const { storeId } = useStore();
+  const { storeId, setStore } = useStore();
   const screens = Grid.useBreakpoint();
   const queryClient = useQueryClient();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const filterScopeRef = useRef<string | null>(null);
+  const didRestoreDirectoryRef = useRef(false);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [activeType, setActiveType] = useState<CustomerListType>("all");
@@ -59,10 +79,35 @@ export default function CustomersPage() {
   const [editingCustomer, setEditingCustomer] = useState<CustomerDto | null>(null);
   const [visitOpen, setVisitOpen] = useState(false);
   const [followUpOpen, setFollowUpOpen] = useState(false);
-  const [activeProfileTab, setActiveProfileTab] = useState("overview");
   const [sortBy, setSortBy] = useState<CustomerSortField>("lastPurchase");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [filters, setFilters] = useState<DirectoryFilters>({});
+  const [directoryRestored, setDirectoryRestored] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState<CustomerNavigationTarget | null>(null);
+  const isDocked = Boolean(screens.lg);
+
+  useEffect(() => {
+    if (didRestoreDirectoryRef.current) return;
+    didRestoreDirectoryRef.current = true;
+    const restored = parseCustomerDirectoryState(new URLSearchParams(window.location.search));
+    setSearch(restored.search ?? "");
+    setDebouncedSearch(restored.search ?? "");
+    setActiveType(restored.type ?? "all");
+    setPage(restored.page ?? 1);
+    setPageSize(restored.pageSize ?? 10);
+    setSortBy(restored.sortBy ?? "lastPurchase");
+    setSortDirection(restored.sortDirection ?? "desc");
+    setFilters(restored.filters ?? {});
+    if (restored.storeId && restored.storeId !== storeId) {
+      fetch("/api/stores")
+        .then((response) => (response.ok ? response.json() : []))
+        .then((stores: Array<{ id: string; name: string }>) => {
+          const store = stores.find((item) => item.id === restored.storeId);
+          if (store) setStore(store.id, store.name);
+        })
+        .finally(() => setDirectoryRestored(true));
+    } else setDirectoryRestored(true);
+  }, [setStore, storeId]);
 
   const directoryParams = useMemo(
     () => ({
@@ -87,7 +132,7 @@ export default function CustomersPage() {
       if (!response.ok) throw new Error("Failed to load customers");
       return response.json() as Promise<PaginatedCustomersDto>;
     },
-    placeholderData: (previous) => previous,
+    enabled: directoryRestored,
   });
   const listData = listQuery.data ?? EMPTY_LIST;
 
@@ -105,13 +150,47 @@ export default function CustomersPage() {
   });
   const selectedCustomer = detailQuery.data ?? null;
 
+  const closeProfile = useCallback(() => {
+    setDrawerOpen(false);
+    setSelectedCustomerId(null);
+    setPendingNavigation(null);
+    setFormOpen(false);
+    setVisitOpen(false);
+    setFollowUpOpen(false);
+    setEditingCustomer(null);
+  }, []);
+
+  const selectCustomer = useCallback((id: string) => {
+    setFormOpen(false);
+    setVisitOpen(false);
+    setFollowUpOpen(false);
+    setEditingCustomer(null);
+    setPendingNavigation(null);
+    setSelectedCustomerId(id);
+    setDrawerOpen(true);
+  }, []);
+
   useEffect(() => {
+    if (!directoryRestored || search === debouncedSearch) return;
     const timer = window.setTimeout(() => {
       setDebouncedSearch(search);
       setPage(1);
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [search]);
+  }, [debouncedSearch, directoryRestored, search]);
+  const directoryState = useMemo(
+    () => ({ search, type: activeType, page, pageSize, sortBy, sortDirection, filters, storeId }),
+    [activeType, filters, page, pageSize, search, sortBy, sortDirection, storeId]
+  );
+  useEffect(() => {
+    if (!directoryRestored) return;
+    const query = serializeCustomerDirectoryState(directoryState).toString();
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `/dashboard/customers${query ? `?${query}` : ""}`
+    );
+  }, [directoryRestored, directoryState]);
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 0 });
   }, [selectedCustomerId]);
@@ -121,6 +200,43 @@ export default function CustomersPage() {
         listQuery.error instanceof Error ? listQuery.error.message : "Failed to load customers"
       );
   }, [listQuery.error, message]);
+  useEffect(() => {
+    if (!listQuery.isFetching && listQuery.data && listQuery.data.page !== page)
+      setPage(listQuery.data.page);
+  }, [listQuery.data, listQuery.isFetching, page]);
+
+  const filterScope = useMemo(
+    () =>
+      JSON.stringify({
+        storeId,
+        search: debouncedSearch,
+        activeType,
+        pageSize,
+        sortBy,
+        sortDirection,
+        filters,
+      }),
+    [activeType, debouncedSearch, filters, pageSize, sortBy, sortDirection, storeId]
+  );
+  useEffect(() => {
+    if (filterScopeRef.current !== null && filterScopeRef.current !== filterScope) closeProfile();
+    filterScopeRef.current = filterScope;
+  }, [closeProfile, filterScope]);
+
+  useEffect(() => {
+    if (!pendingNavigation || listQuery.isFetching || listData.page !== pendingNavigation.page)
+      return;
+    const target = listData.items[pendingNavigation.index];
+    if (target) selectCustomer(target.id);
+    else closeProfile();
+  }, [
+    closeProfile,
+    listData.items,
+    listData.page,
+    listQuery.isFetching,
+    pendingNavigation,
+    selectCustomer,
+  ]);
 
   const refreshCustomer = useCallback(
     async (id: string) => {
@@ -181,9 +297,9 @@ export default function CustomersPage() {
       />
     </div>
   ) : (
-    <CustomerDetailView
-      customer={selectedCustomer}
-      loading={false}
+    <CustomerQuickView
+      customer={selectedCustomer!}
+      fullProfileHref={customerProfileHref(selectedCustomer!.id, directoryState)}
       onEdit={() => {
         if (selectedCustomer) {
           setEditingCustomer(selectedCustomer);
@@ -192,10 +308,66 @@ export default function CustomersPage() {
       }}
       onRecordVisit={() => setVisitOpen(true)}
       onCreateFollowUp={() => setFollowUpOpen(true)}
-      onFollowUpUpdated={() => selectedCustomerId && refreshCustomer(selectedCustomerId)}
-      activeTab={activeProfileTab}
-      onActiveTabChange={setActiveProfileTab}
     />
+  );
+
+  const navigation = getCustomerNavigationTargets({
+    selectedCustomerId,
+    itemIds: listData.items.map((item) => item.id),
+    page: listData.page,
+    pageSize: listData.pageSize,
+    total: listData.total,
+  });
+  const navigate = (target: CustomerNavigationTarget | null) => {
+    if (!target) return;
+    if (target.page === listData.page) {
+      const customer = listData.items[target.index];
+      if (customer) selectCustomer(customer.id);
+      return;
+    }
+    setPendingNavigation(target);
+    setPage(target.page);
+  };
+  const profileHeader = (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 12,
+        width: "100%",
+      }}
+    >
+      <Typography.Text strong>Customer profile</Typography.Text>
+      <div style={{ display: "flex", gap: 4 }}>
+        <Tooltip title="Previous customer">
+          <Button
+            aria-label="Previous customer"
+            size="small"
+            icon={<LeftOutlined />}
+            disabled={!navigation.previous || Boolean(pendingNavigation)}
+            onClick={() => navigate(navigation.previous)}
+          />
+        </Tooltip>
+        <Tooltip title="Next customer">
+          <Button
+            aria-label="Next customer"
+            size="small"
+            icon={<RightOutlined />}
+            disabled={!navigation.next || Boolean(pendingNavigation)}
+            onClick={() => navigate(navigation.next)}
+          />
+        </Tooltip>
+        <Tooltip title="Close profile">
+          <Button
+            aria-label="Close customer profile"
+            size="small"
+            icon={<CloseOutlined />}
+            onClick={closeProfile}
+          />
+        </Tooltip>
+      </div>
+    </div>
   );
 
   const cards = [
@@ -289,57 +461,113 @@ export default function CustomersPage() {
           </Tooltip>
         ))}
       </div>
-      <CustomerList
-        customers={listData.items}
-        loading={listQuery.isFetching}
-        total={listData.total}
-        page={page}
-        pageSize={pageSize}
-        search={search}
-        heading={`${GROUP_LABELS[activeType]} — ${listData.total} customers`}
-        selectedCustomerId={drawerOpen ? selectedCustomerId : null}
-        onSearchChange={setSearch}
-        filters={filters}
-        sortBy={sortBy}
-        sortDirection={sortDirection}
-        onFiltersChange={(next) => {
-          setFilters(next);
-          setPage(1);
+      <div
+        style={{
+          display: isDocked && drawerOpen ? "grid" : "block",
+          gridTemplateColumns:
+            isDocked && drawerOpen ? "minmax(0, 1fr) clamp(360px, 38%, 460px)" : undefined,
+          gap: isDocked && drawerOpen ? 16 : undefined,
+          alignItems: "start",
+          minWidth: 0,
         }}
-        onSortChange={(field, direction) => {
-          setSortBy(field);
-          setSortDirection(direction);
-          setPage(1);
-        }}
-        onClearFilters={() => {
-          setActiveType("all");
-          setSearch("");
-          setFilters({});
-          setPage(1);
-        }}
-        onPageChange={(next, size) => {
-          setPage(next);
-          setPageSize(size);
-        }}
-        onSelectCustomer={(id) => {
-          setSelectedCustomerId(id);
-          setDrawerOpen(true);
-        }}
-        onCreateCustomer={() => {
-          setEditingCustomer(null);
-          setFormOpen(true);
-        }}
-      />
+      >
+        <div style={{ minWidth: 0 }}>
+          <CustomerList
+            customers={listData.items}
+            loading={listQuery.isPending || listQuery.isFetching}
+            total={listData.total}
+            page={page}
+            pageSize={pageSize}
+            search={search}
+            heading={`${GROUP_LABELS[activeType]} — ${listData.total} customers`}
+            selectedCustomerId={drawerOpen ? selectedCustomerId : null}
+            onSearchChange={setSearch}
+            filters={filters}
+            sortBy={sortBy}
+            sortDirection={sortDirection}
+            compact={isDocked && drawerOpen}
+            profileHref={(id) => customerProfileHref(id, directoryState)}
+            onFiltersChange={(next) => {
+              setFilters(next);
+              setPage(1);
+            }}
+            onSortChange={(field, direction) => {
+              setSortBy(field);
+              setSortDirection(direction);
+              setPage(1);
+            }}
+            onClearFilters={() => {
+              setActiveType("all");
+              setSearch("");
+              setFilters({});
+              setPage(1);
+            }}
+            onPageChange={(next, size) => {
+              closeProfile();
+              if (size !== pageSize) {
+                setPageSize(size);
+                setPage(1);
+              } else setPage(next);
+            }}
+            onSelectCustomer={selectCustomer}
+            onCreateCustomer={() => {
+              setEditingCustomer(null);
+              setFormOpen(true);
+            }}
+          />
+        </div>
+        {isDocked && drawerOpen ? (
+          <aside
+            aria-label="Customer profile"
+            style={{
+              minWidth: 0,
+              height: "calc(100vh - 32px)",
+              position: "sticky",
+              top: 16,
+              border: "1px solid #e5e7eb",
+              borderRadius: 14,
+              background: "#fff",
+              boxShadow: "0 12px 36px rgba(15,23,42,.10)",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                height: 48,
+                padding: "8px 12px",
+                borderBottom: "1px solid #f0f0f0",
+                display: "flex",
+                alignItems: "center",
+              }}
+            >
+              {profileHeader}
+            </div>
+            <div
+              ref={scrollRef}
+              style={{
+                height: "calc(100% - 48px)",
+                overflowY: "auto",
+                overscrollBehavior: "contain",
+              }}
+            >
+              {detail}
+            </div>
+          </aside>
+        ) : null}
+      </div>
       <Drawer
-        title="Customer profile"
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
+        title={profileHeader}
+        closable={false}
+        open={!isDocked && drawerOpen}
+        onClose={closeProfile}
         width={screens.md ? "min(620px, calc(100vw - 24px))" : "100vw"}
         styles={{ body: { padding: 0, overflow: "hidden" } }}
       >
-        <div ref={scrollRef} style={{ height: "100%", overflowY: "auto" }}>
-          {detail}
-        </div>
+        {!isDocked ? (
+          <div ref={scrollRef} style={{ height: "100%", overflowY: "auto" }}>
+            {detail}
+          </div>
+        ) : null}
       </Drawer>
       <Modal
         open={formOpen}
