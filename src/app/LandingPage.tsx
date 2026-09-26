@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   ArrowRightOutlined,
   BarChartOutlined,
@@ -153,6 +153,19 @@ export default function LandingPage({ pricingCatalog }: { pricingCatalog: Public
       ] as const,
     []
   );
+  useEffect(() => {
+    if (!menuOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenuOpen(false);
+    };
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [menuOpen]);
   async function submitDemo(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFormState("sending");
@@ -180,14 +193,17 @@ export default function LandingPage({ pricingCatalog }: { pricingCatalog: Public
           <Logo />
         </Link>
         <button
+          type="button"
           className={styles.menuButton}
           onClick={() => setMenuOpen((v) => !v)}
           aria-expanded={menuOpen}
           aria-label="Toggle navigation"
+          aria-controls="primary-navigation"
         >
           {menuOpen ? <CloseOutlined /> : <MenuOutlined />}
         </button>
         <nav
+          id="primary-navigation"
           className={`${styles.nav} ${menuOpen ? styles.navOpen : ""}`}
           aria-label="Primary navigation"
         >
