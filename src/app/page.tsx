@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import LandingPage from "./LandingPage";
+import { getPublicPricingCatalog } from "@/modules/marketing/getPricingCatalog";
 
 const Home = async () => {
   const session = await auth();
@@ -13,7 +14,7 @@ const Home = async () => {
   }
 
   // Unauthenticated — show marketing landing page
-  return <LandingPage />;
+  return <LandingPage pricingCatalog={await getPublicPricingCatalog()} />;
 };
 
 export default Home;

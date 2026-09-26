@@ -16,39 +16,9 @@ import {
   SwapOutlined,
 } from "@ant-design/icons";
 import styles from "./LandingPage.module.css";
+import type { PublicPricingCatalog } from "@/modules/marketing/pricingCatalog";
 
-const features = [
-  {
-    icon: <BarcodeOutlined />,
-    title: "Billing without the hassle",
-    text: "Find products, scan barcodes and create bills without slowing down your counter.",
-  },
-  {
-    icon: <ShopOutlined />,
-    title: "Know what’s in stock",
-    text: "Track products, sizes and inventory so you’re better prepared for your next sale.",
-  },
-  {
-    icon: <SwapOutlined />,
-    title: "Returns made simpler",
-    text: "Manage returns and exchanges while keeping a clear record of every transaction.",
-  },
-  {
-    icon: <CustomerServiceOutlined />,
-    title: "Get to know your customers",
-    text: "Keep customer details and purchase history together.",
-  },
-  {
-    icon: <BarChartOutlined />,
-    title: "Understand your business",
-    text: "Bring sales and inventory information together to make better-informed decisions.",
-  },
-  {
-    icon: <ShoppingCartOutlined />,
-    title: "Manage multiple stores",
-    text: "Keep your stores connected while maintaining visibility across locations.",
-  },
-];
+const benefitIcons = [<BarcodeOutlined key="billing" />, <ShoppingCartOutlined key="catalog" />, <ShopOutlined key="stock" />, <SwapOutlined key="returns" />, <CustomerServiceOutlined key="customers" />, <BarChartOutlined key="reports" />];
 const industries = [
   {
     name: "Clothing & Apparel",
@@ -74,9 +44,12 @@ const faqs = [
     "Stockiva runs in a modern web browser. Barcode workflows can use compatible scanning hardware, but exact requirements depend on your store setup.",
   ],
   [
-    "Can I manage multiple stores?",
-    "Yes. Stockiva supports organizations with multiple stores and scoped operational views.",
+    "What changes with Growth?",
+    "Growth adds multi-store visibility, employee roles, purchasing, expenses, attendance, customer follow-ups and unmet-demand capture. Direct atomic stock transfers between stores are not currently included.",
   ],
+  ["Does Business use different software?", "No. Business includes Growth and is a tailored commercial rollout for larger chains, with proposed store and user scale agreed during the sales conversation."],
+  ["Are WhatsApp messaging charges included?", "No. Meta bills the merchant separately for Meta messaging charges. Stockiva’s optional add-on covers its software and management layer, subject to live account validation."],
+  ["Are analytics included?", "Essential daily sales and stock reporting is included in every core plan. Deeper margin, sell-through, stock-cover, diagnostic and demand analysis is an optional add-on."],
   [
     "Can I try Stockiva before subscribing?",
     "You can explore the public simulated demo or request a guided demonstration. Commercial trial terms have not yet been finalized.",
@@ -165,7 +138,7 @@ export function DashboardMock() {
   );
 }
 
-export default function LandingPage() {
+export default function LandingPage({ pricingCatalog }: { pricingCatalog: PublicPricingCatalog }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [formState, setFormState] = useState<"idle" | "sending" | "success" | "error">("idle");
   const [formMessage, setFormMessage] = useState("");
@@ -319,11 +292,11 @@ export default function LandingPage() {
           </Link>
         </div>
         <div className={styles.featureGrid}>
-          {features.map((feature) => (
-            <article key={feature.title}>
-              <i>{feature.icon}</i>
-              <h3>{feature.title}</h3>
-              <p>{feature.text}</p>
+          {pricingCatalog.featureGroups.filter((group) => group.public !== false).slice(0, 8).map((group, index) => (
+            <article key={group.id}>
+              <i>{benefitIcons[index % benefitIcons.length]}</i>
+              <h3>{group.title}</h3>
+              <p>{group.subtitle}</p>
             </article>
           ))}
         </div>
@@ -400,26 +373,79 @@ export default function LandingPage() {
           <span className={styles.eyebrow}>Pricing</span>
           <h2>A plan for every stage of your business.</h2>
           <p>
-            Commercial packages are being finalized. Tell us what you need and we’ll discuss the
-            right setup.
+            Essential retail operations stay in every plan. Pricing and limits are commercial
+            proposals, so we’ll recommend the right setup after learning about your store.
           </p>
         </div>
+        {pricingCatalog.mode === "draft-preview" && (
+          <p className={styles.previewNotice}>Draft preview · package placement is under commercial review</p>
+        )}
         <div className={styles.pricingGrid}>
-          {[
-            ["Starter", "For a single store getting organised."],
-            ["Growth", "For growing teams and more complex operations."],
-            ["Business", "For multi-store organizations."],
-          ].map(([name, text], i) => (
-            <article className={i === 1 ? styles.featuredPrice : ""} key={name}>
-              {i === 1 && <span className={styles.popular}>Most requested</span>}
-              <h3>{name}</h3>
-              <strong>Request pricing</strong>
-              <p>{text}</p>
-              <a href="#book-demo">
-                Discuss this plan <ArrowRightOutlined />
+          {pricingCatalog.plans.slice().sort((a, b) => a.order - b.order).map((plan) => (
+            <article className={plan.highlighted ? styles.featuredPrice : ""} key={plan.id}>
+              {plan.highlighted && <span className={styles.popular}>Best for growing retail</span>}
+              <span className={styles.planEyebrow}>{plan.eyebrow}</span>
+              <h3>{plan.name}</h3>
+              <strong>{plan.price.displayMode === "contact-sales" ? "Contact sales" : pricingCatalog.priceDisplayFallback}</strong>
+              <p>{plan.target}</p>
+              {pricingCatalog.mode === "draft-preview" ? (
+                <ul className={styles.planFeatures}>{plan.headlineFeatures.map((feature) => <li key={feature}><CheckOutlined /> {feature}</li>)}</ul>
+              ) : (
+                <p className={styles.publicationHold}>Package contents are under commercial review. Request a demo for the currently available workflow.</p>
+              )}
+              {plan.legalNote && <small className={styles.planLegal}>{plan.legalNote}</small>}
+              <a className={styles.planCta} href={plan.cta.href}>
+                {plan.cta.label} <ArrowRightOutlined />
               </a>
             </article>
           ))}
+        </div>
+        <div className={styles.addOnHeading}>
+          <span className={styles.eyebrow}>Optional add-ons</span>
+          <h2>Add deeper communication or analysis to any plan.</h2>
+        </div>
+        <div className={styles.addOnGrid}>
+          {pricingCatalog.addOns.map((addOn) => (
+            <article key={addOn.id}>
+              <span className={styles.addOnBadge}>Available with every plan</span>
+              <h3>{addOn.name}</h3>
+              <strong>{pricingCatalog.priceDisplayFallback}</strong>
+              {pricingCatalog.mode === "draft-preview" ? <ul className={styles.planFeatures}>{addOn.highlights.map((item) => <li key={item}><CheckOutlined /> {item}</li>)}</ul> : <p className={styles.publicationHold}>Preview package · not yet publicly launched.</p>}
+              {(addOn.billingDisclosure || addOn.disclosure) && <p className={styles.addOnDisclosure}>{addOn.billingDisclosure || addOn.disclosure}</p>}
+              <a className={styles.planCta} href="#book-demo">Discuss this add-on <ArrowRightOutlined /></a>
+            </article>
+          ))}
+        </div>
+        <div className={styles.comparison} id="compare-plans">
+          <div className={styles.comparisonIntro}>
+            <span className={styles.eyebrow}>Compare plans</span>
+            <h2>Explore what fits your operation.</h2>
+            <p>Open a category to compare customer-facing capabilities. Internal platform tooling is never shown here.</p>
+          </div>
+          {pricingCatalog.featureGroups.filter((group) => group.public !== false).map((group) => {
+            const rows = group.featureIds.map((id) => pricingCatalog.featureCatalog.find((feature) => feature.id === id)).filter(Boolean);
+            if (!rows.length) return null;
+            return (
+              <details className={styles.comparisonGroup} key={group.id}>
+                <summary><span><strong>{group.title}</strong><small>{group.subtitle}</small></span><span aria-hidden="true">+</span></summary>
+                <div className={styles.comparisonRows}>
+                  {rows.map((feature) => feature && (
+                    <article key={feature.id}>
+                      <div><strong>{feature.name}</strong><p>{feature.summary}</p></div>
+                      <div className={styles.planStates}>
+                        {pricingCatalog.plans.map((plan) => {
+                          const planRank = pricingCatalog.planOrder.indexOf(plan.id);
+                          const minimumRank = feature.minimumPlan ? pricingCatalog.planOrder.indexOf(feature.minimumPlan) : -1;
+                          const state = feature.addOn ? "Requires add-on" : feature.marketingVisibility === "roadmap" || !feature.publishAsAvailable ? "Planned" : minimumRank >= 0 && planRank >= minimumRank ? "Included" : "Not included";
+                          return <span data-state={state} key={plan.id}><b>{plan.name}</b>{state}</span>;
+                        })}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </details>
+            );
+          })}
         </div>
       </section>
       <section className={styles.bookingSection} id="book-demo">
