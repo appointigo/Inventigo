@@ -1,0 +1,31 @@
+.toolbar { display: grid; grid-template-columns: minmax(0, 1fr) 48px; align-items: center; gap: 9px; margin-bottom: 10px; }
+.toolbar :global(.ant-input-affix-wrapper), .toolbar :global(.ant-btn) { min-height: 48px; border-radius: 15px; }
+.typeTabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin-bottom: 14px; padding: 4px; border: 1px solid #e2e8f0; border-radius: 14px; background: #eef2f7; }
+.typeTabs button { min-width: 0; min-height: 38px; padding: 0 4px; border: 0; border-radius: 10px; background: transparent; color: #64748b; font: inherit; font-size: 12px; font-weight: 650; }
+.typeTabs .activeType { background: #fff; color: #0f172a; box-shadow: 0 2px 8px rgba(15, 23, 42, .09); }
+.list { display: grid; gap: 10px; }
+.cardButton { width: 100%; min-width: 0; padding: 14px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; }
+.cardTop { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.identity { min-width: 0; display: grid; gap: 3px; }
+.identity strong { color: #0f172a; font-size: 15px; }
+.identity span, .cardMeta, .cardFooter { color: #64748b; font-size: 12px; }
+.amount { flex: 0 0 auto; color: #0f172a; font-size: 17px; font-weight: 780; }
+.cardMeta, .cardFooter { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 11px; }
+.cardMeta span { min-width: 0; }
+.cardMeta span:last-child { text-align: right; }
+.cardFooter { padding-top: 10px; border-top: 1px solid #eef2f7; }
+.cardFooter :global(.ant-tag) { margin: 0; }
+.due { color: #dc2626; font-weight: 650; }
+.exchangeButton { width: 100%; min-height: 42px; border-top: 1px solid #eef2f7; border-radius: 0 0 16px 16px; color: #1d4ed8; }
+.pagination { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 16px; color: #64748b; font-size: 12px; }
+.pagination :global(.ant-btn) { min-height: 42px; border-radius: 12px; }
+.filterDrawer :global(.ant-drawer-content) { border-radius: 22px 22px 0 0; }
+.filters { display: grid; gap: 14px; padding-bottom: env(safe-area-inset-bottom); }
+.filters label { display: grid; gap: 6px; color: #475569; font-size: 12px; font-weight: 650; }
+.filters :global(.ant-select-selector), .filters :global(.ant-btn) { min-height: 44px; border-radius: 12px !important; }
+.error { padding: 6px; color: #dc2626; }
+@media (max-width: 374px) {
+  .typeTabs button { font-size: 11px; }
+  .cardMeta { align-items: flex-start; flex-direction: column; gap: 3px; }
+  .cardMeta span:last-child { text-align: left; }
+}

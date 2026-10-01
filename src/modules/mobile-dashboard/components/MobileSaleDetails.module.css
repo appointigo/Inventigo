@@ -1,0 +1,22 @@
+.drawer :global(.ant-drawer-content) { border-radius: 22px 22px 0 0; overflow: hidden; }
+.drawer :global(.ant-drawer-title) { font-size: 16px; }
+.loading { padding: 24px 16px; color: #64748b; }
+.content { min-width: 0; padding: 16px 16px calc(104px + env(safe-area-inset-bottom)); background: #f4f7fb; }
+.hero { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 18px; border: 1px solid #dbe4ef; border-radius: 18px; background: linear-gradient(145deg, #fff 0%, #eff6ff 100%); }
+.eyebrow { display: block; margin-bottom: 3px; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+.total { color: #0f172a; font-size: clamp(26px, 8vw, 34px); font-weight: 820; letter-spacing: -.04em; }
+.section { min-width: 0; margin-top: 12px; padding: 16px; border: 1px solid #e2e8f0; border-radius: 18px; background: #fff; box-shadow: 0 5px 18px rgba(15, 23, 42, .04); }
+.section h2 { margin: 0 0 13px; color: #0f172a; font-size: 14px; letter-spacing: -.01em; }
+.detailRow { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 7px 0; color: #64748b; font-size: 13px; }
+.detailRow strong { max-width: 65%; color: #0f172a; text-align: right; overflow-wrap: anywhere; }
+.detailRow .emphasis { color: #dc2626; }
+.itemList { display: grid; gap: 10px; }
+.item { min-width: 0; padding-bottom: 10px; border-bottom: 1px solid #eef2f7; }
+.item:last-child { padding-bottom: 0; border-bottom: 0; }
+.itemTop { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.itemIdentity { min-width: 0; display: grid; gap: 2px; }
+.itemIdentity strong { overflow-wrap: anywhere; }
+.itemIdentity span, .itemMeta { color: #64748b; font-size: 12px; }
+.itemMeta { display: block; margin-top: 5px; }
+.stickyAction { position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom)); left: 16px; z-index: 2; padding: 10px; border: 1px solid rgba(226,232,240,.9); border-radius: 18px; background: rgba(255,255,255,.94); box-shadow: 0 12px 35px rgba(15,23,42,.16); backdrop-filter: blur(14px); }
+.stickyAction :global(.ant-btn) { min-height: 48px; border-radius: 13px; }

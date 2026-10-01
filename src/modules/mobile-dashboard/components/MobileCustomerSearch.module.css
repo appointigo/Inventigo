@@ -1,0 +1,15 @@
+.section { display: grid; min-width: 0; gap: 8px; }
+.sectionTitle { color: #0f172a; font-size: 14px; font-weight: 700; }
+.section :global(.ant-input-affix-wrapper) { min-height: 48px; border-radius: 14px; }
+.hint { font-size: 11px; }
+.results { display: grid; max-height: min(34dvh, 280px); overflow-y: auto; overscroll-behavior: contain; border: 1px solid #dbe4ef; border-radius: 14px; background: #fff; box-shadow: 0 8px 24px rgba(15, 23, 42, .08); }
+.result { display: grid; gap: 3px; min-height: 58px; padding: 10px 12px; border: 0; border-bottom: 1px solid #eef2f7; background: #fff; color: #0f172a; font: inherit; text-align: left; }
+.result:last-child { border-bottom: 0; }
+.result:active { background: #eff6ff; }
+.result span { color: #64748b; font-size: 12px; }
+.empty { padding: 16px; border: 1px dashed #cbd5e1; border-radius: 14px; color: #64748b; text-align: center; }
+.selectedCard { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 62px; padding: 10px 8px 10px 12px; border: 1px solid #bbf7d0; border-radius: 14px; background: #f0fdf4; }
+.check { color: #16a34a; font-size: 18px; }
+.identity { min-width: 0; display: grid; gap: 2px; }
+.identity strong { overflow: hidden; color: #14532d; text-overflow: ellipsis; white-space: nowrap; }
+.identity span { color: #4b7557; font-size: 12px; }
