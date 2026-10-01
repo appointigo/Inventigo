@@ -4,10 +4,9 @@ import { DeleteOutlined, MinusOutlined, PlusOutlined, ShoppingCartOutlined } fro
 import { Button, DatePicker, Drawer, Empty, Input, Typography } from "antd";
 import dayjs from "dayjs";
 import type { CartItem, PaymentMethodType, SplitPaymentEntry } from "@/modules/billing/types";
-import type { WhatsAppInvoiceSelection } from "@/modules/billing/types";
-import { WhatsAppInvoiceSelector } from "@/modules/whatsapp/components/WhatsAppInvoiceSelector";
 import { ItemPriceEditor, type UpdateItemPricing } from "@/modules/billing/components/ItemPriceEditor";
 import { allocatePricingSnapshots } from "@/modules/billing/utils/pricingEngine";
+import { MobileCustomerSearch } from "./MobileCustomerSearch";
 import { SplitPaymentPanel } from "./SplitPaymentPanel";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
 import styles from "./BillingCart.module.css";
@@ -35,7 +34,6 @@ export function BillingCart({
   onCustomerNameChange,
   customerPhone,
   onCustomerPhoneChange,
-  customerEmail,
   onCustomerEmailChange,
   customerStats,
   customerLoading,
@@ -46,9 +44,6 @@ export function BillingCart({
   checkoutLoading,
   transactionDate,
   onTransactionDateChange,
-  storeId,
-  whatsappInvoice,
-  onWhatsAppInvoiceChange,
 }: {
   open: boolean;
   onClose: () => void;
@@ -67,7 +62,6 @@ export function BillingCart({
   onCustomerNameChange: (value: string) => void;
   customerPhone: string;
   onCustomerPhoneChange: (value: string) => void;
-  customerEmail: string;
   onCustomerEmailChange: (value: string) => void;
   customerStats?: { totalVisits: number; totalSpend: number; lastPurchaseDate: string | null } | null;
   customerLoading?: boolean;
@@ -77,9 +71,6 @@ export function BillingCart({
   checkoutLoading: boolean;
   transactionDate: string;
   onTransactionDateChange: (value: string) => void;
-  storeId?: string | null;
-  whatsappInvoice: WhatsAppInvoiceSelection;
-  onWhatsAppInvoiceChange: (value: WhatsAppInvoiceSelection) => void;
 }) {
   const pricing = allocatePricingSnapshots(items.map((item) => ({ productId: item.productId, quantity: item.quantity, mrp: item.originalUnitPrice ?? item.unitPrice, sellingPrice: item.unitPrice })), { taxRate: taxPct });
   const taxAmount = pricing.taxAmount;
@@ -88,7 +79,16 @@ export function BillingCart({
   const splitMatchesTotal = Math.abs(splitTotal - total) < 0.01;
 
   return (
-    <Drawer title="Billing Cart" placement="right" open={open} onClose={onClose} size="min(420px, 100vw)" destroyOnHidden className={styles.drawer}>
+    <Drawer
+      title="Billing Cart"
+      placement="bottom"
+      height="94dvh"
+      open={open}
+      onClose={onClose}
+      destroyOnHidden
+      className={styles.drawer}
+      styles={{ header: { padding: "14px 16px" }, body: { padding: 0 } }}
+    >
       <div className={styles.content}>
         {items.length === 0 ? (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No items in cart" />
@@ -118,15 +118,19 @@ export function BillingCart({
           </div>
         )}
 
-        <Input value={customerName} onChange={(event) => onCustomerNameChange(event.target.value)} placeholder="Customer name" size="large" />
-        <Input value={customerPhone} onChange={(event) => onCustomerPhoneChange(event.target.value.replace(/\D/g, "").slice(0, 10))} placeholder="Customer mobile" size="large" />
-        <Input value={customerEmail} onChange={(event) => onCustomerEmailChange(event.target.value)} placeholder="Customer email (optional)" size="large" />
-
-        <WhatsAppInvoiceSelector
-          storeId={storeId}
-          recipient={customerPhone}
-          value={whatsappInvoice}
-          onChange={onWhatsAppInvoiceChange}
+        <MobileCustomerSearch
+          customerName={customerName}
+          customerPhone={customerPhone}
+          onSelect={(customer) => {
+            onCustomerNameChange(customer.name ?? "");
+            onCustomerPhoneChange(customer.mobile);
+            onCustomerEmailChange(customer.email ?? "");
+          }}
+          onClear={() => {
+            onCustomerNameChange("");
+            onCustomerPhoneChange("");
+            onCustomerEmailChange("");
+          }}
         />
 
         <div>

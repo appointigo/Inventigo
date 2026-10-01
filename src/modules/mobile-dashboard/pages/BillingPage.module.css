@@ -1,18 +1,23 @@
+.stickyContent { display: grid; gap: 10px; }
+.mobileTabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 4px; border: 1px solid #dbe4ef; border-radius: 15px; background: #e9eef5; }
+.mobileTabs button { display: flex; min-width: 0; min-height: 42px; align-items: center; justify-content: center; gap: 6px; padding: 0 7px; border: 0; border-radius: 11px; background: transparent; color: #64748b; font: inherit; font-size: 12px; font-weight: 700; }
+.mobileTabs .activeTab { background: #fff; color: #0f172a; box-shadow: 0 2px 9px rgba(15, 23, 42, .1); }
 .searchPanel { display: grid; gap: 7px; }
 .searchRow { display: flex; gap: 9px; min-width: 0; }
 .searchInput { min-width: 0; min-height: 48px; flex: 1; border-radius: 16px; }
 .scanButton { min-width: 48px; height: 48px; flex: 0 0 48px; }
 .scanHint { font-size: 11px; line-height: 1.35; }
-.productList { display: grid; gap: 10px; }
-.productRow { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.productDetails { min-width: 0; flex: 1; }
+.productList { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; min-width: 0; width: 100%; }
+.productList > * { box-sizing: border-box; min-width: 0; width: 100%; max-width: 100%; overflow: hidden; }
+.productRow { min-width: 0; width: 100%; max-width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.productDetails { min-width: 0; width: 0; flex: 1 1 0; }
 .productName { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .productMeta { margin-top: 3px; overflow: hidden; color: #64748b; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .productPrice { margin-top: 7px; color: #0f172a; font-size: 16px; font-weight: 750; }
 .inStock, .outOfStock { margin-top: 2px; font-size: 12px; }
 .inStock { color: #0f766e; }
 .outOfStock { color: #dc2626; }
-.addButton { min-width: 68px; min-height: 44px; flex: 0 0 auto; border-radius: 13px; }
+.addButton { min-width: 68px; min-height: 44px; flex: 0 0 68px; border-radius: 13px; }
 .checkoutDock {
   position: fixed;
   right: 12px;
@@ -29,4 +34,5 @@
   .checkoutDock { right: 8px; left: 8px; }
   .checkoutButton { padding-inline: 12px; font-size: 13px; }
   .scanHint { display: none; }
+  .mobileTabs button { gap: 4px; padding-inline: 4px; font-size: 11px; }
 }
