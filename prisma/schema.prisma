@@ -24,6 +24,7 @@ model Organization {
   expenseBudgets              ExpenseBudget[]
   expenseCategoryOptions      ExpenseCategoryOption[]
   featureFlags                FeatureFlag[]
+  tenantFeatures              TenantFeature[]
   invitations                 Invitation[]
   leaveBalances               LeaveBalance[]
   leaveRequests               LeaveRequest[]
@@ -699,30 +700,34 @@ model Customer {
 }
 
 model CustomerVisit {
-  id             String             @id @default(uuid())
-  orgId          String
-  storeId        String
-  visitedAt      DateTime           @default(now())
-  outcome        VisitOutcome
-  linkedSaleId   String?            @unique
-  source         String?
-  notes          String?
-  createdBy      String?
-  customerId     String?
-  idempotencyKey String?            @unique
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
-  org            Organization       @relation(fields: [orgId], references: [id])
-  store          Store              @relation(fields: [storeId], references: [id])
-  linkedSale     Sale?              @relation(fields: [linkedSaleId], references: [id])
-  creator        User?              @relation("VisitCreator", fields: [createdBy], references: [id])
-  customer       Customer?          @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  demandRequests DemandRequest[]
-  followUps      CustomerFollowUp[]
+  id                   String                @id @default(uuid())
+  orgId                String
+  storeId              String
+  visitedAt            DateTime              @default(now())
+  outcome              VisitOutcome
+  expectedReturnPeriod ExpectedReturnPeriod?
+  returnConfirmedAt    DateTime?
+  returnOutcome        VisitReturnOutcome?
+  linkedSaleId         String?               @unique
+  source               String?
+  notes                String?
+  createdBy            String?
+  customerId           String?
+  idempotencyKey       String?               @unique
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  org                  Organization          @relation(fields: [orgId], references: [id])
+  store                Store                 @relation(fields: [storeId], references: [id])
+  linkedSale           Sale?                 @relation(fields: [linkedSaleId], references: [id])
+  creator              User?                 @relation("VisitCreator", fields: [createdBy], references: [id])
+  customer             Customer?             @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  demandRequests       DemandRequest[]
+  followUps            CustomerFollowUp[]
 
   @@index([orgId])
   @@index([storeId, visitedAt])
   @@index([outcome])
+  @@index([storeId, outcome, returnConfirmedAt])
   @@index([orgId, customerId, visitedAt])
   @@map("customer_visits")
 }
@@ -1044,6 +1049,24 @@ model FeatureFlag {
   @@unique([orgId, key])
   @@index([key])
   @@map("feature_flags")
+}
+
+enum FeatureKey {
+  WHATSAPP
+}
+
+model TenantFeature {
+  id             String       @id @default(uuid())
+  organizationId String
+  feature        FeatureKey
+  enabled        Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, feature])
+  @@index([organizationId])
+  @@map("tenant_features")
 }
 
 model Announcement {
@@ -1791,6 +1814,19 @@ enum VisitOutcome {
   NOT_CONVERTED
   PARTIALLY_CONVERTED
   BROWSING
+  MAY_RETURN
+}
+
+enum ExpectedReturnPeriod {
+  TOMORROW
+  TWO_TO_THREE_DAYS
+  WITHIN_A_WEEK
+  NOT_SURE
+}
+
+enum VisitReturnOutcome {
+  PURCHASED
+  DID_NOT_PURCHASE
 }
 
 enum CustomerFollowUpType {

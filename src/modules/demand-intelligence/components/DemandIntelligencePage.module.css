@@ -263,7 +263,7 @@
 }
 .outcomeGrid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
 .outcomeButton {
@@ -289,6 +289,10 @@
   color: #b65e00 !important;
   background: #fff5e6 !important;
 }
+.outcomeMAY_RETURN {
+  color: #a15c00 !important;
+  background: #fff7df !important;
+}
 .outcomeSelected {
   border-color: #1677ff !important;
   box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.08);
@@ -308,6 +312,11 @@
 }
 .partialAlert {
   border-radius: 10px;
+}
+.returnHint {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
 }
 .requests {
   display: grid;
@@ -413,6 +422,59 @@
   padding: 16px;
   background: #fff;
 }
+.returnHistoryCard {
+  margin-top: 14px;
+  padding: 16px;
+  background: #fff;
+  border: 1px solid #e3eaf3;
+  border-radius: 15px;
+  box-shadow: 0 5px 24px rgba(21, 47, 85, 0.07);
+}
+.returnHistoryHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.returnHistoryHeader h2 {
+  margin: 0;
+  color: #0b1738;
+  font-size: 17px;
+}
+.returnHistoryHeader p {
+  margin: 3px 0 0;
+  color: #64748b;
+  font-size: 12px;
+}
+.returnVisitList {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+.returnVisitList article {
+  padding: 13px;
+  border: 1px solid #e5ebf3;
+  border-radius: 11px;
+}
+.returnVisitList article > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.returnVisitList p {
+  margin: 9px 0 3px;
+  color: #263a57;
+  font-size: 13px;
+}
+.returnVisitList small {
+  display: block;
+  color: #667896;
+}
+.returnVisitList article > :global(.ant-btn),
+.returnVisitList article > :global(.ant-popconfirm-open) {
+  margin-top: 11px;
+}
 .missedHeader > span {
   width: 43px;
   height: 43px;
@@ -514,6 +576,12 @@
   }
   .outcomeButton {
     padding-inline: 8px !important;
+  }
+  .outcomeGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .returnHistoryHeader {
+    display: grid;
   }
   .outcomeButton > span:last-child {
     font-size: 12px;

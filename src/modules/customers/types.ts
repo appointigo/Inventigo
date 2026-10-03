@@ -71,6 +71,9 @@ export type CustomerDetailDto = CustomerDto & {
     id: string;
     visitedAt: string;
     outcome: string;
+    expectedReturnPeriod: string | null;
+    returnConfirmedAt: string | null;
+    returnOutcome: string | null;
     storeName: string;
     notes: string | null;
   }>;

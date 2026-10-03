@@ -13,6 +13,7 @@ import {
   Flex,
   Input,
   InputNumber,
+  Modal,
   Progress,
   Select,
   Skeleton,
@@ -22,6 +23,8 @@ import {
 } from "antd";
 import {
   ArrowLeftOutlined,
+  CheckCircleOutlined,
+  ClockCircleOutlined,
   CloseCircleOutlined,
   DeleteOutlined,
   PlusOutlined,
@@ -37,9 +40,21 @@ import { useCategories } from "@/modules/categories/hooks/useCategories";
 import { useBrands } from "@/modules/brands/hooks/useBrands";
 import { useProducts } from "@/modules/products/hooks/useProducts";
 import { useMobileViewport } from "@/modules/mobile-dashboard/hooks/useMobileViewport";
-import { useCreateCustomerVisit, useDemandIntelligence } from "../hooks/useDemandIntelligence";
-import type { DemandReasonCode, DemandRequestInput, VisitOutcome } from "../types";
-import { DEMAND_REASON_LABELS } from "../types";
+import {
+  useCreateCustomerVisit,
+  useCustomerVisits,
+  useDemandIntelligence,
+  useUpdateCustomerVisit,
+} from "../hooks/useDemandIntelligence";
+import type {
+  CustomerVisitRecord,
+  DemandReasonCode,
+  DemandRequestInput,
+  ExpectedReturnPeriod,
+  VisitReturnOutcome,
+  VisitOutcome,
+} from "../types";
+import { DEMAND_REASON_LABELS, EXPECTED_RETURN_LABELS } from "../types";
 import styles from "./DemandIntelligencePage.module.css";
 
 const stockReasons: DemandReasonCode[] = [
@@ -118,20 +133,30 @@ export function VisitForm({
   );
   const mutation = useCreateCustomerVisit();
   const [outcome, setOutcome] = useState<VisitOutcome>();
+  const [expectedReturnPeriod, setExpectedReturnPeriod] = useState<ExpectedReturnPeriod>();
   const [requests, setRequests] = useState<DemandRequestInput[]>([]);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const [visitedAt, setVisitedAt] = useState<Dayjs>(() => dayjs());
   const [source, setSource] = useState("WALK_IN");
   const [notes, setNotes] = useState("");
-  const [visitorMode, setVisitorMode] = useState<"ANONYMOUS" | "EXISTING" | "NEW">(customer ? "EXISTING" : "ANONYMOUS");
-  const [customerOptions, setCustomerOptions] = useState<Array<{ value: string; label: string }>>([]);
+  const [visitorMode, setVisitorMode] = useState<"ANONYMOUS" | "EXISTING" | "NEW">(
+    customer ? "EXISTING" : "ANONYMOUS"
+  );
+  const [customerOptions, setCustomerOptions] = useState<Array<{ value: string; label: string }>>(
+    []
+  );
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>();
   const [newCustomerName, setNewCustomerName] = useState("");
   const [newCustomerMobile, setNewCustomerMobile] = useState("");
-  const identityReady = Boolean(customer) || visitorMode === "ANONYMOUS" || (visitorMode === "EXISTING" ? selectedCustomerId : newCustomerMobile.length === 10);
-  const canSave = identityReady && (outcome === "CONVERTED" || requests.length > 0);
+  const identityReady =
+    Boolean(customer) ||
+    visitorMode === "ANONYMOUS" ||
+    (visitorMode === "EXISTING" ? selectedCustomerId : newCustomerMobile.length === 10);
+  const canSave =
+    identityReady && (outcome === "CONVERTED" || outcome === "MAY_RETURN" || requests.length > 0);
   const reset = () => {
     setOutcome(undefined);
+    setExpectedReturnPeriod(undefined);
     setRequests([]);
     setVisitedAt(dayjs());
     setSource("WALK_IN");
@@ -168,9 +193,18 @@ export function VisitForm({
     try {
       let resolvedCustomerId = customer?.id ?? selectedCustomerId;
       if (!customer && visitorMode === "NEW") {
-        const customerResponse = await fetch("/api/customers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: newCustomerName, mobile: newCustomerMobile, preferredStoreId: storeId }) });
+        const customerResponse = await fetch("/api/customers", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: newCustomerName,
+            mobile: newCustomerMobile,
+            preferredStoreId: storeId,
+          }),
+        });
         const customerBody = await customerResponse.json().catch(() => null);
-        if (!customerResponse.ok) throw new Error(customerBody?.error || "Unable to create customer");
+        if (!customerResponse.ok)
+          throw new Error(customerBody?.error || "Unable to create customer");
         resolvedCustomerId = customerBody.id;
       }
       await mutation.mutateAsync({
@@ -180,6 +214,7 @@ export function VisitForm({
         source,
         notes: notes.trim() || undefined,
         outcome: finalOutcome,
+        expectedReturnPeriod: finalOutcome === "MAY_RETURN" ? expectedReturnPeriod : undefined,
         idempotencyKey,
         requests: finalRequests,
       });
@@ -205,17 +240,106 @@ export function VisitForm({
           </div>
         </div>
       ) : null}
-      {customer ? <Alert type="info" showIcon title={customer.name || "Unnamed customer"} description={`${customer.mobile} · linked customer visit`} style={{ marginBottom: 16 }} /> : null}
-      {!customer ? <section className={styles.formSection}>
-        <Field label="Visitor identity"><Select value={visitorMode} onChange={setVisitorMode} options={[{ value: "ANONYMOUS", label: "Anonymous visitor" }, { value: "EXISTING", label: "Existing customer" }, { value: "NEW", label: "Register new customer" }]} /></Field>
-        {visitorMode === "EXISTING" ? <Field label="Customer" required><Select showSearch filterOption={false} value={selectedCustomerId} options={customerOptions} placeholder="Search name or mobile" onSearch={value => { const query = value.trim(); if (query.length < 2) return; const key = /^\d+$/.test(query) ? "phone" : "name"; fetch(`/api/customers/search?${key}=${encodeURIComponent(query)}`).then(r => r.ok ? r.json() : []).then(items => setCustomerOptions(items.map((item: { id: string; name: string | null; mobile: string }) => ({ value: item.id, label: `${item.name || "Unnamed"} · ${item.mobile}` })))); }} onChange={setSelectedCustomerId} /></Field> : null}
-        {visitorMode === "NEW" ? <div className={styles.formGrid}><Field label="Customer name"><Input value={newCustomerName} onChange={event => setNewCustomerName(event.target.value)} /></Field><Field label="Mobile number" required><Input value={newCustomerMobile} maxLength={10} onChange={event => setNewCustomerMobile(event.target.value.replace(/\D/g, "").slice(0, 10))} /></Field></div> : null}
-      </section> : null}
+      {customer ? (
+        <Alert
+          type="info"
+          showIcon
+          title={customer.name || "Unnamed customer"}
+          description={`${customer.mobile} · linked customer visit`}
+          style={{ marginBottom: 16 }}
+        />
+      ) : null}
+      {!customer ? (
+        <section className={styles.formSection}>
+          <Field label="Visitor identity">
+            <Select
+              value={visitorMode}
+              onChange={setVisitorMode}
+              options={[
+                { value: "ANONYMOUS", label: "Anonymous visitor" },
+                { value: "EXISTING", label: "Existing customer" },
+                { value: "NEW", label: "Register new customer" },
+              ]}
+            />
+          </Field>
+          {visitorMode === "EXISTING" ? (
+            <Field label="Customer" required>
+              <Select
+                showSearch
+                filterOption={false}
+                value={selectedCustomerId}
+                options={customerOptions}
+                placeholder="Search name or mobile"
+                onSearch={(value) => {
+                  const query = value.trim();
+                  if (query.length < 2) return;
+                  const key = /^\d+$/.test(query) ? "phone" : "name";
+                  fetch(`/api/customers/search?${key}=${encodeURIComponent(query)}`)
+                    .then((r) => (r.ok ? r.json() : []))
+                    .then((items) =>
+                      setCustomerOptions(
+                        items.map((item: { id: string; name: string | null; mobile: string }) => ({
+                          value: item.id,
+                          label: `${item.name || "Unnamed"} · ${item.mobile}`,
+                        }))
+                      )
+                    );
+                }}
+                onChange={setSelectedCustomerId}
+              />
+            </Field>
+          ) : null}
+          {visitorMode === "NEW" ? (
+            <div className={styles.formGrid}>
+              <Field label="Customer name">
+                <Input
+                  value={newCustomerName}
+                  onChange={(event) => setNewCustomerName(event.target.value)}
+                />
+              </Field>
+              <Field label="Mobile number" required>
+                <Input
+                  value={newCustomerMobile}
+                  maxLength={10}
+                  onChange={(event) =>
+                    setNewCustomerMobile(event.target.value.replace(/\D/g, "").slice(0, 10))
+                  }
+                />
+              </Field>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
       <section className={styles.formSection}>
         <div className={styles.formGrid}>
-          <Field label="Visit date and time" required><DatePicker showTime value={visitedAt} onChange={(value) => value && setVisitedAt(value)} style={{ width: "100%" }} /></Field>
-          <Field label="Source"><Select value={source} onChange={setSource} options={[{ value: "WALK_IN", label: "Walk-in" }, { value: "PHONE", label: "Phone enquiry" }, { value: "WHATSAPP", label: "WhatsApp" }, { value: "OTHER", label: "Other" }]} /></Field>
-          <Field label="Visit notes" wide><Input.TextArea value={notes} onChange={event => setNotes(event.target.value)} maxLength={1000} autoSize={{ minRows: 2, maxRows: 4 }} /></Field>
+          <Field label="Visit date and time" required>
+            <DatePicker
+              showTime
+              value={visitedAt}
+              onChange={(value) => value && setVisitedAt(value)}
+              style={{ width: "100%" }}
+            />
+          </Field>
+          <Field label="Source">
+            <Select
+              value={source}
+              onChange={setSource}
+              options={[
+                { value: "WALK_IN", label: "Walk-in" },
+                { value: "PHONE", label: "Phone enquiry" },
+                { value: "WHATSAPP", label: "WhatsApp" },
+                { value: "OTHER", label: "Other" },
+              ]}
+            />
+          </Field>
+          <Field label="Visit notes" wide>
+            <Input.TextArea
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              maxLength={1000}
+              autoSize={{ minRows: 2, maxRows: 4 }}
+            />
+          </Field>
         </div>
       </section>
       <section className={styles.formSection}>
@@ -235,6 +359,7 @@ export function VisitForm({
                 "Partially",
                 <Progress type="circle" percent={66} size={24} showInfo={false} key="p" />,
               ],
+              ["MAY_RETURN", "May Return", <ClockCircleOutlined key="r" />],
             ] as const
           ).map(([value, label, icon]) => (
             <Button
@@ -242,6 +367,7 @@ export function VisitForm({
               className={`${styles.outcomeButton} ${styles[`outcome${value}`]} ${outcome === value ? styles.outcomeSelected : ""}`}
               onClick={() => {
                 setOutcome(value);
+                if (value !== "MAY_RETURN") setExpectedReturnPeriod(undefined);
                 setRequests(value === "CONVERTED" ? [] : requests);
               }}
             >
@@ -251,6 +377,26 @@ export function VisitForm({
           ))}
         </div>
       </section>
+
+      {outcome === "MAY_RETURN" ? (
+        <section className={styles.formSection}>
+          <Field label="Expected return (optional)">
+            <Select
+              allowClear
+              placeholder="Choose a rough period"
+              value={expectedReturnPeriod}
+              options={Object.entries(EXPECTED_RETURN_LABELS).map(([value, label]) => ({
+                value,
+                label,
+              }))}
+              onChange={setExpectedReturnPeriod}
+            />
+          </Field>
+          <Typography.Text type="secondary" className={styles.returnHint}>
+            Leave this unselected if the customer was unsure. No customer details are required.
+          </Typography.Text>
+        </section>
+      ) : null}
 
       {outcome === "NOT_CONVERTED" ? (
         <section className={styles.formSection}>
@@ -296,7 +442,9 @@ export function VisitForm({
           </div>
           {requests.length === 0 ? (
             <div className={styles.requestPrompt}>
-              Choose a reason above to add the first requested item.
+              {outcome === "MAY_RETURN"
+                ? "Item details are optional. Add them if the customer mentioned what they may return for."
+                : "Choose a reason above to add the first requested item."}
             </div>
           ) : null}
           <div className={styles.requests}>
@@ -601,6 +749,210 @@ export function VisitForm({
   );
 }
 
+type ReturnVisitFilter = "ALL" | "PENDING" | "RETURNED";
+
+function interestedIn(visit: CustomerVisitRecord) {
+  const values = visit.demandRequests.flatMap((request) => [
+    request.product?.name ?? request.category?.name,
+    ...Object.values(request.attributes ?? {}).flatMap((value) =>
+      Array.isArray(value) ? value.map(String) : value ? [String(value)] : []
+    ),
+  ]);
+  return [...new Set(values.filter(Boolean))].join(" / ") || "No item details recorded";
+}
+
+function ReturnVisitHistory({
+  visits,
+  loading,
+  error,
+  mobile = false,
+}: {
+  visits: CustomerVisitRecord[];
+  loading: boolean;
+  error?: Error | null;
+  mobile?: boolean;
+}) {
+  const { message } = App.useApp();
+  const mutation = useUpdateCustomerVisit();
+  const [filter, setFilter] = useState<ReturnVisitFilter>("ALL");
+  const [confirmingVisit, setConfirmingVisit] = useState<CustomerVisitRecord | null>(null);
+  const rows = visits.filter(
+    (visit) =>
+      visit.outcome === "MAY_RETURN" &&
+      (filter === "ALL" ||
+        (filter === "RETURNED" ? Boolean(visit.returnConfirmedAt) : !visit.returnConfirmedAt))
+  );
+  const confirmReturn = async (visit: CustomerVisitRecord, returnOutcome: VisitReturnOutcome) => {
+    try {
+      await mutation.mutateAsync({
+        id: visit.id,
+        input: { returnConfirmedAt: new Date().toISOString(), returnOutcome },
+      });
+      setConfirmingVisit(null);
+      message.success(
+        returnOutcome === "PURCHASED"
+          ? "Return confirmed as purchased"
+          : "Return confirmed without purchase"
+      );
+    } catch (mutationError) {
+      message.error(
+        mutationError instanceof Error ? mutationError.message : "Unable to confirm return"
+      );
+    }
+  };
+  const filterControl = (
+    <Select
+      aria-label="Filter May Return visits"
+      value={filter}
+      onChange={setFilter}
+      options={[
+        { value: "ALL", label: "All May Return" },
+        { value: "PENDING", label: "Return not confirmed" },
+        { value: "RETURNED", label: "Returned" },
+      ]}
+      style={{ minWidth: 190 }}
+    />
+  );
+  if (loading) return <Skeleton active paragraph={{ rows: 3 }} />;
+  if (error)
+    return <Alert type="error" showIcon title="Recent May Return visits could not be loaded" />;
+
+  const status = (visit: CustomerVisitRecord) =>
+    visit.returnConfirmedAt ? (
+      <Tag
+        color={
+          visit.returnOutcome === "PURCHASED" || (!visit.returnOutcome && visit.linkedSale)
+            ? "green"
+            : visit.returnOutcome === "DID_NOT_PURCHASE"
+              ? "red"
+              : "blue"
+        }
+        icon={<CheckCircleOutlined />}
+      >
+        {visit.returnOutcome === "PURCHASED" || (!visit.returnOutcome && visit.linkedSale)
+          ? "Returned → Purchased"
+          : visit.returnOutcome === "DID_NOT_PURCHASE"
+            ? "Returned → Did Not Purchase"
+            : "Returned → Outcome Unknown"}
+      </Tag>
+    ) : (
+      <Tag color="gold" icon={<ClockCircleOutlined />}>
+        Return not confirmed
+      </Tag>
+    );
+  const confirmationModal = (
+    <Modal
+      title="Confirm Return"
+      open={Boolean(confirmingVisit)}
+      onCancel={() => !mutation.isPending && setConfirmingVisit(null)}
+      footer={null}
+      closable={!mutation.isPending}
+      maskClosable={!mutation.isPending}
+      destroyOnHidden
+    >
+      <Typography.Paragraph>Customer came back. What was the outcome?</Typography.Paragraph>
+      <Flex vertical gap={10}>
+        <Button
+          type="primary"
+          icon={<ShoppingCartOutlined />}
+          loading={mutation.isPending}
+          onClick={() => confirmingVisit && void confirmReturn(confirmingVisit, "PURCHASED")}
+        >
+          Purchased
+        </Button>
+        <Button
+          loading={mutation.isPending}
+          onClick={() => confirmingVisit && void confirmReturn(confirmingVisit, "DID_NOT_PURCHASE")}
+        >
+          Did Not Purchase
+        </Button>
+      </Flex>
+    </Modal>
+  );
+
+  if (mobile)
+    return (
+      <>
+        <section className={styles.returnHistoryCard}>
+          <div className={styles.returnHistoryHeader}>
+            <div>
+              <h2>Recent May Return Visits</h2>
+              <p>Find a visitor and confirm when they come back</p>
+            </div>
+            {filterControl}
+          </div>
+          {rows.length ? (
+            <div className={styles.returnVisitList}>
+              {rows.map((visit) => (
+                <article key={visit.id}>
+                  <div>
+                    <strong>{dayjs(visit.visitedAt).format("D MMM, h:mm A")}</strong>
+                    {status(visit)}
+                  </div>
+                  <p>{interestedIn(visit)}</p>
+                  <small>
+                    Expected:{" "}
+                    {visit.expectedReturnPeriod
+                      ? EXPECTED_RETURN_LABELS[visit.expectedReturnPeriod]
+                      : "Not specified"}
+                  </small>
+                  {!visit.returnConfirmedAt ? (
+                    <Button onClick={() => setConfirmingVisit(visit)}>Confirm Return</Button>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          ) : (
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No matching visits" />
+          )}
+        </section>
+        {confirmationModal}
+      </>
+    );
+
+  return (
+    <>
+      <Card title="Recent May Return Visits" extra={filterControl} className={styles.desktopTable}>
+        <Table
+          size="small"
+          rowKey="id"
+          dataSource={rows}
+          pagination={{ pageSize: 8 }}
+          scroll={{ x: 820 }}
+          locale={{ emptyText: "No matching visits" }}
+          columns={[
+            {
+              title: "Visit",
+              dataIndex: "visitedAt",
+              width: 160,
+              render: (value: string) => dayjs(value).format("D MMM YYYY, h:mm A"),
+            },
+            { title: "Interested in", render: (_, visit) => interestedIn(visit), width: 260 },
+            {
+              title: "Expected",
+              dataIndex: "expectedReturnPeriod",
+              render: (value: ExpectedReturnPeriod | null) =>
+                value ? EXPECTED_RETURN_LABELS[value] : "Not specified",
+            },
+            { title: "Status", render: (_, visit) => status(visit), width: 190 },
+            {
+              title: "Action",
+              width: 155,
+              render: (_, visit) =>
+                visit.returnConfirmedAt ? null : (
+                  <Button size="small" onClick={() => setConfirmingVisit(visit)}>
+                    Confirm Return
+                  </Button>
+                ),
+            },
+          ]}
+        />
+      </Card>
+      {confirmationModal}
+    </>
+  );
+}
+
 function MobileSummary({
   visits,
   unfulfilled,
@@ -674,6 +1026,11 @@ export default function DemandIntelligencePage() {
     dayjs().startOf("day").toISOString(),
     dayjs().add(1, "day").startOf("day").toISOString()
   );
+  const visitHistoryQuery = useCustomerVisits(
+    storeId ?? undefined,
+    dayjs().subtract(89, "day").startOf("day").toISOString(),
+    dayjs().add(1, "day").startOf("day").toISOString()
+  );
   const data = query.data;
   const today = todayQuery.data;
   const metricCards = useMemo(
@@ -682,6 +1039,11 @@ export default function DemandIntelligencePage() {
         ? [
             ["Customer Visits", data.visits.total],
             ["Converted", data.visits.converted + data.visits.partiallyConverted],
+            ["May Return", data.visits.mayReturn],
+            ["Confirmed Returned", data.visits.confirmedReturned],
+            ["Return Not Confirmed", data.visits.returnNotConfirmed],
+            ["Returned & Purchased", data.visits.returnedAndPurchased],
+            ["Returned · No Purchase", data.visits.returnedWithoutPurchase],
             ["Unfulfilled Demand", data.demand.unfulfilledQuantity],
             [
               "Demand Fulfilment",
@@ -739,6 +1101,12 @@ export default function DemandIntelligencePage() {
           />
         )}
         <VisitForm storeId={storeId} inline onClose={() => undefined} />
+        <ReturnVisitHistory
+          mobile
+          visits={visitHistoryQuery.data ?? []}
+          loading={visitHistoryQuery.isLoading}
+          error={visitHistoryQuery.error}
+        />
         <section className={styles.missedCard}>
           <div className={styles.missedHeader}>
             <span>
@@ -936,6 +1304,11 @@ export default function DemandIntelligencePage() {
               ]}
             />
           </Card>
+          <ReturnVisitHistory
+            visits={visitHistoryQuery.data ?? []}
+            loading={visitHistoryQuery.isLoading}
+            error={visitHistoryQuery.error}
+          />
         </>
       )}
       {captureOpen ? (
