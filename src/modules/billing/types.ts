@@ -1,4 +1,5 @@
 import type { ItemPriceAdjustment } from "./utils/pricingEngine";
+import type { InvoiceConfigurationSnapshot } from "@/modules/invoice-management/types";
 
 export type PaymentMethodType = "CASH" | "CARD" | "UPI";
 export type SaleStatusType = "COMPLETED" | "REFUNDED" | "EXCHANGED";
@@ -39,12 +40,30 @@ export type CreateSaleInput = {
   customerEmail?: string;
   promoCodeId?: string;
   transactionDate?: string;
+  whatsappInvoice?: WhatsAppInvoiceSelection;
+};
+
+export type WhatsAppInvoiceSelection = {
+  enabled: boolean;
+  recipient?: string;
+  templateInstanceId?: string;
+  consentConfirmed?: boolean;
+};
+
+export type InvoiceDeliveryState = {
+  id: string;
+  status: "QUEUED" | "SUBMITTED" | "SENT" | "DELIVERED" | "READ" | "FAILED";
+  phase?: "QUEUED" | "PROCESSING" | "META_SUBMITTED" | "SENT" | "DELIVERED" | "READ" | "FAILED";
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  timedOut?: boolean;
 };
 
 export type CartItem = ItemPriceAdjustment & {
   originalUnitPrice?: number;
   productId: string;
   productName: string;
+  imageUrl?: string | null;
   sku: string;
   sizeId: string;
   sizeLabel: string;
@@ -90,10 +109,24 @@ export type ReturnTransactionHistory = {
   offsetAmount: number;
   refundAmount: number;
   refundMethod?: PaymentMethodType;
+  discountType?: "PERCENTAGE" | "FLAT";
+  discountPercent?: number;
+  discountAmount?: number;
+  taxRate?: number;
+  calculatedTotal?: number;
+  roundOffAmount?: number;
+  finalPayable?: number;
+  splitPaymentData?: {
+    topUpPayments?: SplitPaymentEntry[];
+    refundPayments?: SplitPaymentEntry[];
+  };
   reason?: string;
   condition?: string;
   notes?: string;
+  transactionDate?: string;
+  businessDate?: string;
   createdAt: string;
+  invoiceSnapshot?: InvoiceConfigurationSnapshot;
 };
 
 /**
@@ -112,6 +145,7 @@ export type SalePayment = {
 
 export type Sale = {
   id: string;
+  storeId: string;
   invoiceNumber: string;
   customerId: string | null;
   customerName: string | null;
@@ -135,6 +169,8 @@ export type Sale = {
   returnTransactions: ReturnTransactionHistory[];
   transactionDate: string;
   createdAt: string;
+  invoiceDelivery?: InvoiceDeliveryState;
+  invoiceSnapshot?: InvoiceConfigurationSnapshot;
 };
 
 export type SaleItem = ItemPriceAdjustment & {
@@ -172,6 +208,7 @@ export type VariantRow = {
   rowKey: string;
   productId: string;
   productName: string;
+  imageUrl?: string | null;
   sku: string;
   externalBarcode: string | null;
   variantSku: string | null;

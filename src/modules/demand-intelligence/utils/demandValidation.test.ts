@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { customerVisitInputSchema, demandRequestInputSchema } from "./demandValidation.ts";
+import {
+  customerVisitInputSchema,
+  customerVisitPatchSchema,
+  demandRequestInputSchema,
+} from "./demandValidation.ts";
 
 const categoryId = "00000000-0000-4000-8000-000000000001";
 
@@ -25,6 +29,49 @@ test("accepts category-only and generic attribute demand", () => {
       attributes: { storage: "256GB", color: "Black" },
     }).success,
     true
+  );
+});
+
+test("accepts an anonymous May Return visit with an optional rough return period", () => {
+  assert.equal(
+    customerVisitInputSchema.safeParse({
+      storeId: "00000000-0000-4000-8000-000000000002",
+      outcome: "MAY_RETURN",
+      expectedReturnPeriod: "TWO_TO_THREE_DAYS",
+      requests: [],
+    }).success,
+    true
+  );
+  assert.equal(
+    customerVisitPatchSchema.safeParse({
+      returnConfirmedAt: new Date().toISOString(),
+      returnOutcome: "PURCHASED",
+    }).success,
+    true
+  );
+  assert.equal(
+    customerVisitPatchSchema.safeParse({
+      returnConfirmedAt: new Date().toISOString(),
+      returnOutcome: "DID_NOT_PURCHASE",
+    }).success,
+    true
+  );
+  const createResult = customerVisitInputSchema.safeParse({
+    storeId: "00000000-0000-4000-8000-000000000002",
+    outcome: "MAY_RETURN",
+    returnConfirmedAt: new Date().toISOString(),
+    requests: [],
+  });
+  assert.equal(createResult.success, true);
+  if (createResult.success) assert.equal("returnConfirmedAt" in createResult.data, false);
+  assert.equal(
+    customerVisitInputSchema.safeParse({
+      storeId: "00000000-0000-4000-8000-000000000002",
+      outcome: "CONVERTED",
+      expectedReturnPeriod: "TOMORROW",
+      requests: [],
+    }).success,
+    false
   );
 });
 

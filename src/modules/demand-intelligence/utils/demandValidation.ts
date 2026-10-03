@@ -5,6 +5,13 @@ export const visitOutcomeSchema = z.enum([
   "NOT_CONVERTED",
   "PARTIALLY_CONVERTED",
   "BROWSING",
+  "MAY_RETURN",
+]);
+export const expectedReturnPeriodSchema = z.enum([
+  "TOMORROW",
+  "TWO_TO_THREE_DAYS",
+  "WITHIN_A_WEEK",
+  "NOT_SURE",
 ]);
 export const demandStatusSchema = z.enum([
   "FULFILLED",
@@ -96,8 +103,10 @@ export const demandRequestInputSchema = z
 
 const customerVisitBaseSchema = z.object({
   storeId: z.string().uuid(),
+  customerId: z.string().uuid().optional(),
   visitedAt: z.iso.datetime().optional(),
   outcome: visitOutcomeSchema,
+  expectedReturnPeriod: expectedReturnPeriodSchema.optional(),
   linkedSaleId: z.string().uuid().optional(),
   source: z.string().trim().max(100).optional(),
   notes: z.string().trim().max(1000).optional(),
@@ -106,6 +115,13 @@ const customerVisitBaseSchema = z.object({
 });
 
 export const customerVisitInputSchema = customerVisitBaseSchema.superRefine((value, context) => {
+  if (value.expectedReturnPeriod && value.outcome !== "MAY_RETURN") {
+    context.addIssue({
+      code: "custom",
+      path: ["expectedReturnPeriod"],
+      message: "An expected return period is only valid for a May Return visit",
+    });
+  }
   if (
     (value.outcome === "PARTIALLY_CONVERTED" || value.outcome === "NOT_CONVERTED") &&
     value.requests.length === 0
@@ -120,4 +136,8 @@ export const customerVisitInputSchema = customerVisitBaseSchema.superRefine((val
 
 export const customerVisitPatchSchema = customerVisitBaseSchema
   .omit({ storeId: true, idempotencyKey: true })
-  .partial();
+  .partial()
+  .extend({
+    returnConfirmedAt: z.iso.datetime().optional(),
+    returnOutcome: z.enum(["PURCHASED", "DID_NOT_PURCHASE"]).optional(),
+  });

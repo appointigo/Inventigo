@@ -4,6 +4,7 @@ import {
   BarChartOutlined,
   DollarOutlined,
   UserAddOutlined,
+  UserOutlined,
 } from "@ant-design/icons";
 import { usePathname, useRouter } from "next/navigation";
 import styles from "./BottomNavigation.module.css";
@@ -11,6 +12,7 @@ import styles from "./BottomNavigation.module.css";
 const NAV_ITEMS = [
   { key: "dashboard", label: "Dashboard", href: "/dashboard", icon: BarChartOutlined },
   { key: "demand", label: "Demand", href: "/dashboard/demand", icon: UserAddOutlined },
+  { key: "customers", label: "Customers", href: "/dashboard/customers", icon: UserOutlined },
   { key: "billing", label: "Billing", href: "/dashboard/billing", icon: DollarOutlined },
 ] as const;
 

@@ -1,7 +1,13 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { billingService } from "@/modules/billing/services/billingService";
 import { requireOrgAuth } from "@/lib/auth.middleware";
 import type { SaleHistoryStatusFilter } from "@/modules/billing/types";
+import { prisma } from "@/lib/db";
+import { createWhatsAppInvoiceDeliveryService } from "@/modules/whatsapp/server";
+import { beginImmediateInvoiceDispatch } from "@/modules/whatsapp/services/immediateInvoiceDispatch";
+
+export const runtime = "nodejs";
+export const maxDuration = 60;
 
 export const GET = async (request: NextRequest) => {
   let user;
@@ -30,29 +36,43 @@ export const GET = async (request: NextRequest) => {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
-
 export const POST = async (request: NextRequest) => {
+  const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
+  const startedAt = Date.now();
   let user;
   try { 
     user = await requireOrgAuth(); 
   }
   catch { 
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 }); 
+    return NextResponse.json({ error: "Unauthorized", requestId }, { status: 401, headers: { "x-request-id": requestId } });
   }
 
   if (!user.storeId) {
-    return NextResponse.json({ error: "No store associated with your account" }, { status: 400 });
+    return NextResponse.json({ error: "No store associated with your account", requestId }, { status: 400, headers: { "x-request-id": requestId } });
   }
 
+  console.info("[Billing] request_received", { requestId, organizationId: user.orgId, storeId: user.storeId, operation: "CREATE_SALE" });
   try {
     const body = await request.json();
-    const sale = await billingService.createSale(user.orgId!, user.storeId, user.id, body);
-    return NextResponse.json(sale, { status: 201 });
+    const sale = await billingService.createSale(user.orgId!, user.storeId, user.id, body, { correlationId: requestId });
+    if (sale.invoiceDelivery) {
+      const dispatch = beginImmediateInvoiceDispatch(
+        prisma,
+        sale.invoiceDelivery.id,
+        createWhatsAppInvoiceDeliveryService
+      );
+      // Keep the invocation alive on Vercel and `next start` if the bounded
+      // response wait expires. The promise starts immediately after commit.
+      after(() => dispatch.completion.then(() => undefined));
+      sale.invoiceDelivery = await dispatch.initial;
+    }
+    console.info("[Billing] response_sent", { requestId, organizationId: user.orgId, storeId: user.storeId, operation: "CREATE_SALE", transactionId: sale.id, invoiceNumber: sale.invoiceNumber, invoiceDeliveryId: sale.invoiceDelivery?.id, invoiceDeliveryStatus: sale.invoiceDelivery?.status, httpStatus: 201, durationMs: Date.now() - startedAt });
+    return NextResponse.json({ ...sale, requestId }, { status: 201, headers: { "x-request-id": requestId } });
   }
   catch (error) {
     const message = error instanceof Error ? error.message : "Internal server error";
     const status = /required|invalid|insufficient|not found|inactive|expired|limit/i.test(message) ? 400 : 500;
-    return NextResponse.json({ error: message }, { status });
+    console.warn("[Billing] request_failed", { requestId, organizationId: user.orgId, storeId: user.storeId, operation: "CREATE_SALE", errorCode: message, httpStatus: status, durationMs: Date.now() - startedAt });
+    return NextResponse.json({ error: message, requestId }, { status, headers: { "x-request-id": requestId } });
   }
 }
-

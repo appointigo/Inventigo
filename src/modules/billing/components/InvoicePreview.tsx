@@ -1,12 +1,21 @@
 "use client";
 
-import { Modal, Table, Typography } from "antd";
-import { PrinterOutlined, CheckCircleFilled, CloseOutlined } from "@ant-design/icons";
+import { Alert, App, Button, Modal, Select, Table, Typography } from "antd";
+import {
+  PrinterOutlined,
+  CheckCircleFilled,
+  CloseOutlined,
+  DownloadOutlined,
+} from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { ReturnTransactionItem, Sale, SaleItem } from "../types";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
 import dayjs from "dayjs";
 import { useStore } from "@/providers/StoreProvider";
+import { useEffect, useState } from "react";
+import { buildInvoiceDocumentHtml } from "../invoiceDocument";
+import type { WhatsAppInvoiceSelection } from "../types";
+import { WhatsAppInvoiceSelector } from "@/modules/whatsapp/components/WhatsAppInvoiceSelector";
 import {
   InvoiceHeader,
   SuccessRow,
@@ -46,12 +55,60 @@ interface InvoicePreviewProps {
   sale: Sale | null;
   open: boolean;
   onClose: () => void;
+  getPdfUrl?: (kind: "SALE" | "RETURN" | "EXCHANGE", transactionId: string) => string;
 }
 
 const { Text } = Typography;
 
-const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
-  const { storeName } = useStore();
+const InvoicePreview = ({ sale, open, onClose, getPdfUrl }: InvoicePreviewProps) => {
+  const { storeName, storeId } = useStore();
+  const { message } = App.useApp();
+  const [whatsappInvoice, setWhatsappInvoice] = useState<WhatsAppInvoiceSelection>({
+    enabled: false,
+  });
+  const [invoiceTarget, setInvoiceTarget] = useState("SALE");
+  const [sendingInvoice, setSendingInvoice] = useState(false);
+  const [latestInvoiceAttempt, setLatestInvoiceAttempt] = useState<{
+    id: string;
+    status: string;
+    errorCode?: string | null;
+    errorMessage?: string | null;
+    templateInstance?: { metaTemplateName: string } | null;
+  } | null>(null);
+
+  useEffect(() => {
+    setInvoiceTarget("SALE");
+    setWhatsappInvoice({ enabled: false, recipient: sale?.customerPhone ?? undefined });
+  }, [sale?.id, sale?.customerPhone]);
+
+  useEffect(() => {
+    if (!open || !sale) return;
+    const selectedTransaction = sale.returnTransactions.find((item) => item.id === invoiceTarget);
+    const kind =
+      invoiceTarget === "SALE"
+        ? "SALE"
+        : selectedTransaction?.exchangedItems?.length
+          ? "EXCHANGE"
+          : "RETURN";
+    const transactionId = invoiceTarget === "SALE" ? sale.id : invoiceTarget;
+    const controller = new AbortController();
+    fetch(
+      `/api/whatsapp/invoices?kind=${kind}&transactionId=${encodeURIComponent(transactionId)}`,
+      {
+        cache: "no-store",
+        headers: { "x-request-id": crypto.randomUUID() },
+        signal: controller.signal,
+      }
+    )
+      .then((response) => (response.ok ? response.json() : Promise.reject()))
+      .then((body: { attempts?: Array<typeof latestInvoiceAttempt> }) =>
+        setLatestInvoiceAttempt(body.attempts?.[0] ?? null)
+      )
+      .catch((error) => {
+        if (!(error instanceof Error && error.name === "AbortError")) setLatestInvoiceAttempt(null);
+      });
+    return () => controller.abort();
+  }, [open, sale, invoiceTarget]);
 
   if (!sale) return null;
 
@@ -59,15 +116,18 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
 
   const getItemSnapshot = (item: SaleItem) => {
     const unitMrp = Number(item.originalUnitPrice ?? item.mrp ?? item.unitPrice);
-    const finalUnitPrice = item.finalUnitPrice != null
-      ? Number(item.finalUnitPrice)
-      : item.sellingPrice != null
-        ? Number(item.sellingPrice)
-        : Number(item.unitPrice);
-    const lineTotal = item.finalLineAmount != null ? Number(item.finalLineAmount) : Number(item.total);
+    const finalUnitPrice =
+      item.finalUnitPrice != null
+        ? Number(item.finalUnitPrice)
+        : item.sellingPrice != null
+          ? Number(item.sellingPrice)
+          : Number(item.unitPrice);
+    const lineTotal =
+      item.finalLineAmount != null ? Number(item.finalLineAmount) : Number(item.total);
     const mrpLineTotal = round2(unitMrp * item.quantity);
     const savings = Math.max(0, round2(mrpLineTotal - lineTotal));
-    const discountPercent = unitMrp > 0 ? Math.round(((unitMrp - finalUnitPrice) / unitMrp) * 100) : 0;
+    const discountPercent =
+      unitMrp > 0 ? Math.round(((unitMrp - finalUnitPrice) / unitMrp) * 100) : 0;
 
     return { unitMrp, finalUnitPrice, lineTotal, mrpLineTotal, savings, discountPercent };
   };
@@ -79,8 +139,8 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
     const sizeLabel = item.sizeLabel?.trim();
     const sizeId = item.sizeId?.trim();
     const primary = productName || sku || productId || "Product";
-    const secondaryParts = [sku, productId].filter(
-      (value): value is string => Boolean(value && value !== primary)
+    const secondaryParts = [sku, productId].filter((value): value is string =>
+      Boolean(value && value !== primary)
     );
 
     return {
@@ -90,9 +150,18 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
     };
   };
 
-  const mrpSubtotal = round2(sale.items.reduce((sum, item) => sum + Number(item.originalUnitPrice ?? item.mrp ?? item.unitPrice) * item.quantity, 0));
+  const mrpSubtotal = round2(
+    sale.items.reduce(
+      (sum, item) =>
+        sum + Number(item.originalUnitPrice ?? item.mrp ?? item.unitPrice) * item.quantity,
+      0
+    )
+  );
   const invoiceSubtotal = sale.items.every((item) => item.netLineAmount != null)
-    ? round2(sale.items.reduce((sum, item) => sum + Number(item.taxableAmount ?? 0), 0) + sale.discountAmount)
+    ? round2(
+        sale.items.reduce((sum, item) => sum + Number(item.taxableAmount ?? 0), 0) +
+          sale.discountAmount
+      )
     : sale.subtotal;
   const totalSavings = Math.max(0, round2(mrpSubtotal - Number(sale.total)));
 
@@ -100,208 +169,113 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
 
-    const itemRows = sale.items
-      .map((item, i) => {
-        const { unitMrp, finalUnitPrice, lineTotal, savings, discountPercent } = getItemSnapshot(item);
-        const attrValues = Object.values(item.attributes ?? {})
-          .filter((v) => {
-            const s = String(v).trim().toLowerCase();
-            return s !== "" && !["pcs", "pc", "piece", "pieces", "unit", "units"].includes(s);
-          })
-          .map((v) => `<span style="display:inline-block;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:3px;font-size:9pt;padding:0 5px;margin-left:3px;">${String(v)}</span>`)
-          .join("");
-
-        return `
-          <tr>
-            <td>${i + 1}</td>
-            <td>
-              <div style="font-weight:700;margin-bottom:4px;">${item.productName}</div>
-              <div style="font-size:10pt;color:#666;line-height:1.4;">
-                ${item.sku} · ${item.sizeLabel}${attrValues}
-              </div>
-              <div style="margin-top:6px;font-size:10pt;color:#111;">
-                <span style="font-weight:700;">${formatCurrency(finalUnitPrice)}</span>
-                ${unitMrp > finalUnitPrice ? `<span style="margin-left:8px;text-decoration:line-through;color:#888;">${formatCurrency(unitMrp)}</span>` : ""}
-              </div>
-              ${unitMrp > finalUnitPrice ? `<div style="font-size:10pt;color:#15803d;">${discountPercent}% OFF${savings > 0 ? ` • Save ${formatCurrency(savings)}` : ""}</div>` : ""}
-            </td>
-            <td style="text-align:center">${item.quantity}</td>
-            <td style="text-align:right">${formatCurrency(lineTotal)}</td>
-          </tr>
-        `;
+    printWindow.document.write(
+      buildInvoiceDocumentHtml({
+        sale,
+        merchant: { name: storeName },
+        kind:
+          invoiceTarget === "SALE"
+            ? "SALE"
+            : sale.returnTransactions.find((item) => item.id === invoiceTarget)?.exchangedItems
+                  ?.length
+              ? "EXCHANGE"
+              : "RETURN",
+        returnTransactionId: invoiceTarget === "SALE" ? undefined : invoiceTarget,
+        configuration:
+          invoiceTarget === "SALE"
+            ? sale.invoiceSnapshot
+            : sale.returnTransactions.find((item) => item.id === invoiceTarget)?.invoiceSnapshot,
       })
-      .join("");
-
-    const historySections = sale.returnTransactions.length
-      ? sale.returnTransactions
-          .map((transaction) => {
-            const returnedRows = (transaction.returnedItems ?? [])
-              .map((item, i) => {
-                const product = getHistoryItemDisplay(item);
-
-                return `
-                  <tr>
-                    <td>${i + 1}</td>
-                    <td>
-                      <div style="font-weight:700;margin-bottom:3px;">${product.primary}</div>
-                      <small style="color:#888">
-                        ${product.secondary}
-                        ${product.size ? `<span style="display:inline-block;background:#eff4ff;border:1px solid #bfdbfe;border-radius:3px;font-size:9pt;padding:0 5px;color:#2563eb;">${product.size}</span>` : ""}
-                      </small>
-                    </td>
-                    <td style="text-align:center">${item.quantity}</td>
-                    <td style="text-align:right">${formatCurrency(item.total)}</td>
-                  </tr>
-                `;
-              })
-              .join("");
-
-            const exchangedRows = (transaction.exchangedItems ?? [])
-              .map((item, i) => {
-                const product = getHistoryItemDisplay(item);
-
-                return `
-                  <tr>
-                    <td>${i + 1}</td>
-                    <td>
-                      <div style="font-weight:700;margin-bottom:3px;">${product.primary}</div>
-                      <small style="color:#888">
-                        ${product.secondary}
-                        ${product.size ? `<span style="display:inline-block;background:#eff4ff;border:1px solid #bfdbfe;border-radius:3px;font-size:9pt;padding:0 5px;color:#2563eb;">${product.size}</span>` : ""}
-                      </small>
-                    </td>
-                    <td style="text-align:center">${item.quantity}</td>
-                    <td style="text-align:right">${formatCurrency(item.total)}</td>
-                  </tr>
-                `;
-              })
-              .join("");
-
-            return `
-              <div style="margin-bottom:20px; padding:12px; border:1px solid #ddd; border-radius:8px;">
-                <div style="font-weight:700; margin-bottom:8px;">${transaction.type} · ${dayjs(transaction.createdAt).format("DD MMM YYYY, hh:mm A")}</div>
-                ${returnedRows ? `
-                  <div style="margin-bottom:12px;">
-                    <div style="font-weight:600; margin-bottom:6px;">Returned items</div>
-                    <table style="width:100%; border-collapse:collapse; margin-bottom:0;">
-                      <thead>
-                        <tr>
-                          <th style="text-align:left; padding:4px; border-bottom:1px solid #ddd;">#</th>
-                          <th style="text-align:left; padding:4px; border-bottom:1px solid #ddd;">Product</th>
-                          <th style="text-align:center; padding:4px; border-bottom:1px solid #ddd;">Qty</th>
-                          <th style="text-align:right; padding:4px; border-bottom:1px solid #ddd;">Total</th>
-                        </tr>
-                      </thead>
-                      <tbody>${returnedRows}</tbody>
-                    </table>
-                  </div>
-                ` : ""}
-                ${exchangedRows ? `
-                  <div>
-                    <div style="font-weight:600; margin-bottom:6px;">Exchanged items</div>
-                    <table style="width:100%; border-collapse:collapse; margin-bottom:0;">
-                      <thead>
-                        <tr>
-                          <th style="text-align:left; padding:4px; border-bottom:1px solid #ddd;">#</th>
-                          <th style="text-align:left; padding:4px; border-bottom:1px solid #ddd;">Product</th>
-                          <th style="text-align:center; padding:4px; border-bottom:1px solid #ddd;">Qty</th>
-                          <th style="text-align:right; padding:4px; border-bottom:1px solid #ddd;">Total</th>
-                        </tr>
-                      </thead>
-                      <tbody>${exchangedRows}</tbody>
-                    </table>
-                  </div>
-                ` : ""}
-                <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-top:12px; font-size:11pt;">
-                  <div>Refund: ${formatCurrency(transaction.refundAmount)}</div>
-                  <div>Offset: ${formatCurrency(transaction.offsetAmount)}</div>
-                </div>
-              </div>
-            `;
-          })
-          .join("")
-      : "";
-
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Invoice ${sale.invoiceNumber}</title>
-          <style>
-            @page { size: A4; margin: 15mm; }
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { font-family: Arial, sans-serif; font-size: 12pt; color: #333; padding: 20px; }
-            .header { text-align: center; margin-bottom: 24px; }
-            .header h1 { font-size: 20pt; margin-bottom: 4px; }
-            .header p { color: #666; }
-            .info { display: flex; justify-content: space-between; margin-bottom: 20px; }
-            .info div { font-size: 10pt; }
-            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-            th, td { padding: 8px; border-bottom: 1px solid #ddd; text-align: left; }
-            th { background: #f5f5f5; font-weight: bold; }
-            .totals { text-align: right; }
-            .totals div { margin-bottom: 4px; }
-            .grand-total { font-size: 14pt; font-weight: bold; border-top: 2px solid #333; padding-top: 8px; }
-            .footer { text-align: center; margin-top: 40px; font-size: 10pt; color: #999; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h1>${storeName}</h1>
-            <p>Tax Invoice</p>
-          </div>
-          <div class="info">
-            <div>
-              <strong>Invoice:</strong> ${sale.invoiceNumber}<br>
-              <strong>Date:</strong> ${dayjs(sale.transactionDate).format("DD MMM YYYY, hh:mm A")}<br>
-              <strong>Payment:</strong> ${sale.paymentMethod}<br>
-              <strong>Payment status:</strong> ${sale.paymentStatus}
-            </div>
-            <div style="text-align:right">
-              ${sale.customerName ? `<strong>Customer:</strong> ${sale.customerName}<br>` : ""}
-              ${sale.customerPhone ? `<strong>Phone:</strong> ${sale.customerPhone}<br>` : ""}
-              <strong>Status:</strong> ${sale.status}
-            </div>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Product</th>
-                <th style="text-align:right">Price</th>
-                <th style="text-align:center">Qty</th>
-                <th style="text-align:right">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${itemRows}
-            </tbody>
-          </table>
-          ${historySections}
-          <div class="totals">
-            <div>Subtotal (before bill discount, excl. tax): ${formatCurrency(invoiceSubtotal)}</div>
-            ${sale.discountAmount > 0 ? `<div>Discount: -${formatCurrency(sale.discountAmount)}</div>` : ""}
-            ${totalSavings > 0 ? `<div>You Saved: ${formatCurrency(totalSavings)}</div>` : ""}
-            ${sale.taxAmount > 0 ? `<div>Tax: ${formatCurrency(sale.taxAmount)}</div>` : ""}
-            <div>Amount paid: ${formatCurrency(sale.amountPaid)}</div>
-            ${sale.amountDue > 0 ? `<div>Amount due: ${formatCurrency(sale.amountDue)}</div>` : ""}
-            <div class="grand-total">Final Total: ${formatCurrency(sale.total)}</div>
-          </div>
-          <div class="footer">Thank you for your purchase!</div>
-          <script>window.onload = function() { setTimeout(function() { window.print(); }, 300); }<\/script>
-        </body>
-      </html>
-    `);
+    );
     printWindow.document.close();
+    printWindow.addEventListener("load", () => printWindow.print(), { once: true });
+  };
+  const selectedTransaction = sale.returnTransactions.find((item) => item.id === invoiceTarget);
+  const selectedKind: "SALE" | "RETURN" | "EXCHANGE" =
+    invoiceTarget === "SALE"
+      ? "SALE"
+      : selectedTransaction?.exchangedItems?.length
+        ? "EXCHANGE"
+        : "RETURN";
+  const selectedTransactionId = invoiceTarget === "SALE" ? sale.id : invoiceTarget;
+
+  const sendFromHistory = async () => {
+    if (!storeId || !whatsappInvoice.recipient || !whatsappInvoice.consentConfirmed) {
+      message.error("Confirm the invoice recipient first.");
+      return;
+    }
+    const [kind, transactionId] =
+      invoiceTarget === "SALE"
+        ? ["SALE", sale.id]
+        : [
+            sale.returnTransactions.find((item) => item.id === invoiceTarget)?.exchangedItems
+              ?.length
+              ? "EXCHANGE"
+              : "RETURN",
+            invoiceTarget,
+          ];
+    const submit = async () => {
+      const requestId = crypto.randomUUID();
+      setSendingInvoice(true);
+      try {
+        const response = await fetch("/api/whatsapp/invoices", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-request-id": requestId },
+          body: JSON.stringify({
+            kind,
+            transactionId,
+            storeId,
+            recipient: whatsappInvoice.recipient,
+            consentConfirmed: true,
+          }),
+        });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body.error || "Invoice could not be queued");
+        setLatestInvoiceAttempt({
+          id: body.id,
+          status: body.status,
+          errorCode: body.errorCode,
+          errorMessage: body.errorMessage,
+        });
+        if (body.status === "FAILED")
+          message.warning(
+            "Invoice attempt was recorded but Meta submission failed. Review the failure before resending."
+          );
+        else message.success("Invoice submitted to Meta. Delivery will update asynchronously.");
+      } catch (error) {
+        message.error(error instanceof Error ? error.message : "Invoice could not be sent");
+      } finally {
+        setSendingInvoice(false);
+      }
+    };
+    let previous: { attempts: unknown[] };
+    try {
+      const response = await fetch(
+        `/api/whatsapp/invoices?kind=${kind}&transactionId=${encodeURIComponent(transactionId)}`,
+        { cache: "no-store", headers: { "x-request-id": crypto.randomUUID() } }
+      );
+      if (!response.ok) throw new Error();
+      previous = (await response.json()) as { attempts: unknown[] };
+    } catch {
+      message.error("Previous invoice attempts could not be checked. Nothing was sent.");
+      return;
+    }
+    if (previous.attempts.length) {
+      Modal.confirm({
+        title: "Resend invoice?",
+        content:
+          "A tracked WhatsApp attempt already exists for this transaction. This creates a separate resend attempt.",
+        okText: "Resend",
+        onOk: submit,
+      });
+    } else await submit();
   };
 
   const columns: ColumnsType<SaleItem> = [
     {
       title: "#",
       width: 40,
-      render: (_, __, index) => (
-        <Text type="secondary">{index + 1}</Text>
-      ),
+      render: (_, __, index) => <Text type="secondary">{index + 1}</Text>,
     },
     {
       title: "Product",
@@ -334,15 +308,19 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
         return (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
             <Text strong>{formatCurrency(finalUnitPrice)}</Text>
-            {record.originalUnitPrice != null && <Text type="secondary" style={{ fontSize: 12 }}>
-              Agreed {formatCurrency(record.sellingPrice ?? record.unitPrice)} / unit
-            </Text>}
+            {record.originalUnitPrice != null && (
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                Agreed {formatCurrency(record.sellingPrice ?? record.unitPrice)} / unit
+              </Text>
+            )}
             {unitMrp > finalUnitPrice && (
               <>
                 <Text delete type="secondary" style={{ fontSize: 12 }}>
                   {formatCurrency(unitMrp)}
                 </Text>
-                <DiscountText>{discountPercent}% OFF{ savings > 0 ? ` • Save ${formatCurrency(savings)}` : "" }</DiscountText>
+                <DiscountText>
+                  {discountPercent}% OFF{savings > 0 ? ` • Save ${formatCurrency(savings)}` : ""}
+                </DiscountText>
               </>
             )}
           </div>
@@ -361,7 +339,9 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
       dataIndex: "total",
       width: 100,
       align: "right",
-      render: (_total: number, record) => <Text strong>{formatCurrency(record.finalLineAmount ?? record.total)}</Text>,
+      render: (_total: number, record) => (
+        <Text strong>{formatCurrency(record.finalLineAmount ?? record.total)}</Text>
+      ),
     },
   ];
 
@@ -510,7 +490,10 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
           {sale.roundOffAmount !== 0 && (
             <SumRow>
               <span>Round Off</span>
-              <span>{sale.roundOffAmount > 0 ? '+' : ''}{formatCurrency(sale.roundOffAmount)}</span>
+              <span>
+                {sale.roundOffAmount > 0 ? "+" : ""}
+                {formatCurrency(sale.roundOffAmount)}
+              </span>
             </SumRow>
           )}
           <SumRow>
@@ -542,10 +525,20 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
                   marginTop: 16,
                 }}
               >
-                <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 12 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    flexWrap: "wrap",
+                    gap: 12,
+                    marginBottom: 12,
+                  }}
+                >
                   <div>
                     <Text strong>{transaction.type}</Text>
-                    <div style={{ color: "#6b7280", fontSize: 12 }}>{dayjs(transaction.createdAt).format("DD MMM YYYY · hh:mm A")}</div>
+                    <div style={{ color: "#6b7280", fontSize: 12 }}>
+                      {dayjs(transaction.createdAt).format("DD MMM YYYY · hh:mm A")}
+                    </div>
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <Text type="secondary">Refund</Text>
@@ -594,12 +587,70 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
           </NewSaleBanner>
         )}
 
+        <div style={{ marginTop: 20, display: "grid", gap: 12 }}>
+          {sale.returnTransactions.length ? (
+            <Select
+              value={invoiceTarget}
+              onChange={setInvoiceTarget}
+              options={[
+                { value: "SALE", label: `Purchase invoice ${sale.invoiceNumber}` },
+                ...sale.returnTransactions.map((transaction) => ({
+                  value: transaction.id,
+                  label: `${transaction.type} ${transaction.referenceNumber || transaction.id.slice(0, 8)}`,
+                })),
+              ]}
+            />
+          ) : null}
+          <WhatsAppInvoiceSelector
+            storeId={storeId}
+            recipient={sale.customerPhone ?? ""}
+            value={whatsappInvoice}
+            onChange={setWhatsappInvoice}
+            transactionKind={invoiceTarget === "SALE" ? "SALE" : "EXCHANGE"}
+          />
+          {latestInvoiceAttempt ? (
+            <Alert
+              type={
+                latestInvoiceAttempt.status === "FAILED"
+                  ? "error"
+                  : latestInvoiceAttempt.status === "DELIVERED" ||
+                      latestInvoiceAttempt.status === "READ"
+                    ? "success"
+                    : "info"
+              }
+              showIcon
+              message={`Latest WhatsApp invoice: ${latestInvoiceAttempt.status}`}
+              description={
+                latestInvoiceAttempt.status === "FAILED"
+                  ? `${latestInvoiceAttempt.errorCode || "INVOICE_DELIVERY_FAILED"}${latestInvoiceAttempt.errorMessage ? ` — ${latestInvoiceAttempt.errorMessage}` : ""}`
+                  : latestInvoiceAttempt.templateInstance?.metaTemplateName
+                    ? `Template: ${latestInvoiceAttempt.templateInstance.metaTemplateName}`
+                    : undefined
+              }
+            />
+          ) : null}
+          {whatsappInvoice.enabled ? (
+            <Button type="primary" loading={sendingInvoice} onClick={() => void sendFromHistory()}>
+              Send / resend finalized PDF
+            </Button>
+          ) : null}
+        </div>
+
         {/* Footer actions */}
         <FooterActions>
           <ActionButton onClick={onClose}>
             <CloseOutlined />
             Close
           </ActionButton>
+          {getPdfUrl ? (
+            <ActionButton
+              icon={<DownloadOutlined />}
+              href={getPdfUrl(selectedKind, selectedTransactionId)}
+              target="_blank"
+            >
+              Download PDF
+            </ActionButton>
+          ) : null}
           <PrintButton type="primary" icon={<PrinterOutlined />} onClick={handlePrint}>
             Print Invoice
           </PrintButton>
@@ -607,6 +658,6 @@ const InvoicePreview = ({ sale, open, onClose }: InvoicePreviewProps) => {
       </InvoiceBodyContent>
     </Modal>
   );
-}
+};
 
 export default InvoicePreview;

@@ -2,7 +2,18 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 // Routes that don't require authentication
-const publicRoutes = ["/login", "/api/auth", "/api/cron", "/verify-email", "/onboarding", "/invite", "/stockiva-admin", "/api/admin/bootstrap-status", "/api/admin/create-super-admin"];
+const publicRoutes = [
+  "/login",
+  "/api/auth",
+  "/api/cron",
+  "/api/whatsapp/webhook",
+  "/verify-email",
+  "/onboarding",
+  "/invite",
+  "/stockiva-admin",
+  "/api/admin/bootstrap-status",
+  "/api/admin/create-super-admin",
+];
 
 export const proxy = (request: NextRequest) => {
   const { pathname } = request.nextUrl;
@@ -32,6 +43,12 @@ export const proxy = (request: NextRequest) => {
     request.cookies.get("authjs.session-token");
 
   if (!token) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json(
+        { error: "Unauthorized", code: "UNAUTHORIZED" },
+        { status: 401 }
+      );
+    }
     const loginUrl = new URL("/login", request.url);
     return NextResponse.redirect(loginUrl);
   }

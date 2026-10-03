@@ -1,0 +1,22 @@
+.designGrid { display: grid; grid-template-columns: minmax(240px, .8fr) minmax(320px, 1.2fr); gap: 20px; align-items: start; }
+.designChoices { display: grid; gap: 10px; }
+.selectedCard { border-color: #1677ff; box-shadow: 0 0 0 2px rgba(22,119,255,.1); }
+.preview { min-height: 430px; padding: 34px; border: 1px solid #d8e0ea; border-radius: 16px; background: #fff; color: #172033; box-shadow: 0 12px 30px rgba(15,23,42,.08); }
+.previewHeader { display: flex; flex-direction: column; align-items: center; gap: 5px; border-bottom: 3px solid #172033; padding-bottom: 18px; font-size: 15px; }
+.previewHeader strong { font-size: 24px; }
+.previewMeta { display: flex; justify-content: space-between; margin: 20px 0; color: #64748b; }
+.previewRow { display: flex; justify-content: space-between; padding: 13px 8px; border-bottom: 1px solid #e2e8f0; }
+.previewTotal { display: flex; justify-content: space-between; margin: 22px 0; padding-top: 12px; border-top: 3px solid #172033; font-size: 17px; }
+.previewPolicy { display: grid; gap: 5px; margin: 18px 0 12px; padding-top: 10px; border-top: 1px solid #dfe3ea; color: #64748b; font-size: 10px; line-height: 1.4; }
+.previewPolicy span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.premium { color: #172554; }
+.premium .previewHeader { align-items: flex-start; padding: 18px; background: #f8f5ec; border-color: #c59a3d; }
+.premium .previewTotal { border-color: #c59a3d; }
+.compact { min-height: 340px; padding: 22px; font-size: 12px; }
+.compact .previewHeader { align-items: flex-start; padding-bottom: 9px; border-width: 1px; }
+.compact .previewHeader strong { font-size: 19px; }
+.compact .previewMeta { margin: 11px 0; }
+.compact .previewRow { padding: 7px 4px; }
+.compact .previewTotal { margin: 12px 0; padding-top: 8px; font-size: 14px; }
+.blueprintGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 900px) { .designGrid { grid-template-columns: 1fr; } .blueprintGrid { grid-template-columns: 1fr; } .preview { min-height: 360px; padding: 24px; } }

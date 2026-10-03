@@ -1,7 +1,12 @@
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
 import type { AttributeField } from "@/modules/categories/types";
-import type { CustomerVisitInput, DemandAnalyticsResponse, DemandReasonCode } from "../types";
+import type {
+  CustomerVisitInput,
+  CustomerVisitPatchInput,
+  DemandAnalyticsResponse,
+  DemandReasonCode,
+} from "../types";
 import { DEMAND_REASON_LABELS } from "../types";
 import {
   canonicalAttributes,
@@ -10,6 +15,7 @@ import {
   demandFulfillmentRate,
   NON_STOCK_DEMAND_REASONS,
   roundDemand,
+  summarizeVisitOutcomes,
 } from "../utils/demandAnalytics";
 import { assertReferencesResolved, assertStoreAssignment } from "../utils/demandSecurity";
 
@@ -121,6 +127,15 @@ async function validateReferences(
   });
 }
 
+async function validateCustomer(orgId: string, customerId?: string) {
+  if (!customerId) return;
+  const customer = await prisma.customer.findFirst({
+    where: { id: customerId, orgId },
+    select: { id: true },
+  });
+  if (!customer) throw new DemandAccessError("Customer access denied");
+}
+
 const visitInclude = {
   demandRequests: {
     include: {
@@ -140,6 +155,7 @@ export const demandIntelligenceService = {
     input: CustomerVisitInput
   ) {
     await ensureStoreAccess(orgId, userStoreId, input.storeId);
+    await validateCustomer(orgId, input.customerId);
     if (input.idempotencyKey) {
       const existing = await prisma.customerVisit.findFirst({
         where: { idempotencyKey: input.idempotencyKey, orgId, storeId: input.storeId },
@@ -148,34 +164,44 @@ export const demandIntelligenceService = {
       if (existing) return existing;
     }
     await validateReferences(orgId, input.storeId, input.requests, input.linkedSaleId);
-    return prisma.customerVisit.create({
-      data: {
-        orgId,
-        storeId: input.storeId,
-        visitedAt: input.visitedAt ? new Date(input.visitedAt) : undefined,
-        outcome: input.outcome,
-        linkedSaleId: input.linkedSaleId,
-        source: input.source,
-        notes: input.notes,
-        createdBy: userId,
-        idempotencyKey: input.idempotencyKey,
-        demandRequests: {
-          create: input.requests.map((request) => ({
-            orgId,
-            storeId: input.storeId,
-            categoryId: request.categoryId,
-            brandId: request.brandId,
-            productId: request.productId,
-            requestedQuantity: request.requestedQuantity,
-            fulfilledQuantity: request.fulfilledQuantity,
-            status: request.status,
-            reasonCode: request.reasonCode,
-            attributes: (request.attributes ?? {}) as Prisma.InputJsonValue,
-            notes: request.notes,
-          })),
+    return prisma.$transaction(async (tx) => {
+      const visit = await tx.customerVisit.create({
+        data: {
+          orgId,
+          storeId: input.storeId,
+          customerId: input.customerId,
+          visitedAt: input.visitedAt ? new Date(input.visitedAt) : undefined,
+          outcome: input.outcome,
+          expectedReturnPeriod: input.expectedReturnPeriod,
+          linkedSaleId: input.linkedSaleId,
+          source: input.source,
+          notes: input.notes,
+          createdBy: userId,
+          idempotencyKey: input.idempotencyKey,
+          demandRequests: {
+            create: input.requests.map((request) => ({
+              orgId,
+              storeId: input.storeId,
+              categoryId: request.categoryId,
+              brandId: request.brandId,
+              productId: request.productId,
+              requestedQuantity: request.requestedQuantity,
+              fulfilledQuantity: request.fulfilledQuantity,
+              status: request.status,
+              reasonCode: request.reasonCode,
+              attributes: (request.attributes ?? {}) as Prisma.InputJsonValue,
+              notes: request.notes,
+            })),
+          },
         },
-      },
-      include: visitInclude,
+        include: visitInclude,
+      });
+      if (input.customerId)
+        await tx.customer.update({
+          where: { id: input.customerId },
+          data: { lastVisitAt: input.visitedAt ? new Date(input.visitedAt) : new Date() },
+        });
+      return visit;
     });
   },
 
@@ -202,9 +228,10 @@ export const demandIntelligenceService = {
     orgId: string,
     userStoreId: string | null,
     id: string,
-    input: Partial<Omit<CustomerVisitInput, "storeId" | "idempotencyKey">>
+    input: CustomerVisitPatchInput
   ) {
     const existing = await this.get(orgId, userStoreId, id);
+    await validateCustomer(orgId, input.customerId);
     const finalOutcome = input.outcome ?? existing.outcome;
     const finalRequestCount = input.requests?.length ?? existing.demandRequests.length;
     if (
@@ -213,8 +240,22 @@ export const demandIntelligenceService = {
     ) {
       throw new DemandValidationError("This visit outcome requires a reason or demand request");
     }
-    if (input.requests)
-      await validateReferences(orgId, existing.storeId, input.requests, input.linkedSaleId);
+    if (input.requests || input.linkedSaleId)
+      await validateReferences(orgId, existing.storeId, input.requests ?? [], input.linkedSaleId);
+    if (input.returnConfirmedAt && finalOutcome !== "MAY_RETURN")
+      throw new DemandValidationError("Only a May Return visit can be marked as returned");
+    if (input.returnOutcome && finalOutcome !== "MAY_RETURN")
+      throw new DemandValidationError("Only a May Return visit can have a return outcome");
+    if (input.returnOutcome && !input.returnConfirmedAt && !existing.returnConfirmedAt)
+      throw new DemandValidationError("Confirm the customer return before recording its outcome");
+    if (input.returnConfirmedAt && !input.returnOutcome && !existing.returnOutcome)
+      throw new DemandValidationError("Select what happened when the customer returned");
+    if (input.returnOutcome === "DID_NOT_PURCHASE" && (input.linkedSaleId ?? existing.linkedSaleId))
+      throw new DemandValidationError("A visit linked to a sale cannot be marked as not purchased");
+    if (input.expectedReturnPeriod && finalOutcome !== "MAY_RETURN")
+      throw new DemandValidationError(
+        "An expected return period is only valid for a May Return visit"
+      );
     return prisma.$transaction(async (tx) => {
       if (input.requests) {
         await tx.demandRequest.deleteMany({
@@ -226,9 +267,15 @@ export const demandIntelligenceService = {
         data: {
           visitedAt: input.visitedAt ? new Date(input.visitedAt) : undefined,
           outcome: input.outcome,
+          expectedReturnPeriod: input.expectedReturnPeriod,
+          returnConfirmedAt: input.returnConfirmedAt
+            ? (existing.returnConfirmedAt ?? new Date())
+            : undefined,
+          returnOutcome: input.returnOutcome,
           linkedSaleId: input.linkedSaleId,
           source: input.source,
           notes: input.notes,
+          customerId: input.customerId,
           ...(input.requests
             ? {
                 demandRequests: {
@@ -269,6 +316,9 @@ export const demandIntelligenceService = {
         where: { orgId, storeId, visitedAt: { gte: start, lt: end } },
         select: {
           outcome: true,
+          returnConfirmedAt: true,
+          returnOutcome: true,
+          linkedSaleId: true,
           demandRequests: {
             select: {
               categoryId: true,
@@ -486,23 +536,7 @@ export const demandIntelligenceService = {
           : evidence === "early"
             ? `Only ${requestCount} stock-demand requests were recorded; treat signals as early evidence.`
             : `${requestCount} stock-demand requests provide a usable observed-demand sample.`,
-      visits: {
-        total: visits.length,
-        converted: visits.filter((visit) => visit.outcome === "CONVERTED").length,
-        partiallyConverted: visits.filter((visit) => visit.outcome === "PARTIALLY_CONVERTED")
-          .length,
-        nonConverted: visits.filter((visit) => visit.outcome === "NOT_CONVERTED").length,
-        browsing: visits.filter((visit) => visit.outcome === "BROWSING").length,
-        conversionRate: visits.length
-          ? roundDemand(
-              (visits.filter(
-                (visit) => visit.outcome === "CONVERTED" || visit.outcome === "PARTIALLY_CONVERTED"
-              ).length /
-                visits.length) *
-                100
-            )
-          : null,
-      },
+      visits: summarizeVisitOutcomes(visits),
       demand: {
         totalRequests: allRequests.length,
         fulfilledRequests: allRequests.filter((request) => request.status === "FULFILLED").length,

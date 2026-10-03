@@ -11,9 +11,12 @@ import dayjs from "dayjs";
 import { useProducts } from "@/modules/products/hooks/useProducts";
 import { useBrands } from "@/modules/brands/hooks/useBrands";
 import { useCategories } from "@/modules/categories/hooks/useCategories";
-import type { SaleSummary, Sale, SaleItem, VariantRow, CartItem, PaymentMethodType } from "../types";
+import type { SaleSummary, Sale, SaleItem, VariantRow, CartItem, PaymentMethodType, WhatsAppInvoiceSelection, InvoiceDeliveryState } from "../types";
+import { WhatsAppInvoiceSelector } from "@/modules/whatsapp/components/WhatsAppInvoiceSelector";
+import { useStore } from "@/providers/StoreProvider";
 import { PAYMENT_OPTIONS } from "../constants";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
+import { getInvoiceDeliveryFeedback } from "../utils/invoiceDeliveryFeedback";
 
 interface ReturnExchangeViewProps {
   sales: SaleSummary[];
@@ -38,10 +41,12 @@ interface ReturnExchangeViewProps {
       discountPercent?: number;
       discountAmount?: number;
       taxRate?: number;
+      whatsappInvoice?: WhatsAppInvoiceSelection;
     }
-  ) => Promise<void>;
+  ) => Promise<{ invoiceDelivery?: InvoiceDeliveryState }>;
   refreshSales: () => Promise<void>;
   initialSaleId?: string;
+  mobile?: boolean;
 }
 
 const { Text } = Typography;
@@ -53,8 +58,10 @@ const ReturnExchangeView = ({
   onCreateReturnTransaction,
   refreshSales,
   initialSaleId,
+  mobile = false,
 }: ReturnExchangeViewProps) => {
   const { message } = App.useApp();
+  const { storeId } = useStore();
   const { token } = theme.useToken();
   const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null);
   const [sale, setSale] = useState<Sale | null>(null);
@@ -89,6 +96,7 @@ const ReturnExchangeView = ({
   
   const [submitting, setSubmitting] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [whatsappInvoice, setWhatsAppInvoice] = useState<WhatsAppInvoiceSelection>({ enabled: false });
 
   const { products, loading: productsLoading } = useProducts(
     {
@@ -127,6 +135,7 @@ const ReturnExchangeView = ({
       setReason("");
       setCondition("");
       setNotes("");
+      setWhatsAppInvoice({ enabled: false });
       return;
     }
 
@@ -480,7 +489,7 @@ const ReturnExchangeView = ({
 
     setSubmitting(true);
     try {
-      await onCreateReturnTransaction(sale.id, {
+      const transaction = await onCreateReturnTransaction(sale.id, {
         type: exchangeType,
         returnedItems,
         exchangedItems: exchangeItems.map((item) => ({
@@ -502,9 +511,11 @@ const ReturnExchangeView = ({
         discountPercent: discountType === "PERCENTAGE" && discountValue > 0 ? discountValue : undefined,
         discountAmount: discountType === "FLAT" && discountValue > 0 ? discountValue : undefined,
         taxRate: taxRate > 0 ? taxRate : undefined,
+        whatsappInvoice,
       });
 
-      message.success("Return / exchange processed successfully.");
+      const feedback = getInvoiceDeliveryFeedback("Return / exchange", transaction.invoiceDelivery);
+      message[feedback.level](feedback.text);
       setSelectedSaleId(null);
       setSale(null);
       setReturnQuantities({});
@@ -520,6 +531,7 @@ const ReturnExchangeView = ({
       setReason("");
       setCondition("");
       setNotes("");
+      setWhatsAppInvoice({ enabled: false });
       setDrawerOpen(false);
       await refreshSales();
     } catch (error) {
@@ -535,7 +547,7 @@ const ReturnExchangeView = ({
   }, [netAmount, refundAmount]);
 
   return (
-    <div style={{ width: "100%" }}>
+    <div style={{ width: "100%" }} data-mobile-return-exchange={mobile ? "true" : undefined}>
       <style jsx global>{`
         .return-exchange-table .ant-table-thead > tr > th {
           padding: 8px 12px;
@@ -564,7 +576,7 @@ const ReturnExchangeView = ({
             style={{ background: "#f8fafc", borderColor: token.colorBorderSecondary, boxShadow: "0 1px 2px rgba(15, 23, 42, 0.06)" }}
           >
             <div style={{ display: "grid", gap: 12 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 12 }}>
+              <div style={{ display: "grid", gridTemplateColumns: mobile ? "minmax(0, 1fr)" : "1fr auto", gap: 12 }}>
                 <Select
                   showSearch
                   filterOption={(input, option) =>
@@ -575,7 +587,7 @@ const ReturnExchangeView = ({
                   onChange={(value) => setSelectedSaleId(value)}
                   options={saleOptions}
                   size="middle"
-                  style={{ minWidth: 320, height: token.controlHeight }}
+                  style={{ minWidth: mobile ? 0 : 320, width: mobile ? "100%" : undefined, height: mobile ? 48 : token.controlHeight }}
                   loading={loading}
                   allowClear
                 />
@@ -585,7 +597,7 @@ const ReturnExchangeView = ({
                   onClick={refreshSales}
                   loading={loading}
                   size="middle"
-                  style={{ height: token.controlHeight, paddingInline: token.paddingSM }}
+                  style={{ height: mobile ? 44 : token.controlHeight, paddingInline: token.paddingSM }}
                 >
                   Refresh
                 </Button>
@@ -601,7 +613,7 @@ const ReturnExchangeView = ({
                     <Spin />
                   </div>
                 ) : (
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0, 1fr))", gap: 12 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: mobile ? "repeat(2, minmax(0, 1fr))" : "repeat(6, minmax(0, 1fr))", gap: 12 }}>
                     <div>
                       <Text type="secondary" style={{ fontSize: 12 }}>Invoice</Text>
                       <div style={{ fontWeight: 600, fontSize: 14 }}>{sale?.invoiceNumber ?? "-"}</div>
@@ -635,6 +647,14 @@ const ReturnExchangeView = ({
                   </div>
                 )}
               </Card>
+
+              <WhatsAppInvoiceSelector
+                storeId={storeId}
+                recipient={sale?.customerPhone ?? ""}
+                value={whatsappInvoice}
+                onChange={setWhatsAppInvoice}
+                transactionKind="EXCHANGE"
+              />
             </div>
           </Card>
 
@@ -646,15 +666,48 @@ const ReturnExchangeView = ({
                 styles={{ body: { padding: token.paddingXS } }}
                 style={{ borderColor: "#f4c7c3", background: "#fff7f5" }}
               >
-                <Table
-                  className="return-exchange-table"
-                  columns={saleColumns}
-                  dataSource={returnRows}
-                  rowKey="id"
-                  pagination={false}
-                  size="small"
-                  locale={{ emptyText: "No sale items available." }}
-                />
+                {mobile ? (
+                  <div style={{ display: "grid", gap: 10 }}>
+                    {returnRows.map((item) => (
+                      <Card key={item.id} size="small" style={{ borderRadius: 12 }} styles={{ body: { padding: 12 } }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                          <div style={{ minWidth: 0 }}>
+                            <Text strong style={{ display: "block", overflowWrap: "anywhere" }}>{item.productName}</Text>
+                            <Text type="secondary" style={{ fontSize: 12 }}>{item.sku} • {item.sizeLabel}</Text>
+                          </div>
+                          <Text strong>{formatCurrency(getHistoricalUnitAmount(item))}</Text>
+                        </div>
+                        <Divider style={{ margin: "10px 0" }} />
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                          <div>
+                            <Text type="secondary" style={{ display: "block", fontSize: 11 }}>Purchased / returned</Text>
+                            <Text style={{ fontSize: 13 }}>{item.quantity} / {item.alreadyReturned}</Text>
+                          </div>
+                          <div style={{ textAlign: "right" }}>
+                            <Text type="secondary" style={{ display: "block", fontSize: 11, marginBottom: 4 }}>Return quantity</Text>
+                            <InputNumber
+                              min={0}
+                              max={Math.max(0, item.quantity - item.alreadyReturned)}
+                              value={item.returnQty}
+                              onChange={(value) => handleReturnQtyChange(item.id, value)}
+                              style={{ width: 96 }}
+                            />
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <Table
+                    className="return-exchange-table"
+                    columns={saleColumns}
+                    dataSource={returnRows}
+                    rowKey="id"
+                    pagination={false}
+                    size="small"
+                    locale={{ emptyText: "No sale items available." }}
+                  />
+                )}
                 <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10 }}>
                   <Text type="secondary" style={{ fontSize: 12 }}>Total returned</Text>
                   <Text strong style={{ color: "#b42318" }}>{formatCurrency(returnedTotal)}</Text>
@@ -662,7 +715,7 @@ const ReturnExchangeView = ({
               </Card>
 
               <Card size="small" title="Exchange Items" styles={{ body: { padding: token.paddingXS } }}>
-                <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 420px", gap: 16 }}>
+                <div style={{ display: "grid", gridTemplateColumns: mobile ? "minmax(0, 1fr)" : "minmax(0, 1fr) 420px", gap: 16 }}>
                   <div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 12 }}>
                       <Input
@@ -690,7 +743,7 @@ const ReturnExchangeView = ({
                           showArrow: false,
                           children: (
                             <>
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                              <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : '1fr 1fr 1fr', gap: 12 }}>
                                 <Select
                                   placeholder="All Categories"
                                   allowClear
@@ -726,16 +779,42 @@ const ReturnExchangeView = ({
                         }]}
                       />
                     </div>
-                    <Table
-                      className="return-exchange-table"
-                      columns={productColumns}
-                      dataSource={variantRows}
-                      rowKey="rowKey"
-                      size="small"
-                      pagination={{ pageSize: 6 }}
-                      loading={productsLoading}
-                      locale={{ emptyText: productSearch ? "No matching products." : "Start typing to find exchange items." }}
+                    {mobile ? (
+                      <Spin spinning={productsLoading}>
+                        <div style={{ display: "grid", gap: 8, maxHeight: 360, overflowY: "auto" }}>
+                          {variantRows.slice(0, 12).map((row) => (
+                            <Card key={row.rowKey} size="small" styles={{ body: { padding: 11 } }}>
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                                <div style={{ minWidth: 0 }}>
+                                  <Text strong style={{ display: "block", overflowWrap: "anywhere" }}>{row.productName}</Text>
+                                  <Text type="secondary" style={{ display: "block", fontSize: 12 }}>{row.sku} • {row.sizeLabel} • {row.stockQty} in stock</Text>
+                                  <Text strong style={{ display: "block", marginTop: 4 }}>{formatCurrency(row.basePrice)}</Text>
+                                </div>
+                                <Button type="primary" disabled={row.stockQty <= 0} onClick={() => handleAddExchangeItem(row)} style={{ minHeight: 42 }}>
+                                  Add
+                                </Button>
+                              </div>
+                            </Card>
+                          ))}
+                          {!productsLoading && variantRows.length === 0 ? (
+                            <div style={{ padding: 16, textAlign: "center", color: "#94a3b8" }}>
+                              {productSearch ? "No matching products." : "Start typing to find exchange items."}
+                            </div>
+                          ) : null}
+                        </div>
+                      </Spin>
+                    ) : (
+                      <Table
+                        className="return-exchange-table"
+                        columns={productColumns}
+                        dataSource={variantRows}
+                        rowKey="rowKey"
+                        size="small"
+                        pagination={{ pageSize: 6 }}
+                        loading={productsLoading}
+                        locale={{ emptyText: productSearch ? "No matching products." : "Start typing to find exchange items." }}
                       />
+                    )}
                   </div>
                   <Card size="small" title="Selected Exchange Items" styles={{ body: { padding: token.paddingXXS } }}>
                     {exchangeItems.length === 0 ? (
@@ -789,7 +868,7 @@ const ReturnExchangeView = ({
               </Card>
 
               <Card size="small" title="Return Details" styles={{ body: { padding: token.paddingXS } }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 2fr", gap: 12 }}>
+                <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "1fr 1fr 2fr", gap: 12 }}>
                   <Input
                     placeholder="Reason for return/exchange"
                     value={reason}
@@ -829,7 +908,7 @@ const ReturnExchangeView = ({
             icon={<SwapOutlined />}
             content={settlementButtonLabel}
             shape="square"
-            style={{ right: 24, width: "auto", minWidth: 120, height: 48, padding: "0 12px" }}
+            style={{ right: mobile ? 16 : 24, bottom: mobile ? "calc(96px + env(safe-area-inset-bottom))" : undefined, width: "auto", minWidth: 120, height: 48, padding: "0 12px" }}
             onClick={() => setDrawerOpen(true)}
             badge={{ count: returnedItems.length + exchangeItems.length, color: token.colorSuccess }}
           />
@@ -837,12 +916,13 @@ const ReturnExchangeView = ({
 
         <Drawer
           title="Review & Settle"
-          placement="right"
+          placement={mobile ? "bottom" : "right"}
+          height={mobile ? "90dvh" : undefined}
           onClose={() => setDrawerOpen(false)}
           open={drawerOpen}
-          styles={{ wrapper: { width: 520 }, body: { padding: 0, display: "flex", flexDirection: "column" } }}
+          styles={{ wrapper: { width: mobile ? "100%" : 520 }, body: { padding: 0, display: "flex", flexDirection: "column" } }}
           footer={
-            <div style={{ textAlign: "right", display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <div style={{ textAlign: "right", display: "flex", gap: 8, justifyContent: "flex-end", paddingBottom: mobile ? "env(safe-area-inset-bottom)" : undefined }}>
               <Button onClick={() => setDrawerOpen(false)} style={{ height: token.controlHeightLG }}>
                 Cancel
               </Button>
@@ -943,7 +1023,7 @@ const ReturnExchangeView = ({
 
               <div>
                 <Text type="secondary" style={{ fontSize: 12 }}>Payment method</Text>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginTop: 8 }}>
+                <div style={{ display: "grid", gridTemplateColumns: mobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: 8, marginTop: 8 }}>
                   {PAYMENT_OPTIONS.map((option) => (
                     <Button
                       key={option.value}
@@ -975,7 +1055,7 @@ const ReturnExchangeView = ({
               {splitMode && requiresPayment ? (
                 <div style={{ border: "1px solid #e5e7eb", borderRadius: 10, padding: 10, display: "grid", gap: 8 }}>
                   {settlementSplits.map((entry, index) => (
-                    <div key={index} style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8 }}>
+                    <div key={index} style={{ display: "grid", gridTemplateColumns: mobile ? "1fr 1fr" : "1fr 1fr auto", gap: 8 }}>
                       <Select
                         value={entry.method}
                         options={PAYMENT_OPTIONS}
@@ -997,6 +1077,7 @@ const ReturnExchangeView = ({
                         danger
                         disabled={settlementSplits.length === 1}
                         onClick={() => setSettlementSplits((prev) => prev.filter((_, i) => i !== index))}
+                        style={mobile ? { gridColumn: "1 / -1" } : undefined}
                       >
                         Remove
                       </Button>

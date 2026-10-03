@@ -2,14 +2,17 @@
 
 import dynamic from "next/dynamic";
 import { App, Badge, Button, Empty, Input, Skeleton, Typography } from "antd";
-import { CameraOutlined, SearchOutlined, ShoppingCartOutlined } from "@ant-design/icons";
+import { CameraOutlined, HistoryOutlined, ScanOutlined, SearchOutlined, ShoppingCartOutlined, SwapOutlined } from "@ant-design/icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createSaleRequest } from "@/modules/billing/hooks/useBilling";
+import { createSaleRequest, useSales } from "@/modules/billing/hooks/useBilling";
 import type { VariantRow } from "@/modules/billing/types";
+import ReturnExchangeView from "@/modules/billing/components/ReturnExchangeView";
+import { getInvoiceDeliveryFeedback } from "@/modules/billing/utils/invoiceDeliveryFeedback";
 import { useProducts } from "@/modules/products/hooks/useProducts";
 import { useStore } from "@/providers/StoreProvider";
 import { BillingCart } from "../components/BillingCart";
 import { Card } from "../components/Card";
+import { MobileSalesHistory } from "../components/MobileSalesHistory";
 import { PageContainer } from "../components/PageContainer";
 import { useMobileWorkspace } from "../context/MobileWorkspaceContext";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
@@ -36,6 +39,29 @@ export default function BillingPage() {
     lastPurchaseDate: string | null;
   } | null>(null);
   const pendingCameraScanRef = useRef<string | null>(null);
+  const [activeView, setActiveView] = useState<"sale" | "history" | "exchange">("sale");
+  const [exchangeSaleId, setExchangeSaleId] = useState<string | undefined>();
+  const salesState = useSales();
+
+  const openExchange = useCallback((saleId?: string) => {
+    setExchangeSaleId(saleId);
+    setActiveView("exchange");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
+  const mobileTabs = (
+    <div className={styles.mobileTabs} role="tablist" aria-label="Billing sections">
+      <button type="button" role="tab" aria-selected={activeView === "sale"} className={activeView === "sale" ? styles.activeTab : undefined} onClick={() => setActiveView("sale")}>
+        <ScanOutlined /> <span>Sale</span>
+      </button>
+      <button type="button" role="tab" aria-selected={activeView === "history"} className={activeView === "history" ? styles.activeTab : undefined} onClick={() => setActiveView("history")}>
+        <HistoryOutlined /> <span>History</span>
+      </button>
+      <button type="button" role="tab" aria-selected={activeView === "exchange"} className={activeView === "exchange" ? styles.activeTab : undefined} onClick={() => openExchange()}>
+        <SwapOutlined /> <span>Exchange</span>
+      </button>
+    </div>
+  );
 
   useEffect(() => {
     if (
@@ -52,6 +78,7 @@ export default function BillingPage() {
       rowKey: `${product.id}-${size.sizeId}`,
       productId: product.id,
       productName: product.name,
+      imageUrl: product.imageUrl,
       sku: product.sku,
       externalBarcode: product.externalBarcode ?? null,
       variantSku: size.variantSku ?? null,
@@ -66,18 +93,24 @@ export default function BillingPage() {
     }))
   ), [products]);
 
-  const addToCart = useCallback((productId: string, productName: string, sku: string, sizeId: string, sizeLabel: string, unitPrice: number) => {
-    cart.addItem({ productId, productName, sku, sizeId, sizeLabel, attributes: {}, quantity: 1, unitPrice });
-    setCartOpen(true);
-  }, [cart]);
-
   const addVariantToCart = useCallback((row: VariantRow) => {
     if (row.stockQty <= 0 || !row.isActive) {
       message.error("This item cannot be added right now");
       return;
     }
-    addToCart(row.productId, row.productName, row.sku, row.sizeId, row.sizeLabel, row.basePrice);
-  }, [addToCart, message]);
+    cart.addItem({
+      productId: row.productId,
+      productName: row.productName,
+      imageUrl: row.imageUrl,
+      sku: row.sku,
+      sizeId: row.sizeId,
+      sizeLabel: row.sizeLabel,
+      attributes: row.attributes,
+      quantity: 1,
+      unitPrice: row.basePrice,
+    });
+    message.success(`${row.productName} · ${row.sizeLabel} added`);
+  }, [cart, message]);
 
   const handleCameraScan = useCallback((decodedText: string) => {
     pendingCameraScanRef.current = decodedText;
@@ -121,16 +154,17 @@ export default function BillingPage() {
 
   const handleCheckout = async () => {
     if (!cart.customerPhone || cart.customerPhone.length < 10) {
-      message.error("Enter customer mobile number to continue");
+      message.error("Select a customer to continue");
       return;
     }
 
     setCheckoutLoading(true);
     try {
-      await createSaleRequest(cart.toCreateInput());
+      const sale = await createSaleRequest(cart.toCreateInput());
       cart.clearCart();
       setCartOpen(false);
-      message.success("Sale completed");
+      const feedback = getInvoiceDeliveryFeedback("Sale", sale.invoiceDelivery);
+      message[feedback.level](feedback.text);
     } catch (error) {
       message.error(error instanceof Error ? error.message : "Checkout failed");
     } finally {
@@ -145,50 +179,15 @@ export default function BillingPage() {
       return;
     }
 
+    const controller = new AbortController();
     const timer = setTimeout(async () => {
       setCustomerLoading(true);
 
       try {
-        const customerRes = await fetch("/api/customer/get-or-create", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            mobile: cart.customerPhone,
-            name: cart.customerName || undefined,
-            email: cart.customerEmail || undefined,
-          }),
+        const statsRes = await fetch(`/api/customers/by-mobile/${encodeURIComponent(cart.customerPhone)}/stats`, {
+          signal: controller.signal,
+          cache: "no-store",
         });
-
-        if (!customerRes.ok) {
-          const payload = await customerRes.json().catch(() => ({ error: "Failed to fetch customer" }));
-
-          // For new numbers, allow user to type name first without noisy errors.
-          if (
-            customerRes.status === 400
-            && typeof payload?.error === "string"
-            && payload.error.toLowerCase().includes("name")
-          ) {
-            setCustomerStats(null);
-            return;
-          }
-
-          throw new Error(payload?.error || "Failed to fetch customer");
-        }
-
-        const customer = await customerRes.json() as {
-          name: string;
-          mobile: string;
-          email: string | null;
-        };
-
-        if (customer.name && customer.name !== cart.customerName) {
-          cart.setCustomerName(customer.name);
-        }
-        if (customer.email && customer.email !== cart.customerEmail) {
-          cart.setCustomerEmail(customer.email);
-        }
-
-        const statsRes = await fetch(`/api/customers/${encodeURIComponent(customer.mobile)}/stats`);
         if (!statsRes.ok) {
           setCustomerStats({ totalVisits: 0, totalSpend: 0, lastPurchaseDate: null });
           return;
@@ -201,22 +200,63 @@ export default function BillingPage() {
         };
         setCustomerStats(stats);
       } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") return;
         setCustomerStats(null);
         message.error(error instanceof Error ? error.message : "Failed to fetch customer details");
       } finally {
-        setCustomerLoading(false);
+        if (!controller.signal.aborted) setCustomerLoading(false);
       }
     }, 350);
 
-    return () => clearTimeout(timer);
-  }, [
-    cart.customerPhone,
-    cart.customerName,
-    cart.customerEmail,
-    cart.setCustomerName,
-    cart.setCustomerEmail,
-    message,
-  ]);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [cart.customerPhone, message]);
+
+  if (activeView === "history") {
+    return (
+      <PageContainer
+        title="Sales history"
+        subtitle="Find sales, payments and exchanges"
+        stickySlot={mobileTabs}
+      >
+        <MobileSalesHistory
+          sales={salesState.sales}
+          loading={salesState.loading}
+          error={salesState.error}
+          filters={salesState.filters}
+          onFiltersChange={(filters) => { salesState.setPage(1); salesState.setFilters(filters); }}
+          page={salesState.page}
+          totalPages={salesState.pagination.totalPages}
+          onPageChange={salesState.setPage}
+          onViewSale={salesState.getSaleById}
+          onCollectPayment={salesState.collectPayment}
+          onOpenExchange={openExchange}
+        />
+      </PageContainer>
+    );
+  }
+
+  if (activeView === "exchange") {
+    return (
+      <PageContainer
+        title="Return / exchange"
+        subtitle="Select an eligible completed sale"
+        stickySlot={mobileTabs}
+      >
+        <ReturnExchangeView
+          mobile
+          sales={salesState.sales}
+          loading={salesState.loading}
+          onFetchSale={salesState.getSaleById}
+          onCreateReturnTransaction={salesState.createReturnTransaction}
+          refreshSales={salesState.refresh}
+          initialSaleId={exchangeSaleId}
+        />
+      </PageContainer>
+    );
+  }
 
   return (
     <>
@@ -230,7 +270,9 @@ export default function BillingPage() {
           </Badge>
         }
         stickySlot={(
-          <div className={styles.searchPanel}>
+          <div className={styles.stickyContent}>
+            {mobileTabs}
+            <div className={styles.searchPanel}>
             <div className={styles.searchRow}>
               <Input
                 value={moduleSearch.billing}
@@ -255,41 +297,39 @@ export default function BillingPage() {
             <Typography.Text type="secondary" className={styles.scanHint}>
               Barcode scanners can type here and auto-add on Enter. Camera scan is available on supported devices.
             </Typography.Text>
+            </div>
           </div>
         )}
       >
         {loading ? (
           <Skeleton active paragraph={{ rows: 5 }} />
-        ) : products.length === 0 ? (
+        ) : variantRows.length === 0 ? (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No sellable products found" />
         ) : (
           <div className={styles.productList}>
-            {products.map((product) => {
-              const sellableSize = product.stock.find((size) => size.quantity > 0) ?? product.stock[0];
-              return (
-                <Card key={product.id} style={{ padding: 13 }}>
+            {variantRows.map((row) => (
+                <Card key={row.rowKey} style={{ padding: 13 }}>
                   <div className={styles.productRow}>
                     <div className={styles.productDetails}>
-                      <Typography.Text strong className={styles.productName}>{product.name}</Typography.Text>
-                      <div className={styles.productMeta}>{product.brandName} • {product.categoryName}</div>
-                      <div className={styles.productPrice}>{formatCurrency(product.basePrice)}</div>
-                      <div className={sellableSize?.quantity ? styles.inStock : styles.outOfStock}>
-                        {sellableSize ? `${sellableSize.sizeLabel} • ${sellableSize.quantity} in stock` : "No variants"}
+                      <Typography.Text strong className={styles.productName}>{row.productName}</Typography.Text>
+                      <div className={styles.productMeta}>{row.brandName} • {row.categoryName}</div>
+                      <div className={styles.productPrice}>{formatCurrency(row.basePrice)}</div>
+                      <div className={row.stockQty > 0 ? styles.inStock : styles.outOfStock}>
+                        {row.sizeLabel} • {row.stockQty} in stock
                       </div>
                     </div>
                     <Button
                       type="primary"
                       size="large"
                       className={styles.addButton}
-                      disabled={!sellableSize || sellableSize.quantity <= 0}
-                      onClick={() => sellableSize && addToCart(product.id, product.name, product.sku, sellableSize.sizeId, sellableSize.sizeLabel, product.basePrice)}
+                      disabled={row.stockQty <= 0 || !row.isActive}
+                      onClick={() => addVariantToCart(row)}
                     >
                       Add
                     </Button>
                   </div>
                 </Card>
-              );
-            })}
+            ))}
           </div>
         )}
       </PageContainer>
@@ -326,7 +366,6 @@ export default function BillingPage() {
         onCustomerNameChange={cart.setCustomerName}
         customerPhone={cart.customerPhone}
         onCustomerPhoneChange={cart.setCustomerPhone}
-        customerEmail={cart.customerEmail}
         onCustomerEmailChange={cart.setCustomerEmail}
         customerStats={customerStats}
         customerLoading={customerLoading}

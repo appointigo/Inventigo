@@ -4,8 +4,21 @@ import { ItemPriceEditor } from "./ItemPriceEditor";
 
 import { useState, useCallback, useMemo, useEffect, useRef, type KeyboardEvent } from "react";
 import dynamic from "next/dynamic";
-import { App, DatePicker, Input, Select, Spin } from "antd";
-import { SearchOutlined, CheckOutlined, CloseOutlined, TagOutlined, LockOutlined, CameraOutlined } from "@ant-design/icons";
+import Image from "next/image";
+import { App, Collapse, DatePicker, Input, Popover, Select, Spin } from "antd";
+import {
+  CalendarOutlined,
+  CameraOutlined,
+  CheckOutlined,
+  CloseOutlined,
+  CreditCardOutlined,
+  FileTextOutlined,
+  LockOutlined,
+  SearchOutlined,
+  SettingOutlined,
+  TagOutlined,
+  UserOutlined,
+} from "@ant-design/icons";
 import dayjs from "dayjs";
 import { useProducts } from "@/modules/products/hooks/useProducts";
 import { useCart } from "@/modules/billing/hooks/useBilling";
@@ -13,7 +26,10 @@ import { useBillingProductSearch } from "@/modules/billing/hooks/useBillingProdu
 import { sanitizeScannedBarcode } from "@/shared/services/barcodeService";
 import InvoicePreview from "./InvoicePreview";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
-import type { VariantRow, CreateSaleInput, Sale, PaymentMethodType } from "@/modules/billing/types";
+import { getInvoiceDeliveryFeedback } from "@/modules/billing/utils/invoiceDeliveryFeedback";
+import type { VariantRow, CreateSaleInput, Sale, PaymentMethodType, WhatsAppInvoiceSelection } from "@/modules/billing/types";
+import { WhatsAppInvoiceSelector } from "@/modules/whatsapp/components/WhatsAppInvoiceSelector";
+import { useStore } from "@/providers/StoreProvider";
 import { PAYMENT_OPTIONS } from "@/modules/billing/constants";
 import { usePromoCodes } from "@/modules/promo-codes/hooks/usePromoCodes";
 import type { PromoCode } from "@/modules/promo-codes/types";
@@ -58,6 +74,7 @@ import {
   CartRows,
   CartRowItem,
   RowNumber,
+  RowProductThumb,
   RowInfoWrap,
   RowProductName,
   RowMetaLine,
@@ -69,6 +86,7 @@ import {
   RowQtyVal,
   RowTotal,
   RowDelBtn,
+  RowPricingBar,
   CartEmptyState,
   CartEmptyIcon,
   CartEmptyText,
@@ -87,6 +105,8 @@ import {
   PayPillsGrid,
   APayPill,
   PayPillEmoji,
+  SplitPaymentsWrap,
+  SplitPaymentRow,
   APromoRow,
   APromoInput,
   APromoApplyBtn,
@@ -94,12 +114,17 @@ import {
   APromoClearBtn,
   SummaryCardWrap,
   ASumRow,
-  ASumPctGroup,
   ASumPctInput,
   ATotalRow,
   CheckoutFooter,
   ConfirmHint,
   SecureText,
+  CheckoutToolsRow,
+  MoreOptionsButton,
+  MoreOptionsContent,
+  DiscountsWrap,
+  DiscountHeader,
+  AppliedOfferChip,
 } from "./BillingView.styled";
 import { Button } from "antd";
 import { ScanHeroInputRow, CameraScanBtn } from "./BillingView.styled";
@@ -126,6 +151,7 @@ type SuggestField = "name" | "phone";
 
 const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
   const { message } = App.useApp();
+  const { storeId } = useStore();
 
   // ─── Local UI state ────────────────────────────────────────────────────────
   const {
@@ -140,6 +166,8 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
   const [saleLoading, setSaleLoading] = useState(false);
   const [completedSale, setCompletedSale] = useState<Sale | null>(null);
   const [invoiceOpen, setInvoiceOpen] = useState(false);
+  const [whatsappInvoice, setWhatsAppInvoice] = useState<WhatsAppInvoiceSelection>({ enabled: false });
+  const [invoiceOptionsOpen, setInvoiceOptionsOpen] = useState(false);
 
   // ─── Camera scanner state ─────────────────────────────────────────────────
   const [cameraScanOpen, setCameraScanOpen] = useState(false);
@@ -199,6 +227,7 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
         rowKey: `${p.id}-${s.sizeId}`,
         productId: p.id,
         productName: p.name,
+        imageUrl: p.imageUrl,
         sku: p.sku,
         externalBarcode: p.externalBarcode ?? null,
         variantSku: s.variantSku ?? null,
@@ -256,6 +285,7 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
       cart.addItem({
         productId: row.productId,
         productName: row.productName,
+        imageUrl: row.imageUrl,
         sku: row.sku,
         sizeId: row.sizeId,
         sizeLabel: row.sizeLabel,
@@ -340,11 +370,22 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
 
     setSaleLoading(true);
     try {
-      const sale = await createSale(cart.toCreateInput());
+      const resolvedWhatsAppInvoice = whatsappInvoice.enabled
+        ? {
+            ...whatsappInvoice,
+            recipient: whatsappInvoice.recipient?.trim() || cart.customerPhone.trim(),
+          }
+        : whatsappInvoice;
+      const sale = await createSale({
+        ...cart.toCreateInput(),
+        whatsappInvoice: resolvedWhatsAppInvoice,
+      });
       setCompletedSale(sale);
       setInvoiceOpen(true);
       cart.clearCart();
-      message.success(`Sale created: ${sale.invoiceNumber}`);
+      setWhatsAppInvoice({ enabled: false });
+      const feedback = getInvoiceDeliveryFeedback(`Sale ${sale.invoiceNumber}`, sale.invoiceDelivery);
+      message[feedback.level](feedback.text);
     } 
     catch (error) {
       console.error(error);
@@ -761,8 +802,22 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
           ) : (
             <CartRows>
               {cart.items.map((item, idx) => (
-                <CartRowItem key={`${item.productId}-${item.sizeId}`}>
+                <CartRowItem
+                  key={`${item.productId}-${item.sizeId}`}
+                  $hasImage={Boolean(item.imageUrl)}
+                >
                   <RowNumber>{idx + 1}</RowNumber>
+                  {item.imageUrl ? (
+                    <RowProductThumb>
+                      <Image
+                        src={item.imageUrl}
+                        alt=""
+                        fill
+                        sizes="52px"
+                        unoptimized
+                      />
+                    </RowProductThumb>
+                  ) : null}
                   <RowInfoWrap>
                     <RowProductName>{item.productName}</RowProductName>
                     <RowMetaLine>
@@ -780,7 +835,6 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
                         ))}
                       <RowSkuPill>{item.sku}</RowSkuPill>
                     </RowMetaLine>
-                    <ItemPriceEditor item={item} onChange={cart.updateItemPricing} />
                   </RowInfoWrap>
                   <RowQtyCtrl>
                     <RowQtyBtn
@@ -807,6 +861,9 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
                   <RowDelBtn onClick={() => cart.removeItem(item.productId, item.sizeId)}>
                     ✕
                   </RowDelBtn>
+                  <RowPricingBar>
+                    <ItemPriceEditor item={item} onChange={cart.updateItemPricing} />
+                  </RowPricingBar>
                 </CartRowItem>
               ))}
             </CartRows>
@@ -828,7 +885,7 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
         <CheckoutScrollBody>
           {/* Customer Details */}
           <CheckoutSection>
-            <CheckoutSectionLabel>Customer Details</CheckoutSectionLabel>
+            <CheckoutSectionLabel><UserOutlined /> Customer Details</CheckoutSectionLabel>
             <CustomerGrid>
               <input type="hidden" value={selectedCustomerId ?? ""} readOnly />
               <CustomerField>
@@ -905,7 +962,7 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
               </CustomerField>
               <CustomerField>
                 <FieldLabel>
-                  Phone <RequiredStar>*</RequiredStar>
+                  Mobile number <RequiredStar>*</RequiredStar>
                 </FieldLabel>
                 <div ref={phoneSuggestWrapRef} style={{ position: "relative" }}>
                   <Input
@@ -987,18 +1044,45 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
                 />
               </CustomerFieldFull>
             </CustomerGrid>
-            <div style={{ marginTop: 16 }}>
-              <FieldLabel style={{ marginBottom: 8, display: "block" }}>
-                Transaction Date
-              </FieldLabel>
-              <DatePicker
-                value={dayjs(cart.transactionDate)}
-                onChange={(date) => cart.setTransactionDate(date?.format("YYYY-MM-DD") ?? new Date().toISOString().slice(0, 10))}
-                disabledDate={(current) => current && current.isAfter(dayjs().endOf("day"))}
-                size="small"
-                style={{ width: "100%" }}
-              />
-            </div>
+            <CheckoutToolsRow style={{ marginTop: 7 }}>
+              <CustomerField>
+                <FieldLabel><CalendarOutlined /> Transaction Date</FieldLabel>
+                <DatePicker
+                  value={dayjs(cart.transactionDate)}
+                  onChange={(date) => cart.setTransactionDate(date?.format("YYYY-MM-DD") ?? new Date().toISOString().slice(0, 10))}
+                  disabledDate={(current) => current && current.isAfter(dayjs().endOf("day"))}
+                  size="small"
+                  style={{ width: "100%" }}
+                />
+              </CustomerField>
+              <Popover
+                open={invoiceOptionsOpen}
+                trigger="click"
+                placement="bottomRight"
+                forceRender
+                destroyOnHidden={false}
+                onOpenChange={setInvoiceOptionsOpen}
+                content={(
+                  <MoreOptionsContent>
+                    <WhatsAppInvoiceSelector
+                      storeId={storeId}
+                      recipient={cart.customerPhone}
+                      value={whatsappInvoice}
+                      onChange={setWhatsAppInvoice}
+                    />
+                  </MoreOptionsContent>
+                )}
+              >
+                <MoreOptionsButton
+                  htmlType="button"
+                  icon={<SettingOutlined />}
+                  aria-expanded={invoiceOptionsOpen}
+                  aria-haspopup="dialog"
+                >
+                  More
+                </MoreOptionsButton>
+              </Popover>
+            </CheckoutToolsRow>
             {cart.items.length > 0 &&
               (!cart.customerName.trim() || cart.customerPhone.length < 10) && (
                 <CustWarning>⚠ Enter name &amp; phone to confirm sale</CustWarning>
@@ -1007,12 +1091,14 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
 
           {/* Payment Method */}
           <CheckoutSection>
-            <CheckoutSectionLabel>Payment Method</CheckoutSectionLabel>
+            <CheckoutSectionLabel><CreditCardOutlined /> Payment Method</CheckoutSectionLabel>
             <PayPillsGrid>
               {PAYMENT_OPTIONS.map((opt) => (
                 <APayPill
                   key={opt.value}
+                  type="button"
                   $active={!cart.splitMode && cart.paymentMethod === opt.value}
+                  aria-pressed={!cart.splitMode && cart.paymentMethod === opt.value}
                   onClick={() => {
                     cart.setSplitMode(false);
                     cart.setPaymentMethod(opt.value as PaymentMethodType);
@@ -1023,7 +1109,9 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
                 </APayPill>
               ))}
               <APayPill
+                type="button"
                 $active={cart.splitMode}
+                aria-pressed={cart.splitMode}
                 onClick={() => {
                   cart.setSplitMode(true);
                   cart.setIsAmountPaidManual(true);
@@ -1038,9 +1126,9 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
             </PayPillsGrid>
 
             {cart.splitMode ? (
-              <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+              <SplitPaymentsWrap>
                 {cart.splitPayments.map((entry, index) => (
-                  <div key={index} style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8 }}>
+                  <SplitPaymentRow key={index}>
                     <Select
                       size="small"
                       value={entry.method}
@@ -1074,7 +1162,7 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
                     >
                       Remove
                     </Button>
-                  </div>
+                  </SplitPaymentRow>
                 ))}
 
                 <Button
@@ -1089,27 +1177,26 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
                 <div style={{ fontSize: 12, color: splitMatchesTotal ? "#15803d" : "#b45309" }}>
                   Entered: {formatCurrency(splitTotalEntered)} · Remaining: {formatCurrency(Math.max(0, total - splitTotalEntered))}
                 </div>
-              </div>
+              </SplitPaymentsWrap>
             ) : null}
-          </CheckoutSection>
-
-          <CheckoutSection>
-            <CheckoutSectionLabel>Amount received</CheckoutSectionLabel>
-            <Input
-              type="number"
-              min={0}
-              value={cart.amountPaid}
-              onChange={(e) => {
-                if (cart.splitMode) return;
-                const next = Number(e.target.value);
-                cart.setIsAmountPaidManual(true);
-                cart.setAmountPaid(clampNumber(Number.isNaN(next) ? 0 : next, 0, Math.max(0, total)));
-              }}
-              size="small"
-              prefix="₹"
-              placeholder={String(total)}
-              disabled={cart.splitMode}
-            />
+            <div style={{ marginTop: 7 }}>
+              <FieldLabel style={{ display: "block", marginBottom: 4 }}>Amount received</FieldLabel>
+              <Input
+                type="number"
+                min={0}
+                value={cart.amountPaid}
+                onChange={(e) => {
+                  if (cart.splitMode) return;
+                  const next = Number(e.target.value);
+                  cart.setIsAmountPaidManual(true);
+                  cart.setAmountPaid(clampNumber(Number.isNaN(next) ? 0 : next, 0, Math.max(0, total)));
+                }}
+                size="small"
+                prefix="₹"
+                placeholder={String(total)}
+                disabled={cart.splitMode}
+              />
+            </div>
             {cart.amountDue > 0 && (
               <div style={{ marginTop: 8, color: "#b45309", fontSize: 12 }}>
                 {formatCurrency(cart.amountDue)} due after this payment
@@ -1122,11 +1209,20 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
             )}
           </CheckoutSection>
 
-          {/* Available Offers */}
+          {/* Discounts, available offers and promo code */}
           <CheckoutSection>
-            <CheckoutSectionLabel>
-              <TagOutlined /> Available Offers
-            </CheckoutSectionLabel>
+            <DiscountsWrap>
+              <Collapse
+                ghost
+                items={[{
+                  key: "discounts",
+                  label: (
+                    <DiscountHeader>
+                      <span><TagOutlined style={{ marginRight: 6 }} />Discounts &amp; Offers</span>
+                      {appliedPromo ? <AppliedOfferChip>{appliedPromo.code}</AppliedOfferChip> : null}
+                    </DiscountHeader>
+                  ),
+                  children: <>
             <Select
               placeholder="Select an offer…"
               value={appliedPromo?.id ?? null}
@@ -1170,11 +1266,8 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
                   gradient: GRADIENTS[idx % GRADIENTS.length],
                 }))}
             />
-          </CheckoutSection>
-
-          {/* Promo Code */}
-          <CheckoutSection>
-            <CheckoutSectionLabel>Promo Code</CheckoutSectionLabel>
+            <div style={{ marginTop: 10 }}>
+              <FieldLabel style={{ display: "block", marginBottom: 5 }}>Promo code</FieldLabel>
             {appliedPromo ? (
               <APromoSuccessPill>
                 <CheckOutlined />
@@ -1211,11 +1304,16 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
                 )}
               </>
             )}
+            </div>
+                  </>,
+                }]}
+              />
+            </DiscountsWrap>
           </CheckoutSection>
 
           {/* Order Summary */}
           <CheckoutSection>
-            <CheckoutSectionLabel>Order Summary</CheckoutSectionLabel>
+            <CheckoutSectionLabel><FileTextOutlined /> Order Summary</CheckoutSectionLabel>
             <SummaryCardWrap>
               <ASumRow>
                 <span>Subtotal ({totalItems} items)</span>
@@ -1294,21 +1392,7 @@ const BillingView = ({ createSale, defaultTaxPct = 0 }: BillingViewProps) => {
               </ASumRow>
               <ASumRow>
                 <span>Tax (GST)</span>
-                <ASumPctGroup>
-                  <ASumPctInput
-                    min={0}
-                    max={100}
-                    value={cart.taxPct}
-                    onChange={(val) => cart.setTaxPct((val as number) ?? 0)}
-                    size="small"
-                    suffix="%"
-                  />
-                  {taxAmount > 0 && (
-                    <span style={{ fontSize: 11, color: "#9ca3af", whiteSpace: "nowrap" }}>
-                      = {formatCurrency(taxAmount)}
-                    </span>
-                  )}
-                </ASumPctGroup>
+                <span>{formatCurrency(taxAmount)}</span>
               </ASumRow>
               <ASumRow>
                 <span>Amount received</span>

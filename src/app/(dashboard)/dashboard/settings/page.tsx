@@ -15,6 +15,7 @@ import StoreProfileCard from "@/modules/settings/components/StoreProfileCard";
 import BillingConfigForm from "@/modules/settings/components/BillingConfigForm";
 import AppearanceSettings from "@/modules/settings/components/AppearanceSettings";
 import PromoCodesSettings from "@/modules/promo-codes/components/PromoCodesSettings";
+import InvoiceManagementSettings from "@/modules/invoice-management/components/InvoiceManagementSettings";
 import {
   SettingsWrap,
   PageBanner,
@@ -59,7 +60,7 @@ import {
   WarningBox,
 } from "./SettingsPage.styled";
 
-type TabKey = "profile" | "users" | "stores" | "billing" | "promos" | "appearance";
+type TabKey = "profile" | "users" | "stores" | "billing" | "invoices" | "promos" | "appearance";
 
 // ── Profile pane ──────────────────────────────────────────────────────────────
 type CurrentUser = {
@@ -341,6 +342,7 @@ const SettingsPage = () => {
     { key: "users",      label: "Users",       icon: "👥",  adminOnly: true  },
     { key: "stores",     label: "Stores",      icon: "🏪",  adminOnly: true  },
     { key: "billing",    label: "Billing",     icon: "💳",  adminOnly: true  },
+    { key: "invoices",   label: "Invoices",    icon: "🧾",  adminOnly: true  },
     { key: "promos",     label: "Promo Codes", icon: "🏷️",  adminOnly: true  },
     { key: "appearance", label: "Appearance",  icon: "🎨",  adminOnly: false },
   ];
@@ -406,6 +408,12 @@ const SettingsPage = () => {
         {isAdmin && activeTab === "billing" && (
           <Pane>
             <BillingPane />
+          </Pane>
+        )}
+
+        {isAdmin && activeTab === "invoices" && (
+          <Pane>
+            <InvoiceManagementSettings />
           </Pane>
         )}
 

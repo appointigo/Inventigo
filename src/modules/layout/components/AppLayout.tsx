@@ -117,7 +117,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
   if (isMobile) {
     return (
       <MobileWorkspaceProvider>
-        <Layout style={{ minHeight: "100vh", background: "linear-gradient(180deg, #f4f7fb 0%, #eef3f9 100%)", overflowX: "hidden" }}>
+        <Layout style={{ minHeight: "100dvh", background: "linear-gradient(180deg, #f4f7fb 0%, #eef3f9 100%)", overflowX: "hidden" }}>
           <Header
             style={{
               background: "rgba(255,255,255,0.88)",
@@ -179,7 +179,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
             </Space>
           </Header>
 
-          <Content style={{ overflowY: "auto", overflowX: "hidden", minHeight: "calc(100vh - 68px)", paddingBottom: 120 }}>
+          <Content style={{ overflowY: "auto", overflowX: "hidden", minHeight: "calc(100dvh - 68px)", paddingBottom: 120 }}>
             {children}
           </Content>
           <BottomNavigation />
@@ -190,7 +190,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
 
   return (
     <MobileWorkspaceProvider>
-      <Layout style={{ height: "100vh", overflow: "hidden" }}>
+      <Layout style={{ height: "100dvh", minHeight: 0, overflow: "hidden" }}>
       <Sider
         trigger={null}
         collapsible
@@ -202,7 +202,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
           display: "flex",
           flexDirection: "column",
           minHeight: 0,
-          height: "100vh",
+          height: "100dvh",
           overflowY: "auto",
           WebkitOverflowScrolling: "touch",
         }}
@@ -294,7 +294,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
         </Tooltip>
       </Sider>
 
-      <Layout>
+      <Layout style={{ minWidth: 0, minHeight: 0, overflow: "hidden" }}>
         <Header
           style={{
             background: token.colorBgContainer,
@@ -359,8 +359,11 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
             margin: 0,
             padding: 0,
             background: token.colorBgLayout,
-            overflow: "auto",
-            height: "calc(100vh - 56px)",
+            overflow: pathname === "/dashboard/billing" ? "hidden" : "auto",
+            minWidth: 0,
+            minHeight: 0,
+            height: "calc(100dvh - 56px)",
+            maxHeight: "calc(100dvh - 56px)",
           }}
         >
           {children}
