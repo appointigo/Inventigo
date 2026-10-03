@@ -940,17 +940,22 @@ export const billingService = {
             },
           });
 
-          const deliveryIntent = preparedInvoiceDelivery
-            ? await enqueueInvoiceDelivery(tx, preparedInvoiceDelivery, {
-                kind: "SALE",
-                id: created.id,
-                reference: created.invoiceNumber,
-                customerName: created.customerName,
-                customerId: created.customerId,
-                amount: Number(created.total),
-                transactionDate: created.transactionDate,
-              })
-            : null;
+          const deliveryIntent = null as Awaited<
+            ReturnType<typeof enqueueInvoiceDelivery>
+          > | null;
+          // TEMP: Automatic WhatsApp invoice sending disabled.
+          // Re-enable when WhatsApp billing integration is ready.
+          // const deliveryIntent = preparedInvoiceDelivery
+          //   ? await enqueueInvoiceDelivery(tx, preparedInvoiceDelivery, {
+          //       kind: "SALE",
+          //       id: created.id,
+          //       reference: created.invoiceNumber,
+          //       customerName: created.customerName,
+          //       customerId: created.customerId,
+          //       amount: Number(created.total),
+          //       transactionDate: created.transactionDate,
+          //     })
+          //   : null;
           return { created, deliveryIntent };
         });
 
