@@ -3,14 +3,6 @@
     {
       "path": "/api/cron/reorder-check",
       "schedule": "0 8 * * *"
-    },
-    {
-      "path": "/api/cron/whatsapp-campaigns",
-      "schedule": "* * * * *"
-    },
-    {
-      "path": "/api/cron/whatsapp-invoices",
-      "schedule": "* * * * *"
     }
   ]
 }
