@@ -7,8 +7,15 @@ import { EmotionRegistry } from "@/providers/EmotionRegistry";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Stockiva — Inventory Management",
-  description: "Clothing retail inventory management system",
+  title: "Stockiva — One Platform. Smarter Retail.",
+  description:
+    "Stockiva brings billing, inventory, customers, returns and business reporting together for modern clothing retailers.",
+  applicationName: "Stockiva",
+  openGraph: {
+    title: "Stockiva — One Platform. Smarter Retail.",
+    description: "Everyday retail operations, brought together in one clear platform.",
+    type: "website",
+  },
 };
 
 export default function RootLayout({
