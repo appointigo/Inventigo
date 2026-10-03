@@ -1,4 +1,9 @@
-import type { DemandPressureSignal, DemandReasonCode } from "../types";
+import type {
+  DemandPressureSignal,
+  DemandReasonCode,
+  VisitOutcome,
+  VisitReturnOutcome,
+} from "../types";
 
 export const DEMAND_THRESHOLDS = {
   minimumReliableRequests: 10,
@@ -81,5 +86,50 @@ export function summarizeObservedDemand(
     fulfilledQuantity,
     unfulfilledQuantity: Math.max(0, observedDemand - fulfilledQuantity),
     fulfillmentRate: demandFulfillmentRate(fulfilledQuantity, observedDemand),
+  };
+}
+
+export function summarizeVisitOutcomes(
+  visits: Array<{
+    outcome: VisitOutcome;
+    returnConfirmedAt: Date | string | null;
+    returnOutcome: VisitReturnOutcome | null;
+    linkedSaleId: string | null;
+  }>
+) {
+  const mayReturnVisits = visits.filter((visit) => visit.outcome === "MAY_RETURN");
+  const returnedAndPurchased = mayReturnVisits.filter(
+    (visit) =>
+      visit.returnConfirmedAt &&
+      (visit.returnOutcome === "PURCHASED" ||
+        (visit.returnOutcome === null && Boolean(visit.linkedSaleId)))
+  ).length;
+  const returnedWithoutPurchase = mayReturnVisits.filter(
+    (visit) => visit.returnConfirmedAt && visit.returnOutcome === "DID_NOT_PURCHASE"
+  ).length;
+  const converted =
+    visits.filter((visit) => visit.outcome === "CONVERTED").length + returnedAndPurchased;
+  const partiallyConverted = visits.filter(
+    (visit) => visit.outcome === "PARTIALLY_CONVERTED"
+  ).length;
+  const confirmedReturned = mayReturnVisits.filter((visit) => visit.returnConfirmedAt).length;
+  const conversionEligibleVisits =
+    visits.length - mayReturnVisits.length + returnedAndPurchased + returnedWithoutPurchase;
+
+  return {
+    total: visits.length,
+    converted,
+    partiallyConverted,
+    nonConverted:
+      visits.filter((visit) => visit.outcome === "NOT_CONVERTED").length + returnedWithoutPurchase,
+    browsing: visits.filter((visit) => visit.outcome === "BROWSING").length,
+    mayReturn: mayReturnVisits.length,
+    confirmedReturned,
+    returnedAndPurchased,
+    returnedWithoutPurchase,
+    returnNotConfirmed: mayReturnVisits.length - confirmedReturned,
+    conversionRate: conversionEligibleVisits
+      ? roundDemand(((converted + partiallyConverted) / conversionEligibleVisits) * 100)
+      : null,
   };
 }

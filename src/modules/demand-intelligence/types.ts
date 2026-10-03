@@ -1,4 +1,11 @@
-export type VisitOutcome = "CONVERTED" | "NOT_CONVERTED" | "PARTIALLY_CONVERTED" | "BROWSING";
+export type VisitOutcome =
+  | "CONVERTED"
+  | "NOT_CONVERTED"
+  | "PARTIALLY_CONVERTED"
+  | "BROWSING"
+  | "MAY_RETURN";
+export type ExpectedReturnPeriod = "TOMORROW" | "TWO_TO_THREE_DAYS" | "WITHIN_A_WEEK" | "NOT_SURE";
+export type VisitReturnOutcome = "PURCHASED" | "DID_NOT_PURCHASE";
 export type DemandRequestStatus = "FULFILLED" | "PARTIALLY_FULFILLED" | "UNFULFILLED" | "ABANDONED";
 export type DemandReasonCode =
   | "OUT_OF_STOCK"
@@ -30,12 +37,17 @@ export type CustomerVisitInput = {
   customerId?: string;
   visitedAt?: string;
   outcome: VisitOutcome;
+  expectedReturnPeriod?: ExpectedReturnPeriod;
   linkedSaleId?: string;
   source?: string;
   notes?: string;
   idempotencyKey?: string;
   requests: DemandRequestInput[];
 };
+
+export type CustomerVisitPatchInput = Partial<
+  Omit<CustomerVisitInput, "storeId" | "idempotencyKey">
+> & { returnConfirmedAt?: string; returnOutcome?: VisitReturnOutcome };
 
 export type DemandRequirementRow = {
   key: string;
@@ -89,6 +101,11 @@ export type DemandAnalyticsResponse = {
     partiallyConverted: number;
     nonConverted: number;
     browsing: number;
+    mayReturn: number;
+    confirmedReturned: number;
+    returnedAndPurchased: number;
+    returnedWithoutPurchase: number;
+    returnNotConfirmed: number;
     conversionRate: number | null;
   };
   demand: {
@@ -105,6 +122,32 @@ export type DemandAnalyticsResponse = {
   requirements: DemandRequirementRow[];
   categories: DemandCategoryRow[];
   attributes: DemandAttributeRow[];
+};
+
+export type CustomerVisitRecord = {
+  id: string;
+  visitedAt: string;
+  outcome: VisitOutcome;
+  expectedReturnPeriod: ExpectedReturnPeriod | null;
+  returnConfirmedAt: string | null;
+  returnOutcome: VisitReturnOutcome | null;
+  source: string | null;
+  notes: string | null;
+  linkedSale: { id: string; invoiceNumber: string } | null;
+  demandRequests: Array<{
+    id: string;
+    attributes: Record<string, unknown>;
+    category: { id: string; name: string } | null;
+    brand: { id: string; name: string } | null;
+    product: { id: string; name: string; sku: string } | null;
+  }>;
+};
+
+export const EXPECTED_RETURN_LABELS: Record<ExpectedReturnPeriod, string> = {
+  TOMORROW: "Tomorrow",
+  TWO_TO_THREE_DAYS: "2–3 days",
+  WITHIN_A_WEEK: "Within a week",
+  NOT_SURE: "Not sure",
 };
 
 export const DEMAND_REASON_LABELS: Record<DemandReasonCode, string> = {

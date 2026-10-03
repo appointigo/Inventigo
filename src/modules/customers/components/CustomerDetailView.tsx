@@ -437,8 +437,8 @@ export default function CustomerDetailView({
                   renderItem={(visit) => (
                     <List.Item>
                       <List.Item.Meta
-                        title={`${plainLabel(visit.outcome)} · ${visit.storeName}`}
-                        description={`${new Date(visit.visitedAt).toLocaleString("en-IN")}${visit.notes ? ` · ${visit.notes}` : ""}`}
+                        title={`${plainLabel(visit.outcome)}${visit.returnConfirmedAt ? ` · Returned${visit.returnOutcome ? ` · ${plainLabel(visit.returnOutcome)}` : " · Outcome Unknown"}` : ""} · ${visit.storeName}`}
+                        description={`${new Date(visit.visitedAt).toLocaleString("en-IN")}${visit.expectedReturnPeriod ? ` · Expected: ${plainLabel(visit.expectedReturnPeriod)}` : ""}${visit.notes ? ` · ${visit.notes}` : ""}`}
                       />
                     </List.Item>
                   )}
