@@ -9,6 +9,8 @@
 
 You experienced **intermittent barcode scanning failures** on the Billing and Stock pages when scanning variant-wise EAN-13 barcodes. Root cause: **variantSku was not persisted in the database** and only computed on-the-fly, causing inconsistent lookups.
 
+need to fix some more issue
+
 ---
 
 ## Root Causes Fixed
