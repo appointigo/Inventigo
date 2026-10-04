@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import dayjs from "dayjs";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireOrgAuth } from "@/lib/auth.middleware";
@@ -8,6 +7,11 @@ import {
   resolveAnalyticsStoreId,
 } from "@/modules/analytics/services/analyticsAccess";
 import { aggregatePaymentEntries } from "@/modules/analytics/utils/paymentAggregation";
+import {
+  businessDateEndExclusive,
+  businessDateStart,
+  isBusinessDate,
+} from "@/modules/analytics/utils/dateRange";
 
 const METHODS = ["CASH", "UPI", "CARD"] as const;
 
@@ -49,19 +53,19 @@ export const GET = async (request: Request) => {
 
   try {
     const { searchParams } = new URL(request.url);
-    const from = dayjs(searchParams.get("from"));
-    const to = dayjs(searchParams.get("to"));
+    const from = searchParams.get("from") ?? "";
+    const to = searchParams.get("to") ?? "";
     const storeId = await resolveAnalyticsStoreId(user, searchParams.get("storeId"));
 
-    if (!from.isValid() || !to.isValid() || from.isAfter(to, "day")) {
+    if (!isBusinessDate(from) || !isBusinessDate(to) || from > to) {
       return NextResponse.json(
         { error: "A valid from/to accounting period is required" },
         { status: 400 },
       );
     }
 
-    const rangeStart = from.startOf("day").toDate();
-    const rangeEnd = to.endOf("day").toDate();
+    const rangeStart = businessDateStart(from);
+    const rangeEndExclusive = businessDateEndExclusive(to);
     const storeFilter = {
       store: { orgId: user.orgId },
       storeId,
@@ -72,7 +76,7 @@ export const GET = async (request: Request) => {
       prisma.salePayment.findMany({
         where: {
           method: { in: [...METHODS] },
-          businessDate: { gte: rangeStart, lte: rangeEnd },
+          businessDate: { gte: rangeStart, lt: rangeEndExclusive },
           sale: storeFilter,
         },
         select: {
@@ -87,7 +91,7 @@ export const GET = async (request: Request) => {
       prisma.sale.findMany({
         where: {
           ...storeFilter,
-          transactionDate: { gte: rangeStart, lte: rangeEnd },
+          transactionDate: { gte: rangeStart, lt: rangeEndExclusive },
           payments: { none: {} },
         },
         select: {
@@ -106,7 +110,7 @@ export const GET = async (request: Request) => {
       prisma.sale.aggregate({
         where: {
           ...storeFilter,
-          transactionDate: { gte: rangeStart, lte: rangeEnd },
+          transactionDate: { gte: rangeStart, lt: rangeEndExclusive },
           status: { not: "REFUNDED" },
           paymentStatus: "PARTIAL",
           amountDue: { gt: 0 },

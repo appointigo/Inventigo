@@ -34,5 +34,10 @@ test("fills empty daily and weekly buckets with finite zeroes", () => {
   assert.equal(daily.trend.length, 7);
   assert.ok(daily.trend.every((row) => row.revenue === 0 && Number.isFinite(row.revenue)));
   const weekly = aggregateFinancialEvents([], from, new Date("2026-09-20T00:00:00Z"), "week");
-  assert.equal(weekly.trend.length, 4);
+  assert.equal(weekly.trend.length, 3);
+  assert.deepEqual(weekly.trend.map((row) => row.period), [
+    "2026-08-31",
+    "2026-09-07",
+    "2026-09-14",
+  ]);
 });

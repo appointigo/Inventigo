@@ -5,6 +5,7 @@ import {
   AnalyticsAccessError,
   resolveAnalyticsStoreId,
 } from "@/modules/analytics/services/analyticsAccess";
+import { businessDateStart, isBusinessDate } from "@/modules/analytics/utils/dateRange";
 
 export async function GET(request: Request) {
   let user;
@@ -21,8 +22,14 @@ export async function GET(request: Request) {
     const startDateParam = searchParams.get("startDate") ?? null;
     const endDateParam = searchParams.get("endDate") ?? null;
 
-    const startDate = startDateParam ? new Date(startDateParam) : undefined;
-    const endDate = endDateParam ? new Date(endDateParam) : undefined;
+    if ((startDateParam && !isBusinessDate(startDateParam)) || (endDateParam && !isBusinessDate(endDateParam))) {
+      return NextResponse.json({ error: "Invalid expense analytics date range" }, { status: 400 });
+    }
+    const startDate = startDateParam ? businessDateStart(startDateParam) : undefined;
+    const endDate = endDateParam ? businessDateStart(endDateParam) : undefined;
+    if (startDate && endDate && startDate > endDate) {
+      return NextResponse.json({ error: "Invalid expense analytics date range" }, { status: 400 });
+    }
 
     const data = await expenseAnalyticsService.getAnalytics(user.orgId, storeId, {
       period,

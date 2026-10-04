@@ -1,0 +1,9 @@
+.filter { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.select { min-width: 148px; }
+.custom { display: flex; align-items: center; gap: 8px; }
+.range { min-width: 250px; }
+@media (max-width: 640px) {
+  .filter, .custom { width: 100%; justify-content: flex-start; }
+  .select, .range { width: 100%; min-width: 0; }
+  .custom { flex-wrap: wrap; }
+}

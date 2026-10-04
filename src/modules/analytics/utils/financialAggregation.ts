@@ -5,21 +5,23 @@ import type {
   SalesAnalyticsPoint,
   SalesAnalyticsResponse,
 } from "../types";
+import {
+  addBusinessDays,
+  analyticsBucketKey,
+  businessDateForInstant,
+  nextAnalyticsBucket,
+} from "./dateRange.ts";
 
 const round = (value: number) => Number(value.toFixed(2));
 
 export function bucketStart(date: Date, group: AnalyticsGroup) {
-  const value = dayjs(date);
-  if (group === "day") return value.startOf("day");
-  if (group === "week") return value.startOf("week");
-  if (group === "year") return value.startOf("year");
-  return value.startOf("month");
+  return analyticsBucketKey(date, group);
 }
 
 export function bucketLabel(period: string, group: AnalyticsGroup) {
   const value = dayjs(period);
   if (group === "day") return value.format("DD MMM");
-  if (group === "week") return `${value.format("DD MMM")} – ${value.add(6, "day").format("DD MMM")}`;
+  if (group === "week") return `${value.format("DD MMM")} – ${dayjs(addBusinessDays(period, 6)).format("DD MMM")}`;
   if (group === "year") return value.format("YYYY");
   return value.format("MMM YYYY");
 }
@@ -27,16 +29,10 @@ export function bucketLabel(period: string, group: AnalyticsGroup) {
 export function buildBucketKeys(from: Date, to: Date, group: AnalyticsGroup) {
   const keys: string[] = [];
   let cursor = bucketStart(from, group);
-  const end = dayjs(to).endOf("day");
-  while (!cursor.isAfter(end)) {
-    keys.push(cursor.format("YYYY-MM-DD"));
-    cursor = group === "day"
-      ? cursor.add(1, "day")
-      : group === "week"
-        ? cursor.add(1, "week")
-        : group === "year"
-          ? cursor.add(1, "year")
-          : cursor.add(1, "month");
+  const end = businessDateForInstant(to);
+  while (cursor <= end) {
+    keys.push(cursor);
+    cursor = nextAnalyticsBucket(cursor, group);
   }
   return keys;
 }
@@ -49,7 +45,7 @@ export function aggregateFinancialEvents(
 ): SalesAnalyticsResponse {
   const grouped = new Map<string, FinancialEvent[]>();
   for (const event of events) {
-    const key = bucketStart(event.date, group).format("YYYY-MM-DD");
+    const key = bucketStart(event.date, group);
     grouped.set(key, [...(grouped.get(key) ?? []), event]);
   }
 
@@ -80,8 +76,8 @@ export function aggregateFinancialEvents(
 
   return {
     range: {
-      from: dayjs(from).format("YYYY-MM-DD"),
-      to: dayjs(to).format("YYYY-MM-DD"),
+      from: businessDateForInstant(from),
+      to: businessDateForInstant(to),
       group,
     },
     methodology: {

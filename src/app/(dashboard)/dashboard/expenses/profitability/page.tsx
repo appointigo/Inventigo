@@ -1,5 +1,6 @@
+import { Suspense } from "react";
 import ProfitabilityPage from "@/modules/analytics/components/ProfitabilityPage";
 
 export default function Page() {
-  return <ProfitabilityPage />;
+  return <Suspense fallback={null}><ProfitabilityPage /></Suspense>;
 }

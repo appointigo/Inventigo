@@ -1,5 +1,5 @@
-import dayjs from "dayjs";
 import type { AnalyticsGroup } from "../types";
+import { businessDateStart, isBusinessDate } from "./dateRange.ts";
 
 export class AnalyticsQueryError extends Error {}
 
@@ -10,13 +10,14 @@ export function parseAnalyticsQuery(searchParams: URLSearchParams) {
   const group: AnalyticsGroup | null = ["day", "week", "month", "year"].includes(groupValue)
     ? (groupValue as AnalyticsGroup)
     : null;
-  const from = dayjs(fromValue).startOf("day");
-  const to = dayjs(toValue).startOf("day");
-  if (!fromValue || !toValue || !group || !from.isValid() || !to.isValid() || from.isAfter(to)) {
+  if (!fromValue || !toValue || !group || !isBusinessDate(fromValue) || !isBusinessDate(toValue)) {
     throw new AnalyticsQueryError("A valid from, to and group are required");
   }
-  if (to.diff(from, "day") > 730) {
+  const from = businessDateStart(fromValue);
+  const to = businessDateStart(toValue);
+  if (from > to) throw new AnalyticsQueryError("A valid from, to and group are required");
+  if (to.getTime() - from.getTime() > 730 * 86_400_000) {
     throw new AnalyticsQueryError("Analytics ranges cannot exceed two years");
   }
-  return { from: from.toDate(), to: to.toDate(), group };
+  return { from, to, group };
 }

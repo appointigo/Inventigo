@@ -1,37 +1,23 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Alert, Button, DatePicker, Empty, Segmented, Skeleton } from "antd";
-import dayjs, { type Dayjs } from "dayjs";
+import { Alert, Button, Empty, Skeleton } from "antd";
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, ReferenceLine,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { useStore } from "@/providers/StoreProvider";
+import { useAnalyticsDateRange } from "../hooks/useAnalyticsDateRange";
 import { useProfitabilityAnalytics } from "../hooks/useAnalytics";
+import AnalyticsDateFilter from "./AnalyticsDateFilter";
 import styles from "./AnalyticsPage.module.css";
 
-type Preset = "30d" | "90d" | "12m" | "custom";
 const money = (value: number | null) => value === null || !Number.isFinite(value) ? "Unavailable" : new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(value);
 
 export default function ProfitabilityPage() {
   const { storeId, storeName } = useStore();
-  const [preset, setPreset] = useState<Preset>("30d");
-  const [draftRange, setDraftRange] = useState<[Dayjs | null, Dayjs | null] | null>(null);
-  const [customRange, setCustomRange] = useState<{ from: string; to: string } | null>(null);
-  const range = useMemo(() => {
-    if (preset === "custom") return customRange;
-    const to = dayjs();
-    const days = preset === "30d" ? 29 : preset === "90d" ? 89 : 364;
-    return { from: to.subtract(days, "day").format("YYYY-MM-DD"), to: to.format("YYYY-MM-DD") };
-  }, [customRange, preset]);
-  const group = preset === "12m" ? "month" as const : "day" as const;
-  const query = useProfitabilityAnalytics({ storeId: storeId ?? undefined, from: range?.from ?? "", to: range?.to ?? "", group });
+  const { range, selectPreset, selectCustom } = useAnalyticsDateRange("30d");
+  const query = useProfitabilityAnalytics({ storeId: storeId ?? undefined, from: range.from, to: range.to, group: range.group });
   const data = query.data;
-  const applyCustom = () => {
-    if (!draftRange?.[0] || !draftRange[1]) return;
-    setCustomRange({ from: draftRange[0].format("YYYY-MM-DD"), to: draftRange[1].format("YYYY-MM-DD") });
-  };
   const hasActivity = data?.trend.some((row) => row.revenue || row.operatingExpenses);
 
   if (!storeId) return <div className={styles.page}><Alert showIcon type="info" title="Choose a store to load Profitability." /></div>;
@@ -39,9 +25,8 @@ export default function ProfitabilityPage() {
     <main className={styles.page}>
       <header className={styles.header}>
         <div><span className={styles.eyebrow}>Finance · Profitability</span><h1>Profitability</h1><p>Revenue, historical COGS and approved operating expenses for {storeName}.</p></div>
-        <div className={styles.controls}><Segmented<Preset> value={preset} onChange={setPreset} options={[{ label: "30 days", value: "30d" }, { label: "90 days", value: "90d" }, { label: "12 months", value: "12m" }, { label: "Custom", value: "custom" }]} /><Button onClick={() => query.refetch()} loading={query.isFetching}>Refresh</Button></div>
+        <div className={styles.controls}><AnalyticsDateFilter range={range} onPreset={selectPreset} onCustom={selectCustom} /><Button onClick={() => query.refetch()} loading={query.isFetching}>Refresh</Button></div>
       </header>
-      {preset === "custom" ? <div className={styles.customRange}><DatePicker.RangePicker value={draftRange} onChange={(value) => setDraftRange(value as [Dayjs | null, Dayjs | null] | null)} /><Button type="primary" onClick={applyCustom} disabled={!draftRange?.[0] || !draftRange?.[1]}>Apply</Button></div> : null}
       {query.isError ? <Alert className={styles.note} showIcon type="error" title="Profitability could not be loaded" description={query.error.message} action={<Button onClick={() => query.refetch()}>Try again</Button>} /> : null}
       {data?.methodology.grossProfitNote ? <Alert className={styles.note} showIcon type="warning" title="Historical COGS is incomplete" description={data.methodology.grossProfitNote} /> : null}
       <section className={`${styles.metrics} ${styles.profitMetrics}`} aria-label="Profitability metrics">

@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { PaymentMethodDistributionResponse } from "@/modules/dashboard/services/paymentMethodService";
 import type { AnalyticsGroup, ProfitabilityResponse, SalesAnalyticsResponse } from "../types";
+import { buildAnalyticsSearchParams } from "../utils/dateRange";
 
 export type AnalyticsFilters = {
   storeId?: string;
@@ -18,13 +19,12 @@ async function fetchJson<T>(url: string, signal: AbortSignal): Promise<T> {
   return body as T;
 }
 
-const queryString = (filters: AnalyticsFilters) =>
-  new URLSearchParams({
-    storeId: filters.storeId!,
-    from: filters.from,
-    to: filters.to,
-    group: filters.group,
-  });
+const queryString = (filters: AnalyticsFilters) => buildAnalyticsSearchParams({
+  storeId: filters.storeId!,
+  from: filters.from,
+  to: filters.to,
+  group: filters.group,
+});
 
 export function useSalesAnalytics(filters: AnalyticsFilters) {
   return useQuery({
@@ -42,7 +42,7 @@ export function usePaymentDistribution(filters: AnalyticsFilters) {
     enabled: Boolean(filters.storeId && filters.from && filters.to),
     staleTime: 60_000,
     queryFn: ({ signal }) => {
-      const params = new URLSearchParams({
+      const params = buildAnalyticsSearchParams({
         storeId: filters.storeId!,
         from: filters.from,
         to: filters.to,

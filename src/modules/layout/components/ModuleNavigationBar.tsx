@@ -9,8 +9,10 @@ function isSelected(pathname: string, search: string, target: string) {
   if (pathname === "/dashboard/leaves" && target === "/dashboard/attendance-leave?view=leave") return true;
   const [targetPath, targetSearch = ""] = target.split("?");
   if (pathname !== targetPath && !pathname.startsWith(`${targetPath}/`)) return false;
-  if (!targetSearch) return pathname !== targetPath || !search;
   const currentParams = new URLSearchParams(search);
+  if (!targetSearch) {
+    return pathname !== targetPath || (!currentParams.has("view") && !currentParams.has("section"));
+  }
   return [...new URLSearchParams(targetSearch).entries()].every(([key, value]) => currentParams.get(key) === value);
 }
 

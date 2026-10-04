@@ -1,5 +1,6 @@
 import dayjs from "dayjs";
 import { prisma } from "@/lib/db";
+import { analyticsBucketKey } from "@/modules/analytics/utils/dateRange";
 import type { ExpenseAnalyticsResponse } from "../types";
 
 const validPeriods = new Set(["daily", "weekly", "monthly", "yearly"]);
@@ -24,28 +25,16 @@ const buildDateFilter = (startDate?: Date, endDate?: Date) => {
       (where.date as Record<string, Date>).gte = startDate;
     }
     if (endDate) {
-      (where.date as Record<string, Date>).lte = endDate;
+      const endExclusive = new Date(endDate);
+      endExclusive.setDate(endExclusive.getDate() + 1);
+      (where.date as Record<string, Date>).lt = endExclusive;
     }
   }
 
   return where;
 };
 
-const getTrendBucket = (period: string, value: Date) => {
-  const date = dayjs(value);
-  if (period === "daily") {
-    return date.startOf("day").toDate();
-  }
-  if (period === "weekly") {
-    return date.startOf("week").toDate();
-  }
-  if (period === "yearly") {
-    return date.startOf("year").toDate();
-  }
-  return date.startOf("month").toDate();
-};
-
-const buildTrendLabel = (period: string, value: Date) => {
+const buildTrendLabel = (period: string, value: string) => {
   const date = dayjs(value);
   if (period === "daily") {
     return date.format("DD MMM");
@@ -88,8 +77,8 @@ export const expenseAnalyticsService = {
       breakdownMap.set(category, (breakdownMap.get(category) ?? 0) + amount);
 
       const dateValue = row.date instanceof Date ? row.date : new Date(row.date);
-      const bucketDate = getTrendBucket(period, dateValue);
-      const key = dayjs(bucketDate).format("YYYY-MM-DD");
+      const group = period === "daily" ? "day" : period === "weekly" ? "week" : period === "yearly" ? "year" : "month";
+      const key = analyticsBucketKey(dateValue, group);
 
       trendMap.set(key, (trendMap.get(key) ?? 0) + amount);
     });
@@ -97,9 +86,8 @@ export const expenseAnalyticsService = {
     const trend = Array.from(trendMap.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([key, amount]) => {
-        const bucketDate = dayjs(key, "YYYY-MM-DD").toDate();
         return {
-          label: buildTrendLabel(period, bucketDate),
+          label: buildTrendLabel(period, key),
           amount: Number(amount.toFixed(2)),
           period: key,
         };

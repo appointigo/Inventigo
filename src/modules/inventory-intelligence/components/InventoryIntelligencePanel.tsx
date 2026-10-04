@@ -6,7 +6,6 @@ import {
   Alert,
   Button,
   Card,
-  DatePicker,
   Drawer,
   Empty,
   Flex,
@@ -24,7 +23,6 @@ import {
   AppstoreOutlined,
   BarChartOutlined,
   BulbOutlined,
-  CalendarOutlined,
   ClockCircleOutlined,
   InfoCircleOutlined,
   PlusOutlined,
@@ -34,7 +32,6 @@ import {
   TeamOutlined,
   WarningFilled,
 } from "@ant-design/icons";
-import type { Dayjs } from "dayjs";
 import {
   Bar,
   BarChart,
@@ -51,6 +48,9 @@ import {
   YAxis,
   ZAxis,
 } from "recharts";
+import AnalyticsDateFilter from "@/modules/analytics/components/AnalyticsDateFilter";
+import { useAnalyticsDateRange } from "@/modules/analytics/hooks/useAnalyticsDateRange";
+import { businessDateEndExclusive, businessDateStart } from "@/modules/analytics/utils/dateRange";
 import { useInventoryDrilldown, useInventoryIntelligence } from "../hooks/useInventoryIntelligence";
 import type {
   CategoryPerformanceRow,
@@ -58,7 +58,6 @@ import type {
   InventoryComparisonMode,
   InventoryDrilldownRow,
   InventoryIntelligenceResponse,
-  InventoryPeriodPreset,
   ProductSignalRow,
 } from "../types";
 import styles from "./InventoryIntelligencePanel.module.css";
@@ -81,14 +80,6 @@ const changeLabel = (change: ChangeMetric) =>
     : change.percentage === null || !Number.isFinite(change.percentage)
       ? "N/A"
       : `${Math.abs(change.percentage)}%`;
-const periodLabels: Record<InventoryPeriodPreset, string> = {
-  weekly: "Last 7 Days",
-  monthly: "Last 30 Days",
-  quarterly: "Last 3 Months",
-  halfYearly: "Last 6 Months",
-  annual: "Last 12 Months",
-  custom: "Custom Range",
-};
 const comparisonLabels: Record<InventoryComparisonMode, string> = {
   previousPeriod: "Previous Period",
   previousYear: "Previous Year",
@@ -236,11 +227,11 @@ function InventoryPortfolioCharts({ data }: { data: InventoryIntelligenceRespons
       </section>
       <section className={styles.portfolioPair}>
         <article className={styles.surface}>
-          <div className={styles.sectionHeading}><div><h2>Inventory Value by Category</h2><p>Current stock value, not unit count.</p></div></div>
+          <div className={styles.sectionHeading}><div><h2>Inventory Value by Category</h2><p>Current stock value; this point-in-time view is not date-filtered.</p></div></div>
           {valueChart(data.categoryValuation, "#64748b")}
         </article>
         <article className={styles.surface}>
-          <div className={styles.sectionHeading}><div><h2>Net Sales by Category</h2><p>Net item revenue after dated returns and exchanges.</p></div></div>
+          <div className={styles.sectionHeading}><div><h2>Net Sales by Category</h2><p>Net item revenue after returns and exchanges in the selected period.</p></div></div>
           {data.categorySales.length ? <ResponsiveContainer width="100%" height={260} minWidth={0} minHeight={0} initialDimension={{ width: 560, height: 260 }}><BarChart data={data.categorySales.slice(0, 12)} margin={{ top: 4, right: 12, bottom: 2, left: -8 }}><CartesianGrid stroke="#e7edf5" vertical={false} /><XAxis dataKey="label" tick={{ fontSize: 10, fill: "#64748b" }} axisLine={false} tickLine={false} interval={0} angle={-18} textAnchor="end" height={56} /><YAxis tickFormatter={(value) => money(Number(value))} tick={{ fontSize: 10, fill: "#64748b" }} axisLine={false} tickLine={false} /><ChartTooltip formatter={(value, name, item) => [name === "revenue" ? money(Number(value)) : number(Number(value)), name === "revenue" ? "Net sales" : `Net units (${item.payload.unitsSold})`]} /><Bar dataKey="revenue" fill="#16a34a" radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No category sales in this period" />}
         </article>
       </section>
@@ -260,11 +251,9 @@ export default function InventoryIntelligencePanel({
   compact?: boolean;
 }) {
   const router = useRouter();
-  const [period, setPeriod] = useState<InventoryPeriodPreset>("monthly");
+  const { range, selectPreset, selectCustom } = useAnalyticsDateRange("30d");
   const [comparisonMode, setComparisonMode] = useState<InventoryComparisonMode>("previousPeriod");
   const [trendMode, setTrendMode] = useState<"actual" | "indexed">("actual");
-  const [draftRange, setDraftRange] = useState<[Dayjs | null, Dayjs | null] | null>(null);
-  const [appliedRange, setAppliedRange] = useState<{ start: string; end: string } | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<CategoryPerformanceRow | null>(null);
   const [selectedBrandId, setSelectedBrandId] = useState<string>();
   const [selectedProductId, setSelectedProductId] = useState<string>();
@@ -273,17 +262,16 @@ export default function InventoryIntelligencePanel({
   const [insightsOpen, setInsightsOpen] = useState(false);
   const filters = {
     storeId,
-    period,
+    period: "custom" as const,
     comparisonMode,
-    customStart: appliedRange?.start,
-    customEnd: appliedRange?.end,
+    customStart: businessDateStart(range.from).toISOString(),
+    customEnd: businessDateEndExclusive(range.to).toISOString(),
   };
   const query = useInventoryIntelligence(filters);
   const data = query.data;
   const activeVariantCategoryId = variantCategoryId ?? data?.categoryPerformance[0]?.categoryId;
   const drilldownQuery = useInventoryDrilldown(filters, selectedCategory?.categoryId);
   const variantQuery = useInventoryDrilldown(filters, activeVariantCategoryId);
-  const customRangeReady = period !== "custom" || Boolean(appliedRange);
 
   const openCategory = (
     category: CategoryPerformanceRow,
@@ -360,16 +348,6 @@ export default function InventoryIntelligencePanel({
           : null,
     }));
   }, [data?.sizeInsights, variantQuery.data]);
-  const applyCustom = () => {
-    const startDay = draftRange?.[0];
-    const endDay = draftRange?.[1]?.add(1, "day");
-    if (!startDay || !endDay || !endDay.isAfter(startDay)) return;
-    setAppliedRange({
-      start: new Date(`${startDay.format("YYYY-MM-DD")}T00:00:00+05:30`).toISOString(),
-      end: new Date(`${endDay.format("YYYY-MM-DD")}T00:00:00+05:30`).toISOString(),
-    });
-  };
-
   if (!storeId)
     return <Alert type="info" showIcon title="Choose a store to load Inventory Intelligence." />;
   const demandMissed = data?.lostDemand ? 100 - (data.lostDemand.fulfillmentRate ?? 0) : null;
@@ -392,16 +370,7 @@ export default function InventoryIntelligencePanel({
           </Typography.Text>
         </div>
         <div className={styles.controls}>
-          <Select<InventoryPeriodPreset>
-            aria-label="Analytics period"
-            value={period}
-            prefix={<CalendarOutlined />}
-            onChange={(value) => {
-              setPeriod(value);
-              if (value !== "custom") setAppliedRange(null);
-            }}
-            options={Object.entries(periodLabels).map(([value, label]) => ({ value, label }))}
-          />
+          <AnalyticsDateFilter range={range} onPreset={selectPreset} onCustom={selectCustom} />
           <Select<InventoryComparisonMode>
             aria-label="Comparison period"
             value={comparisonMode}
@@ -414,7 +383,6 @@ export default function InventoryIntelligencePanel({
               icon={<ReloadOutlined />}
               onClick={() => query.refetch()}
               loading={query.isFetching}
-              disabled={!customRangeReady}
             />
           </Tooltip>
           <Button
@@ -426,25 +394,7 @@ export default function InventoryIntelligencePanel({
           </Button>
         </div>
       </header>
-      {period === "custom" ? (
-        <div className={styles.customRange}>
-          <DatePicker.RangePicker
-            value={draftRange}
-            onChange={(value) => setDraftRange(value as [Dayjs | null, Dayjs | null] | null)}
-            allowClear
-          />
-          <Button
-            type="primary"
-            onClick={applyCustom}
-            disabled={!draftRange?.[0] || !draftRange?.[1]}
-          >
-            Apply
-          </Button>
-        </div>
-      ) : null}
-      {period === "custom" && !appliedRange ? (
-        <Alert type="info" showIcon title="Select a custom date range and choose Apply" />
-      ) : query.isError ? (
+      {query.isError ? (
         <Alert
           type="error"
           showIcon
@@ -453,7 +403,7 @@ export default function InventoryIntelligencePanel({
           action={<Button onClick={() => query.refetch()}>Try again</Button>}
         />
       ) : null}
-      {period === "custom" && !appliedRange ? null : query.isLoading || !data ? (
+      {query.isLoading || !data ? (
         <div className={styles.loadingGrid}>
           {Array.from({ length: 8 }).map((_, index) => (
             <Card key={index} className={styles.surface}>
