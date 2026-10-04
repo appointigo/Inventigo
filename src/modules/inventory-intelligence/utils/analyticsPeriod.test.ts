@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseInventoryAnalyticsSearchParams, resolveAnalyticsPeriod } from "./analyticsPeriod.ts";
+import {
+  AnalyticsPeriodError,
+  parseInventoryAnalyticsSearchParams,
+  resolveAnalyticsPeriod,
+} from "./analyticsPeriod.ts";
 
 const now = new Date("2026-09-21T10:00:00.000Z");
 
@@ -125,6 +129,16 @@ test("validates API query parameters and requires a store", () => {
   );
   assert.equal(parsed.storeId, "store-a");
   assert.equal(parsed.period.comparisonMode, "previousYear");
+  assert.throws(
+    () =>
+      parseInventoryAnalyticsSearchParams(
+        new URLSearchParams({ storeId: "store-b" }),
+        "store-a",
+        now
+      ),
+    (error: unknown) =>
+      error instanceof AnalyticsPeriodError && error.status === 403
+  );
   assert.throws(() =>
     parseInventoryAnalyticsSearchParams(new URLSearchParams({ period: "daily" }), null, now)
   );

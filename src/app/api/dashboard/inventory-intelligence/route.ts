@@ -31,7 +31,7 @@ export const GET = async (request: Request) => {
               ? "Store was not found in this organization"
               : error.message,
         },
-        { status: 400 }
+        { status: error instanceof AnalyticsPeriodError ? error.status : 400 }
       );
     }
     console.error("[inventory-intelligence GET]", error);

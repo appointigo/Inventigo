@@ -32,6 +32,7 @@ import {
   PrinterOutlined,
   DownloadOutlined,
   CloseOutlined,
+  ScanOutlined,
 } from "@ant-design/icons";
 import type { MenuProps } from "antd";
 import type { ColumnsType } from "antd/es/table";
@@ -65,6 +66,7 @@ interface ProductTableProps {
   duplicateLoadingId?: string | null;
   onDelete: (id: string) => Promise<void>;
   onBulkUpload?: () => void;
+  onScan?: () => void;
   attributeSchema: Category["attributeSchema"] | null;
   attributeFilters: Record<string, string | string[] | boolean>;
   onAttributeChange: (name: string, value: string | string[] | boolean | undefined) => void;
@@ -95,6 +97,7 @@ const ProductTable = ({
   duplicateLoadingId,
   onDelete,
   onBulkUpload,
+  onScan,
   attributeSchema,
   attributeFilters,
   onAttributeChange,
@@ -514,6 +517,11 @@ const ProductTable = ({
       align: "center",
       render: (_, record) => (
         <Space>
+          {onScan && (
+            <Button icon={<ScanOutlined />} onClick={onScan}>
+              Scan Barcode
+            </Button>
+          )}
           <Tooltip title="View" destroyOnHidden>
             <Button type="text" icon={<EyeOutlined />} onClick={() => onView(record)} />
           </Tooltip>

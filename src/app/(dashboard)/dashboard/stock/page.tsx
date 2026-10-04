@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useState, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Typography, Tabs, App } from "antd";
 import StockTable from "@/modules/stock/components/StockTable";
 import StockAdjustmentModal from "@/modules/stock/components/StockAdjustmentModal";
@@ -15,11 +16,14 @@ const MobileStockPage = dynamic(() => import("@/modules/mobile-dashboard/pages/S
 
 export default function StockPage() {
   const { message } = App.useApp();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { isMobile, isReady } = useMobileViewport();
   const { storeId } = useStore();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
   const [adjustingRow, setAdjustingRow] = useState<StockLevelRow | null>(null);
+  const activeTab = searchParams.get("view") === "movements" ? "movements" : "levels";
 
   const { stockLevels, loading, refresh } = useStockLevels({
     storeId: storeId ?? undefined,
@@ -52,7 +56,7 @@ export default function StockPage() {
       refresh();
       refreshMovements();
     },
-    [refresh, refreshMovements]
+    [message, refresh, refreshMovements]
   );
 
   if (!isReady) {
@@ -69,7 +73,8 @@ export default function StockPage() {
         Stock Management
       </Typography.Title>
       <Tabs
-        defaultActiveKey="levels"
+        activeKey={activeTab}
+        onChange={(key) => router.replace(key === "movements" ? "/dashboard/stock?view=movements" : "/dashboard/stock")}
         items={[
           {
             key: "levels",

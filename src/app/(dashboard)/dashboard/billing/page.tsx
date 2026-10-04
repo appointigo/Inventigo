@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ScanOutlined, HistoryOutlined, SwapOutlined } from "@ant-design/icons";
 import { useSales } from "@/modules/billing/hooks/useBilling";
 import SalesHistory from "@/modules/billing/components/SalesHistory";
@@ -13,7 +14,8 @@ import BillingView from "@/modules/billing/components/BillingView";
 const MobileBillingPage = dynamic(() => import("@/modules/mobile-dashboard/pages/BillingPage"));
 
 const DesktopBillingPage = () => {
-  const [activeTab, setActiveTab] = useState("new-sale");
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [prefillSaleId, setPrefillSaleId] = useState<string | undefined>(undefined);
 
   const {
@@ -34,6 +36,11 @@ const DesktopBillingPage = () => {
   } = useSales();
 
   const defaultTaxPct = 0;
+  const requestedView = searchParams.get("view");
+  const activeTab = requestedView === "history" || requestedView === "return-exchange" ? requestedView : "new-sale";
+  const setActiveTab = (view: string) => {
+    router.replace(view === "new-sale" ? "/dashboard/billing" : `/dashboard/billing?view=${view}`);
+  };
 
   return (
     <PageWrapper>
@@ -43,7 +50,7 @@ const DesktopBillingPage = () => {
         tabBarExtraContent={{
           left: (
             <PageTitle style={{ marginRight: 20, fontSize: 17, letterSpacing: "-0.2px" }}>
-              Billing
+              POS / Billing
             </PageTitle>
           ),
         }}

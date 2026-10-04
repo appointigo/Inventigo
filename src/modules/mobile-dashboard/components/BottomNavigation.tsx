@@ -1,26 +1,39 @@
 "use client";
 
 import {
-  BarChartOutlined,
-  DollarOutlined,
-  UserAddOutlined,
-  UserOutlined,
+  DashboardOutlined,
+  InboxOutlined,
+  SettingOutlined,
+  ShoppingCartOutlined,
 } from "@ant-design/icons";
 import { usePathname, useRouter } from "next/navigation";
 import styles from "./BottomNavigation.module.css";
 
 const NAV_ITEMS = [
-  { key: "dashboard", label: "Dashboard", href: "/dashboard", icon: BarChartOutlined },
-  { key: "demand", label: "Demand", href: "/dashboard/demand", icon: UserAddOutlined },
-  { key: "customers", label: "Customers", href: "/dashboard/customers", icon: UserOutlined },
-  { key: "billing", label: "Billing", href: "/dashboard/billing", icon: DollarOutlined },
+  { key: "dashboard", label: "Dashboard", href: "/dashboard", icon: DashboardOutlined },
+  { key: "sales", label: "Sales", href: "/dashboard/billing", icon: ShoppingCartOutlined },
+  { key: "inventory", label: "Inventory", href: "/dashboard/products", icon: InboxOutlined },
+  { key: "settings", label: "Settings", href: "/dashboard/settings", icon: SettingOutlined },
 ] as const;
 
-function isActivePath(pathname: string, href: string) {
-  if (href === "/dashboard") {
-    return pathname === href;
+function isActivePath(pathname: string, key: (typeof NAV_ITEMS)[number]["key"]) {
+  if (key === "dashboard") return pathname === "/dashboard";
+  if (key === "sales") {
+    return ["/dashboard/billing", "/dashboard/customers", "/dashboard/sales", "/dashboard/whatsapp"].some(
+      (path) => pathname === path || pathname.startsWith(`${path}/`)
+    );
   }
-  return pathname === href || pathname.startsWith(`${href}/`);
+  if (key === "inventory") {
+    return [
+      "/dashboard/products",
+      "/dashboard/stock",
+      "/dashboard/categories",
+      "/dashboard/brands",
+      "/dashboard/demand",
+      "/dashboard/inventory-intelligence",
+    ].some((path) => pathname === path || pathname.startsWith(`${path}/`));
+  }
+  return pathname === "/dashboard/settings" || pathname.startsWith("/dashboard/settings/");
 }
 
 export function BottomNavigation() {
@@ -31,7 +44,7 @@ export function BottomNavigation() {
     <nav aria-label="Primary" className={styles.navigation}>
       <div className={styles.items}>
         {NAV_ITEMS.map((item) => {
-          const active = isActivePath(pathname, item.href);
+          const active = isActivePath(pathname, item.key);
           const Icon = item.icon;
           return (
             <button

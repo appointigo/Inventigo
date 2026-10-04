@@ -344,6 +344,15 @@
   gap: 14px;
   margin-top: 14px;
 }
+.portfolioCharts { display: grid; gap: 14px; margin-top: 14px; }
+.portfolioFull, .portfolioPair > article { min-width: 0; padding: 16px; }
+.portfolioPair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.heatMapScroll { overflow-x: auto; }
+.heatMap { display: grid; gap: 4px; min-width: max-content; }
+.heatHeader, .heatRowLabel, .heatCell { display: flex; align-items: center; min-height: 38px; border-radius: 6px; padding: 6px 8px; font-size: 11px; }
+.heatHeader { justify-content: center; color: #64748b; background: #f1f5f9; font-weight: 650; }
+.heatRowLabel { color: #334155; background: #f8fafc; font-weight: 650; }
+.heatCell { justify-content: center; font-weight: 700; }
 .bottomGrid {
   display: grid;
   grid-template-columns: 1.25fr 0.72fr 1fr;
@@ -501,6 +510,7 @@
 }
 @media (max-width: 900px) {
   .attentionGrid,
+  .portfolioPair,
   .middleGrid,
   .bottomGrid {
     grid-template-columns: 1fr;

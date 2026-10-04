@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { requireOrgAuth } from "@/lib/auth.middleware";
 import { expenseAnalyticsService } from "@/modules/dashboard/services/expenseAnalyticsService";
+import {
+  AnalyticsAccessError,
+  resolveAnalyticsStoreId,
+} from "@/modules/analytics/services/analyticsAccess";
 
 export async function GET(request: Request) {
   let user;
@@ -12,14 +16,10 @@ export async function GET(request: Request) {
 
   try {
     const { searchParams } = new URL(request.url);
-    const storeId = searchParams.get("storeId") ?? user.storeId ?? null;
+    const storeId = await resolveAnalyticsStoreId(user, searchParams.get("storeId"));
     const period = searchParams.get("period") ?? "monthly";
     const startDateParam = searchParams.get("startDate") ?? null;
     const endDateParam = searchParams.get("endDate") ?? null;
-
-    if (!storeId) {
-      return NextResponse.json({ error: "storeId is required" }, { status: 400 });
-    }
 
     const startDate = startDateParam ? new Date(startDateParam) : undefined;
     const endDate = endDateParam ? new Date(endDateParam) : undefined;
@@ -32,6 +32,9 @@ export async function GET(request: Request) {
 
     return NextResponse.json(data);
   } catch (error) {
+    if (error instanceof AnalyticsAccessError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error("[dashboard expense-analytics GET]", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }

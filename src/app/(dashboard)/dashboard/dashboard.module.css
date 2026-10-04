@@ -1,0 +1,66 @@
+.page { min-height: 100%; padding: 28px; color: var(--text-primary); background: #f6f8fb; }
+.hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
+.hero h1 { margin: 3px 0 4px !important; font-size: clamp(24px, 3vw, 31px) !important; line-height: 1.18 !important; letter-spacing: -.7px; }
+.eyebrow { color: #2563eb !important; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.periodPill { flex: 0 0 auto; border: 1px solid #e1e7ef; border-radius: 9px; padding: 8px 11px; background: #fff; color: #64748b; font-size: 12px; }
+.metricGrid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }
+.metricCard { min-width: 0; border: 1px solid #e6ebf1; border-radius: 12px; background: #fff; padding: 16px; box-shadow: 0 1px 2px rgba(15, 23, 42, .02); }
+.metricTop { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #64748b; font-size: 12px; font-weight: 600; }
+.metricIcon { width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; background: #eff6ff; color: #2563eb; }
+.metricCard[data-tone="green"] .metricIcon { color: #15803d; background: #f0fdf4; }
+.metricCard[data-tone="amber"] .metricIcon { color: #c2410c; background: #fff7ed; }
+.metricCard[data-tone="violet"] .metricIcon { color: #7c3aed; background: #f5f3ff; }
+.metricCard[data-tone="slate"] .metricIcon { color: #475569; background: #f1f5f9; }
+.metricCard[data-tone="red"] .metricIcon { color: #dc2626; background: #fef2f2; }
+.metricCard > strong { display: block; overflow: hidden; margin: 14px 0 4px; color: #0f172a; font-size: clamp(20px, 2vw, 25px); font-weight: 700; letter-spacing: -.45px; text-overflow: ellipsis; white-space: nowrap; }
+.metricCard small { color: #8491a3; font-size: 11px; }
+.primaryGrid, .insightGrid, .bottomGrid { display: grid; gap: 14px; margin-top: 14px; }
+.primaryGrid { grid-template-columns: minmax(0, 1.75fr) minmax(300px, .75fr); }
+.insightGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.bottomGrid { grid-template-columns: minmax(0, 1.65fr) minmax(280px, .65fr); }
+.section { min-width: 0; border: 1px solid #e6ebf1; border-radius: 13px; background: #fff; padding: 18px; box-shadow: 0 1px 2px rgba(15, 23, 42, .02); }
+.sectionHeader { min-height: 44px; display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
+.sectionHeader h2 { margin: 0; color: #152033; font-size: 15px; font-weight: 700; letter-spacing: -.15px; }
+.sectionHeader p { margin: 4px 0 0; color: #8a96a8; font-size: 11px; }
+.sectionHeader :global(.ant-btn) { height: auto; padding: 0; font-size: 12px; white-space: nowrap; }
+.chartWrap { height: 290px; }
+.attentionList { display: flex; flex-direction: column; }
+.attentionList button { width: 100%; display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 10px; border: 0; border-top: 1px solid #f0f3f7; background: transparent; padding: 12px 2px; color: #94a3b8; cursor: pointer; text-align: left; }
+.attentionList button:first-child { border-top: 0; }
+.attentionList button:hover strong { color: #2563eb; }
+.attentionList button > span:nth-child(2) { min-width: 0; }
+.attentionList strong, .attentionList small { display: block; }
+.attentionList strong { color: #334155; font-size: 12px; }
+.attentionList small { margin-top: 3px; color: #94a3b8; font-size: 11px; }
+.attentionIcon { width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; color: #d97706; background: #fffbeb; }
+.attentionIcon[data-tone="info"] { color: #2563eb; background: #eff6ff; }
+.inventoryValue { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; border-bottom: 1px solid #eef2f6; padding-bottom: 16px; }
+.inventoryValue span { color: #64748b; font-size: 12px; }
+.inventoryValue strong { color: #0f172a; font-size: 24px; }
+.healthGrid, .demandStats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 15px; }
+.healthGrid div, .demandStats div { border-radius: 9px; background: #f8fafc; padding: 11px; }
+.healthGrid strong, .healthGrid span, .demandStats strong, .demandStats span { display: block; }
+.healthGrid strong, .demandStats strong { color: #1e293b; font-size: 18px; }
+.healthGrid span, .demandStats span { margin-top: 3px; color: #8491a3; font-size: 10px; }
+.demandHeadline { display: flex; align-items: center; gap: 10px; color: #64748b; font-size: 12px; }
+.demandHeadline strong { margin-right: auto; color: #0f172a; font-size: 24px; }
+.demandStats { grid-template-columns: repeat(3, 1fr); }
+.insightNote { margin: 13px 0 0; border-radius: 9px; background: #eff6ff; padding: 10px 12px; color: #475569; font-size: 11px; }
+.insightNote :global(.anticon) { margin-right: 6px; color: #2563eb; }
+.tableScroll { width: 100%; overflow-x: auto; }
+.tableScroll table { width: 100%; border-collapse: collapse; white-space: nowrap; }
+.tableScroll th { padding: 9px 10px; border-bottom: 1px solid #e9edf3; color: #94a3b8; font-size: 10px; font-weight: 650; text-align: left; text-transform: uppercase; letter-spacing: .04em; }
+.tableScroll td { padding: 12px 10px; border-bottom: 1px solid #f1f4f7; color: #64748b; font-size: 12px; }
+.tableScroll tbody tr:last-child td { border-bottom: 0; }
+.tableScroll td strong { color: #334155; }
+.productList { display: flex; flex-direction: column; }
+.productList > div { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 11px 0; border-bottom: 1px solid #f0f3f7; }
+.productList > div:last-child { border-bottom: 0; }
+.rank { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; border-radius: 7px; background: #f1f5f9; color: #64748b; font-size: 11px; font-weight: 700; }
+.productList strong, .productList small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.productList strong { color: #334155; font-size: 12px; }
+.productList small { margin-top: 3px; color: #94a3b8; font-size: 10px; }
+.productList b { color: #2563eb; font-size: 11px; font-weight: 650; }
+@media (max-width: 1180px) { .metricGrid { grid-template-columns: repeat(3, 1fr); } .primaryGrid, .bottomGrid { grid-template-columns: 1fr; } .insightGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 800px) { .page { padding: 18px 14px 28px; } .hero { align-items: flex-start; flex-direction: column; gap: 12px; } .metricGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .metricCard:last-child { grid-column: 1 / -1; } .insightGrid { grid-template-columns: 1fr; } .healthGrid { grid-template-columns: repeat(2, 1fr); } .chartWrap { height: 235px; } }
+@media (max-width: 420px) { .metricGrid { grid-template-columns: 1fr; } .metricCard:last-child { grid-column: auto; } .section { padding: 15px; } .sectionHeader { align-items: flex-start; flex-direction: column; } }

@@ -38,9 +38,8 @@ export function calculateProfitabilityMetrics(input: ProfitabilityInput): Profit
   const breakEvenRevenue = cogs + operatingExpenses;
   const breakEvenGap = revenue - breakEvenRevenue;
 
-  const growthScore = Math.max(0, Math.min(100, Math.abs(revenueGrowthPct)));
+  const growthScore = Math.max(0, Math.min(100, 50 + revenueGrowthPct * 2.5));
   const marginScore = Math.max(0, Math.min(100, netProfitMarginPct * 2));
-  const expenseScore = Math.max(0, Math.min(100, 100 - expenseRatioPct));
   const profitToExpenseScore = operatingExpenses > 0 ? Math.max(0, Math.min(100, Math.max(0, profitToExpenseRatio) * 100)) : 0;
   const grossMarginScore = Math.max(0, Math.min(100, grossMarginPct));
 

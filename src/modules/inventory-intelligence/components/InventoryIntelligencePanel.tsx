@@ -37,6 +37,7 @@ import {
 import type { Dayjs } from "dayjs";
 import {
   Bar,
+  BarChart,
   CartesianGrid,
   ComposedChart,
   Legend,
@@ -56,6 +57,7 @@ import type {
   ChangeMetric,
   InventoryComparisonMode,
   InventoryDrilldownRow,
+  InventoryIntelligenceResponse,
   InventoryPeriodPreset,
   ProductSignalRow,
 } from "../types";
@@ -196,6 +198,56 @@ function AttentionList({
           </b>
         </button>
       ))}
+    </div>
+  );
+}
+
+function InventoryPortfolioCharts({ data }: { data: InventoryIntelligenceResponse }) {
+  const categories = Array.from(
+    new Map(data.categorySizeDemand.map((row) => [row.categoryId, row.category])).entries(),
+  );
+  const sizes = Array.from(
+    new Map(data.categorySizeDemand.map((row) => [row.sizeId, row.size])).entries(),
+  );
+  const cellMap = new Map(
+    data.categorySizeDemand.map((row) => [`${row.categoryId}:${row.sizeId}`, row.netUnitsSold]),
+  );
+  const maxUnits = Math.max(1, ...data.categorySizeDemand.map((row) => Math.max(0, row.netUnitsSold)));
+  const valueChart = (
+    rows: Array<{ id: string; label: string; inventoryValue: number }>,
+    color: string,
+  ) => rows.length ? (
+    <ResponsiveContainer width="100%" height={260} minWidth={0} minHeight={0} initialDimension={{ width: 560, height: 260 }}>
+      <BarChart data={rows.slice(0, 12)} layout="vertical" margin={{ top: 4, right: 16, bottom: 2, left: 18 }}>
+        <CartesianGrid stroke="#e7edf5" horizontal={false} />
+        <XAxis type="number" tickFormatter={(value) => money(Number(value))} tick={{ fontSize: 10, fill: "#64748b" }} axisLine={false} tickLine={false} />
+        <YAxis type="category" dataKey="label" width={90} tick={{ fontSize: 10, fill: "#475569" }} axisLine={false} tickLine={false} />
+        <ChartTooltip formatter={(value) => [money(Number(value)), "Inventory value"]} />
+        <Bar dataKey="inventoryValue" fill={color} radius={[0, 4, 4, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  ) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No inventory value to display" />;
+
+  return (
+    <div className={styles.portfolioCharts}>
+      <section className={`${styles.surface} ${styles.portfolioFull}`}>
+        <div className={styles.sectionHeading}><div><h2>Inventory Value by Brand</h2><p>Current positive on-hand quantity valued at product cost.</p></div></div>
+        {valueChart(data.brandValuation, "#2563eb")}
+      </section>
+      <section className={styles.portfolioPair}>
+        <article className={styles.surface}>
+          <div className={styles.sectionHeading}><div><h2>Inventory Value by Category</h2><p>Current stock value, not unit count.</p></div></div>
+          {valueChart(data.categoryValuation, "#64748b")}
+        </article>
+        <article className={styles.surface}>
+          <div className={styles.sectionHeading}><div><h2>Net Sales by Category</h2><p>Net item revenue after dated returns and exchanges.</p></div></div>
+          {data.categorySales.length ? <ResponsiveContainer width="100%" height={260} minWidth={0} minHeight={0} initialDimension={{ width: 560, height: 260 }}><BarChart data={data.categorySales.slice(0, 12)} margin={{ top: 4, right: 12, bottom: 2, left: -8 }}><CartesianGrid stroke="#e7edf5" vertical={false} /><XAxis dataKey="label" tick={{ fontSize: 10, fill: "#64748b" }} axisLine={false} tickLine={false} interval={0} angle={-18} textAnchor="end" height={56} /><YAxis tickFormatter={(value) => money(Number(value))} tick={{ fontSize: 10, fill: "#64748b" }} axisLine={false} tickLine={false} /><ChartTooltip formatter={(value, name, item) => [name === "revenue" ? money(Number(value)) : number(Number(value)), name === "revenue" ? "Net sales" : `Net units (${item.payload.unitsSold})`]} /><Bar dataKey="revenue" fill="#16a34a" radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No category sales in this period" />}
+        </article>
+      </section>
+      <section className={`${styles.surface} ${styles.portfolioFull}`}>
+        <div className={styles.sectionHeading}><div><h2>Category × Size Demand Heat Map</h2><p>Net units sold in the selected period. Darker cells indicate stronger demand.</p></div></div>
+        {!categories.length || !sizes.length ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No category and size demand in this period" /> : <div className={styles.heatMapScroll}><div className={styles.heatMap} style={{ gridTemplateColumns: `minmax(120px, 1.4fr) repeat(${sizes.length}, minmax(62px, 1fr))` }}><span className={styles.heatHeader}>Category</span>{sizes.map(([id, label]) => <span className={styles.heatHeader} key={id}>{label}</span>)}{categories.flatMap(([categoryId, category]) => [<span className={styles.heatRowLabel} key={`${categoryId}:label`}>{category}</span>, ...sizes.map(([sizeId]) => { const units = cellMap.get(`${categoryId}:${sizeId}`) ?? 0; const strength = Math.max(0, units) / maxUnits; return <span className={styles.heatCell} key={`${categoryId}:${sizeId}`} title={`${category}: ${units} net units sold`} style={{ backgroundColor: units > 0 ? `rgba(37, 99, 235, ${0.12 + strength * 0.78})` : "#f8fafc", color: strength > .55 ? "#fff" : "#334155" }}>{units}</span>; })])}</div></div>}
+      </section>
     </div>
   );
 }
@@ -553,6 +605,7 @@ export default function InventoryIntelligencePanel({
               </article>
             </div>
           </section>
+          <InventoryPortfolioCharts data={data} />
           <div className={styles.middleGrid}>
             <section className={`${styles.surface} ${styles.chartSection}`}>
               <div className={styles.sectionHeading}>
@@ -570,7 +623,7 @@ export default function InventoryIntelligencePanel({
                 />
               </div>
               {data.trend.length ? (
-                <ResponsiveContainer width="100%" height={255} minWidth={0}>
+                <ResponsiveContainer width="100%" height={255} minWidth={0} minHeight={0} initialDimension={{ width: 560, height: 255 }}>
                   <ComposedChart
                     data={data.trend}
                     margin={{ top: 12, right: 8, bottom: 2, left: -14 }}
@@ -843,7 +896,7 @@ export default function InventoryIntelligencePanel({
             footer={null}
             width={760}
           >
-            <ResponsiveContainer width="100%" height={360} minWidth={0}>
+            <ResponsiveContainer width="100%" height={360} minWidth={0} minHeight={0} initialDimension={{ width: 720, height: 360 }}>
               <ScatterChart margin={{ top: 18, right: 22, bottom: 18, left: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis type="number" dataKey="x" name="Stock change" unit="%" />

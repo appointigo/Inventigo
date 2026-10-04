@@ -1,0 +1,23 @@
+.page { padding: 24px; color: #0f172a; }
+.header { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 18px; }
+.header h1 { margin: 5px 0 4px; font-size: 28px; line-height: 1.2; letter-spacing: -.03em; }
+.header p, .eyebrow { margin: 0; color: #64748b; }
+.eyebrow { font-size: 12px; }
+.controls { display: flex; align-items: center; justify-content: flex-end; gap: 9px; flex-wrap: wrap; }
+.customRange { display: flex; justify-content: flex-end; gap: 8px; margin: -6px 0 16px; }
+.metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.profitMetrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.metric { min-width: 0; padding: 16px; background: #fff; border: 1px solid #e3e9f1; border-radius: 12px; box-shadow: 0 4px 18px rgba(15, 23, 42, .04); }
+.metric span { display: block; color: #64748b; font-size: 12px; }
+.metric strong { display: block; margin-top: 8px; overflow: hidden; color: #0f172a; font-size: 23px; line-height: 1.1; text-overflow: ellipsis; white-space: nowrap; }
+.metric small { display: block; margin-top: 7px; color: #94a3b8; font-size: 11px; }
+.grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(320px, .8fr); gap: 14px; }
+.stack { display: grid; gap: 14px; }
+.surface { min-width: 0; padding: 17px; background: #fff; border: 1px solid #e3e9f1; border-radius: 12px; box-shadow: 0 4px 18px rgba(15, 23, 42, .04); }
+.surface h2 { margin: 0; font-size: 16px; }
+.surface p { margin: 3px 0 14px; color: #64748b; font-size: 12px; }
+.chart { width: 100%; height: 310px; min-width: 0; min-height: 0; }
+.halfGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 14px; }
+.note { margin-bottom: 14px; }
+@media (max-width: 1180px) { .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); } .grid { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .page { padding: 16px; } .header { align-items: flex-start; flex-direction: column; } .controls { justify-content: flex-start; width: 100%; } .metrics, .profitMetrics, .halfGrid { grid-template-columns: 1fr; } .customRange { justify-content: flex-start; flex-wrap: wrap; } .chart { height: 280px; } }

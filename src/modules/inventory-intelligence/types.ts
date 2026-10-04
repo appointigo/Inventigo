@@ -187,6 +187,16 @@ export type InventoryIntelligenceResponse = {
   trend: InventoryTrendPoint[];
   correlation: { coefficient: number; observationCount: number; description: string } | null;
   categoryPerformance: CategoryPerformanceRow[];
+  brandValuation: Array<{ id: string; label: string; inventoryValue: number; units: number }>;
+  categoryValuation: Array<{ id: string; label: string; inventoryValue: number; units: number }>;
+  categorySales: Array<{ id: string; label: string; revenue: number; unitsSold: number }>;
+  categorySizeDemand: Array<{
+    categoryId: string;
+    category: string;
+    sizeId: string;
+    size: string;
+    netUnitsSold: number;
+  }>;
   drilldown: InventoryDrilldownRow[];
   highDemandLowStock: ProductSignalRow[];
   overstock: ProductSignalRow[];

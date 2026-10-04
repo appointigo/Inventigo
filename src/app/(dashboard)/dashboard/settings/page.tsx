@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Tag } from "antd";
 import { Role } from "@prisma/client";
 import { useCurrentUser } from "@/modules/auth/hooks/useAuth";
@@ -46,7 +46,6 @@ import {
   ProfileRow,
   ProfileLbl,
   ProfileVal,
-  ProfileValMono,
   InfoBox,
   SectionCard,
   SectionHead,
@@ -333,21 +332,24 @@ const AdminPromoCount = () => {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 const SettingsPage = () => {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useCurrentUser();
   const isAdmin = user?.role === Role.ADMIN || user?.role === Role.OWNER;
-  const [activeTab, setActiveTab] = useState<TabKey>("profile");
 
   const tabs: Array<{ key: TabKey; label: string; icon: string; adminOnly: boolean }> = [
     { key: "profile",    label: "Profile",     icon: "👤",  adminOnly: false },
     { key: "users",      label: "Users",       icon: "👥",  adminOnly: true  },
     { key: "stores",     label: "Stores",      icon: "🏪",  adminOnly: true  },
-    { key: "billing",    label: "Billing",     icon: "💳",  adminOnly: true  },
-    { key: "invoices",   label: "Invoices",    icon: "🧾",  adminOnly: true  },
+    { key: "billing",    label: "Plan & Billing", icon: "💳", adminOnly: true },
+    { key: "invoices",   label: "Invoice Settings", icon: "🧾", adminOnly: true },
     { key: "promos",     label: "Promo Codes", icon: "🏷️",  adminOnly: true  },
     { key: "appearance", label: "Appearance",  icon: "🎨",  adminOnly: false },
   ];
 
   const visibleTabs = tabs.filter((t) => !t.adminOnly || isAdmin);
+  const requestedSection = searchParams.get("section") as TabKey | null;
+  const activeTab = visibleTabs.some((tab) => tab.key === requestedSection) ? requestedSection! : "profile";
 
   if (!user) return null;
 
@@ -367,7 +369,7 @@ const SettingsPage = () => {
             <TabItem
               key={tab.key}
               $active={activeTab === tab.key}
-              onClick={() => setActiveTab(tab.key)}
+              onClick={() => router.replace(tab.key === "profile" ? "/dashboard/settings" : `/dashboard/settings?section=${tab.key}`)}
             >
               <span>{tab.icon}</span>
               {tab.label}

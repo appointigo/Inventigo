@@ -6,7 +6,11 @@ import type {
   InventoryPeriodPreset,
 } from "../types";
 
-export class AnalyticsPeriodError extends Error {}
+export class AnalyticsPeriodError extends Error {
+  constructor(message: string, readonly status: 400 | 403 = 400) {
+    super(message);
+  }
+}
 
 const PERIODS = new Set<InventoryPeriodPreset>([
   "weekly",
@@ -182,7 +186,11 @@ export function parseInventoryAnalyticsSearchParams(
   if (!COMPARISONS.has(rawComparison as InventoryComparisonMode)) {
     throw new AnalyticsPeriodError("Unsupported comparison mode");
   }
-  const storeId = searchParams.get("storeId")?.trim() || fallbackStoreId || undefined;
+  const requestedStoreId = searchParams.get("storeId")?.trim() || undefined;
+  if (fallbackStoreId && requestedStoreId && requestedStoreId !== fallbackStoreId) {
+    throw new AnalyticsPeriodError("Store access denied", 403);
+  }
+  const storeId = fallbackStoreId || requestedStoreId;
   if (!storeId) throw new AnalyticsPeriodError("A current store is required");
   const parseDate = (value: string | null, label: string) => {
     if (!value) return undefined;

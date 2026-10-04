@@ -3,14 +3,13 @@ import dayjs from "dayjs";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireOrgAuth } from "@/lib/auth.middleware";
+import {
+  AnalyticsAccessError,
+  resolveAnalyticsStoreId,
+} from "@/modules/analytics/services/analyticsAccess";
+import { aggregatePaymentEntries } from "@/modules/analytics/utils/paymentAggregation";
 
 const METHODS = ["CASH", "UPI", "CARD"] as const;
-
-const METHOD_LABELS: Record<(typeof METHODS)[number], string> = {
-  CASH: "Cash",
-  UPI: "UPI",
-  CARD: "Card",
-};
 
 type PaymentMethod = (typeof METHODS)[number];
 
@@ -52,7 +51,7 @@ export const GET = async (request: Request) => {
     const { searchParams } = new URL(request.url);
     const from = dayjs(searchParams.get("from"));
     const to = dayjs(searchParams.get("to"));
-    const storeId = searchParams.get("storeId") ?? user.storeId ?? undefined;
+    const storeId = await resolveAnalyticsStoreId(user, searchParams.get("storeId"));
 
     if (!from.isValid() || !to.isValid() || from.isAfter(to, "day")) {
       return NextResponse.json(
@@ -65,7 +64,7 @@ export const GET = async (request: Request) => {
     const rangeEnd = to.endOf("day").toDate();
     const storeFilter = {
       store: { orgId: user.orgId },
-      ...(storeId ? { storeId } : {}),
+      storeId,
     };
 
     const [ledgerCutoverDate, modernPayments, salesWithoutLedger, receivableAggregate] = await Promise.all([
@@ -175,38 +174,17 @@ export const GET = async (request: Request) => {
       });
     }
 
-    const totals = new Map<PaymentMethod, { value: number; count: number }>(
-      METHODS.map((method) => [method, { value: 0, count: 0 }]),
-    );
-    for (const payment of normalizedPayments) {
-      const entry = totals.get(payment.method)!;
-      entry.value += payment.amount;
-      entry.count += 1;
-    }
-
-    const totalReceived = METHODS.reduce(
-      (sum, method) => sum + totals.get(method)!.value,
-      0,
-    );
-
-    const methods = totalReceived === 0
-      ? []
-      : METHODS.map((method) => {
-        const entry = totals.get(method)!;
-        return {
-          name: METHOD_LABELS[method],
-          value: Number(entry.value.toFixed(2)),
-          count: entry.count,
-          percentage: Number(((entry.value / totalReceived) * 100).toFixed(2)),
-        };
-      });
+    const distribution = aggregatePaymentEntries(normalizedPayments);
 
     return NextResponse.json({
-      methods,
-      totalReceived: Number(totalReceived.toFixed(2)),
+      methods: distribution.methods,
+      totalReceived: distribution.totalReceived,
       amountReceivable: Number(Number(receivableAggregate._sum.amountDue ?? 0).toFixed(2)),
     });
   } catch (error) {
+    if (error instanceof AnalyticsAccessError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     const message = error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });
   }

@@ -847,7 +847,7 @@ function ReturnVisitHistory({
       onCancel={() => !mutation.isPending && setConfirmingVisit(null)}
       footer={null}
       closable={!mutation.isPending}
-      maskClosable={!mutation.isPending}
+      mask={{ closable: !mutation.isPending }}
       destroyOnHidden
     >
       <Typography.Paragraph>Customer came back. What was the outcome?</Typography.Paragraph>

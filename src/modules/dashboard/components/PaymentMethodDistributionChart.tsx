@@ -22,10 +22,9 @@ interface PaymentMethodDistributionChartProps {
 }
 
 const PAYMENT_METHOD_COLORS: Record<string, string> = {
-  Cash: "#1abc9c",
-  Card: "#3b82f6",
+  Cash: "#16a34a",
+  Card: "#2563eb",
   UPI: "#f59e0b",
-  Split: "#a855f7",
 };
 
 const DEFAULT_COLOR_SEQUENCE = Object.values(PAYMENT_METHOD_COLORS);
@@ -105,7 +104,7 @@ export default function PaymentMethodDistributionChart({
           Coverage: {percentage}% of chart total
         </div>
         <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 2 }}>Percentage: {percentage}%</div>
-        <div style={{ fontSize: 12, color: "#6b7280" }}>Count: {count ?? 0}</div>
+        <div style={{ fontSize: 12, color: "#6b7280" }}>Payment entries: {count ?? 0}</div>
       </div>
     );
   };
@@ -124,9 +123,9 @@ export default function PaymentMethodDistributionChart({
           />
         </div>
       ) : (
-        <div style={{ width: "100%" }}>
+        <div style={{ width: "100%", minWidth: 0 }}>
           <div style={{ width: "100%", height }}>
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} initialDimension={{ width: 360, height }}>
               <PieChart margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
                 <Pie
                   data={chartData}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Typography } from "antd";
 import type { PurchaseOrderStatus } from "@prisma/client";
 import POTable from "@/modules/purchase-orders/components/POTable";
@@ -11,8 +11,11 @@ import { useStore } from "@/providers/StoreProvider";
 
 export default function PurchaseOrdersPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { storeId } = useStore();
-  const [statusFilter, setStatusFilter] = useState<PurchaseOrderStatus | undefined>();
+  const [statusFilter, setStatusFilter] = useState<PurchaseOrderStatus | undefined>(() =>
+    searchParams.get("view") === "receiving" ? "ORDERED" : undefined
+  );
   const [supplierFilter, setSupplierFilter] = useState<string | undefined>();
 
   const { purchaseOrders, loading } = usePurchaseOrders({

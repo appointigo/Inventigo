@@ -63,7 +63,7 @@ export function WhatsAppInvoiceSelector({
   const deliveryAvailable = options?.enabled === true && Boolean(configuredTemplateId);
   return (
     <div style={{ border: "1px solid #dbe5f0", borderRadius: 14, padding: 14, background: "#f8fbff" }}>
-      <Space direction="vertical" size={10} style={{ width: "100%" }}>
+      <Space orientation="vertical" size={10} style={{ width: "100%" }}>
         <Space style={{ width: "100%", justifyContent: "space-between" }}>
           <Typography.Text strong>WhatsApp invoice</Typography.Text>
           <Switch checked={value.enabled} disabled={loading || !deliveryAvailable} onChange={enabled => onChange({ ...value, enabled, consentConfirmed: enabled || undefined })} />

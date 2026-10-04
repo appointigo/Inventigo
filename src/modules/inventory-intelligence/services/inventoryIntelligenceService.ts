@@ -26,6 +26,7 @@ import {
   summarizeTransactionEvents,
   type AnalyticsTransactionEvent,
 } from "../utils/metrics";
+import { buildCategorySizeDemand, buildInventoryValuation } from "../utils/portfolioAnalytics";
 
 const DAY_MS = 86_400_000;
 const OFFSET_MS = 330 * 60_000;
@@ -1223,6 +1224,18 @@ export const inventoryIntelligenceService = {
         )
       : null;
 
+    const valuation = (dimension: "brand" | "category") => buildInventoryValuation(
+      Array.from(currentQuantities.entries()).flatMap(([key, quantity]) => {
+        const meta = stockMeta.get(key);
+        return meta ? [{
+          dimensionId: dimension === "brand" ? meta.brandId : meta.categoryId,
+          dimensionLabel: dimension === "brand" ? meta.brand : meta.category,
+          quantity,
+          unitCost: meta.costPrice,
+        }] : [];
+      }),
+    );
+
     return {
       range: period,
       generatedAt: now.toISOString(),
@@ -1291,6 +1304,15 @@ export const inventoryIntelligenceService = {
               description: `${Math.abs(correlationValue) >= 0.7 ? "Strong" : Math.abs(correlationValue) >= 0.4 ? "Moderate" : "Weak"} association; correlation does not establish causation.`,
             },
       categoryPerformance,
+      brandValuation: valuation("brand"),
+      categoryValuation: valuation("category"),
+      categorySales: categoryPerformance.map((row) => ({
+        id: row.categoryId,
+        label: row.category,
+        revenue: row.revenue,
+        unitsSold: row.unitsSold,
+      })),
+      categorySizeDemand: buildCategorySizeDemand(Array.from(current.rows.values())),
       drilldown,
       highDemandLowStock,
       overstock,
