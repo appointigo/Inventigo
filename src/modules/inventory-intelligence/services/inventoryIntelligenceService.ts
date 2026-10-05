@@ -793,6 +793,7 @@ export const inventoryIntelligenceService = {
         stockCoverDays,
         stockoutDays,
         daysSinceSale,
+        lastSaleDate: lastSale?.toISOString() ?? null,
         priorityScore,
         status,
       };
@@ -1328,6 +1329,7 @@ export const inventoryIntelligenceService = {
       drilldown,
       highDemandLowStock,
       overstock,
+      products: productSignals,
       sizeInsights,
       sizeAvailabilityScore,
       inactivity,

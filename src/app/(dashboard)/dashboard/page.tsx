@@ -72,6 +72,7 @@ function DashboardContent() {
   const { data: session } = useSession();
   const { storeId, storeName } = useStore();
   const [customerCount, setCustomerCount] = useState<number | null>(null);
+  const [releaseActions, setReleaseActions] = useState<{ customerActions: number; receivables: number } | null>(null);
   const [trend, setTrend] = useState<SalesTrendRow[]>([]);
   const [trendLoading, setTrendLoading] = useState(true);
   const end = dayjs().endOf("day");
@@ -141,6 +142,20 @@ function DashboardContent() {
     return () => controller.abort();
   }, [storeId]);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    if (!storeId) return () => controller.abort();
+    const params = new URLSearchParams({ storeId, period: "monthly", compare: "previousPeriod", page: "1", pageSize: "1" });
+    Promise.all([
+      fetch(`/api/customer-actions?${params}`, { signal: controller.signal }).then((response) => response.ok ? response.json() : null),
+      fetch(`/api/receivables?${params}`, { signal: controller.signal }).then((response) => response.ok ? response.json() : null),
+    ]).then(([customers, receivables]) => setReleaseActions({
+      customerActions: Number(customers?.counts?.OVERDUE_FOLLOW_UP ?? 0) + Number(customers?.counts?.HIGH_VALUE_DORMANT ?? 0) + Number(customers?.counts?.DEMAND_FOLLOW_UP ?? 0),
+      receivables: Number(receivables?.kpis?.totalOutstanding ?? 0),
+    })).catch((requestError) => { if (requestError instanceof Error && requestError.name !== "AbortError") setReleaseActions(null); });
+    return () => controller.abort();
+  }, [storeId]);
+
   const summary = useMemo(() => {
     const revenue = trend.reduce((sum, row) => sum + finiteNumber(row.total_revenue), 0);
     const grossProfitReliable = trend.every((row) => row.net_profit !== null);
@@ -189,10 +204,10 @@ function DashboardContent() {
   }, [recentMovements]);
 
   const attentionItems = [
-    ...(alerts.length ? [{ key: "low-stock", tone: "warning", title: `${alerts.length} items need stock attention`, detail: `${stockSummary.outOfStock} out of stock`, path: "/dashboard/stock" }] : []),
-    ...(finiteNumber(data?.kpis?.pendingPOsCount) > 0 ? [{ key: "purchase-orders", tone: "info", title: `${finiteNumber(data?.kpis?.pendingPOsCount)} purchase orders are open`, detail: "Review supplier progress", path: "/dashboard/purchase-orders" }] : []),
-    ...(highDemandLowStock.length > 0 ? [{ key: "replenishment", tone: "warning", title: `${highDemandLowStock.length} high-demand items risk stocking out`, detail: "Review replenishment suggestions", path: "/dashboard/inventory-intelligence" }] : []),
-    ...(finiteNumber(demand.data?.demand?.unfulfilledQuantity) > 0 ? [{ key: "demand", tone: "info", title: `${finiteNumber(demand.data?.demand?.unfulfilledQuantity)} requested units were unavailable`, detail: "Investigate lost demand", path: "/dashboard/demand" }] : []),
+    ...((highDemandLowStock.length > 0 || alerts.length > 0) ? [{ key: "replenishment", tone: "warning", title: `${Math.max(highDemandLowStock.length, alerts.length)} products need attention`, detail: "Review product reorder decisions", path: "/dashboard/inventory-intelligence/products" }] : []),
+    ...((releaseActions?.customerActions ?? 0) > 0 ? [{ key: "customer-actions", tone: "info", title: `${releaseActions!.customerActions} customers need follow-up`, detail: "Review today’s action queue", path: "/dashboard/customers/action-center" }] : []),
+    ...(finiteNumber(demand.data?.demand?.unfulfilledQuantity) > 0 ? [{ key: "demand", tone: "info", title: `${finiteNumber(demand.data?.demand?.unfulfilledQuantity)} requested units were unavailable`, detail: "Investigate lost demand", path: "/dashboard/demand/lost-opportunity" }] : []),
+    ...((releaseActions?.receivables ?? 0) > 0 ? [{ key: "receivables", tone: "warning", title: `${currency(releaseActions!.receivables)} outstanding`, detail: "Review receivable aging", path: "/dashboard/expenses/receivables" }] : []),
   ];
 
   const firstName = session?.user?.name?.split(" ")[0] || "there";

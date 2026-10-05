@@ -17,6 +17,7 @@ import {
   TeamOutlined,
   UnorderedListOutlined,
   UserOutlined,
+  WarningOutlined,
   WhatsAppOutlined,
 } from "@ant-design/icons";
 import { Role } from "@prisma/client";
@@ -75,6 +76,7 @@ export const MODULE_NAVIGATION: ModuleNavigation[] = [
       { key: "pos", path: "/dashboard/billing", name: "POS / Billing", icon: DollarOutlined, roles: ALL_ROLES },
       { key: "transactions", path: "/dashboard/billing?view=history", name: "Transactions", icon: UnorderedListOutlined, roles: ALL_ROLES },
       { key: "customers", path: "/dashboard/customers", name: "Customers", icon: UserOutlined, roles: ALL_ROLES },
+      { key: "customer-actions", path: "/dashboard/customers/action-center", name: "Action Center", icon: TeamOutlined, roles: ALL_ROLES },
       { key: "returns", path: "/dashboard/billing?view=return-exchange", name: "Returns & Exchanges", icon: FileTextOutlined, roles: ALL_ROLES },
       { key: "sales-analytics", path: "/dashboard/sales/analytics", name: "Analytics", icon: BarChartOutlined, roles: ALL_ROLES },
       { key: "whatsapp", path: "/dashboard/whatsapp/overview", name: "WhatsApp", icon: WhatsAppOutlined, roles: ADMIN_ONLY },
@@ -89,7 +91,9 @@ export const MODULE_NAVIGATION: ModuleNavigation[] = [
       { key: "brands", path: "/dashboard/brands", name: "Brands", icon: TagsOutlined, roles: ADMIN_MANAGER },
       { key: "movements", path: "/dashboard/stock?view=movements", name: "Stock Movement", icon: UnorderedListOutlined, roles: ALL_ROLES },
       { key: "intelligence", path: "/dashboard/inventory-intelligence", name: "Inventory Intelligence", icon: BarChartOutlined, roles: ALL_ROLES },
+      { key: "product-intelligence", path: "/dashboard/inventory-intelligence/products", name: "Product Intelligence", icon: RiseOutlined, roles: ALL_ROLES },
       { key: "demand", path: "/dashboard/demand", name: "Demand Intelligence", icon: RiseOutlined, roles: ALL_ROLES },
+      { key: "lost-opportunity", path: "/dashboard/demand/lost-opportunity", name: "Lost Opportunity", icon: WarningOutlined, roles: ALL_ROLES },
     ],
   },
   {
@@ -106,6 +110,7 @@ export const MODULE_NAVIGATION: ModuleNavigation[] = [
       { key: "expenses", path: "/dashboard/expenses", name: "Expenses", icon: AccountBookOutlined, roles: ADMIN_MANAGER },
       { key: "expense-analytics", path: "/dashboard/expenses/analytics", name: "Expense Analytics", icon: BarChartOutlined, roles: ADMIN_MANAGER },
       { key: "profitability", path: "/dashboard/expenses/profitability", name: "Profitability", icon: RiseOutlined, roles: ADMIN_MANAGER },
+      { key: "receivables", path: "/dashboard/expenses/receivables", name: "Receivables", icon: DollarOutlined, roles: ADMIN_MANAGER },
       { key: "gst", path: "/dashboard/expenses/gst", name: "GST & ITC", icon: PercentageOutlined, roles: ADMIN_MANAGER },
     ],
   },

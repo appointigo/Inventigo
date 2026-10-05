@@ -102,6 +102,7 @@ export type ProductSignalRow = {
   stockCoverDays: number | null;
   stockoutDays: number | null;
   daysSinceSale: number | null;
+  lastSaleDate: string | null;
   priorityScore: number;
   status:
     | "Critical"
@@ -201,6 +202,7 @@ export type InventoryIntelligenceResponse = {
   drilldown: InventoryDrilldownRow[];
   highDemandLowStock: ProductSignalRow[];
   overstock: ProductSignalRow[];
+  products: ProductSignalRow[];
   sizeInsights: SizeInsightRow[];
   sizeAvailabilityScore: number | null;
   inactivity: InactivityBucket[];
