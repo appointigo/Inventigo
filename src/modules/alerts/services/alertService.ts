@@ -99,15 +99,17 @@ export const alertService = {
     return true;
   },
 
-  async checkStockLevels(orgId: string): Promise<LowStockItem[]> {
+  async checkStockLevels(orgId: string, storeId?: string): Promise<LowStockItem[]> {
     const activeConfigs = await prisma.alertConfig.findMany({
       where: { orgId, isActive: true },
       include: { category: { select: { name: true } } },
     });
     if (activeConfigs.length === 0) return [];
 
-    // Aggregate stock across all stores in the org
-    const stores = await prisma.store.findMany({ where: { orgId }, select: { id: true } });
+    // Cron callers may deliberately inspect all stores; user-facing callers pass one explicit store.
+    const stores = await prisma.store.findMany({
+      where: { orgId, ...(storeId ? { id: storeId } : {}) }, select: { id: true },
+    });
     const lowStockMap = new Map<string, LowStockItem>();
 
     for (const store of stores) {

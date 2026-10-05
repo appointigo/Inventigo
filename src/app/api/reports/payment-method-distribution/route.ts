@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { requireOrgAuth } from "@/lib/auth.middleware";
 import {
   AnalyticsAccessError,
-  resolveAnalyticsStoreId,
+  resolveAnalyticsStore,
 } from "@/modules/analytics/services/analyticsAccess";
 import { aggregatePaymentEntries } from "@/modules/analytics/utils/paymentAggregation";
 import {
@@ -55,7 +55,8 @@ export const GET = async (request: Request) => {
     const { searchParams } = new URL(request.url);
     const from = searchParams.get("from") ?? "";
     const to = searchParams.get("to") ?? "";
-    const storeId = await resolveAnalyticsStoreId(user, searchParams.get("storeId"));
+    const scope = await resolveAnalyticsStore(user, searchParams.get("storeId"));
+    const storeId = scope.storeId;
 
     if (!isBusinessDate(from) || !isBusinessDate(to) || from > to) {
       return NextResponse.json(
@@ -184,6 +185,7 @@ export const GET = async (request: Request) => {
       methods: distribution.methods,
       totalReceived: distribution.totalReceived,
       amountReceivable: Number(Number(receivableAggregate._sum.amountDue ?? 0).toFixed(2)),
+      scope,
     });
   } catch (error) {
     if (error instanceof AnalyticsAccessError) {

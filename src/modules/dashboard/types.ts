@@ -66,6 +66,7 @@ export type ExpenseAnalyticsResponse = {
 };
 
 export type DashboardData = {
+  scope?: { type: "STORE"; storeId: string; storeName: string };
   kpis: DashboardKPIs;
   stockByCategory: StockByCategory[];
   topBrands: TopBrand[];

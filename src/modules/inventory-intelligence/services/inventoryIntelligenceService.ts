@@ -23,6 +23,7 @@ import {
   classifyInventoryPerformance,
   resolveSaleLineRevenue,
   reconstructStockSnapshot,
+  resolveMovementDelta,
   summarizeTransactionEvents,
   type AnalyticsTransactionEvent,
 } from "../utils/metrics";
@@ -69,6 +70,7 @@ const returnSelect = {
       newSizeId: true,
       newQuantity: true,
       newUnitPrice: true,
+      newCostPrice: true,
       returnedProduct: {
         select: {
           name: true,
@@ -282,7 +284,7 @@ function aggregateTransactions(sales: SaleRecord[], returns: ReturnRecord[]): Ag
           size: item.newSize.label,
           revenue: Number(item.newUnitPrice ?? 0) * quantity,
           units: quantity,
-          cost: null,
+          cost: item.newCostPrice === null ? null : Number(item.newCostPrice) * quantity,
           date: transaction.businessDate,
         });
       }
@@ -311,7 +313,7 @@ export const inventoryIntelligenceService = {
   ): Promise<InventoryIntelligenceResponse> {
     const store = await prisma.store.findFirst({
       where: { id: storeId, orgId, isActive: true },
-      select: { id: true },
+      select: { id: true, name: true },
     });
     if (!store) throw new Error("STORE_NOT_FOUND");
 
@@ -382,6 +384,7 @@ export const inventoryIntelligenceService = {
           sizeId: true,
           type: true,
           quantity: true,
+          deltaQuantity: true,
           movementDate: true,
           product: { select: { categoryId: true } },
         },
@@ -420,7 +423,9 @@ export const inventoryIntelligenceService = {
 
     const current = aggregateTransactions(currentSales, currentReturns);
     const comparison = aggregateTransactions(comparisonSales, comparisonReturns);
-    const stockHistoryReliable = !movements.some((movement) => movement.type === "ADJUSTMENT");
+    const stockHistoryReliable = !movements.some(
+      (movement) => movement.type === "ADJUSTMENT" && movement.deltaQuantity === null,
+    );
     const currentQuantities = new Map(
       stockEntries.map((entry) => [variantKey(entry.productId, entry.sizeId), entry.quantity])
     );
@@ -459,6 +464,7 @@ export const inventoryIntelligenceService = {
       key: variantKey(movement.productId, movement.sizeId),
       type: movement.type,
       quantity: movement.quantity,
+      deltaQuantity: movement.deltaQuantity,
       date: movement.movementDate,
     }));
 
@@ -497,7 +503,12 @@ export const inventoryIntelligenceService = {
       movements.reduce((total, movement) => {
         if (movement.movementDate < start || movement.movementDate >= end) return total;
         if (categoryId && movement.product.categoryId !== categoryId) return total;
-        return isInboundMovement(movement.type) ? total + movement.quantity : total;
+        const delta = resolveMovementDelta(
+          movement.type,
+          movement.quantity,
+          movement.deltaQuantity,
+        );
+        return delta !== null && delta > 0 ? total + delta : total;
       }, 0);
     const currentStock = Array.from(currentQuantities.values()).reduce(
       (sum, quantity) => sum + quantity,
@@ -1237,6 +1248,7 @@ export const inventoryIntelligenceService = {
     );
 
     return {
+      scope: { type: "STORE", storeId: store.id, storeName: store.name },
       range: period,
       generatedAt: now.toISOString(),
       methodology: {

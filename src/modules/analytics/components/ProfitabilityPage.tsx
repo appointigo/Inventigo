@@ -7,7 +7,8 @@ import {
 } from "recharts";
 import { useStore } from "@/providers/StoreProvider";
 import { useAnalyticsDateRange } from "../hooks/useAnalyticsDateRange";
-import { useProfitabilityAnalytics } from "../hooks/useAnalytics";
+import { useDataIntegrity, useProfitabilityAnalytics } from "../hooks/useAnalytics";
+import { useCurrentUser } from "@/modules/auth/hooks/useAuth";
 import AnalyticsDateFilter from "./AnalyticsDateFilter";
 import styles from "./AnalyticsPage.module.css";
 
@@ -16,7 +17,10 @@ const money = (value: number | null) => value === null || !Number.isFinite(value
 export default function ProfitabilityPage() {
   const { storeId, storeName } = useStore();
   const { range, selectPreset, selectCustom } = useAnalyticsDateRange("30d");
+  const { user } = useCurrentUser();
   const query = useProfitabilityAnalytics({ storeId: storeId ?? undefined, from: range.from, to: range.to, group: range.group });
+  const canInspectIntegrity = user?.role === "OWNER" || user?.role === "ADMIN";
+  const integrity = useDataIntegrity(storeId ?? undefined, canInspectIntegrity);
   const data = query.data;
   const hasActivity = data?.trend.some((row) => row.revenue || row.operatingExpenses);
 
@@ -29,6 +33,7 @@ export default function ProfitabilityPage() {
       </header>
       {query.isError ? <Alert className={styles.note} showIcon type="error" title="Profitability could not be loaded" description={query.error.message} action={<Button onClick={() => query.refetch()}>Try again</Button>} /> : null}
       {data?.methodology.grossProfitNote ? <Alert className={styles.note} showIcon type="warning" title="Historical COGS is incomplete" description={data.methodology.grossProfitNote} /> : null}
+      {integrity.data && integrity.data.status !== "HEALTHY" ? <Alert className={styles.note} showIcon type={integrity.data.status === "ACTION_REQUIRED" ? "error" : "warning"} title={`Data integrity: ${integrity.data.completenessPercentage}% cost snapshots complete`} description={`${integrity.data.issues.filter((item) => item.count > 0).length} check(s) need review for this store.`} /> : null}
       <section className={`${styles.metrics} ${styles.profitMetrics}`} aria-label="Profitability metrics">
         {[
           ["Revenue", money(data?.summary.revenue ?? null), "Final billed sales net of dated returns"],

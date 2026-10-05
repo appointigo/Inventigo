@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { dashboardServiceCompat } from "@/modules/dashboard/services/dashboardServiceCompat";
 import { requireOrgAuth } from "@/lib/auth.middleware";
+import { AnalyticsAccessError, resolveAnalyticsStore } from "@/modules/analytics/services/analyticsAccess";
 
 export const GET = async (request: Request) => {
   let user;
@@ -9,8 +10,7 @@ export const GET = async (request: Request) => {
 
   try {
     const { searchParams } = new URL(request.url);
-    // Prefer storeId from query param (client store switcher), fall back to session storeId
-    const storeId = searchParams.get("storeId") ?? user.storeId ?? null;
+    const scope = await resolveAnalyticsStore(user, searchParams.get("storeId"));
     const startDateParam = searchParams.get("startDate");
     const endDateParam = searchParams.get("endDate");
     const startDate = startDateParam ? new Date(startDateParam) : null;
@@ -19,10 +19,13 @@ export const GET = async (request: Request) => {
     const validStartDate = startDate && !Number.isNaN(startDate.getTime()) ? startDate : undefined;
     const validEndDate = endDate && !Number.isNaN(endDate.getTime()) ? endDate : undefined;
 
-    const data = await dashboardServiceCompat.getData(user.orgId, storeId, validStartDate, validEndDate);
-    return NextResponse.json(data);
+    const data = await dashboardServiceCompat.getData(user.orgId, scope.storeId, validStartDate, validEndDate);
+    return NextResponse.json({ ...data, scope });
   } 
   catch (err) {
+    if (err instanceof AnalyticsAccessError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     console.error("[dashboard GET]", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }

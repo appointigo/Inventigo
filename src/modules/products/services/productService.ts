@@ -12,6 +12,7 @@ import type { AttributeField } from "@/modules/categories/types";
 import { imageService } from "@/shared/services/imageService";
 import { normalizeNameKey, normalizeSku } from "@/shared/utils/normalization";
 import { buildVariantSku } from "@/shared/services/barcodeService";
+import { stockAuditSnapshot } from "@/modules/stock/utils/stockMovementContract";
 
 const buildInclude = (storeId?: string) => ({
   category: { select: { name: true } },
@@ -317,16 +318,10 @@ export const productService = {
     return null;
   },
 
-  async create(orgId: string, values: ProductFormValues): Promise<Product> {
-    // Use the storeId sent by the client (selected store) or fall back to the org's first store
-    let storeId = values.storeId ?? null;
-
-    if (!storeId) {
-      const org = await prisma.organization.findUnique({
-        where: { id: orgId },
-        include: { stores: { orderBy: { createdAt: "asc" }, take: 1 } },
-      });
-      storeId = org?.stores[0]?.id ?? null;
+  async create(orgId: string, values: ProductFormValues, userId: string): Promise<Product> {
+    const storeId = values.storeId ?? null;
+    if (!storeId && values.sizes?.some((size) => size.quantity > 0)) {
+      throw new Error("A store must be selected before adding opening stock");
     }
 
     const p = await prisma.$transaction(async (tx) => {
@@ -370,6 +365,18 @@ export const productService = {
 
         if (stockData.length) {
           await tx.stockEntry.createMany({ data: stockData });
+          await tx.stockMovement.createMany({
+            data: stockData.map((entry) => ({
+              productId: entry.productId,
+              sizeId: entry.sizeId,
+              storeId: entry.storeId,
+              type: "ADJUSTMENT",
+              ...stockAuditSnapshot(0, entry.quantity),
+              reason: "Opening stock recorded during product creation",
+              referenceType: "MANUAL",
+              createdBy: userId,
+            })),
+          });
         }
       }
 
@@ -386,7 +393,8 @@ export const productService = {
   async update(
     orgId: string,
     id: string,
-    values: Partial<ProductFormValues>
+    values: Partial<ProductFormValues>,
+    userId: string,
   ): Promise<Product | null> {
     const existing = await prisma.product.findFirst({ where: { id, orgId } });
     if (!existing) return null;
@@ -426,21 +434,32 @@ export const productService = {
 
       // Sync stock entries when sizes are provided in the update
       if (values.sizes !== undefined) {
-        // Get the store from existing stock entries, the passed storeId, or the org's first store
-        const firstEntry = await tx.stockEntry.findFirst({ where: { productId: id } });
-        let storeId = values.storeId ?? firstEntry?.storeId ?? null;
+        const storeId = values.storeId;
+        if (!storeId) throw new Error("A store must be selected before changing stock");
 
-        if (!storeId) {
-          const org = await prisma.organization.findUnique({
-            where: { id: orgId },
-            include: { stores: { orderBy: { createdAt: "asc" }, take: 1 } },
-          });
-          storeId = org?.stores[0]?.id ?? null;
-        }
-
-        if (storeId) {
+        {
           // Upsert each size entry; remove entries for sizes no longer in the list
           const incomingSizeIds = new Set(values.sizes.map((s) => s.sizeId));
+          const existingEntries = await tx.stockEntry.findMany({
+            where: { productId: id, storeId },
+            select: { sizeId: true, quantity: true },
+          });
+          const existingBySize = new Map(existingEntries.map((entry) => [entry.sizeId, entry]));
+          const removed = existingEntries.filter((entry) => !incomingSizeIds.has(entry.sizeId));
+          if (removed.length > 0) {
+            await tx.stockMovement.createMany({
+              data: removed.map((entry) => ({
+                productId: id,
+                sizeId: entry.sizeId,
+                storeId,
+                type: "ADJUSTMENT",
+                ...stockAuditSnapshot(entry.quantity, -entry.quantity),
+                reason: "Stock variant removed during product update",
+                referenceType: "MANUAL",
+                createdBy: userId,
+              })),
+            });
+          }
           // Delete removed sizes
           await tx.stockEntry.deleteMany({
             where: { productId: id, storeId, sizeId: { notIn: [...incomingSizeIds] } },
@@ -458,6 +477,7 @@ export const productService = {
             (await tx.product.findUnique({ where: { id }, select: { sku: true } }))?.sku ?? id;
 
           for (const sz of values.sizes) {
+            const before = existingBySize.get(sz.sizeId)?.quantity ?? 0;
             const vSku = buildVariantSku(productSku, sizeLabelMap.get(sz.sizeId) ?? sz.sizeId);
             await tx.stockEntry.upsert({
               where: { productId_sizeId_storeId: { productId: id, sizeId: sz.sizeId, storeId } },
@@ -473,6 +493,18 @@ export const productService = {
                 quantity: sz.quantity,
                 reorderLevel: sz.reorderLevel ?? 5,
                 variantSku: vSku,
+              },
+            });
+            await tx.stockMovement.create({
+              data: {
+                productId: id,
+                sizeId: sz.sizeId,
+                storeId,
+                type: "ADJUSTMENT",
+                ...stockAuditSnapshot(before, sz.quantity - before),
+                reason: "Stock quantity set during product update",
+                referenceType: "MANUAL",
+                createdBy: userId,
               },
             });
           }
@@ -509,17 +541,16 @@ export const productService = {
   async bulkCreate(
     rows: BulkProductValidated[],
     orgId: string,
-    storeId?: string
+    storeId: string | undefined,
+    userId: string,
   ): Promise<BulkUploadResult> {
     return prisma.$transaction(async (tx) => {
-      // 1. Resolve default storeId if not provided
-      let resolvedStoreId = storeId ?? null;
-      if (!resolvedStoreId) {
-        const org = await tx.organization.findUnique({
-          where: { id: orgId },
-          include: { stores: { orderBy: { createdAt: "asc" }, take: 1 } },
-        });
-        resolvedStoreId = org?.stores[0]?.id ?? null;
+      const resolvedStoreId = storeId ?? null;
+      const includesStock = rows.some((row) =>
+        Object.values(row.sizesAndQuantities ?? {}).some((quantity) => quantity > 0),
+      );
+      if (!resolvedStoreId && includesStock) {
+        throw new Error("A store must be selected before importing stock");
       }
 
       // 2. Build category and brand lookup maps
@@ -692,6 +723,18 @@ export const productService = {
 
         if (allStockData.length > 0) {
           await tx.stockEntry.createMany({ data: allStockData });
+          await tx.stockMovement.createMany({
+            data: allStockData.map((entry) => ({
+              productId: entry.productId,
+              sizeId: entry.sizeId,
+              storeId: entry.storeId,
+              type: "ADJUSTMENT",
+              ...stockAuditSnapshot(0, entry.quantity),
+              reason: "Opening stock recorded during bulk product import",
+              referenceType: "MANUAL",
+              createdBy: userId,
+            })),
+          });
         }
       }
 

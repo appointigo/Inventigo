@@ -9,13 +9,15 @@ import { useAlertConfigs, useLowStockAlerts } from "@/modules/alerts/hooks/useAl
 import { useProducts } from "@/modules/products/hooks/useProducts";
 import { useCategories } from "@/modules/categories/hooks/useCategories";
 import type { AlertConfig, AlertConfigFormValues } from "@/modules/alerts/types";
+import { useStore } from "@/providers/StoreProvider";
 
 const { Title } = Typography;
 
 export default function AlertsPage() {
   const { message } = App.useApp();
+  const { storeId } = useStore();
   const { configs, loading, refresh } = useAlertConfigs();
-  const { items: lowStockItems, loading: lowStockLoading } = useLowStockAlerts();
+  const { items: lowStockItems, loading: lowStockLoading } = useLowStockAlerts(storeId ?? undefined);
   const { products } = useProducts({});
   const { categories } = useCategories();
 

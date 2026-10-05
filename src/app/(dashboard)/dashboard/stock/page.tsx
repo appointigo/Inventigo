@@ -38,13 +38,14 @@ export default function StockPage() {
       productId: string;
       sizeId: string;
       quantity: number;
-      type: "IN" | "OUT" | "ADJUSTMENT";
+      type: "ADJUSTMENT";
+      operation: "ADD" | "REMOVE" | "SET";
       reason?: string;
     }) => {
       const res = await fetch("/api/stock", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
+        body: JSON.stringify({ ...values, storeId }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -56,7 +57,7 @@ export default function StockPage() {
       refresh();
       refreshMovements();
     },
-    [message, refresh, refreshMovements]
+    [message, refresh, refreshMovements, storeId]
   );
 
   if (!isReady) {

@@ -11,6 +11,7 @@ import {
   CUSTOMER_DATE_PRESETS,
   type CustomerDatePreset,
 } from "@/modules/customers/utils/customerDateWindow";
+import { AnalyticsAccessError, resolveAnalyticsStore } from "@/modules/analytics/services/analyticsAccess";
 
 const VALID_TYPES: CustomerGroupFilter[] = [
   "all",
@@ -38,8 +39,9 @@ export async function GET(request: Request) {
     const pageSize = Number(searchParams.get("pageSize") ?? "10");
     const typeParam = (searchParams.get("type") ?? "all") as CustomerGroupFilter;
     const requestedStore = searchParams.get("storeId");
-    if (user.storeId && requestedStore && requestedStore !== user.storeId)
-      return NextResponse.json({ error: "Store access denied" }, { status: 403 });
+    const resolvedScope = requestedStore || user.storeId
+      ? await resolveAnalyticsStore(user, requestedStore)
+      : null;
 
     if (!VALID_TYPES.includes(typeParam)) {
       return NextResponse.json({ error: "Invalid type filter" }, { status: 400 });
@@ -73,7 +75,7 @@ export async function GET(request: Request) {
       page,
       pageSize,
       group: typeParam,
-      storeId: requestedStore ?? user.storeId,
+      storeId: resolvedScope?.storeId,
       sortBy,
       sortDirection,
       lastPurchaseDays: lastPurchaseDays as CustomerDatePreset | undefined,
@@ -83,8 +85,14 @@ export async function GET(request: Request) {
       maxOrders: number("maxOrders"),
     });
 
-    return NextResponse.json(result);
+    return NextResponse.json({
+      ...result,
+      scope: resolvedScope ?? { type: "ORGANIZATION", organizationId: user.orgId },
+    });
   } catch (error) {
+    if (error instanceof AnalyticsAccessError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     const message = error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });
   }

@@ -22,15 +22,10 @@ export type StockReportRow = StockLevelRow & {
 export const reportsService = {
   async getStockReport(
     orgId: string,
-    storeId: string | null,
+    storeId: string,
     filters?: StockReportFilters
   ): Promise<StockReportRow[]> {
-    let resolvedStoreId = storeId;
-    if (!resolvedStoreId) {
-      const firstStore = await prisma.store.findFirst({ where: { orgId }, select: { id: true } });
-      resolvedStoreId = firstStore?.id ?? null;
-    }
-    if (!resolvedStoreId) return [];
+    const resolvedStoreId = storeId;
 
     const { items: allStock } = await stockService.getStockLevels({
       storeId: resolvedStoreId,
@@ -64,15 +59,10 @@ export const reportsService = {
 
   async getMovementReport(
     orgId: string,
-    storeId: string | null,
+    storeId: string,
     filters?: MovementReportFilters
   ): Promise<StockMovementRow[]> {
-    let resolvedStoreId = storeId;
-    if (!resolvedStoreId) {
-      const firstStore = await prisma.store.findFirst({ where: { orgId }, select: { id: true } });
-      resolvedStoreId = firstStore?.id ?? null;
-    }
-    if (!resolvedStoreId) return [];
+    const resolvedStoreId = storeId;
 
     const { items } = await stockService.getMovementHistory({
       storeId: resolvedStoreId,

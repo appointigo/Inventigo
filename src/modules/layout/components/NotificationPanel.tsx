@@ -4,12 +4,14 @@ import { useRouter } from "next/navigation";
 import { Badge, Button, Dropdown, Empty, Skeleton, Typography } from "antd";
 import { BellOutlined, WarningOutlined } from "@ant-design/icons";
 import { useLowStockAlerts } from "@/modules/alerts/hooks/useAlerts";
+import { useStore } from "@/providers/StoreProvider";
 
 const { Text } = Typography;
 
 export default function NotificationPanel() {
   const router = useRouter();
-  const { items, loading } = useLowStockAlerts();
+  const { storeId } = useStore();
+  const { items, loading } = useLowStockAlerts(storeId ?? undefined);
   const alerts = Array.isArray(items) ? items : [];
   const visibleItems = alerts.slice(0, 6);
 

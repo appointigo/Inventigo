@@ -342,22 +342,25 @@ model StockEntry {
 }
 
 model StockMovement {
-  id            String            @id @default(uuid())
-  productId     String
-  sizeId        String
-  storeId       String
-  type          StockMovementType
-  quantity      Int
-  reason        String?
-  referenceType ReferenceType?
-  referenceId   String?
-  createdBy     String
-  movementDate  DateTime          @default(now())
-  createdAt     DateTime          @default(now())
-  user          User              @relation(fields: [createdBy], references: [id])
-  product       Product           @relation(fields: [productId], references: [id])
-  size          Size              @relation(fields: [sizeId], references: [id])
-  store         Store             @relation(fields: [storeId], references: [id])
+  id             String            @id @default(uuid())
+  productId      String
+  sizeId         String
+  storeId        String
+  type           StockMovementType
+  quantity       Int
+  deltaQuantity  Int?
+  quantityBefore Int?
+  quantityAfter  Int?
+  reason         String?
+  referenceType  ReferenceType?
+  referenceId    String?
+  createdBy      String
+  movementDate   DateTime          @default(now())
+  createdAt      DateTime          @default(now())
+  user           User              @relation(fields: [createdBy], references: [id])
+  product        Product           @relation(fields: [productId], references: [id])
+  size           Size              @relation(fields: [sizeId], references: [id])
+  store          Store             @relation(fields: [storeId], references: [id])
 
   @@index([productId])
   @@index([storeId])
@@ -655,6 +658,7 @@ model ReturnTransactionItem {
   newSizeId           String?
   newQuantity         Int?
   newUnitPrice        Decimal?          @db.Decimal(10, 2)
+  newCostPrice        Decimal?          @db.Decimal(10, 2)
   createdAt           DateTime          @default(now())
   returnTransaction   ReturnTransaction @relation(fields: [returnTransactionId], references: [id], onDelete: Cascade)
   returnedProduct     Product?          @relation("ReturnedProduct", fields: [returnedProductId], references: [id])

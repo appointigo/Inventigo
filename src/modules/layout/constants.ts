@@ -107,7 +107,6 @@ export const MODULE_NAVIGATION: ModuleNavigation[] = [
       { key: "expense-analytics", path: "/dashboard/expenses/analytics", name: "Expense Analytics", icon: BarChartOutlined, roles: ADMIN_MANAGER },
       { key: "profitability", path: "/dashboard/expenses/profitability", name: "Profitability", icon: RiseOutlined, roles: ADMIN_MANAGER },
       { key: "gst", path: "/dashboard/expenses/gst", name: "GST & ITC", icon: PercentageOutlined, roles: ADMIN_MANAGER },
-      { key: "advances", path: "/dashboard/expenses/advanced", name: "Advances", icon: FileTextOutlined, roles: ADMIN_MANAGER },
     ],
   },
   {

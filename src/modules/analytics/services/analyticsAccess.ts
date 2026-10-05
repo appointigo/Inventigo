@@ -8,7 +8,7 @@ export class AnalyticsAccessError extends Error {
   }
 }
 
-export async function resolveAnalyticsStoreId(
+export async function resolveAnalyticsStore(
   user: AuthUser & { orgId: string },
   requestedStoreId: string | null,
 ) {
@@ -24,8 +24,15 @@ export async function resolveAnalyticsStoreId(
 
   const store = await prisma.store.findFirst({
     where: { id: storeId, orgId: user.orgId, isActive: true },
-    select: { id: true },
+    select: { id: true, name: true },
   });
   if (!store) throw new AnalyticsAccessError("Store was not found in this organization", 404);
-  return store.id;
+  return { type: "STORE" as const, storeId: store.id, storeName: store.name };
+}
+
+export async function resolveAnalyticsStoreId(
+  user: AuthUser & { orgId: string },
+  requestedStoreId: string | null,
+) {
+  return (await resolveAnalyticsStore(user, requestedStoreId)).storeId;
 }

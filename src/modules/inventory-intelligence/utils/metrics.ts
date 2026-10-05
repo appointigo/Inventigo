@@ -31,8 +31,10 @@ export function calculateInventoryValue(positions: Array<{ quantity: number; uni
 
 export function resolveMovementDelta(
   type: "IN" | "OUT" | "SALE" | "RETURN" | "EXCHANGE_IN" | "EXCHANGE_OUT" | "ADJUSTMENT",
-  quantity: number
+  quantity: number,
+  signedDelta?: number | null,
 ) {
+  if (signedDelta !== null && signedDelta !== undefined) return signedDelta;
   if (type === "IN" || type === "RETURN" || type === "EXCHANGE_IN") return Math.abs(quantity);
   if (type === "OUT" || type === "SALE" || type === "EXCHANGE_OUT") return -Math.abs(quantity);
   return null;
@@ -47,6 +49,7 @@ export function reconstructStockSnapshot(
     key: string;
     type: "IN" | "OUT" | "SALE" | "RETURN" | "EXCHANGE_IN" | "EXCHANGE_OUT" | "ADJUSTMENT";
     quantity: number;
+    deltaQuantity?: number | null;
     date: Date;
   }>,
   at: Date
@@ -54,7 +57,7 @@ export function reconstructStockSnapshot(
   const snapshot = new Map(current);
   for (const movement of movements) {
     if (movement.date < at) continue;
-    const delta = resolveMovementDelta(movement.type, movement.quantity);
+    const delta = resolveMovementDelta(movement.type, movement.quantity, movement.deltaQuantity);
     if (delta === null) return null;
     snapshot.set(movement.key, (snapshot.get(movement.key) ?? 0) - delta);
   }

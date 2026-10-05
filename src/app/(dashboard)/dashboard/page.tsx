@@ -80,7 +80,7 @@ function DashboardContent() {
   const endDate = end.format("YYYY-MM-DD");
 
   const { data, loading, error } = useDashboard(storeId ?? undefined);
-  const { items: lowStockItems, loading: lowStockLoading } = useLowStockAlerts();
+  const { items: lowStockItems, loading: lowStockLoading } = useLowStockAlerts(storeId ?? undefined);
   const { sales, loading: salesLoading, setFilters, setLimit } = useSales({ startDate, endDate });
   const { data: expenses, loading: expensesLoading } = useExpenseAnalytics(storeId, "monthly", startDate, endDate);
   const inventory = useInventoryIntelligence({ storeId: storeId ?? undefined, period: "monthly", comparisonMode: "previousPeriod" });

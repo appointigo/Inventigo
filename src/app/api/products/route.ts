@@ -3,6 +3,7 @@ import { productService } from "@/modules/products/services/productService";
 import { requireOrgAuth } from "@/lib/auth.middleware";
 import { prisma } from "@/lib/db";
 import type { AttributeField } from "@/modules/categories/types";
+import { AnalyticsAccessError, resolveAnalyticsStore } from "@/modules/analytics/services/analyticsAccess";
 
 const KNOWN_FILTER_KEYS = new Set([
   "search",
@@ -59,6 +60,10 @@ export const GET = async (request: Request) => {
 
   try {
     const { searchParams } = new URL(request.url);
+    const requestedStoreId = getOptionalParam(searchParams, "storeId");
+    const scope = requestedStoreId || user.storeId
+      ? await resolveAnalyticsStore(user, requestedStoreId ?? null)
+      : null;
     const pageParam = getPositiveIntegerParam(searchParams, "page");
     const pageSizeParam =
       getPositiveIntegerParam(searchParams, "pageSize") ??
@@ -70,7 +75,7 @@ export const GET = async (request: Request) => {
       getOptionalParam(searchParams, "brandId") ?? getOptionalParam(searchParams, "brand");
     const isActiveParam = getOptionalParam(searchParams, "isActive");
     const filters = {
-      storeId: getOptionalParam(searchParams, "storeId") ?? user.storeId ?? undefined,
+      storeId: scope?.storeId,
       categoryId,
       brandId,
       sizeId: getOptionalParam(searchParams, "sizeId"),
@@ -100,9 +105,13 @@ export const GET = async (request: Request) => {
 
     return NextResponse.json({
       ...result,
+      scope: scope ?? { type: "ORGANIZATION", organizationId: user.orgId },
       categoryAttributeSchema,
     });
   } catch (err) {
+    if (err instanceof AnalyticsAccessError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     console.error("[products GET]", err);
     return NextResponse.json({ error: "Internal server error found" }, { status: 500 });
   }
@@ -133,9 +142,20 @@ export const POST = async (request: Request) => {
     if (typeof body.costPrice !== "number" || body.costPrice <= 0) {
       return NextResponse.json({ error: "costPrice must be a positive number" }, { status: 400 });
     }
-    const product = await productService.create(user.orgId, body);
+    const requiresStore = body.sizes?.some((size: { quantity?: number }) => Number(size.quantity) > 0);
+    const scope = requiresStore
+      ? await resolveAnalyticsStore(user, body.storeId ?? null)
+      : null;
+    const product = await productService.create(
+      user.orgId,
+      { ...body, storeId: scope?.storeId ?? body.storeId },
+      user.id,
+    );
     return NextResponse.json(product, { status: 201 });
   } catch (err) {
+    if (err instanceof AnalyticsAccessError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     console.error("[products POST]", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }

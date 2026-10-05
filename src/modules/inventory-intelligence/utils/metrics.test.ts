@@ -77,6 +77,7 @@ test("resolves directional movements and rejects ambiguous adjustments", () => {
   assert.equal(resolveMovementDelta("EXCHANGE_IN", 2), 2);
   assert.equal(resolveMovementDelta("EXCHANGE_OUT", 2), -2);
   assert.equal(resolveMovementDelta("ADJUSTMENT", 5), null);
+  assert.equal(resolveMovementDelta("ADJUSTMENT", 5, -2), -2);
   assert.equal(calculateStockoutDays([3, 0, -1, 2]), 2);
   assert.equal(calculateStockoutDays(null), null);
 });
@@ -108,6 +109,14 @@ test("reconstructs historical stock across inbound, sale, out and return movemen
       at
     ),
     null
+  );
+  assert.equal(
+    reconstructStockSnapshot(
+      new Map([["variant", 8]]),
+      [{ key: "variant", type: "ADJUSTMENT", quantity: 3, deltaQuantity: -3, date: new Date("2026-09-05T00:00:00Z") }],
+      at
+    )?.get("variant"),
+    11
   );
 });
 

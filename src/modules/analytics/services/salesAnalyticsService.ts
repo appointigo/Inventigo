@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import type { AnalyticsGroup, FinancialEvent, SalesAnalyticsResponse } from "../types";
-import { aggregateFinancialEvents } from "../utils/financialAggregation";
+import { aggregateFinancialEvents, calculateReturnCostEvent } from "../utils/financialAggregation";
 
 const saleSelect = {
   transactionDate: true,
@@ -26,6 +26,7 @@ const returnSelect = {
       newProductId: true,
       newQuantity: true,
       newUnitPrice: true,
+      newCostPrice: true,
     },
   },
   sale: {
@@ -81,6 +82,9 @@ export const salesAnalyticsService = {
         returnValue: 0,
         returnCount: 0,
         exchangeCount: 0,
+        completenessReasons: costs.some((cost) => cost === null)
+          ? ["MISSING_SALE_ITEM_COST"]
+          : [],
       };
     });
 
@@ -110,16 +114,18 @@ export const salesAnalyticsService = {
         (sum, item) => sum + number(item.newUnitPrice) * number(item.newQuantity),
         0,
       );
+      const replacementCosts = replacementItems.map((item) =>
+        item.newCostPrice === null ? null : number(item.newCostPrice) * number(item.newQuantity),
+      );
       const hasDetailedItems = returnedItems.length > 0 || replacementItems.length > 0;
       const revenue = hasDetailedItems
         ? replacementRevenue - returnedRevenue
         : transaction.type === "RETURN"
           ? -number(transaction.refundAmount)
           : number(transaction.netAmount);
-      const costComplete = hasDetailedItems && returnedCosts.every((cost) => cost !== null) && replacementItems.length === 0;
-      const cogs = costComplete
-        ? -returnedCosts.reduce<number>((sum, cost) => sum + (cost ?? 0), 0)
-        : null;
+      const { cogs, completenessReasons } = calculateReturnCostEvent(
+        returnedCosts, replacementCosts, hasDetailedItems,
+      );
 
       events.push({
         date: transaction.businessDate,
@@ -130,6 +136,7 @@ export const salesAnalyticsService = {
         returnValue: returnedRevenue || number(transaction.refundAmount),
         returnCount: transaction.type === "EXCHANGE" ? 0 : 1,
         exchangeCount: transaction.type === "RETURN" ? 0 : 1,
+        completenessReasons,
       });
     }
 

@@ -76,12 +76,8 @@ async function hasTable(tableName: string) {
 }
 
 export const dashboardServiceCompat = {
-  async getData(orgId: string, storeId: string | null, startDate?: Date, endDate?: Date): Promise<DashboardData> {
-    let resolvedStoreId = storeId;
-    if (!resolvedStoreId) {
-      const firstStore = await prisma.store.findFirst({ where: { orgId }, select: { id: true } });
-      resolvedStoreId = firstStore?.id ?? null;
-    }
+  async getData(orgId: string, storeId: string, startDate?: Date, endDate?: Date): Promise<DashboardData> {
+    const resolvedStoreId = storeId;
 
     const baseResults = await Promise.allSettled([
       resolvedStoreId
@@ -101,9 +97,9 @@ export const dashboardServiceCompat = {
         select: { id: true, costPrice: true },
       }),
       prisma.purchaseOrder.count({
-        where: { status: { in: ["DRAFT", "ORDERED"] }, store: { orgId } },
+        where: { storeId: resolvedStoreId, status: { in: ["DRAFT", "ORDERED"] }, store: { orgId } },
       }),
-      prisma.product.count({ where: { orgId } }),
+      prisma.product.count({ where: { orgId, stockEntries: { some: { storeId: resolvedStoreId } } } }),
     ]);
 
     const stockResult = baseResults[0].status === "fulfilled" ? baseResults[0].value : { items: [], total: 0 };

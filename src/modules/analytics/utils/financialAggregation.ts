@@ -5,6 +5,8 @@ import type {
   SalesAnalyticsPoint,
   SalesAnalyticsResponse,
 } from "../types";
+import { dataCompleteness } from "../completeness.ts";
+import type { DataCompletenessReason } from "../completeness";
 import {
   addBusinessDays,
   analyticsBucketKey,
@@ -13,6 +15,29 @@ import {
 } from "./dateRange.ts";
 
 const round = (value: number) => Number(value.toFixed(2));
+
+export function calculateReturnCostEvent(
+  returnedCosts: Array<number | null>,
+  replacementCosts: Array<number | null>,
+  hasDetailedItems = returnedCosts.length > 0 || replacementCosts.length > 0,
+) {
+  const reasons: DataCompletenessReason[] = [];
+  if (!hasDetailedItems) reasons.push("LEGACY_RETURN_WITHOUT_ITEMS");
+  if (returnedCosts.some((cost) => cost === null)) reasons.push("MISSING_SALE_ITEM_COST");
+  if (replacementCosts.some((cost) => cost === null)) {
+    reasons.push("MISSING_EXCHANGE_REPLACEMENT_COST");
+  }
+  const complete = hasDetailedItems && reasons.length === 0;
+  return {
+    cogs: complete
+      ? round(
+          replacementCosts.reduce<number>((sum, cost) => sum + (cost ?? 0), 0) -
+            returnedCosts.reduce<number>((sum, cost) => sum + (cost ?? 0), 0),
+        )
+      : null,
+    completenessReasons: reasons,
+  };
+}
 
 export function bucketStart(date: Date, group: AnalyticsGroup) {
   return analyticsBucketKey(date, group);
@@ -73,6 +98,10 @@ export function aggregateFinancialEvents(
   const cogs = cogsComplete ? round(trend.reduce((sum, row) => sum + (row.cogs ?? 0), 0)) : null;
   const orders = trend.reduce((sum, row) => sum + row.orders, 0);
   const grossProfit = cogs === null ? null : round(revenue - cogs);
+  const reasons = events.flatMap((event) => event.completenessReasons ?? []);
+  const costReasons = events
+    .filter((event) => event.cogs === null)
+    .flatMap((event) => event.completenessReasons ?? ["MISSING_SALE_ITEM_COST" as const]);
 
   return {
     range: {
@@ -88,6 +117,14 @@ export function aggregateFinancialEvents(
       grossProfitNote: cogsComplete
         ? null
         : "Some replacement exchange lines do not have an immutable cost snapshot, so gross profit is unavailable for affected periods.",
+    },
+    completeness: {
+      overall: dataCompleteness(reasons),
+      revenue: dataCompleteness(
+        reasons.filter((reason) => reason === "LEGACY_RETURN_WITHOUT_ITEMS"),
+      ),
+      cogs: dataCompleteness(costReasons, !cogsComplete),
+      grossProfit: dataCompleteness(costReasons, !cogsComplete),
     },
     summary: {
       revenue,

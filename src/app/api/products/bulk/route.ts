@@ -2,12 +2,13 @@ import { NextResponse } from "next/server";
 import { requireOrgAuth } from "@/lib/auth.middleware";
 import { productService } from "@/modules/products/services/productService";
 import type { BulkProductValidated } from "@/modules/products/types";
+import { AnalyticsAccessError, resolveAnalyticsStore } from "@/modules/analytics/services/analyticsAccess";
 
 // Maximum rows accepted per request (server-side guard)
 const MAX_ROWS = 500;
 
 export const POST = async (request: Request) => {
-  let user: { orgId: string };
+  let user;
   try {
     user = await requireOrgAuth();
   } catch {
@@ -79,7 +80,8 @@ export const POST = async (request: Request) => {
   }
 
   try {
-    const result = await productService.bulkCreate(rows, user.orgId, storeId);
+    const scope = await resolveAnalyticsStore(user, storeId ?? null);
+    const result = await productService.bulkCreate(rows, user.orgId, scope.storeId, user.id);
 
     if (!result.success) {
       return NextResponse.json(result, { status: 422 });
@@ -87,6 +89,9 @@ export const POST = async (request: Request) => {
 
     return NextResponse.json(result, { status: 201 });
   } catch (err) {
+    if (err instanceof AnalyticsAccessError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     console.error("[POST /api/products/bulk]", err);
     return NextResponse.json(
       { error: "Internal server error" },

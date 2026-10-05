@@ -10,6 +10,7 @@ export interface PaymentMethodDistribution {
 }
 
 export interface PaymentMethodDistributionResponse {
+  scope?: { type: "STORE"; storeId: string; storeName: string };
   methods: PaymentMethodDistribution[];
   totalReceived: number;
   amountReceivable: number;

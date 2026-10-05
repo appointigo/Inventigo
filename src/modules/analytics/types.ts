@@ -1,5 +1,7 @@
 export type AnalyticsGroup = "day" | "week" | "month" | "year";
 
+import type { DataCompleteness, DataCompletenessReason } from "./completeness";
+
 export type FinancialEvent = {
   date: Date;
   revenue: number;
@@ -9,6 +11,7 @@ export type FinancialEvent = {
   returnValue: number;
   returnCount: number;
   exchangeCount: number;
+  completenessReasons?: DataCompletenessReason[];
 };
 
 export type SalesAnalyticsPoint = {
@@ -25,6 +28,7 @@ export type SalesAnalyticsPoint = {
 };
 
 export type SalesAnalyticsResponse = {
+  scope?: { type: "STORE"; storeId: string; storeName: string };
   range: { from: string; to: string; group: AnalyticsGroup };
   methodology: {
     revenue: string;
@@ -32,6 +36,12 @@ export type SalesAnalyticsResponse = {
     returns: string;
     grossProfitReliable: boolean;
     grossProfitNote: string | null;
+  };
+  completeness: {
+    overall: DataCompleteness;
+    revenue: DataCompleteness;
+    cogs: DataCompleteness;
+    grossProfit: DataCompleteness;
   };
   summary: {
     revenue: number;

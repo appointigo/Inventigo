@@ -6,6 +6,7 @@ import { DownloadOutlined, FilterOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
 import { formatDateTime } from "@/shared/utils/formatDate";
+import { useStore } from "@/providers/StoreProvider";
 
 const { Title } = Typography;
 const { RangePicker } = DatePicker;
@@ -61,6 +62,7 @@ function downloadCsv(filename: string, headers: string[], rows: string[][]) {
 // ─── Stock Report Tab ────────────────────────────────────────────────────────
 
 function StockReport() {
+  const { storeId } = useStore();
   const { message } = App.useApp();
   const [data, setData] = useState<StockReportRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,15 +74,17 @@ function StockReport() {
     setLoading(true);
     try {
       const params = new URLSearchParams({ type: "stock" });
+      if (!storeId) { setData([]); return; }
+      params.set("storeId", storeId);
       if (categoryFilter) params.set("categoryName", categoryFilter);
       if (brandFilter) params.set("brandName", brandFilter);
       if (statusFilter) params.set("status", statusFilter);
       const res = await fetch(`/api/reports?${params.toString()}`);
-      if (res.ok) setData(await res.json());
+      if (res.ok) setData((await res.json()).items);
     } finally {
       setLoading(false);
     }
-  }, [categoryFilter, brandFilter, statusFilter]);
+  }, [categoryFilter, brandFilter, statusFilter, storeId]);
 
   useEffect(() => {
     fetchData();
@@ -213,6 +217,7 @@ const TYPE_COLORS: Record<string, string> = {
 };
 
 function MovementReport() {
+  const { storeId } = useStore();
   const { message } = App.useApp();
   const [data, setData] = useState<MovementReportRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -223,17 +228,19 @@ function MovementReport() {
     setLoading(true);
     try {
       const params = new URLSearchParams({ type: "movements" });
+      if (!storeId) { setData([]); return; }
+      params.set("storeId", storeId);
       if (typeFilter) params.set("movementType", typeFilter);
       if (dateRange) {
         params.set("startDate", dateRange[0]);
         params.set("endDate", dateRange[1]);
       }
       const res = await fetch(`/api/reports?${params.toString()}`);
-      if (res.ok) setData(await res.json());
+      if (res.ok) setData((await res.json()).items);
     } finally {
       setLoading(false);
     }
-  }, [typeFilter, dateRange]);
+  }, [typeFilter, dateRange, storeId]);
 
   useEffect(() => {
     fetchData();

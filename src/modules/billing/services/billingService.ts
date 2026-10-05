@@ -16,6 +16,8 @@ import {
   normalizeSaleCompatibility,
 } from "../utils/saleCompatibility";
 import { resolveInvoiceConfigurationSnapshot } from "@/modules/invoice-management/services/invoiceManagementService";
+import { stockAuditSnapshot } from "@/modules/stock/utils/stockMovementContract";
+import { attachReplacementCostSnapshots } from "../utils/exchangeCostSnapshot";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -914,13 +916,14 @@ export const billingService = {
             });
             if (reserved.count !== 1) throw new Error("Insufficient stock");
 
+            const audit = stockAuditSnapshot(entry.quantity, -it.quantity);
             await tx.stockMovement.create({
               data: {
                 productId: it.productId,
                 sizeId: it.sizeId,
                 storeId,
                 type: "SALE",
-                quantity: it.quantity,
+                ...audit,
                 reason: `Sale ${invoiceNumber}`,
                 referenceType: "SALE",
                 referenceId: created.id,
@@ -1551,6 +1554,17 @@ export const billingService = {
 
       // Restore stock for each item + create audit records
       for (const it of existing.items) {
+        const entry = await tx.stockEntry.findUnique({
+          where: {
+            productId_sizeId_storeId: {
+              productId: it.productId,
+              sizeId: it.sizeId,
+              storeId: existing.storeId,
+            },
+          },
+        });
+        if (!entry) throw new Error("Stock entry not found while refunding sale");
+        const audit = stockAuditSnapshot(entry.quantity, it.quantity);
         await tx.stockEntry.updateMany({
           where: { productId: it.productId, sizeId: it.sizeId, storeId: existing.storeId },
           data: { quantity: { increment: it.quantity } },
@@ -1562,7 +1576,7 @@ export const billingService = {
             sizeId: it.sizeId,
             storeId: existing.storeId,
             type: "RETURN",
-            quantity: it.quantity,
+            ...audit,
             reason: `Refund for sale ${existing.invoiceNumber}`,
             referenceType: "SALE",
             referenceId: saleId,
@@ -1815,14 +1829,13 @@ export const billingService = {
         orgId,
         isActive: true,
       },
-      select: { id: true },
+      select: { id: true, costPrice: true },
     });
-    const exchangedLineItems = (input.exchangedItems ?? []).map((item) => {
+    const pricedExchangeItems = (input.exchangedItems ?? []).map((item) => {
       validateAmount(item.total, "exchange price");
-      if (!exchangeProducts.some((product) => product.id === item.productId))
-        throw new Error("Invalid exchange product");
       return { ...item, total: round2(item.total) };
     });
+    const exchangedLineItems = attachReplacementCostSnapshots(pricedExchangeItems, exchangeProducts);
     const returnedItemsJson = returnedLineItems.map((item) => ({
       productId: item.productId,
       sizeId: item.sizeId,
@@ -1953,6 +1966,7 @@ export const billingService = {
                     newSizeId: ei.sizeId,
                     newQuantity: ei.quantity,
                     newUnitPrice: new Prisma.Decimal(Number(ei.total) / (ei.quantity || 1)),
+                    newCostPrice: new Prisma.Decimal(ei.costPrice),
                   })),
                 ],
               };
@@ -2076,6 +2090,7 @@ export const billingService = {
                 data: { quantity: { increment: item.quantity } },
               });
 
+              const audit = stockAuditSnapshot(stockEntry.quantity, item.quantity);
               await tx.stockMovement.create({
                 data: {
                   productId: item.productId,
@@ -2083,7 +2098,7 @@ export const billingService = {
                   storeId: sale.storeId,
 
                   type: "RETURN",
-                  quantity: item.quantity,
+                  ...audit,
                   reason: `Return for sale ${sale.invoiceNumber}`,
                   referenceType: "SALE",
                   referenceId: returnTransaction.id,
@@ -2094,6 +2109,21 @@ export const billingService = {
             }
 
             for (const item of input.exchangedItems ?? []) {
+              const stockEntry = await tx.stockEntry.findUnique({
+                where: {
+                  productId_sizeId_storeId: {
+                    productId: item.productId,
+                    sizeId: item.sizeId,
+                    storeId: sale.storeId,
+                  },
+                },
+              });
+              if (!stockEntry || stockEntry.quantity < item.quantity) {
+                throw new Error(
+                  `Insufficient stock for exchange item ${item.productId} size ${item.sizeId}`
+                );
+              }
+              const audit = stockAuditSnapshot(stockEntry.quantity, -item.quantity);
               const reserved = await tx.stockEntry.updateMany({
                 where: {
                   productId: item.productId,
@@ -2115,7 +2145,7 @@ export const billingService = {
                   sizeId: item.sizeId,
                   storeId: sale.storeId,
                   type: "SALE",
-                  quantity: item.quantity,
+                  ...audit,
                   reason: `Exchange for sale ${sale.invoiceNumber}`,
                   referenceType: "SALE",
                   referenceId: returnTransaction.id,

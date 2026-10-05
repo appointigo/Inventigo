@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { aggregateFinancialEvents } from "./financialAggregation.ts";
+import { aggregateFinancialEvents, calculateReturnCostEvent } from "./financialAggregation.ts";
 
 const from = new Date("2026-09-01T00:00:00.000Z");
 const to = new Date("2026-09-07T00:00:00.000Z");
@@ -22,11 +22,13 @@ test("nets returns and exchanges using sale-time cost events", () => {
 
 test("marks profit unavailable when an exchange replacement lacks immutable cost", () => {
   const result = aggregateFinancialEvents([
-    { date: from, revenue: 500, cogs: null, discount: 0, orderCount: 0, returnValue: 200, returnCount: 0, exchangeCount: 1 },
+    { date: from, revenue: 500, cogs: null, discount: 0, orderCount: 0, returnValue: 200, returnCount: 0, exchangeCount: 1, completenessReasons: ["MISSING_EXCHANGE_REPLACEMENT_COST"] },
   ], from, to, "day");
   assert.equal(result.summary.cogs, null);
   assert.equal(result.summary.grossProfit, null);
   assert.equal(result.methodology.grossProfitReliable, false);
+  assert.equal(result.completeness.cogs.status, "UNAVAILABLE");
+  assert.deepEqual(result.completeness.cogs.reasons, ["MISSING_EXCHANGE_REPLACEMENT_COST"]);
 });
 
 test("fills empty daily and weekly buckets with finite zeroes", () => {
@@ -40,4 +42,21 @@ test("fills empty daily and weekly buckets with finite zeroes", () => {
     "2026-09-07",
     "2026-09-14",
   ]);
+  assert.equal(daily.summary.cogs, 0);
+  assert.equal(daily.summary.grossProfit, 0);
+  assert.equal(daily.completeness.cogs.status, "COMPLETE");
+});
+
+test("replacement exchange cost handles pure returns, higher/lower replacements, and missing snapshots", () => {
+  assert.deepEqual(calculateReturnCostEvent([500], []), { cogs: -500, completenessReasons: [] });
+  assert.deepEqual(calculateReturnCostEvent([500], [700]), { cogs: 200, completenessReasons: [] });
+  assert.deepEqual(calculateReturnCostEvent([700], [500]), { cogs: -200, completenessReasons: [] });
+  assert.deepEqual(calculateReturnCostEvent([500], [null]), {
+    cogs: null,
+    completenessReasons: ["MISSING_EXCHANGE_REPLACEMENT_COST"],
+  });
+  assert.deepEqual(calculateReturnCostEvent([], [], false), {
+    cogs: null,
+    completenessReasons: ["LEGACY_RETURN_WITHOUT_ITEMS"],
+  });
 });

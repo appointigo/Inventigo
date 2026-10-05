@@ -67,3 +67,22 @@ export function useProfitabilityAnalytics(filters: AnalyticsFilters) {
       ),
   });
 }
+
+export type DataIntegrityResponse = {
+  status: "HEALTHY" | "REVIEW" | "ACTION_REQUIRED";
+  completenessPercentage: number;
+  issues: Array<{ code: string; severity: "warning" | "error"; count: number; description: string }>;
+};
+
+export function useDataIntegrity(storeId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ["analytics-data-integrity", storeId],
+    enabled: Boolean(storeId && enabled),
+    staleTime: 5 * 60_000,
+    queryFn: ({ signal }) =>
+      fetchJson<DataIntegrityResponse>(
+        `/api/analytics/integrity?storeId=${encodeURIComponent(storeId!)}`,
+        signal,
+      ),
+  });
+}

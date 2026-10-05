@@ -26,21 +26,22 @@ export function useAlertConfigs() {
   return { configs, loading, refresh: fetchConfigs };
 }
 
-export function useLowStockAlerts() {
+export function useLowStockAlerts(storeId?: string) {
   const [items, setItems] = useState<LowStockItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchAlerts = useCallback(async () => {
+    if (!storeId) { setItems([]); setLoading(false); return; }
     setLoading(true);
     try {
-      const res = await fetch("/api/alerts/low-stock");
+      const res = await fetch(`/api/alerts/low-stock?storeId=${encodeURIComponent(storeId)}`);
       if (res.ok) {
         setItems(await res.json());
       }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [storeId]);
 
   useEffect(() => {
     fetchAlerts();

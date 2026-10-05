@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Modal, Form, InputNumber, Select, Input, Typography, Space, Tag } from "antd";
+import { Modal, Form, InputNumber, Select, Typography, Space, Tag } from "antd";
 import type { StockLevelRow } from "../types";
 
 interface StockAdjustmentModalProps {
@@ -12,7 +12,8 @@ interface StockAdjustmentModalProps {
     productId: string;
     sizeId: string;
     quantity: number;
-    type: "IN" | "OUT" | "ADJUSTMENT";
+    type: "ADJUSTMENT";
+    operation: "ADD" | "REMOVE" | "SET";
     reason?: string;
   }) => Promise<void>;
 }
@@ -29,7 +30,8 @@ const StockAdjustmentModal = ({ stockRow, open, onCancel, onSubmit }: StockAdjus
         productId: stockRow!.productId,
         sizeId: stockRow!.sizeId,
         quantity: values.quantity,
-        type: values.type,
+        type: "ADJUSTMENT",
+        operation: values.operation,
         reason: values.reason,
       });
       form.resetFields();
@@ -62,24 +64,24 @@ const StockAdjustmentModal = ({ stockRow, open, onCancel, onSubmit }: StockAdjus
             </Space>
           </Space>
 
-          <Form form={form} layout="vertical" initialValues={{ type: "ADJUSTMENT" }}>
+          <Form form={form} layout="vertical" initialValues={{ operation: "ADD" }}>
             <Form.Item
-              name="type"
-              label="Adjustment Type"
+              name="operation"
+              label="Stock operation"
               rules={[{ required: true }]}
             >
               <Select
                 options={[
-                  { label: "Stock In (received)", value: "IN" },
-                  { label: "Stock Out (removed)", value: "OUT" },
-                  { label: "Adjustment (+/-)", value: "ADJUSTMENT" },
+                  { label: "Add stock", value: "ADD" },
+                  { label: "Remove stock", value: "REMOVE" },
+                  { label: "Set quantity", value: "SET" },
                 ]}
               />
             </Form.Item>
 
             <Form.Item
               name="quantity"
-              label="Quantity"
+              label="Quantity / new quantity"
               rules={[{ required: true, message: "Enter quantity" }]}
             >
               <InputNumber style={{ width: "100%" }} placeholder="Enter quantity" />

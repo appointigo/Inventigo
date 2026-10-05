@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { expenseService } from "@/modules/expenses/services/expenseService";
 import { requireOrgAuth } from "@/lib/auth.middleware";
+import { AnalyticsAccessError, resolveAnalyticsStore } from "@/modules/analytics/services/analyticsAccess";
 
 export async function GET(request: Request) {
   let user;
@@ -12,12 +13,12 @@ export async function GET(request: Request) {
 
   try {
     const { searchParams } = new URL(request.url);
-    const storeId = user.storeId ?? searchParams.get("storeId") ?? undefined;
+    const scope = await resolveAnalyticsStore(user, searchParams.get("storeId"));
     const monthParam = searchParams.get("month");
     const yearParam = searchParams.get("year");
 
     const filters = {
-      storeId,
+      storeId: scope.storeId,
       month: monthParam ? parseInt(monthParam, 10) : undefined,
       year: yearParam ? parseInt(yearParam, 10) : undefined,
     };
@@ -25,6 +26,9 @@ export async function GET(request: Request) {
     const expenses = await expenseService.list(filters, user.orgId);
     return NextResponse.json(expenses);
   } catch (err) {
+    if (err instanceof AnalyticsAccessError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     console.error("[expenses GET]", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
@@ -40,15 +44,19 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
+    const scope = await resolveAnalyticsStore(user, body.storeId ?? null);
     if (!body.storeId || !body.category || body.amount == null || !body.date) {
       return NextResponse.json(
         { error: "storeId, category, amount, and date are required" },
         { status: 400 }
       );
     }
-    const expense = await expenseService.create(body, user.id, user.orgId);
+    const expense = await expenseService.create({ ...body, storeId: scope.storeId }, user.id, user.orgId);
     return NextResponse.json(expense, { status: 201 });
   } catch (err) {
+    if (err instanceof AnalyticsAccessError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     console.error("[expenses POST]", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }

@@ -161,6 +161,7 @@ export type InactivityBucket = {
 };
 
 export type InventoryIntelligenceResponse = {
+  scope: { type: "STORE"; storeId: string; storeName: string };
   range: AnalyticsPeriod;
   generatedAt: string;
   methodology: {

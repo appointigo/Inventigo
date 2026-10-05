@@ -128,6 +128,7 @@ export const poService = {
       const item = po.items.find((i) => i.id === received.purchaseOrderItemId);
       if (!item) continue;
       await stockService.adjustStock({
+        orgId,
         productId: item.productId,
         sizeId: item.sizeId,
         storeId: po.storeId,

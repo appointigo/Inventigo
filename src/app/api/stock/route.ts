@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireOrgAuth } from "@/lib/auth.middleware";
 import { stockService } from "@/modules/stock/services/stockService";
+import { AnalyticsAccessError, resolveAnalyticsStore } from "@/modules/analytics/services/analyticsAccess";
 
 export const GET = async (request: Request) => {
   let user;
@@ -10,22 +11,21 @@ export const GET = async (request: Request) => {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const storeId = user.storeId ?? new URL(request.url).searchParams.get("storeId");
-  if (!storeId) {
-    return NextResponse.json({ error: "storeId is required" }, { status: 400 });
-  }
-
   try {
     const { searchParams } = new URL(request.url);
+    const scope = await resolveAnalyticsStore(user, searchParams.get("storeId"));
     const filters = {
-      storeId,
+      storeId: scope.storeId,
       search: searchParams.get("search") || undefined,
       lowStockOnly: searchParams.get("lowStockOnly") === "true" || undefined,
       outOfStockOnly: searchParams.get("outOfStockOnly") === "true" || undefined,
     };
     const result = await stockService.getStockLevels(filters);
     return NextResponse.json(result.items);
-  } catch {
+  } catch (error) {
+    if (error instanceof AnalyticsAccessError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 };
@@ -38,13 +38,9 @@ export const POST = async (request: Request) => {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const storeId = user.storeId;
-  if (!storeId) {
-    return NextResponse.json({ error: "User is not assigned to a store" }, { status: 400 });
-  }
-
   try {
     const body = await request.json();
+    const scope = await resolveAnalyticsStore(user, body.storeId ?? null);
     if (!body.productId || !body.sizeId || body.quantity === undefined || !body.type) {
       return NextResponse.json(
         { error: "productId, sizeId, quantity, and type are required" },
@@ -52,11 +48,13 @@ export const POST = async (request: Request) => {
       );
     }
     const result = await stockService.adjustStock({
+      orgId: user.orgId,
       productId: body.productId,
       sizeId: body.sizeId,
-      storeId,
+      storeId: scope.storeId,
       quantity: body.quantity,
       type: body.type,
+      operation: body.operation,
       reason: body.reason,
       referenceType: body.referenceType,
       referenceId: body.referenceId,
@@ -64,6 +62,9 @@ export const POST = async (request: Request) => {
     });
     return NextResponse.json(result.stockEntry);
   } catch (err) {
+    if (err instanceof AnalyticsAccessError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     if (err instanceof Error && err.message.startsWith("Insufficient")) {
       return NextResponse.json({ error: err.message }, { status: 422 });
     }

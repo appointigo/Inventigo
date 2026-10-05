@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import type { AdjustStockInput, StockLevelFilters, StockLevelRow, MovementHistoryFilters, StockMovementRow } from "../types";
+import { resolveStockDelta, stockAuditSnapshot } from "../utils/stockMovementContract";
 
 /**
  * Central Stock Service — THE single source of truth for all inventory mutations.
@@ -13,21 +14,24 @@ export const stockService = {
    * Creates a StockMovement audit record and updates the StockEntry atomically.
    */
   async adjustStock(input: AdjustStockInput) {
-    const { productId, sizeId, storeId, quantity, type, reason, referenceType, referenceId, businessDate, userId } = input;
+    const { orgId, productId, sizeId, storeId, quantity, type, operation, reason, referenceType, referenceId, businessDate, userId } = input;
 
     return prisma.$transaction(async (tx) => {
-      // Determine quantity change: IN/RETURN add stock, OUT/SALE/ADJUSTMENT can be +/-
-      let quantityChange: number;
-      if (type === "IN" || type === "RETURN") {
-        quantityChange = Math.abs(quantity);
-      } 
-      else if (type === "OUT" || type === "SALE") {
-        quantityChange = -Math.abs(quantity);
-      } 
-      else {
-        // ADJUSTMENT: quantity can be positive (add) or negative (remove)
-        quantityChange = quantity;
-      }
+      const [store, product] = await Promise.all([
+        tx.store.findFirst({ where: { id: storeId, orgId, isActive: true }, select: { id: true } }),
+        tx.product.findFirst({
+          where: { id: productId, orgId, category: { sizes: { some: { id: sizeId } } } },
+          select: { id: true },
+        }),
+      ]);
+      if (!store || !product) throw new Error("Stock target is outside the selected store scope");
+      const existing = await tx.stockEntry.findUnique({
+        where: { productId_sizeId_storeId: { productId, sizeId, storeId } },
+        select: { quantity: true },
+      });
+      const quantityBefore = existing?.quantity ?? 0;
+      const deltaQuantity = resolveStockDelta({ type, quantity, quantityBefore, operation });
+      const audit = stockAuditSnapshot(quantityBefore, deltaQuantity);
 
       // Update stock entry
       const stockEntry = await tx.stockEntry.upsert({
@@ -35,26 +39,19 @@ export const stockService = {
           productId_sizeId_storeId: { productId, sizeId, storeId },
         },
         update: {
-          quantity: { increment: quantityChange },
-          lastRestockedAt: quantityChange > 0 ? new Date() : undefined,
+          quantity: { increment: deltaQuantity },
+          lastRestockedAt: deltaQuantity > 0 ? new Date() : undefined,
         },
         create: {
           productId,
           sizeId,
           storeId,
-          quantity: Math.max(0, quantityChange),
+          quantity: audit.quantityAfter,
           reorderLevel: 5,
           reorderQuantity: 20,
-          lastRestockedAt: quantityChange > 0 ? new Date() : null,
+          lastRestockedAt: deltaQuantity > 0 ? new Date() : null,
         },
       });
-
-      // Prevent negative stock
-      if (stockEntry.quantity < 0) {
-        throw new Error(
-          `Insufficient stock. Available: ${stockEntry.quantity - quantityChange}, Requested: ${Math.abs(quantity)}`
-        );
-      }
 
       // Create immutable audit record
       const movement = await tx.stockMovement.create({
@@ -63,7 +60,7 @@ export const stockService = {
           sizeId,
           storeId,
           type,
-          quantity: Math.abs(quantity),
+          ...audit,
           reason,
           referenceType: referenceType ?? "MANUAL",
           referenceId,
@@ -204,6 +201,9 @@ export const stockService = {
         sizeLabel: m.size.label,
         type: m.type,
         quantity: m.quantity,
+        deltaQuantity: m.deltaQuantity,
+        quantityBefore: m.quantityBefore,
+        quantityAfter: m.quantityAfter,
         reason: m.reason ?? null,
         userName: userNameById.get(m.createdBy) ?? "Unknown",
         movementDate: m.movementDate.toISOString(),

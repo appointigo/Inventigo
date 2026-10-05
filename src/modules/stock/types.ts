@@ -1,11 +1,13 @@
 import { StockMovementType, ReferenceType } from "@prisma/client";
 
 export type AdjustStockInput = {
+  orgId: string;
   productId: string;
   sizeId: string;
   storeId: string;
   quantity: number;
   type: StockMovementType;
+  operation?: "ADD" | "REMOVE" | "SET";
   reason?: string;
   referenceType?: ReferenceType;
   referenceId?: string;
@@ -52,6 +54,9 @@ export type StockMovementRow = {
   sizeLabel: string;
   type: string;
   quantity: number;
+  deltaQuantity: number | null;
+  quantityBefore: number | null;
+  quantityAfter: number | null;
   reason: string | null;
   userName: string;
   movementDate: string;

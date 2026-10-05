@@ -76,35 +76,26 @@ async function hasTable(tableName: string) {
 }
 
 export const dashboardService = {
-  async getData(orgId: string, storeId: string | null, startDate?: Date, endDate?: Date): Promise<DashboardData> {
-    // Resolve storeId — fall back to first store in the org if not set
-    let resolvedStoreId = storeId;
-    if (!resolvedStoreId) {
-      const firstStore = await prisma.store.findFirst({ where: { orgId }, select: { id: true } });
-      resolvedStoreId = firstStore?.id ?? null;
-    }
+  async getData(orgId: string, storeId: string, startDate?: Date, endDate?: Date): Promise<DashboardData> {
+    const resolvedStoreId = storeId;
 
     const baseResults = await Promise.allSettled([
-      resolvedStoreId
-        ? stockService.getStockLevels({ storeId: resolvedStoreId, page: 1, pageSize: 1000 })
-        : Promise.resolve({ items: [], total: 0 }),
-      resolvedStoreId
-        ? stockService.getMovementHistory({
+      stockService.getStockLevels({ storeId: resolvedStoreId, page: 1, pageSize: 1000 }),
+      stockService.getMovementHistory({
             storeId: resolvedStoreId,
             startDate,
             endDate,
             page: 1,
             pageSize: startDate || endDate ? 1000 : 10,
-          })
-        : Promise.resolve({ items: [], total: 0 }),
+          }),
       prisma.product.findMany({
         where: { orgId },
         select: { id: true, costPrice: true },
       }),
       prisma.purchaseOrder.count({
-        where: { status: { in: ["DRAFT", "ORDERED"] }, store: { orgId } },
+        where: { storeId: resolvedStoreId, status: { in: ["DRAFT", "ORDERED"] }, store: { orgId } },
       }),
-      prisma.product.count({ where: { orgId } }),
+      prisma.product.count({ where: { orgId, stockEntries: { some: { storeId: resolvedStoreId } } } }),
     ]);
 
     const stockResult =
@@ -269,7 +260,7 @@ export const dashboardService = {
       // - Exchange: customer pays the `net_amount` extra (increase in revenue).
       // - Return: refunds reduce revenue by `refund_amount`.
       // - Return+Exchange: net impact = `net_amount - refund_amount`.
-      let revenueAmount = Number(rt.net_amount ?? 0) - Number(rt.refund_amount ?? 0);
+      const revenueAmount = Number(rt.net_amount ?? 0) - Number(rt.refund_amount ?? 0);
       
       const reportDate = new Date(rt.report_date);
       const dayKey = formatDayKey(reportDate);
