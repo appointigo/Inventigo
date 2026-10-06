@@ -169,7 +169,7 @@ export const productIntelligenceService = {
     const signalMap = new Map(signalRows.map((row) => [row.productId, row]));
     // Inventory service exposes the complete product set through its valuation/signals only in grouped views;
     // load lightweight product metadata and current stock to include products with no period activity.
-    const products = await prisma.product.findMany({
+    const [products, inboundItems] = await Promise.all([prisma.product.findMany({
       where: {
         orgId,
         OR: [
@@ -187,7 +187,10 @@ export const productIntelligenceService = {
         brand: { select: { id: true, name: true } },
         stockEntries: { where: { storeId }, select: { quantity: true } },
       },
-    });
+    }), prisma.purchaseOrderItem.findMany({ where: { purchaseOrder: { storeId, store: { orgId }, status: { in: ["ORDERED", "PARTIALLY_RECEIVED"] } } }, select: { productId: true, quantity: true, purchaseOrder: { select: { expectedDeliveryDate: true } }, receiptItems: { select: { quantityAccepted: true } } } })]);
+    const inboundByProduct = new Map<string, { quantity: number; expectedDate: string | null; overdue: boolean }>();
+    const today = new Date().toISOString().slice(0, 10);
+    for (const item of inboundItems) { const accepted = item.receiptItems.reduce((sum, receipt) => sum + receipt.quantityAccepted, 0); const open = Math.max(0, item.quantity - accepted); if (!open) continue; const current = inboundByProduct.get(item.productId) ?? { quantity: 0, expectedDate: null, overdue: false }; const expected = item.purchaseOrder.expectedDeliveryDate?.toISOString().slice(0, 10) ?? null; current.quantity += open; if (expected && (!current.expectedDate || expected < current.expectedDate)) current.expectedDate = expected; if (expected && expected < today) current.overdue = true; inboundByProduct.set(item.productId, current); }
     const rows: ProductIntelligenceRow[] = products.map((product) => {
       const f = financial.get(product.id) ?? emptyFinancial();
       const signal = signalMap.get(product.id);
@@ -210,6 +213,7 @@ export const productIntelligenceService = {
       const daysSinceSale =
         signal?.daysSinceSale ??
         (last ? Math.floor((Date.now() - last.getTime()) / 86_400_000) : null);
+      const inbound = inboundByProduct.get(product.id) ?? { quantity: 0, expectedDate: null, overdue: false };
       const decision = deriveProductDecision({
         productId: product.id,
         unitsSold: f.units,
@@ -222,6 +226,7 @@ export const productIntelligenceService = {
         unfulfilledDemand: signal?.unfulfilledDemand ?? null,
         returnRate,
         discountRate,
+        inboundQuantity: inbound.quantity, inboundExpectedDate: inbound.expectedDate, inboundOverdue: inbound.overdue,
       });
       return {
         productId: product.id,
@@ -240,6 +245,9 @@ export const productIntelligenceService = {
         grossProfit,
         grossMarginPercent: margin,
         currentQuantity,
+        inboundQuantity: inbound.quantity,
+        inboundExpectedDate: inbound.expectedDate,
+        inboundOverdue: inbound.overdue,
         inventoryValue,
         salesVelocityPerDay: round(Math.max(0, f.units) / days, 3),
         stockCoverDays:
@@ -309,6 +317,7 @@ export const productIntelligenceService = {
         deadStock: summaryTypes.filter((x) => x === "DEAD_STOCK").length,
         overstock: summaryTypes.filter((x) => x === "OVERSTOCK").length,
         highReturn: summaryTypes.filter((x) => x === "HIGH_RETURN").length,
+        inboundStock: summaryTypes.filter((x) => x === "INBOUND_STOCK").length,
       },
       filters: {
         categories: [

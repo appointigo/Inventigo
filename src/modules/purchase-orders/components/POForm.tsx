@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Form, Select, Input, InputNumber, Button, Space, Table, Card, App } from "antd";
+import { Form, Select, Input, InputNumber, Button, Space, Table, Card, App, DatePicker } from "antd";
 import { PlusOutlined, DeleteOutlined } from "@ant-design/icons";
 import type { Supplier } from "@/modules/suppliers/types";
 import type { Product } from "@/modules/products/types";
@@ -11,7 +11,7 @@ import { formatCurrency } from "@/shared/utils/formatCurrency";
 interface POFormProps {
   suppliers: Supplier[];
   products: Product[];
-  onSubmit: (values: { supplierId: string; notes?: string; items: POItemFormValues[] }) => Promise<void>;
+  onSubmit: (values: { supplierId: string; notes?: string; expectedDeliveryDate?: string; items: POItemFormValues[] }) => Promise<void>;
   onCancel: () => void;
   loading?: boolean;
 }
@@ -50,7 +50,7 @@ export default function POForm({ suppliers, products, onSubmit, onCancel, loadin
     }
 
     const newItem: LineItem = {
-      key: `${values.productId}-${values.sizeId}-${Date.now()}`,
+      key: `${values.productId}-${values.sizeId}`,
       productId: values.productId,
       sizeId: values.sizeId,
       quantity: values.quantity,
@@ -70,7 +70,7 @@ export default function POForm({ suppliers, products, onSubmit, onCancel, loadin
 
   const totalAmount = lineItems.reduce((sum, li) => sum + li.quantity * li.unitCost, 0);
 
-  const handleFinish = async (formValues: { supplierId: string; notes?: string }) => {
+  const handleFinish = async (formValues: { supplierId: string; notes?: string; expectedDeliveryDate?: { format: (pattern: string) => string } }) => {
     if (lineItems.length === 0) {
       message.error("Please add at least one line item");
       return;
@@ -78,6 +78,7 @@ export default function POForm({ suppliers, products, onSubmit, onCancel, loadin
     await onSubmit({
       supplierId: formValues.supplierId,
       notes: formValues.notes,
+      expectedDeliveryDate: formValues.expectedDeliveryDate?.format("YYYY-MM-DD"),
       items: lineItems.map(({ productId, sizeId, quantity, unitCost }) => ({
         productId,
         sizeId,
@@ -133,6 +134,9 @@ export default function POForm({ suppliers, products, onSubmit, onCancel, loadin
 
         <Form.Item name="notes" label="Notes">
           <Input.TextArea rows={2} placeholder="Optional notes for this order" />
+        </Form.Item>
+        <Form.Item name="expectedDeliveryDate" label="Expected delivery date" rules={[{ required: true, message: "Select the expected delivery date" }]}>
+          <DatePicker style={{ width: "100%" }} />
         </Form.Item>
       </Card>
 

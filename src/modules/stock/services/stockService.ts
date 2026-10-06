@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import type { AdjustStockInput, StockLevelFilters, StockLevelRow, MovementHistoryFilters, StockMovementRow } from "../types";
 import { resolveStockDelta, stockAuditSnapshot } from "../utils/stockMovementContract";
@@ -14,63 +15,7 @@ export const stockService = {
    * Creates a StockMovement audit record and updates the StockEntry atomically.
    */
   async adjustStock(input: AdjustStockInput) {
-    const { orgId, productId, sizeId, storeId, quantity, type, operation, reason, referenceType, referenceId, businessDate, userId } = input;
-
-    return prisma.$transaction(async (tx) => {
-      const [store, product] = await Promise.all([
-        tx.store.findFirst({ where: { id: storeId, orgId, isActive: true }, select: { id: true } }),
-        tx.product.findFirst({
-          where: { id: productId, orgId, category: { sizes: { some: { id: sizeId } } } },
-          select: { id: true },
-        }),
-      ]);
-      if (!store || !product) throw new Error("Stock target is outside the selected store scope");
-      const existing = await tx.stockEntry.findUnique({
-        where: { productId_sizeId_storeId: { productId, sizeId, storeId } },
-        select: { quantity: true },
-      });
-      const quantityBefore = existing?.quantity ?? 0;
-      const deltaQuantity = resolveStockDelta({ type, quantity, quantityBefore, operation });
-      const audit = stockAuditSnapshot(quantityBefore, deltaQuantity);
-
-      // Update stock entry
-      const stockEntry = await tx.stockEntry.upsert({
-        where: {
-          productId_sizeId_storeId: { productId, sizeId, storeId },
-        },
-        update: {
-          quantity: { increment: deltaQuantity },
-          lastRestockedAt: deltaQuantity > 0 ? new Date() : undefined,
-        },
-        create: {
-          productId,
-          sizeId,
-          storeId,
-          quantity: audit.quantityAfter,
-          reorderLevel: 5,
-          reorderQuantity: 20,
-          lastRestockedAt: deltaQuantity > 0 ? new Date() : null,
-        },
-      });
-
-      // Create immutable audit record
-      const movement = await tx.stockMovement.create({
-        data: {
-          productId,
-          sizeId,
-          storeId,
-          type,
-          ...audit,
-          reason,
-          referenceType: referenceType ?? "MANUAL",
-          referenceId,
-          movementDate: businessDate ?? new Date(),
-          createdBy: userId,
-        },
-      });
-
-      return { stockEntry, movement };
-    });
+    return prisma.$transaction((tx) => adjustStockWithClient(tx, input));
   },
 
   /**
@@ -213,3 +158,28 @@ export const stockService = {
     };
   },
 };
+
+export async function adjustStockWithClient(
+  tx: Prisma.TransactionClient,
+  input: AdjustStockInput,
+) {
+  const { orgId, productId, sizeId, storeId, quantity, type, operation, reason, referenceType, referenceId, businessDate, userId } = input;
+  const [store, product] = await Promise.all([
+    tx.store.findFirst({ where: { id: storeId, orgId, isActive: true }, select: { id: true } }),
+    tx.product.findFirst({ where: { id: productId, orgId, category: { sizes: { some: { id: sizeId } } } }, select: { id: true } }),
+  ]);
+  if (!store || !product) throw new Error("Stock target is outside the selected store scope");
+  const existing = await tx.stockEntry.findUnique({ where: { productId_sizeId_storeId: { productId, sizeId, storeId } }, select: { quantity: true } });
+  const quantityBefore = existing?.quantity ?? 0;
+  const deltaQuantity = resolveStockDelta({ type, quantity, quantityBefore, operation });
+  const audit = stockAuditSnapshot(quantityBefore, deltaQuantity);
+  const stockEntry = await tx.stockEntry.upsert({
+    where: { productId_sizeId_storeId: { productId, sizeId, storeId } },
+    update: { quantity: { increment: deltaQuantity }, lastRestockedAt: deltaQuantity > 0 ? new Date() : undefined },
+    create: { productId, sizeId, storeId, quantity: audit.quantityAfter, reorderLevel: 5, reorderQuantity: 20, lastRestockedAt: deltaQuantity > 0 ? new Date() : null },
+  });
+  const movement = await tx.stockMovement.create({
+    data: { productId, sizeId, storeId, type, ...audit, reason, referenceType: referenceType ?? "MANUAL", referenceId, movementDate: businessDate ?? new Date(), createdBy: userId },
+  });
+  return { stockEntry, movement };
+}

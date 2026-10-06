@@ -13,6 +13,9 @@ const base = {
   unfulfilledDemand: 0,
   returnRate: 0,
   discountRate: 0,
+  inboundQuantity: 0,
+  inboundExpectedDate: null,
+  inboundOverdue: false,
 };
 test("reorder explains low cover and sales", () => {
   const r = deriveProductDecision({ ...base, currentStock: 2, stockCoverDays: 5 });
@@ -23,7 +26,11 @@ test("demand gap takes precedence when unfulfilled demand meets low stock", () =
   assert.equal(
     deriveProductDecision({ ...base, currentStock: 1, unfulfilledDemand: 6 }).type,
     "DEMAND_GAP"
-  ));
+));
+test("sufficient on-time inbound prevents a misleading duplicate reorder", () => {
+  assert.equal(deriveProductDecision({ ...base, currentStock: 1, stockCoverDays: 4, inboundQuantity: 20, inboundExpectedDate: "2026-10-07" }).type, "INBOUND_STOCK");
+  assert.equal(deriveProductDecision({ ...base, currentStock: 1, stockCoverDays: 4, inboundQuantity: 20, inboundOverdue: true }).type, "REORDER");
+});
 test("dead and slow stock use centralized inactivity thresholds", () => {
   assert.equal(
     deriveProductDecision({ ...base, unitsSold: 0, daysSinceSale: 200 }).type,

@@ -103,6 +103,7 @@ export const MODULE_NAVIGATION: ModuleNavigation[] = [
       { key: "suppliers", path: "/dashboard/suppliers", name: "Suppliers", icon: ShopOutlined, roles: ADMIN_MANAGER },
       { key: "purchase-orders", path: "/dashboard/purchase-orders", name: "Purchase Orders", icon: FileTextOutlined, roles: ADMIN_MANAGER },
       { key: "goods-received", path: "/dashboard/purchase-orders?view=receiving", name: "Goods Received / Stock In", icon: InboxOutlined, roles: ADMIN_MANAGER },
+      { key: "procurement-intelligence", path: "/dashboard/purchase-orders/intelligence", name: "Procurement Intelligence", icon: RiseOutlined, roles: ADMIN_MANAGER },
     ],
   },
   {

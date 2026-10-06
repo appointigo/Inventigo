@@ -10,7 +10,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { id } = await params;
-  const po = await poService.getById(id, user.orgId);
+  const po = await poService.getById(id, user.orgId, user.storeId);
   if (!po) return NextResponse.json({ error: "Purchase order not found" }, { status: 404 });
   return NextResponse.json(po);
 }
@@ -25,7 +25,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params;
   const body = await request.json();
   try {
-    const po = await poService.update(id, user.orgId, body);
+    const po = await poService.update(id, user.orgId, body, user.storeId);
     if (!po) return NextResponse.json({ error: "Purchase order not found" }, { status: 404 });
     return NextResponse.json(po);
   } catch (err) {
@@ -43,7 +43,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   }
   const { id } = await params;
   try {
-    const po = await poService.cancelPO(id, user.orgId);
+    const po = await poService.cancelPO(id, user.orgId, user.storeId);
     if (!po) return NextResponse.json({ error: "Purchase order not found" }, { status: 404 });
     return NextResponse.json(po);
   } catch (err) {

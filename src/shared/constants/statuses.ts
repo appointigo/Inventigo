@@ -3,6 +3,7 @@ import { PurchaseOrderStatus } from "@prisma/client";
 export const PO_STATUS_LABELS: Record<PurchaseOrderStatus, string> = {
   DRAFT: "Draft",
   ORDERED: "Ordered",
+  PARTIALLY_RECEIVED: "Partially Received",
   RECEIVED: "Received",
   CANCELLED: "Cancelled",
 };
@@ -10,6 +11,7 @@ export const PO_STATUS_LABELS: Record<PurchaseOrderStatus, string> = {
 export const PO_STATUS_COLORS: Record<PurchaseOrderStatus, string> = {
   DRAFT: "default",
   ORDERED: "processing",
+  PARTIALLY_RECEIVED: "warning",
   RECEIVED: "success",
   CANCELLED: "error",
 };

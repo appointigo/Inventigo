@@ -12,7 +12,7 @@ import {
 import PODetailComponent from "@/modules/purchase-orders/components/PODetail";
 import POReceiveForm from "@/modules/purchase-orders/components/POReceiveForm";
 import { usePurchaseOrder } from "@/modules/purchase-orders/hooks/usePurchaseOrders";
-import type { ReceiveItemInput } from "@/modules/purchase-orders/types";
+import type { ReceivePOInput } from "@/modules/purchase-orders/types";
 
 export default function PurchaseOrderDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -56,13 +56,13 @@ export default function PurchaseOrderDetailPage() {
     }
   };
 
-  const handleReceive = async (items: ReceiveItemInput[]) => {
+  const handleReceive = async (input: ReceivePOInput) => {
     setActionLoading(true);
     try {
       const res = await fetch(`/api/purchase-orders/${encodeURIComponent(id)}/receive`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items }),
+        body: JSON.stringify(input),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -129,7 +129,7 @@ export default function PurchaseOrderDetailPage() {
               </Popconfirm>
             </>
           )}
-          {status === "ORDERED" && (
+          {(status === "ORDERED" || status === "PARTIALLY_RECEIVED") && (
             <>
               <Button
                 type="primary"

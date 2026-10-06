@@ -21,6 +21,7 @@ export default function NewPurchaseOrderPage() {
   const handleSubmit = async (values: {
     supplierId: string;
     notes?: string;
+    expectedDeliveryDate?: string;
     items: POItemFormValues[];
   }) => {
     if (!storeId) {

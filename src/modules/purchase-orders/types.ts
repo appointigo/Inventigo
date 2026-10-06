@@ -4,6 +4,7 @@ export type POFormValues = {
   storeId: string;
   supplierId: string;
   notes?: string;
+  expectedDeliveryDate?: string | null;
   items: POItemFormValues[];
 };
 
@@ -34,6 +35,11 @@ export type POItem = {
   quantity: number;
   unitCost: number;
   total: number;
+  acceptedQuantity: number;
+  rejectedQuantity: number;
+  damagedQuantity: number;
+  outstandingQuantity: number;
+  receiptStatus: "NOT_RECEIVED" | "PARTIALLY_RECEIVED" | "FULLY_RECEIVED" | "OVER_RECEIVED";
 };
 
 export type PurchaseOrder = {
@@ -46,6 +52,7 @@ export type PurchaseOrder = {
   notes: string | null;
   orderedAt: string | null;
   receivedAt: string | null;
+  expectedDeliveryDate: string | null;
   createdBy: string;
   createdByName: string;
   items: POItem[];
@@ -57,4 +64,16 @@ export type PurchaseOrder = {
 export type ReceiveItemInput = {
   purchaseOrderItemId: string;
   receivedQuantity: number;
+  acceptedQuantity: number;
+  rejectedQuantity: number;
+  damagedQuantity: number;
+  rejectionReason?: string;
+  unitCostActual?: number;
+};
+
+export type ReceivePOInput = {
+  receivedAt?: string;
+  supplierInvoiceNumber?: string;
+  notes?: string;
+  items: ReceiveItemInput[];
 };

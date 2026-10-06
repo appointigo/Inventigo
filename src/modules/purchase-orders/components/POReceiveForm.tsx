@@ -1,21 +1,27 @@
 "use client";
 
 import { useState } from "react";
-import { Table, InputNumber, Button, Space, Card, App } from "antd";
+import { Table, InputNumber, Button, Space, Card, App, Input, DatePicker, Form } from "antd";
+import dayjs from "dayjs";
 import { CheckCircleOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
-import type { PurchaseOrder, POItem, ReceiveItemInput } from "../types";
+import type { PurchaseOrder, POItem, ReceivePOInput } from "../types";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
 
 interface POReceiveFormProps {
   purchaseOrder: PurchaseOrder;
-  onReceive: (items: ReceiveItemInput[]) => Promise<void>;
+  onReceive: (input: ReceivePOInput) => Promise<void>;
   onCancel: () => void;
   loading?: boolean;
 }
 
 type ReceiveLine = POItem & {
   receivedQuantity: number;
+  acceptedQuantity: number;
+  rejectedQuantity: number;
+  damagedQuantity: number;
+  rejectionReason?: string;
+  unitCostActual: number;
 };
 
 export default function POReceiveForm({ purchaseOrder, onReceive, onCancel, loading }: POReceiveFormProps) {
@@ -23,13 +29,20 @@ export default function POReceiveForm({ purchaseOrder, onReceive, onCancel, load
   const [lines, setLines] = useState<ReceiveLine[]>(
     purchaseOrder.items.map((item) => ({
       ...item,
-      receivedQuantity: item.quantity, // Default to ordered quantity
+      receivedQuantity: item.outstandingQuantity,
+      acceptedQuantity: item.outstandingQuantity,
+      rejectedQuantity: 0,
+      damagedQuantity: 0,
+      unitCostActual: item.unitCost,
     }))
   );
+  const [receivedAt, setReceivedAt] = useState(dayjs());
+  const [supplierInvoiceNumber, setSupplierInvoiceNumber] = useState("");
+  const [notes, setNotes] = useState("");
 
-  const updateQuantity = (itemId: string, qty: number) => {
+  const updateLine = (itemId: string, patch: Partial<ReceiveLine>) => {
     setLines((prev) =>
-      prev.map((l) => (l.id === itemId ? { ...l, receivedQuantity: qty } : l))
+      prev.map((l) => (l.id === itemId ? { ...l, ...patch } : l))
     );
   };
 
@@ -38,7 +51,9 @@ export default function POReceiveForm({ purchaseOrder, onReceive, onCancel, load
       .filter((l) => l.receivedQuantity > 0)
       .map((l) => ({
         purchaseOrderItemId: l.id,
-        receivedQuantity: l.receivedQuantity,
+        receivedQuantity: l.receivedQuantity, acceptedQuantity: l.acceptedQuantity,
+        rejectedQuantity: l.rejectedQuantity, damagedQuantity: l.damagedQuantity,
+        rejectionReason: l.rejectionReason, unitCostActual: l.unitCostActual,
       }));
 
     if (itemsToReceive.length === 0) {
@@ -46,7 +61,8 @@ export default function POReceiveForm({ purchaseOrder, onReceive, onCancel, load
       return;
     }
 
-    await onReceive(itemsToReceive);
+    if (itemsToReceive.some((item) => item.acceptedQuantity + item.rejectedQuantity + item.damagedQuantity !== item.receivedQuantity)) { message.error("Accepted + rejected + damaged must equal received for every line"); return; }
+    await onReceive({ items: itemsToReceive, receivedAt: receivedAt.toISOString(), supplierInvoiceNumber, notes });
   };
 
   const columns: ColumnsType<ReceiveLine> = [
@@ -67,8 +83,8 @@ export default function POReceiveForm({ purchaseOrder, onReceive, onCancel, load
       align: "center",
     },
     {
-      title: "Ordered",
-      dataIndex: "quantity",
+      title: "Outstanding",
+      dataIndex: "outstandingQuantity",
       width: 100,
       align: "center",
     },
@@ -87,19 +103,25 @@ export default function POReceiveForm({ purchaseOrder, onReceive, onCancel, load
       render: (_, record) => (
         <InputNumber
           min={0}
-          max={record.quantity * 2} // Allow slight over-delivery
+          max={record.quantity * 2}
           value={record.receivedQuantity}
-          onChange={(val) => updateQuantity(record.id, val ?? 0)}
+          onChange={(val) => updateLine(record.id, { receivedQuantity: val ?? 0 })}
           style={{ width: 80 }}
         />
       ),
     },
+    { title: "Accepted", width: 105, render: (_, record) => <InputNumber min={0} value={record.acceptedQuantity} onChange={(value) => updateLine(record.id, { acceptedQuantity: value ?? 0 })} style={{ width: 75 }} /> },
+    { title: "Rejected", width: 105, render: (_, record) => <InputNumber min={0} value={record.rejectedQuantity} onChange={(value) => updateLine(record.id, { rejectedQuantity: value ?? 0 })} style={{ width: 75 }} /> },
+    { title: "Damaged", width: 105, render: (_, record) => <InputNumber min={0} value={record.damagedQuantity} onChange={(value) => updateLine(record.id, { damagedQuantity: value ?? 0 })} style={{ width: 75 }} /> },
+    { title: "Actual cost", width: 120, render: (_, record) => <InputNumber min={0} value={record.unitCostActual} onChange={(value) => updateLine(record.id, { unitCostActual: value ?? 0 })} style={{ width: 95 }} /> },
+    { title: "Reason", width: 170, render: (_, record) => <Input value={record.rejectionReason} disabled={record.rejectedQuantity + record.damagedQuantity === 0} onChange={(event) => updateLine(record.id, { rejectionReason: event.target.value })} placeholder="Damage/rejection" /> },
   ];
 
   return (
     <Card title="Receive Purchase Order" size="small">
+      <Form layout="inline" style={{ marginBottom: 16 }}><Form.Item label="Received at"><DatePicker showTime value={receivedAt} onChange={(value) => value && setReceivedAt(value)} /></Form.Item><Form.Item label="Supplier invoice"><Input value={supplierInvoiceNumber} onChange={(event) => setSupplierInvoiceNumber(event.target.value)} placeholder="Optional invoice number" /></Form.Item><Form.Item label="Notes"><Input value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Optional receipt notes" /></Form.Item></Form>
       <p style={{ marginBottom: 16, color: "#666" }}>
-        Enter the actual received quantity for each item. Items with 0 received quantity will not update stock.
+        Record the complete receipt evidence. Only accepted quantity increases usable stock.
       </p>
       <Table
         columns={columns}
@@ -107,6 +129,7 @@ export default function POReceiveForm({ purchaseOrder, onReceive, onCancel, load
         rowKey="id"
         pagination={false}
         size="small"
+        scroll={{ x: 1200 }}
       />
       <div style={{ marginTop: 16, textAlign: "right" }}>
         <Space>

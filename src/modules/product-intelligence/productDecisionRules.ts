@@ -23,9 +23,13 @@ export type ProductDecisionInput = {
   unfulfilledDemand: number | null;
   returnRate: number;
   discountRate: number;
+  inboundQuantity?: number;
+  inboundExpectedDate?: string | null;
+  inboundOverdue?: boolean;
 };
 
 export type ProductDecisionType =
+  | "INBOUND_STOCK"
   | "REORDER"
   | "DEMAND_GAP"
   | "DEAD_STOCK"
@@ -44,6 +48,9 @@ export function deriveProductDecision(
 ): DecisionInsight<ProductDecisionType> {
   const t = PRODUCT_DECISION_THRESHOLDS;
   const base = { entityType: "PRODUCT" as const, entityId: input.productId };
+  const shortage = Math.max(1, input.unitsSold - input.currentStock);
+  if ((input.currentStock <= 2 || (input.stockCoverDays !== null && input.stockCoverDays <= t.reorderCoverDays)) && (input.inboundQuantity ?? 0) >= shortage && !input.inboundOverdue)
+    return { ...base, type: "INBOUND_STOCK", severity: "LOW", title: "Inbound stock", reasons: [`${n(input.inboundQuantity ?? 0)} units already on order`, input.inboundExpectedDate ? `Expected ${input.inboundExpectedDate}` : "Expected date not recorded", `${n(input.currentStock)} units currently in stock`] };
   if ((input.unfulfilledDemand ?? 0) > 0 && input.currentStock <= 2)
     return {
       ...base,

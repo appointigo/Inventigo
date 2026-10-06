@@ -141,22 +141,22 @@ model InvoicePolicyVersion {
 }
 
 model User {
-  id                        String              @id @default(uuid())
+  id                        String                 @id @default(uuid())
   orgId                     String?
   name                      String
-  email                     String              @unique
+  email                     String                 @unique
   passwordHash              String
-  role                      Role                @default(STAFF)
+  role                      Role                   @default(STAFF)
   storeId                   String?
-  isActive                  Boolean             @default(true)
-  emailVerified             Boolean             @default(false)
-  createdAt                 DateTime            @default(now())
-  updatedAt                 DateTime            @updatedAt
+  isActive                  Boolean                @default(true)
+  emailVerified             Boolean                @default(false)
+  createdAt                 DateTime               @default(now())
+  updatedAt                 DateTime               @updatedAt
   createdColors             Color[]
-  sentInvitations           Invitation[]        @relation("SentInvitations")
+  sentInvitations           Invitation[]           @relation("SentInvitations")
   leaveBalances             LeaveBalance[]
-  reviewedLeaves            LeaveRequest[]      @relation("LeaveReviewer")
-  leaveRequests             LeaveRequest[]      @relation("LeaveRequester")
+  reviewedLeaves            LeaveRequest[]         @relation("LeaveReviewer")
+  leaveRequests             LeaveRequest[]         @relation("LeaveRequester")
   purchaseOrders            PurchaseOrder[]
   purchases                 Purchase[]
   sales                     Sale[]
@@ -164,12 +164,13 @@ model User {
   returnTransactions        ReturnTransaction[]
   attendances               StaffAttendance[]
   stockMovements            StockMovement[]
-  createdVisits             CustomerVisit[]     @relation("VisitCreator")
+  createdVisits             CustomerVisit[]        @relation("VisitCreator")
   assignedCustomerFollowUps CustomerFollowUp[]
-  createdCustomerFollowUps  CustomerFollowUp[]  @relation("FollowUpCreator")
+  createdCustomerFollowUps  CustomerFollowUp[]     @relation("FollowUpCreator")
   storeExpenses             StoreExpense[]
-  org                       Organization?       @relation(fields: [orgId], references: [id])
-  store                     Store?              @relation(fields: [storeId], references: [id])
+  purchaseOrderReceipts     PurchaseOrderReceipt[]
+  org                       Organization?          @relation(fields: [orgId], references: [id])
+  store                     Store?                 @relation(fields: [storeId], references: [id])
 
   @@index([orgId])
   @@map("users")
@@ -261,31 +262,33 @@ model Brand {
 }
 
 model Product {
-  id                 String                  @id @default(uuid())
-  orgId              String
-  name               String
-  sku                String
-  externalBarcode    String?
-  categoryId         String
-  brandId            String
-  basePrice          Decimal                 @db.Decimal(10, 2)
-  costPrice          Decimal                 @db.Decimal(10, 2)
-  attributes         Json                    @default("{}")
-  imageUrl           String?
-  isActive           Boolean                 @default(true)
-  createdAt          DateTime                @default(now())
-  updatedAt          DateTime                @updatedAt
-  mrp                Decimal                 @db.Decimal(10, 2)
-  brand              Brand                   @relation(fields: [brandId], references: [id])
-  category           Category                @relation(fields: [categoryId], references: [id])
-  org                Organization            @relation(fields: [orgId], references: [id])
-  purchaseOrderItems PurchaseOrderItem[]
-  saleItems          SaleItem[]
-  stockEntries       StockEntry[]
-  stockMovements     StockMovement[]
-  returnedItems      ReturnTransactionItem[] @relation("ReturnedProduct")
-  newItems           ReturnTransactionItem[] @relation("NewProduct")
-  demandRequests     DemandRequest[]
+  id                        String                     @id @default(uuid())
+  orgId                     String
+  name                      String
+  sku                       String
+  externalBarcode           String?
+  categoryId                String
+  brandId                   String
+  basePrice                 Decimal                    @db.Decimal(10, 2)
+  costPrice                 Decimal                    @db.Decimal(10, 2)
+  attributes                Json                       @default("{}")
+  imageUrl                  String?
+  isActive                  Boolean                    @default(true)
+  createdAt                 DateTime                   @default(now())
+  updatedAt                 DateTime                   @updatedAt
+  mrp                       Decimal                    @db.Decimal(10, 2)
+  brand                     Brand                      @relation(fields: [brandId], references: [id])
+  category                  Category                   @relation(fields: [categoryId], references: [id])
+  org                       Organization               @relation(fields: [orgId], references: [id])
+  purchaseOrderItems        PurchaseOrderItem[]
+  saleItems                 SaleItem[]
+  stockEntries              StockEntry[]
+  stockMovements            StockMovement[]
+  returnedItems             ReturnTransactionItem[]    @relation("ReturnedProduct")
+  newItems                  ReturnTransactionItem[]    @relation("NewProduct")
+  demandRequests            DemandRequest[]
+  productSuppliers          ProductSupplier[]
+  purchaseOrderReceiptItems PurchaseOrderReceiptItem[]
 
   @@unique([sku, orgId])
   @@index([orgId])
@@ -297,19 +300,20 @@ model Product {
 }
 
 model Size {
-  id                  String                  @id @default(uuid())
-  label               String
-  sortOrder           Int                     @default(0)
-  categoryId          String
-  createdAt           DateTime                @default(now())
-  purchaseOrderItems  PurchaseOrderItem[]
-  purchaseItemOptions PurchaseItemOption[]
-  saleItems           SaleItem[]
-  category            Category                @relation(fields: [categoryId], references: [id])
-  stockEntries        StockEntry[]
-  stockMovements      StockMovement[]
-  returnedItems       ReturnTransactionItem[] @relation("ReturnedSize")
-  newItems            ReturnTransactionItem[] @relation("NewSize")
+  id                        String                     @id @default(uuid())
+  label                     String
+  sortOrder                 Int                        @default(0)
+  categoryId                String
+  createdAt                 DateTime                   @default(now())
+  purchaseOrderItems        PurchaseOrderItem[]
+  purchaseItemOptions       PurchaseItemOption[]
+  saleItems                 SaleItem[]
+  category                  Category                   @relation(fields: [categoryId], references: [id])
+  stockEntries              StockEntry[]
+  stockMovements            StockMovement[]
+  returnedItems             ReturnTransactionItem[]    @relation("ReturnedSize")
+  newItems                  ReturnTransactionItem[]    @relation("NewSize")
+  purchaseOrderReceiptItems PurchaseOrderReceiptItem[]
 
   @@unique([label, categoryId])
   @@index([categoryId])
@@ -372,40 +376,43 @@ model StockMovement {
 }
 
 model Supplier {
-  id             String          @id @default(uuid())
-  orgId          String
-  name           String
-  contactPerson  String?
-  email          String?
-  phone          String?
-  address        String?
-  isActive       Boolean         @default(true)
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  purchaseOrders PurchaseOrder[]
-  purchases      Purchase[]
-  org            Organization    @relation(fields: [orgId], references: [id])
+  id               String            @id @default(uuid())
+  orgId            String
+  name             String
+  contactPerson    String?
+  email            String?
+  phone            String?
+  address          String?
+  isActive         Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  purchaseOrders   PurchaseOrder[]
+  purchases        Purchase[]
+  productSuppliers ProductSupplier[]
+  org              Organization      @relation(fields: [orgId], references: [id])
 
   @@index([orgId])
   @@map("suppliers")
 }
 
 model PurchaseOrder {
-  id          String              @id @default(uuid())
-  storeId     String
-  supplierId  String
-  status      PurchaseOrderStatus @default(DRAFT)
-  totalAmount Decimal             @default(0) @db.Decimal(10, 2)
-  notes       String?
-  orderedAt   DateTime?
-  receivedAt  DateTime?
-  createdBy   String
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
-  items       PurchaseOrderItem[]
-  user        User                @relation(fields: [createdBy], references: [id])
-  store       Store               @relation(fields: [storeId], references: [id])
-  supplier    Supplier            @relation(fields: [supplierId], references: [id])
+  id                   String                 @id @default(uuid())
+  storeId              String
+  supplierId           String
+  status               PurchaseOrderStatus    @default(DRAFT)
+  totalAmount          Decimal                @default(0) @db.Decimal(10, 2)
+  notes                String?
+  orderedAt            DateTime?
+  receivedAt           DateTime?
+  expectedDeliveryDate DateTime?              @db.Date
+  createdBy            String
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  items                PurchaseOrderItem[]
+  user                 User                   @relation(fields: [createdBy], references: [id])
+  store                Store                  @relation(fields: [storeId], references: [id])
+  supplier             Supplier               @relation(fields: [supplierId], references: [id])
+  receipts             PurchaseOrderReceipt[]
 
   @@index([storeId])
   @@index([supplierId])
@@ -414,18 +421,78 @@ model PurchaseOrder {
 }
 
 model PurchaseOrderItem {
-  id              String        @id @default(uuid())
+  id              String                     @id @default(uuid())
   purchaseOrderId String
   productId       String
   sizeId          String
   quantity        Int
-  unitCost        Decimal       @db.Decimal(10, 2)
-  createdAt       DateTime      @default(now())
-  product         Product       @relation(fields: [productId], references: [id])
-  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
-  size            Size          @relation(fields: [sizeId], references: [id])
+  unitCost        Decimal                    @db.Decimal(10, 2)
+  createdAt       DateTime                   @default(now())
+  product         Product                    @relation(fields: [productId], references: [id])
+  purchaseOrder   PurchaseOrder              @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  size            Size                       @relation(fields: [sizeId], references: [id])
+  receiptItems    PurchaseOrderReceiptItem[]
 
   @@map("purchase_order_items")
+}
+
+model PurchaseOrderReceipt {
+  id                    String                     @id @default(uuid())
+  purchaseOrderId       String
+  receivedAt            DateTime                   @default(now())
+  receivedBy            String
+  supplierInvoiceNumber String?
+  notes                 String?
+  createdAt             DateTime                   @default(now())
+  purchaseOrder         PurchaseOrder              @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  receiver              User                       @relation(fields: [receivedBy], references: [id], onDelete: Restrict)
+  items                 PurchaseOrderReceiptItem[]
+
+  @@index([purchaseOrderId, receivedAt])
+  @@index([receivedBy])
+  @@map("purchase_order_receipts")
+}
+
+model PurchaseOrderReceiptItem {
+  id                  String               @id @default(uuid())
+  receiptId           String
+  purchaseOrderItemId String
+  productId           String
+  sizeId              String
+  quantityReceived    Int
+  quantityAccepted    Int
+  quantityRejected    Int                  @default(0)
+  quantityDamaged     Int                  @default(0)
+  rejectionReason     String?
+  unitCostActual      Decimal?             @db.Decimal(10, 2)
+  createdAt           DateTime             @default(now())
+  receipt             PurchaseOrderReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  purchaseOrderItem   PurchaseOrderItem    @relation(fields: [purchaseOrderItemId], references: [id], onDelete: Restrict)
+  product             Product              @relation(fields: [productId], references: [id], onDelete: Restrict)
+  size                Size                 @relation(fields: [sizeId], references: [id], onDelete: Restrict)
+
+  @@index([receiptId])
+  @@index([purchaseOrderItemId])
+  @@index([productId, sizeId])
+  @@map("purchase_order_receipt_items")
+}
+
+model ProductSupplier {
+  id               String   @id @default(uuid())
+  productId        String
+  supplierId       String
+  isDefault        Boolean  @default(false)
+  supplierSku      String?
+  lastPurchaseCost Decimal? @db.Decimal(10, 2)
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  product          Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  supplier         Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, supplierId])
+  @@index([supplierId, isActive])
+  @@map("product_suppliers")
 }
 
 model Purchase {
@@ -1774,6 +1841,7 @@ enum ReferenceType {
 enum PurchaseOrderStatus {
   DRAFT
   ORDERED
+  PARTIALLY_RECEIVED
   RECEIVED
   CANCELLED
 }

@@ -19,6 +19,7 @@ const statusColors: Record<string, string> = {
   MARGIN_LEAKAGE: "magenta",
   HIGH_RETURN: "red",
   HIGH_PERFORMER: "green",
+  INBOUND_STOCK: "blue",
   MONITOR: "default",
 };
 const periods = [
@@ -125,6 +126,7 @@ export default function ProductIntelligencePage() {
       },
       { title: "Units", dataIndex: "unitsSold", width: 80 },
       { title: "Stock", dataIndex: "currentQuantity", width: 80 },
+      { title: "Inbound", dataIndex: "inboundQuantity", width: 95, render: (v: number, row) => v ? <span>{v}<div className={styles.muted}>{row.inboundExpectedDate ?? (row.inboundOverdue ? "Overdue" : "Date missing")}</div></span> : "—" },
       {
         title: "Cover",
         dataIndex: "stockCoverDays",
@@ -207,6 +209,7 @@ export default function ProductIntelligencePage() {
           { l: "Slow moving", v: query.data?.summary.slowMoving },
           { l: "Dead stock", v: query.data?.summary.deadStock },
           { l: "High returns", v: query.data?.summary.highReturn },
+          { l: "Inbound stock", v: query.data?.summary.inboundStock },
         ].map((x) => (
           <article key={x.l}>
             <span>{x.l}</span>
@@ -251,6 +254,7 @@ export default function ProductIntelligencePage() {
             "HIGH_RETURN",
             "MARGIN_LEAKAGE",
             "HIGH_PERFORMER",
+            "INBOUND_STOCK",
           ].map((x) => ({ value: x, label: x.replaceAll("_", " ") }))}
           onChange={(v) => {
             setStatus(v);

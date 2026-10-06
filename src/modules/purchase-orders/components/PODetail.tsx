@@ -18,7 +18,7 @@ export default function PODetail({ purchaseOrder }: PODetailProps) {
   let currentStep = 0;
   if (status === "CANCELLED") {
     currentStep = status === "CANCELLED" ? -1 : 0; // Special handling below
-  } else if (status === "ORDERED") {
+  } else if (status === "ORDERED" || status === "PARTIALLY_RECEIVED") {
     currentStep = 1;
   } else if (status === "RECEIVED") {
     currentStep = 2;
@@ -47,6 +47,10 @@ export default function PODetail({ purchaseOrder }: PODetailProps) {
       width: 100,
       align: "center",
     },
+    { title: "Accepted", dataIndex: "acceptedQuantity", width: 90, align: "center" },
+    { title: "Rejected", dataIndex: "rejectedQuantity", width: 90, align: "center" },
+    { title: "Damaged", dataIndex: "damagedQuantity", width: 90, align: "center" },
+    { title: "Outstanding", dataIndex: "outstandingQuantity", width: 100, align: "center" },
     {
       title: "Unit Cost",
       dataIndex: "unitCost",
@@ -116,6 +120,7 @@ export default function PODetail({ purchaseOrder }: PODetailProps) {
           <Descriptions.Item label="Created">
             {formatDateTime(purchaseOrder.createdAt)}
           </Descriptions.Item>
+          <Descriptions.Item label="Expected delivery">{purchaseOrder.expectedDeliveryDate ? formatDate(purchaseOrder.expectedDeliveryDate) : "Not recorded"}</Descriptions.Item>
           {purchaseOrder.notes && (
             <Descriptions.Item label="Notes" span={2}>
               {purchaseOrder.notes}
@@ -134,7 +139,7 @@ export default function PODetail({ purchaseOrder }: PODetailProps) {
           size="small"
           summary={() => (
             <Table.Summary.Row>
-              <Table.Summary.Cell index={0} colSpan={4}>
+              <Table.Summary.Cell index={0} colSpan={8}>
                 <strong>Total</strong>
               </Table.Summary.Cell>
               <Table.Summary.Cell index={1} align="right">

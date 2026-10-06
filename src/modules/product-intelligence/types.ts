@@ -18,6 +18,9 @@ export type ProductIntelligenceRow = {
   grossProfit: number | null;
   grossMarginPercent: number | null;
   currentQuantity: number;
+  inboundQuantity: number;
+  inboundExpectedDate: string | null;
+  inboundOverdue: boolean;
   inventoryValue: number;
   salesVelocityPerDay: number;
   stockCoverDays: number | null;
@@ -54,6 +57,7 @@ export type ProductIntelligenceResponse = {
     deadStock: number;
     overstock: number;
     highReturn: number;
+    inboundStock: number;
   };
   filters: {
     categories: Array<{ id: string; name: string }>;
