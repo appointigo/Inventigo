@@ -1,7 +1,11 @@
+import { Role } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { poService } from "@/modules/purchase-orders/services/poService";
 import { requireOrgAuth } from "@/lib/auth.middleware";
-import { AnalyticsAccessError, resolveAnalyticsStore } from "@/modules/analytics/services/analyticsAccess";
+import {
+  AnalyticsAccessError,
+  resolveAnalyticsStore,
+} from "@/modules/analytics/services/analyticsAccess";
 
 export async function GET(request: Request) {
   let user;
@@ -16,7 +20,9 @@ export async function GET(request: Request) {
     const filters = {
       storeId: scope.storeId,
       supplierId: searchParams.get("supplierId") || undefined,
-      status: searchParams.get("status") as import("@prisma/client").PurchaseOrderStatus | undefined,
+      status: searchParams.get("status") as
+        | import("@prisma/client").PurchaseOrderStatus
+        | undefined,
     };
     const orders = await poService.list(filters, user.orgId);
     return NextResponse.json(orders);
@@ -34,6 +40,9 @@ export async function POST(request: Request) {
     user = await requireOrgAuth();
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!(user.role === Role.OWNER || user.role === Role.ADMIN || user.role === Role.MANAGER)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   try {
     const body = await request.json();

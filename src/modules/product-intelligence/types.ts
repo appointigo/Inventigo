@@ -21,6 +21,13 @@ export type ProductIntelligenceRow = {
   inboundQuantity: number;
   inboundExpectedDate: string | null;
   inboundOverdue: boolean;
+  replenishment: {
+    type: string;
+    recommendedQuantity: number | null;
+    evidenceQuality: "HIGH" | "MEDIUM" | "LOW";
+    reasons: string[];
+    stockoutRisk: boolean;
+  } | null;
   inventoryValue: number;
   salesVelocityPerDay: number;
   stockCoverDays: number | null;

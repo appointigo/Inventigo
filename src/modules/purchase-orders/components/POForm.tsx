@@ -1,7 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { Form, Select, Input, InputNumber, Button, Space, Table, Card, App, DatePicker } from "antd";
+import {
+  Form,
+  Select,
+  Input,
+  InputNumber,
+  Button,
+  Space,
+  Table,
+  Card,
+  App,
+  DatePicker,
+} from "antd";
 import { PlusOutlined, DeleteOutlined } from "@ant-design/icons";
 import type { Supplier } from "@/modules/suppliers/types";
 import type { Product } from "@/modules/products/types";
@@ -11,9 +22,15 @@ import { formatCurrency } from "@/shared/utils/formatCurrency";
 interface POFormProps {
   suppliers: Supplier[];
   products: Product[];
-  onSubmit: (values: { supplierId: string; notes?: string; expectedDeliveryDate?: string; items: POItemFormValues[] }) => Promise<void>;
+  onSubmit: (values: {
+    supplierId: string;
+    notes?: string;
+    expectedDeliveryDate?: string;
+    items: POItemFormValues[];
+  }) => Promise<void>;
   onCancel: () => void;
   loading?: boolean;
+  prefill?: { supplierId?: string; productId: string; sizeId: string; quantity: number };
 }
 
 type LineItem = POItemFormValues & {
@@ -22,22 +39,50 @@ type LineItem = POItemFormValues & {
   sizeLabel?: string;
 };
 
-export default function POForm({ suppliers, products, onSubmit, onCancel, loading }: POFormProps) {
+export default function POForm({
+  suppliers,
+  products,
+  onSubmit,
+  onCancel,
+  loading,
+  prefill,
+}: POFormProps) {
   const { message } = App.useApp();
   const [form] = Form.useForm();
-  const [lineItems, setLineItems] = useState<LineItem[]>([]);
+  const [lineItems, setLineItems] = useState<LineItem[]>(() => {
+    if (!prefill) return [];
+    const product = products.find((item) => item.id === prefill.productId);
+    const size = product?.stock?.find((item) => item.sizeId === prefill.sizeId);
+    return [
+      {
+        key: `${prefill.productId}-${prefill.sizeId}`,
+        productId: prefill.productId,
+        sizeId: prefill.sizeId,
+        quantity: prefill.quantity,
+        unitCost: product?.costPrice ?? 0,
+        productName: product?.name,
+        sizeLabel: size?.sizeLabel,
+      },
+    ];
+  });
   const [selectedProduct, setSelectedProduct] = useState<string | undefined>();
 
   const activeSuppliers = suppliers.filter((s) => s.isActive);
   const activeProducts = products.filter((p) => p.isActive);
 
   const selectedProductData = activeProducts.find((p) => p.id === selectedProduct);
-  const availableSizes = selectedProductData?.stock?.map((s) => ({
-    value: s.sizeId,
-    label: s.sizeLabel,
-  })) ?? [];
+  const availableSizes =
+    selectedProductData?.stock?.map((s) => ({
+      value: s.sizeId,
+      label: s.sizeLabel,
+    })) ?? [];
 
-  const addItem = (values: { productId: string; sizeId: string; quantity: number; unitCost: number }) => {
+  const addItem = (values: {
+    productId: string;
+    sizeId: string;
+    quantity: number;
+    unitCost: number;
+  }) => {
     const product = activeProducts.find((p) => p.id === values.productId);
     const sizeInfo = product?.stock?.find((s) => s.sizeId === values.sizeId);
 
@@ -70,7 +115,11 @@ export default function POForm({ suppliers, products, onSubmit, onCancel, loadin
 
   const totalAmount = lineItems.reduce((sum, li) => sum + li.quantity * li.unitCost, 0);
 
-  const handleFinish = async (formValues: { supplierId: string; notes?: string; expectedDeliveryDate?: { format: (pattern: string) => string } }) => {
+  const handleFinish = async (formValues: {
+    supplierId: string;
+    notes?: string;
+    expectedDeliveryDate?: { format: (pattern: string) => string };
+  }) => {
     if (lineItems.length === 0) {
       message.error("Please add at least one line item");
       return;
@@ -112,13 +161,24 @@ export default function POForm({ suppliers, products, onSubmit, onCancel, loadin
       key: "actions",
       width: 50,
       render: (_: unknown, record: LineItem) => (
-        <Button type="text" danger icon={<DeleteOutlined />} onClick={() => removeItem(record.key)} size="small" />
+        <Button
+          type="text"
+          danger
+          icon={<DeleteOutlined />}
+          onClick={() => removeItem(record.key)}
+          size="small"
+        />
       ),
     },
   ];
 
   return (
-    <Form form={form} layout="vertical" onFinish={handleFinish}>
+    <Form
+      form={form}
+      layout="vertical"
+      onFinish={handleFinish}
+      initialValues={{ supplierId: prefill?.supplierId }}
+    >
       <Card title="Order Details" size="small" style={{ marginBottom: 16 }}>
         <Form.Item
           name="supplierId"
@@ -135,7 +195,11 @@ export default function POForm({ suppliers, products, onSubmit, onCancel, loadin
         <Form.Item name="notes" label="Notes">
           <Input.TextArea rows={2} placeholder="Optional notes for this order" />
         </Form.Item>
-        <Form.Item name="expectedDeliveryDate" label="Expected delivery date" rules={[{ required: true, message: "Select the expected delivery date" }]}>
+        <Form.Item
+          name="expectedDeliveryDate"
+          label="Expected delivery date"
+          rules={[{ required: true, message: "Select the expected delivery date" }]}
+        >
           <DatePicker style={{ width: "100%" }} />
         </Form.Item>
       </Card>
@@ -152,11 +216,7 @@ export default function POForm({ suppliers, products, onSubmit, onCancel, loadin
             />
           </Form.Item>
           <Form.Item name="itemSize" style={{ marginBottom: 0, width: 100 }}>
-            <Select
-              placeholder="Size"
-              disabled={!selectedProduct}
-              options={availableSizes}
-            />
+            <Select placeholder="Size" disabled={!selectedProduct} options={availableSizes} />
           </Form.Item>
           <Form.Item name="itemQty" style={{ marginBottom: 0, width: 90 }}>
             <InputNumber placeholder="Qty" min={1} style={{ width: "100%" }} />
@@ -214,7 +274,12 @@ export default function POForm({ suppliers, products, onSubmit, onCancel, loadin
       <div style={{ textAlign: "right" }}>
         <Space>
           <Button onClick={onCancel}>Cancel</Button>
-          <Button type="primary" htmlType="submit" loading={loading} disabled={lineItems.length === 0}>
+          <Button
+            type="primary"
+            htmlType="submit"
+            loading={loading}
+            disabled={lineItems.length === 0}
+          >
             Create Purchase Order
           </Button>
         </Space>

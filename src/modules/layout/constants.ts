@@ -93,6 +93,7 @@ export const MODULE_NAVIGATION: ModuleNavigation[] = [
       { key: "movements", path: "/dashboard/stock?view=movements", name: "Stock Movement", icon: UnorderedListOutlined, roles: ALL_ROLES },
       { key: "intelligence", path: "/dashboard/inventory-intelligence", name: "Inventory Intelligence", icon: BarChartOutlined, roles: ALL_ROLES },
       { key: "product-intelligence", path: "/dashboard/inventory-intelligence/products", name: "Product Intelligence", icon: RiseOutlined, roles: ALL_ROLES },
+      { key: "inventory-actions", path: "/dashboard/inventory-intelligence/actions", name: "Inventory Actions", icon: WarningOutlined, roles: ALL_ROLES },
       { key: "demand", path: "/dashboard/demand", name: "Demand Intelligence", icon: RiseOutlined, roles: ALL_ROLES },
       { key: "lost-opportunity", path: "/dashboard/demand/lost-opportunity", name: "Lost Opportunity", icon: WarningOutlined, roles: ALL_ROLES },
     ],

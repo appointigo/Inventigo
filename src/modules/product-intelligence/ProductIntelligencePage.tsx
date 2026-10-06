@@ -126,7 +126,36 @@ export default function ProductIntelligencePage() {
       },
       { title: "Units", dataIndex: "unitsSold", width: 80 },
       { title: "Stock", dataIndex: "currentQuantity", width: 80 },
-      { title: "Inbound", dataIndex: "inboundQuantity", width: 95, render: (v: number, row) => v ? <span>{v}<div className={styles.muted}>{row.inboundExpectedDate ?? (row.inboundOverdue ? "Overdue" : "Date missing")}</div></span> : "—" },
+      {
+        title: "Inbound",
+        dataIndex: "inboundQuantity",
+        width: 95,
+        render: (v: number, row) =>
+          v ? (
+            <span>
+              {v}
+              <div className={styles.muted}>
+                {row.inboundExpectedDate ?? (row.inboundOverdue ? "Overdue" : "Date missing")}
+              </div>
+            </span>
+          ) : (
+            "—"
+          ),
+      },
+      {
+        title: "Recommended",
+        dataIndex: "replenishment",
+        width: 145,
+        render: (value: ProductIntelligenceRow["replenishment"]) =>
+          value ? (
+            <span>
+              {value.recommendedQuantity == null ? "—" : `${value.recommendedQuantity} units`}
+              <div className={styles.muted}>{value.evidenceQuality} evidence</div>
+            </span>
+          ) : (
+            "Not evaluated"
+          ),
+      },
       {
         title: "Cover",
         dataIndex: "stockCoverDays",
@@ -360,6 +389,27 @@ export default function ProductIntelligencePage() {
                 <strong>{selected.sellThrough == null ? "—" : `${selected.sellThrough}%`}</strong>
               </article>
             </div>
+            <Typography.Title level={4}>Replenishment recommendation</Typography.Title>
+            {selected.replenishment ? (
+              <>
+                <Tag color={statusColors[selected.replenishment.type] ?? "blue"}>
+                  {selected.replenishment.type.replaceAll("_", " ")}
+                </Tag>
+                <p>
+                  {selected.replenishment.recommendedQuantity == null
+                    ? "No precise reorder quantity is available."
+                    : `${selected.replenishment.recommendedQuantity} units recommended across variants.`}
+                </p>
+                <Tag>{selected.replenishment.evidenceQuality} evidence</Tag>
+                <ul className={styles.reasons}>
+                  {selected.replenishment.reasons.map((reason) => (
+                    <li key={reason}>{reason}</li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p>Open Inventory Actions to evaluate this product for the selected period.</p>
+            )}
             <Typography.Title level={4}>Demand, returns & discounts</Typography.Title>
             <div className={styles.detailGrid}>
               <article>

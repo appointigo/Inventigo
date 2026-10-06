@@ -169,28 +169,117 @@ export const productIntelligenceService = {
     const signalMap = new Map(signalRows.map((row) => [row.productId, row]));
     // Inventory service exposes the complete product set through its valuation/signals only in grouped views;
     // load lightweight product metadata and current stock to include products with no period activity.
-    const [products, inboundItems] = await Promise.all([prisma.product.findMany({
-      where: {
-        orgId,
-        OR: [
-          { stockEntries: { some: { storeId } } },
-          { saleItems: { some: { sale: { storeId, transactionDate: { gte: start, lt: end } } } } },
-        ],
-      },
-      select: {
-        id: true,
-        name: true,
-        sku: true,
-        isActive: true,
-        costPrice: true,
-        category: { select: { id: true, name: true } },
-        brand: { select: { id: true, name: true } },
-        stockEntries: { where: { storeId }, select: { quantity: true } },
-      },
-    }), prisma.purchaseOrderItem.findMany({ where: { purchaseOrder: { storeId, store: { orgId }, status: { in: ["ORDERED", "PARTIALLY_RECEIVED"] } } }, select: { productId: true, quantity: true, purchaseOrder: { select: { expectedDeliveryDate: true } }, receiptItems: { select: { quantityAccepted: true } } } })]);
-    const inboundByProduct = new Map<string, { quantity: number; expectedDate: string | null; overdue: boolean }>();
+    const [products, inboundItems, replenishmentSnapshots] = await Promise.all([
+      prisma.product.findMany({
+        where: {
+          orgId,
+          OR: [
+            { stockEntries: { some: { storeId } } },
+            {
+              saleItems: {
+                some: { sale: { storeId, transactionDate: { gte: start, lt: end } } },
+              },
+            },
+          ],
+        },
+        select: {
+          id: true,
+          name: true,
+          sku: true,
+          isActive: true,
+          costPrice: true,
+          category: { select: { id: true, name: true } },
+          brand: { select: { id: true, name: true } },
+          stockEntries: { where: { storeId }, select: { quantity: true } },
+        },
+      }),
+      prisma.purchaseOrderItem.findMany({
+        where: {
+          purchaseOrder: {
+            storeId,
+            store: { orgId },
+            status: { in: ["ORDERED", "PARTIALLY_RECEIVED"] },
+          },
+        },
+        select: {
+          productId: true,
+          sizeId: true,
+          quantity: true,
+          purchaseOrder: { select: { expectedDeliveryDate: true } },
+          receiptItems: { select: { quantityAccepted: true } },
+        },
+      }),
+      prisma.replenishmentRecommendation.findMany({
+        where: { orgId, storeId, observationFrom: start, observationTo: end },
+        orderBy: { evaluatedAt: "desc" },
+        select: {
+          productId: true,
+          sizeId: true,
+          type: true,
+          recommendedQuantity: true,
+          evidenceQuality: true,
+          reasons: true,
+        },
+      }),
+    ]);
+    const inboundByProduct = new Map<
+      string,
+      { quantity: number; expectedDate: string | null; overdue: boolean }
+    >();
     const today = new Date().toISOString().slice(0, 10);
-    for (const item of inboundItems) { const accepted = item.receiptItems.reduce((sum, receipt) => sum + receipt.quantityAccepted, 0); const open = Math.max(0, item.quantity - accepted); if (!open) continue; const current = inboundByProduct.get(item.productId) ?? { quantity: 0, expectedDate: null, overdue: false }; const expected = item.purchaseOrder.expectedDeliveryDate?.toISOString().slice(0, 10) ?? null; current.quantity += open; if (expected && (!current.expectedDate || expected < current.expectedDate)) current.expectedDate = expected; if (expected && expected < today) current.overdue = true; inboundByProduct.set(item.productId, current); }
+    for (const item of inboundItems) {
+      const accepted = item.receiptItems.reduce(
+        (sum, receipt) => sum + receipt.quantityAccepted,
+        0
+      );
+      const open = Math.max(0, item.quantity - accepted);
+      if (!open) continue;
+      const current = inboundByProduct.get(item.productId) ?? {
+        quantity: 0,
+        expectedDate: null,
+        overdue: false,
+      };
+      const expected = item.purchaseOrder.expectedDeliveryDate?.toISOString().slice(0, 10) ?? null;
+      current.quantity += open;
+      if (expected && (!current.expectedDate || expected < current.expectedDate))
+        current.expectedDate = expected;
+      if (expected && expected < today) current.overdue = true;
+      inboundByProduct.set(item.productId, current);
+    }
+    const replenishmentByProduct = new Map<string, ProductIntelligenceRow["replenishment"]>();
+    const recommendationPriority: Record<string, number> = {
+      STOCKOUT_RISK: 7,
+      REORDER: 6,
+      MARKDOWN_CANDIDATE: 5,
+      OVERSTOCK: 4,
+      MONITOR: 3,
+      INBOUND_COVERS_DEMAND: 2,
+      NO_REORDER: 1,
+    };
+    const evaluatedVariants = new Set<string>();
+    for (const snapshot of replenishmentSnapshots) {
+      const variantKey = `${snapshot.productId}:${snapshot.sizeId}`;
+      if (evaluatedVariants.has(variantKey)) continue;
+      evaluatedVariants.add(variantKey);
+      const current = replenishmentByProduct.get(snapshot.productId);
+      const quantity = (current?.recommendedQuantity ?? 0) + (snapshot.recommendedQuantity ?? 0);
+      replenishmentByProduct.set(snapshot.productId, {
+        type:
+          !current ||
+          (recommendationPriority[snapshot.type] ?? 0) > (recommendationPriority[current.type] ?? 0)
+            ? snapshot.type
+            : current.type,
+        recommendedQuantity: quantity > 0 ? quantity : null,
+        evidenceQuality:
+          current?.evidenceQuality === "LOW" || snapshot.evidenceQuality === "LOW"
+            ? "LOW"
+            : current?.evidenceQuality === "MEDIUM" || snapshot.evidenceQuality === "MEDIUM"
+              ? "MEDIUM"
+              : "HIGH",
+        reasons: [...new Set([...(current?.reasons ?? []), ...snapshot.reasons])].slice(0, 4),
+        stockoutRisk: current?.stockoutRisk === true || snapshot.type === "STOCKOUT_RISK",
+      });
+    }
     const rows: ProductIntelligenceRow[] = products.map((product) => {
       const f = financial.get(product.id) ?? emptyFinancial();
       const signal = signalMap.get(product.id);
@@ -213,7 +302,11 @@ export const productIntelligenceService = {
       const daysSinceSale =
         signal?.daysSinceSale ??
         (last ? Math.floor((Date.now() - last.getTime()) / 86_400_000) : null);
-      const inbound = inboundByProduct.get(product.id) ?? { quantity: 0, expectedDate: null, overdue: false };
+      const inbound = inboundByProduct.get(product.id) ?? {
+        quantity: 0,
+        expectedDate: null,
+        overdue: false,
+      };
       const decision = deriveProductDecision({
         productId: product.id,
         unitsSold: f.units,
@@ -226,7 +319,9 @@ export const productIntelligenceService = {
         unfulfilledDemand: signal?.unfulfilledDemand ?? null,
         returnRate,
         discountRate,
-        inboundQuantity: inbound.quantity, inboundExpectedDate: inbound.expectedDate, inboundOverdue: inbound.overdue,
+        inboundQuantity: inbound.quantity,
+        inboundExpectedDate: inbound.expectedDate,
+        inboundOverdue: inbound.overdue,
       });
       return {
         productId: product.id,
@@ -248,6 +343,7 @@ export const productIntelligenceService = {
         inboundQuantity: inbound.quantity,
         inboundExpectedDate: inbound.expectedDate,
         inboundOverdue: inbound.overdue,
+        replenishment: replenishmentByProduct.get(product.id) ?? null,
         inventoryValue,
         salesVelocityPerDay: round(Math.max(0, f.units) / days, 3),
         stockCoverDays:

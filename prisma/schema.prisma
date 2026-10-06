@@ -7,93 +7,95 @@ datasource db {
 }
 
 model Organization {
-  id                          String                       @id @default(uuid())
-  name                        String
-  slug                        String                       @unique
-  logoUrl                     String?
-  plan                        OrgPlan                      @default(FREE)
-  isActive                    Boolean                      @default(true)
-  createdAt                   DateTime                     @default(now())
-  updatedAt                   DateTime                     @updatedAt
-  alertConfigs                AlertConfig[]
-  brands                      Brand[]
-  categories                  Category[]
-  customers                   Customer[]
-  customerVisits              CustomerVisit[]
-  demandRequests              DemandRequest[]
-  expenseBudgets              ExpenseBudget[]
-  expenseCategoryOptions      ExpenseCategoryOption[]
-  featureFlags                FeatureFlag[]
-  tenantFeatures              TenantFeature[]
-  invitations                 Invitation[]
-  leaveBalances               LeaveBalance[]
-  leaveRequests               LeaveRequest[]
-  products                    Product[]
-  promoCodes                  PromoCode[]
-  purchases                   Purchase[]
-  attendances                 StaffAttendance[]
-  storeExpenses               StoreExpense[]
-  leavePolicies               StoreLeavePolicy[]
-  stores                      Store[]
-  suppliers                   Supplier[]
-  users                       User[]
-  weeklyOffs                  WeeklyOff[]
-  whatsappIntegrations        WhatsAppIntegration[]
-  whatsappCredentials         WhatsAppCredential[]
-  whatsappMessages            WhatsAppMessage[]
-  whatsappTemplateDefinitions WhatsAppTemplateDefinition[]
-  whatsappContacts            WhatsAppContact[]
-  whatsappCampaigns           WhatsAppCampaign[]
-  whatsappAutomations         WhatsAppAutomation[]
-  whatsappConversations       WhatsAppConversation[]
-  whatsappWebhookEvents       WhatsAppWebhookEvent[]
-  customerFollowUps           CustomerFollowUp[]
+  id                           String                        @id @default(uuid())
+  name                         String
+  slug                         String                        @unique
+  logoUrl                      String?
+  plan                         OrgPlan                       @default(FREE)
+  isActive                     Boolean                       @default(true)
+  createdAt                    DateTime                      @default(now())
+  updatedAt                    DateTime                      @updatedAt
+  alertConfigs                 AlertConfig[]
+  brands                       Brand[]
+  categories                   Category[]
+  customers                    Customer[]
+  customerVisits               CustomerVisit[]
+  demandRequests               DemandRequest[]
+  expenseBudgets               ExpenseBudget[]
+  expenseCategoryOptions       ExpenseCategoryOption[]
+  featureFlags                 FeatureFlag[]
+  tenantFeatures               TenantFeature[]
+  invitations                  Invitation[]
+  leaveBalances                LeaveBalance[]
+  leaveRequests                LeaveRequest[]
+  products                     Product[]
+  promoCodes                   PromoCode[]
+  purchases                    Purchase[]
+  attendances                  StaffAttendance[]
+  storeExpenses                StoreExpense[]
+  leavePolicies                StoreLeavePolicy[]
+  stores                       Store[]
+  suppliers                    Supplier[]
+  users                        User[]
+  weeklyOffs                   WeeklyOff[]
+  whatsappIntegrations         WhatsAppIntegration[]
+  whatsappCredentials          WhatsAppCredential[]
+  whatsappMessages             WhatsAppMessage[]
+  whatsappTemplateDefinitions  WhatsAppTemplateDefinition[]
+  whatsappContacts             WhatsAppContact[]
+  whatsappCampaigns            WhatsAppCampaign[]
+  whatsappAutomations          WhatsAppAutomation[]
+  whatsappConversations        WhatsAppConversation[]
+  whatsappWebhookEvents        WhatsAppWebhookEvent[]
+  customerFollowUps            CustomerFollowUp[]
+  replenishmentRecommendations ReplenishmentRecommendation[]
 
   @@map("organizations")
 }
 
 model Store {
-  id                         String                      @id @default(uuid())
-  orgId                      String
-  name                       String
-  code                       String
-  address                    String?
-  phone                      String?
-  isActive                   Boolean                     @default(true)
-  createdAt                  DateTime                    @default(now())
-  updatedAt                  DateTime                    @updatedAt
-  alertConfigs               AlertConfig[]
-  brands                     Brand[]
-  categories                 Category[]
-  expenseBudgets             ExpenseBudget[]
-  invitations                Invitation[]
-  leaveRequests              LeaveRequest[]
-  purchaseOrders             PurchaseOrder[]
-  purchases                  Purchase[]
-  sales                      Sale[]
-  returnTransactions         ReturnTransaction[]
-  customerVisits             CustomerVisit[]
-  demandRequests             DemandRequest[]
-  attendances                StaffAttendance[]
-  stockEntries               StockEntry[]
-  stockMovements             StockMovement[]
-  storeExpenses              StoreExpense[]
-  leavePolicies              StoreLeavePolicy[]
-  org                        Organization                @relation(fields: [orgId], references: [id])
-  users                      User[]
-  weeklyOffs                 WeeklyOff[]
-  whatsappSenders            StoreWhatsAppSender[]
-  whatsappProfile            StoreWhatsAppProfile?
-  whatsappMessages           WhatsAppMessage[]
-  whatsappContacts           WhatsAppContactStore[]
-  whatsappCampaignStores     WhatsAppCampaignStore[]
-  whatsappCampaignRecipients WhatsAppCampaignRecipient[]
-  whatsappAutomations        WhatsAppAutomation[]
-  whatsappConversations      WhatsAppConversation[]
-  invoiceSettings            StoreInvoiceSettings?
-  invoicePolicyVersions      InvoicePolicyVersion[]
-  preferredCustomers         Customer[]                  @relation("PreferredCustomerStore")
-  customerFollowUps          CustomerFollowUp[]
+  id                           String                        @id @default(uuid())
+  orgId                        String
+  name                         String
+  code                         String
+  address                      String?
+  phone                        String?
+  isActive                     Boolean                       @default(true)
+  createdAt                    DateTime                      @default(now())
+  updatedAt                    DateTime                      @updatedAt
+  alertConfigs                 AlertConfig[]
+  brands                       Brand[]
+  categories                   Category[]
+  expenseBudgets               ExpenseBudget[]
+  invitations                  Invitation[]
+  leaveRequests                LeaveRequest[]
+  purchaseOrders               PurchaseOrder[]
+  purchases                    Purchase[]
+  sales                        Sale[]
+  returnTransactions           ReturnTransaction[]
+  customerVisits               CustomerVisit[]
+  demandRequests               DemandRequest[]
+  attendances                  StaffAttendance[]
+  stockEntries                 StockEntry[]
+  stockMovements               StockMovement[]
+  storeExpenses                StoreExpense[]
+  leavePolicies                StoreLeavePolicy[]
+  org                          Organization                  @relation(fields: [orgId], references: [id])
+  users                        User[]
+  weeklyOffs                   WeeklyOff[]
+  whatsappSenders              StoreWhatsAppSender[]
+  whatsappProfile              StoreWhatsAppProfile?
+  whatsappMessages             WhatsAppMessage[]
+  whatsappContacts             WhatsAppContactStore[]
+  whatsappCampaignStores       WhatsAppCampaignStore[]
+  whatsappCampaignRecipients   WhatsAppCampaignRecipient[]
+  whatsappAutomations          WhatsAppAutomation[]
+  whatsappConversations        WhatsAppConversation[]
+  invoiceSettings              StoreInvoiceSettings?
+  invoicePolicyVersions        InvoicePolicyVersion[]
+  preferredCustomers           Customer[]                    @relation("PreferredCustomerStore")
+  customerFollowUps            CustomerFollowUp[]
+  replenishmentRecommendations ReplenishmentRecommendation[]
 
   @@unique([code, orgId])
   @@index([orgId])
@@ -262,33 +264,34 @@ model Brand {
 }
 
 model Product {
-  id                        String                     @id @default(uuid())
-  orgId                     String
-  name                      String
-  sku                       String
-  externalBarcode           String?
-  categoryId                String
-  brandId                   String
-  basePrice                 Decimal                    @db.Decimal(10, 2)
-  costPrice                 Decimal                    @db.Decimal(10, 2)
-  attributes                Json                       @default("{}")
-  imageUrl                  String?
-  isActive                  Boolean                    @default(true)
-  createdAt                 DateTime                   @default(now())
-  updatedAt                 DateTime                   @updatedAt
-  mrp                       Decimal                    @db.Decimal(10, 2)
-  brand                     Brand                      @relation(fields: [brandId], references: [id])
-  category                  Category                   @relation(fields: [categoryId], references: [id])
-  org                       Organization               @relation(fields: [orgId], references: [id])
-  purchaseOrderItems        PurchaseOrderItem[]
-  saleItems                 SaleItem[]
-  stockEntries              StockEntry[]
-  stockMovements            StockMovement[]
-  returnedItems             ReturnTransactionItem[]    @relation("ReturnedProduct")
-  newItems                  ReturnTransactionItem[]    @relation("NewProduct")
-  demandRequests            DemandRequest[]
-  productSuppliers          ProductSupplier[]
-  purchaseOrderReceiptItems PurchaseOrderReceiptItem[]
+  id                           String                        @id @default(uuid())
+  orgId                        String
+  name                         String
+  sku                          String
+  externalBarcode              String?
+  categoryId                   String
+  brandId                      String
+  basePrice                    Decimal                       @db.Decimal(10, 2)
+  costPrice                    Decimal                       @db.Decimal(10, 2)
+  attributes                   Json                          @default("{}")
+  imageUrl                     String?
+  isActive                     Boolean                       @default(true)
+  createdAt                    DateTime                      @default(now())
+  updatedAt                    DateTime                      @updatedAt
+  mrp                          Decimal                       @db.Decimal(10, 2)
+  brand                        Brand                         @relation(fields: [brandId], references: [id])
+  category                     Category                      @relation(fields: [categoryId], references: [id])
+  org                          Organization                  @relation(fields: [orgId], references: [id])
+  purchaseOrderItems           PurchaseOrderItem[]
+  saleItems                    SaleItem[]
+  stockEntries                 StockEntry[]
+  stockMovements               StockMovement[]
+  returnedItems                ReturnTransactionItem[]       @relation("ReturnedProduct")
+  newItems                     ReturnTransactionItem[]       @relation("NewProduct")
+  demandRequests               DemandRequest[]
+  productSuppliers             ProductSupplier[]
+  purchaseOrderReceiptItems    PurchaseOrderReceiptItem[]
+  replenishmentRecommendations ReplenishmentRecommendation[]
 
   @@unique([sku, orgId])
   @@index([orgId])
@@ -300,20 +303,21 @@ model Product {
 }
 
 model Size {
-  id                        String                     @id @default(uuid())
-  label                     String
-  sortOrder                 Int                        @default(0)
-  categoryId                String
-  createdAt                 DateTime                   @default(now())
-  purchaseOrderItems        PurchaseOrderItem[]
-  purchaseItemOptions       PurchaseItemOption[]
-  saleItems                 SaleItem[]
-  category                  Category                   @relation(fields: [categoryId], references: [id])
-  stockEntries              StockEntry[]
-  stockMovements            StockMovement[]
-  returnedItems             ReturnTransactionItem[]    @relation("ReturnedSize")
-  newItems                  ReturnTransactionItem[]    @relation("NewSize")
-  purchaseOrderReceiptItems PurchaseOrderReceiptItem[]
+  id                           String                        @id @default(uuid())
+  label                        String
+  sortOrder                    Int                           @default(0)
+  categoryId                   String
+  createdAt                    DateTime                      @default(now())
+  purchaseOrderItems           PurchaseOrderItem[]
+  purchaseItemOptions          PurchaseItemOption[]
+  saleItems                    SaleItem[]
+  category                     Category                      @relation(fields: [categoryId], references: [id])
+  stockEntries                 StockEntry[]
+  stockMovements               StockMovement[]
+  returnedItems                ReturnTransactionItem[]       @relation("ReturnedSize")
+  newItems                     ReturnTransactionItem[]       @relation("NewSize")
+  purchaseOrderReceiptItems    PurchaseOrderReceiptItem[]
+  replenishmentRecommendations ReplenishmentRecommendation[]
 
   @@unique([label, categoryId])
   @@index([categoryId])
@@ -396,23 +400,24 @@ model Supplier {
 }
 
 model PurchaseOrder {
-  id                   String                 @id @default(uuid())
-  storeId              String
-  supplierId           String
-  status               PurchaseOrderStatus    @default(DRAFT)
-  totalAmount          Decimal                @default(0) @db.Decimal(10, 2)
-  notes                String?
-  orderedAt            DateTime?
-  receivedAt           DateTime?
-  expectedDeliveryDate DateTime?              @db.Date
-  createdBy            String
-  createdAt            DateTime               @default(now())
-  updatedAt            DateTime               @updatedAt
-  items                PurchaseOrderItem[]
-  user                 User                   @relation(fields: [createdBy], references: [id])
-  store                Store                  @relation(fields: [storeId], references: [id])
-  supplier             Supplier               @relation(fields: [supplierId], references: [id])
-  receipts             PurchaseOrderReceipt[]
+  id                           String                        @id @default(uuid())
+  storeId                      String
+  supplierId                   String
+  status                       PurchaseOrderStatus           @default(DRAFT)
+  totalAmount                  Decimal                       @default(0) @db.Decimal(10, 2)
+  notes                        String?
+  orderedAt                    DateTime?
+  receivedAt                   DateTime?
+  expectedDeliveryDate         DateTime?                     @db.Date
+  createdBy                    String
+  createdAt                    DateTime                      @default(now())
+  updatedAt                    DateTime                      @updatedAt
+  items                        PurchaseOrderItem[]
+  user                         User                          @relation(fields: [createdBy], references: [id])
+  store                        Store                         @relation(fields: [storeId], references: [id])
+  supplier                     Supplier                      @relation(fields: [supplierId], references: [id])
+  receipts                     PurchaseOrderReceipt[]
+  replenishmentRecommendations ReplenishmentRecommendation[]
 
   @@index([storeId])
   @@index([supplierId])
@@ -493,6 +498,40 @@ model ProductSupplier {
   @@unique([productId, supplierId])
   @@index([supplierId, isActive])
   @@map("product_suppliers")
+}
+
+model ReplenishmentRecommendation {
+  id                    String                          @id @default(uuid())
+  orgId                 String
+  storeId               String
+  productId             String
+  sizeId                String
+  type                  ReplenishmentRecommendationType
+  severity              String
+  recommendedQuantity   Int?
+  reasonCodes           String[]
+  reasons               String[]
+  evidence              Json
+  evidenceQuality       RecommendationEvidenceQuality
+  observationFrom       DateTime
+  observationTo         DateTime
+  horizonDays           Int
+  disposition           RecommendationDisposition       @default(OPEN)
+  linkedPurchaseOrderId String?
+  outcome               Json?
+  evaluatedAt           DateTime?
+  createdAt             DateTime                        @default(now())
+  updatedAt             DateTime                        @updatedAt
+  org                   Organization                    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  store                 Store                           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product               Product                         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  size                  Size                            @relation(fields: [sizeId], references: [id], onDelete: Cascade)
+  linkedPurchaseOrder   PurchaseOrder?                  @relation(fields: [linkedPurchaseOrderId], references: [id], onDelete: SetNull)
+
+  @@unique([storeId, productId, sizeId, observationFrom, observationTo, type])
+  @@index([orgId, storeId, createdAt])
+  @@index([storeId, type, disposition])
+  @@map("replenishment_recommendations")
 }
 
 model Purchase {
@@ -1844,6 +1883,29 @@ enum PurchaseOrderStatus {
   PARTIALLY_RECEIVED
   RECEIVED
   CANCELLED
+}
+
+enum ReplenishmentRecommendationType {
+  REORDER
+  NO_REORDER
+  STOCKOUT_RISK
+  INBOUND_COVERS_DEMAND
+  OVERSTOCK
+  MARKDOWN_CANDIDATE
+  MONITOR
+}
+
+enum RecommendationEvidenceQuality {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum RecommendationDisposition {
+  OPEN
+  ACCEPTED
+  DISMISSED
+  IGNORED
 }
 
 enum PurchaseStatus {
