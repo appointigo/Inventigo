@@ -1,0 +1,20 @@
+.page { padding: 24px; display: grid; gap: 16px; }
+.header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.header h1 { margin: 0; font-size: 30px; }
+.header p { margin: 6px 0 0; color: #64748b; max-width: 760px; }
+.metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.metric { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; }
+.metric span { display: block; color: #64748b; font-size: 12px; margin-bottom: 6px; }
+.metric strong { font-size: 21px; color: #0f172a; }
+.surface { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px; }
+.coverage { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.coverage article { border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; }
+.coverage h3 { margin: 0 0 10px; }
+.coverage dl { margin: 0; display: grid; grid-template-columns: 1fr auto; gap: 7px 12px; }
+.coverage dd { margin: 0; font-weight: 600; }
+.danger { color: #b91c1c; }
+.action { border-left: 4px solid #f59e0b; padding: 10px 12px; background: #fffbeb; margin-bottom: 8px; }
+.action strong { display: block; }
+.muted { color: #64748b; }
+@media (max-width: 1050px) { .metrics { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 640px) { .page { padding: 16px; } .header { flex-direction: column; } .metrics, .coverage { grid-template-columns: 1fr; } }

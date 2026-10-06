@@ -355,6 +355,13 @@ export const MODULE_NAVIGATION: ModuleNavigation[] = [
         roles: ADMIN_MANAGER,
       },
       {
+        key: "cash-planning",
+        path: "/dashboard/expenses/finance",
+        name: "Cash & Planning",
+        icon: AccountBookOutlined,
+        roles: ADMIN_MANAGER,
+      },
+      {
         key: "gst",
         path: "/dashboard/expenses/gst",
         name: "GST & ITC",

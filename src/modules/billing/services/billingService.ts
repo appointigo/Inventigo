@@ -18,6 +18,7 @@ import {
 import { resolveInvoiceConfigurationSnapshot } from "@/modules/invoice-management/services/invoiceManagementService";
 import { stockAuditSnapshot } from "@/modules/stock/utils/stockMovementContract";
 import { attachReplacementCostSnapshots } from "../utils/exchangeCostSnapshot";
+import { postSalePayment } from "@/modules/finance/financeService";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -883,6 +884,10 @@ export const billingService = {
             include: saleInclude,
           });
 
+          for (const payment of created.payments) {
+            await postSalePayment(tx, payment.id, orgId);
+          }
+
           // Atomically increment promo usageCount
           if (resolvedPromoCodeId) {
             await tx.promoCode.update({
@@ -1676,16 +1681,19 @@ export const billingService = {
     );
 
     const updated = await prisma.$transaction(async (tx) => {
-      await tx.salePayment.createMany({
-        data: normalizedEntries.map((entry) => ({
+      for (const entry of normalizedEntries) {
+        const payment = await tx.salePayment.create({
+          data: {
           saleId,
           amount: entry.amount,
           method: entry.method,
           note: input.note,
           businessDate: input.businessDate ? new Date(input.businessDate) : new Date(),
           createdBy: userId,
-        })),
-      });
+          },
+        });
+        await postSalePayment(tx, payment.id, orgId);
+      }
 
       // Cast to `any` so toSaleDto can access dynamic includes (payments, user)
       // without fighting Prisma's deep-conditional return type inference.
@@ -1990,6 +1998,19 @@ export const billingService = {
                 : {}),
             });
 
+            if (refundAmount > 0) {
+              await tx.refundLiability.create({
+                data: {
+                  orgId,
+                  storeId: sale.storeId,
+                  returnTransactionId: returnTransaction.id,
+                  liabilityAmount: refundAmount,
+                  outstandingAmount: refundAmount,
+                  createdBy: userId,
+                },
+              });
+            }
+
             if (hasLegacyReturnedItemsColumn && hasLegacyExchangedItemsColumn) {
               await tx.$executeRaw`
               UPDATE "return_transactions"
@@ -2017,16 +2038,19 @@ export const billingService = {
                 throw new Error("Top-up split payment total cannot exceed exchange payable amount");
               }
 
-              await tx.salePayment.createMany({
-                data: topUpEntries.map((entry) => ({
-                  saleId,
-                  amount: entry.amount,
-                  method: entry.method,
-                  note: `Exchange top-up payment for ${returnTransaction.id}`,
-                  businessDate,
-                  createdBy: userId,
-                })),
-              });
+              for (const entry of topUpEntries) {
+                const payment = await tx.salePayment.create({
+                  data: {
+                    saleId,
+                    amount: entry.amount,
+                    method: entry.method,
+                    note: `Exchange top-up payment for ${returnTransaction.id}`,
+                    businessDate,
+                    createdBy: userId,
+                  },
+                });
+                await postSalePayment(tx, payment.id, orgId);
+              }
             }
 
             if (refundAmount > 0) {

@@ -50,55 +50,71 @@ model Organization {
   customerFollowUps            CustomerFollowUp[]
   replenishmentRecommendations ReplenishmentRecommendation[]
   stockTransfers               StockTransfer[]
+  financialAccounts            FinancialAccount[]
+  paymentAccountMappings       PaymentMethodAccountMapping[]
+  financialTransactions        FinancialTransaction[]
+  financialAccountTransfers    FinancialAccountTransfer[]
+  supplierPayables             SupplierPayable[]
+  supplierPayments             SupplierPayment[]
+  refundLiabilities            RefundLiability[]
+  refundSettlements            RefundSettlement[]
 
   @@map("organizations")
 }
 
 model Store {
-  id                           String                        @id @default(uuid())
-  orgId                        String
-  name                         String
-  code                         String
-  address                      String?
-  phone                        String?
-  isActive                     Boolean                       @default(true)
-  createdAt                    DateTime                      @default(now())
-  updatedAt                    DateTime                      @updatedAt
-  alertConfigs                 AlertConfig[]
-  brands                       Brand[]
-  categories                   Category[]
-  expenseBudgets               ExpenseBudget[]
-  invitations                  Invitation[]
-  leaveRequests                LeaveRequest[]
-  purchaseOrders               PurchaseOrder[]
-  purchases                    Purchase[]
-  sales                        Sale[]
-  returnTransactions           ReturnTransaction[]
-  customerVisits               CustomerVisit[]
-  demandRequests               DemandRequest[]
-  attendances                  StaffAttendance[]
-  stockEntries                 StockEntry[]
-  stockMovements               StockMovement[]
-  storeExpenses                StoreExpense[]
-  leavePolicies                StoreLeavePolicy[]
-  org                          Organization                  @relation(fields: [orgId], references: [id])
-  users                        User[]
-  weeklyOffs                   WeeklyOff[]
-  whatsappSenders              StoreWhatsAppSender[]
-  whatsappProfile              StoreWhatsAppProfile?
-  whatsappMessages             WhatsAppMessage[]
-  whatsappContacts             WhatsAppContactStore[]
-  whatsappCampaignStores       WhatsAppCampaignStore[]
-  whatsappCampaignRecipients   WhatsAppCampaignRecipient[]
-  whatsappAutomations          WhatsAppAutomation[]
-  whatsappConversations        WhatsAppConversation[]
-  invoiceSettings              StoreInvoiceSettings?
-  invoicePolicyVersions        InvoicePolicyVersion[]
-  preferredCustomers           Customer[]                    @relation("PreferredCustomerStore")
-  customerFollowUps            CustomerFollowUp[]
-  replenishmentRecommendations ReplenishmentRecommendation[]
-  outgoingStockTransfers       StockTransfer[]               @relation("StockTransferSource")
-  incomingStockTransfers       StockTransfer[]               @relation("StockTransferDestination")
+  id                            String                        @id @default(uuid())
+  orgId                         String
+  name                          String
+  code                          String
+  address                       String?
+  phone                         String?
+  isActive                      Boolean                       @default(true)
+  createdAt                     DateTime                      @default(now())
+  updatedAt                     DateTime                      @updatedAt
+  alertConfigs                  AlertConfig[]
+  brands                        Brand[]
+  categories                    Category[]
+  expenseBudgets                ExpenseBudget[]
+  invitations                   Invitation[]
+  leaveRequests                 LeaveRequest[]
+  purchaseOrders                PurchaseOrder[]
+  purchases                     Purchase[]
+  sales                         Sale[]
+  returnTransactions            ReturnTransaction[]
+  customerVisits                CustomerVisit[]
+  demandRequests                DemandRequest[]
+  attendances                   StaffAttendance[]
+  stockEntries                  StockEntry[]
+  stockMovements                StockMovement[]
+  storeExpenses                 StoreExpense[]
+  leavePolicies                 StoreLeavePolicy[]
+  org                           Organization                  @relation(fields: [orgId], references: [id])
+  users                         User[]
+  weeklyOffs                    WeeklyOff[]
+  whatsappSenders               StoreWhatsAppSender[]
+  whatsappProfile               StoreWhatsAppProfile?
+  whatsappMessages              WhatsAppMessage[]
+  whatsappContacts              WhatsAppContactStore[]
+  whatsappCampaignStores        WhatsAppCampaignStore[]
+  whatsappCampaignRecipients    WhatsAppCampaignRecipient[]
+  whatsappAutomations           WhatsAppAutomation[]
+  whatsappConversations         WhatsAppConversation[]
+  invoiceSettings               StoreInvoiceSettings?
+  invoicePolicyVersions         InvoicePolicyVersion[]
+  preferredCustomers            Customer[]                    @relation("PreferredCustomerStore")
+  customerFollowUps             CustomerFollowUp[]
+  replenishmentRecommendations  ReplenishmentRecommendation[]
+  outgoingStockTransfers        StockTransfer[]               @relation("StockTransferSource")
+  incomingStockTransfers        StockTransfer[]               @relation("StockTransferDestination")
+  financialAccounts             FinancialAccount[]
+  paymentAccountMappings        PaymentMethodAccountMapping[]
+  financialTransactions         FinancialTransaction[]
+  financialAccountTransfersFrom FinancialAccountTransfer[]    @relation("FinancialTransferStore")
+  supplierPayables              SupplierPayable[]
+  supplierPayments              SupplierPayment[]
+  refundLiabilities             RefundLiability[]
+  refundSettlements             RefundSettlement[]
 
   @@unique([code, orgId])
   @@index([orgId])
@@ -146,22 +162,22 @@ model InvoicePolicyVersion {
 }
 
 model User {
-  id                        String                 @id @default(uuid())
+  id                        String                        @id @default(uuid())
   orgId                     String?
   name                      String
-  email                     String                 @unique
+  email                     String                        @unique
   passwordHash              String
-  role                      Role                   @default(STAFF)
+  role                      Role                          @default(STAFF)
   storeId                   String?
-  isActive                  Boolean                @default(true)
-  emailVerified             Boolean                @default(false)
-  createdAt                 DateTime               @default(now())
-  updatedAt                 DateTime               @updatedAt
+  isActive                  Boolean                       @default(true)
+  emailVerified             Boolean                       @default(false)
+  createdAt                 DateTime                      @default(now())
+  updatedAt                 DateTime                      @updatedAt
   createdColors             Color[]
-  sentInvitations           Invitation[]           @relation("SentInvitations")
+  sentInvitations           Invitation[]                  @relation("SentInvitations")
   leaveBalances             LeaveBalance[]
-  reviewedLeaves            LeaveRequest[]         @relation("LeaveReviewer")
-  leaveRequests             LeaveRequest[]         @relation("LeaveRequester")
+  reviewedLeaves            LeaveRequest[]                @relation("LeaveReviewer")
+  leaveRequests             LeaveRequest[]                @relation("LeaveRequester")
   purchaseOrders            PurchaseOrder[]
   purchases                 Purchase[]
   sales                     Sale[]
@@ -169,17 +185,25 @@ model User {
   returnTransactions        ReturnTransaction[]
   attendances               StaffAttendance[]
   stockMovements            StockMovement[]
-  createdVisits             CustomerVisit[]        @relation("VisitCreator")
+  createdVisits             CustomerVisit[]               @relation("VisitCreator")
   assignedCustomerFollowUps CustomerFollowUp[]
-  createdCustomerFollowUps  CustomerFollowUp[]     @relation("FollowUpCreator")
+  createdCustomerFollowUps  CustomerFollowUp[]            @relation("FollowUpCreator")
   storeExpenses             StoreExpense[]
   purchaseOrderReceipts     PurchaseOrderReceipt[]
-  requestedStockTransfers   StockTransfer[]        @relation("StockTransferRequestedBy")
-  approvedStockTransfers    StockTransfer[]        @relation("StockTransferApprovedBy")
-  dispatchedStockTransfers  StockTransfer[]        @relation("StockTransferDispatchedBy")
-  receivedStockTransfers    StockTransfer[]        @relation("StockTransferReceivedBy")
-  org                       Organization?          @relation(fields: [orgId], references: [id])
-  store                     Store?                 @relation(fields: [storeId], references: [id])
+  requestedStockTransfers   StockTransfer[]               @relation("StockTransferRequestedBy")
+  approvedStockTransfers    StockTransfer[]               @relation("StockTransferApprovedBy")
+  dispatchedStockTransfers  StockTransfer[]               @relation("StockTransferDispatchedBy")
+  receivedStockTransfers    StockTransfer[]               @relation("StockTransferReceivedBy")
+  createdFinancialAccounts  FinancialAccount[]
+  createdPaymentMappings    PaymentMethodAccountMapping[]
+  financialTransactions     FinancialTransaction[]
+  financialAccountTransfers FinancialAccountTransfer[]
+  createdSupplierPayables   SupplierPayable[]
+  supplierPayments          SupplierPayment[]
+  refundLiabilities         RefundLiability[]
+  refundSettlements         RefundSettlement[]
+  org                       Organization?                 @relation(fields: [orgId], references: [id])
+  store                     Store?                        @relation(fields: [storeId], references: [id])
 
   @@index([orgId])
   @@map("users")
@@ -403,6 +427,7 @@ model Supplier {
   purchases        Purchase[]
   productSuppliers ProductSupplier[]
   org              Organization      @relation(fields: [orgId], references: [id])
+  payables         SupplierPayable[]
 
   @@index([orgId])
   @@map("suppliers")
@@ -427,6 +452,7 @@ model PurchaseOrder {
   supplier                     Supplier                      @relation(fields: [supplierId], references: [id])
   receipts                     PurchaseOrderReceipt[]
   replenishmentRecommendations ReplenishmentRecommendation[]
+  supplierPayables             SupplierPayable[]
 
   @@index([storeId])
   @@index([supplierId])
@@ -461,6 +487,7 @@ model PurchaseOrderReceipt {
   purchaseOrder         PurchaseOrder              @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
   receiver              User                       @relation(fields: [receivedBy], references: [id], onDelete: Restrict)
   items                 PurchaseOrderReceiptItem[]
+  supplierPayables      SupplierPayable[]
 
   @@index([purchaseOrderId, receivedAt])
   @@index([receivedBy])
@@ -755,16 +782,17 @@ model SaleItem {
 }
 
 model SalePayment {
-  id           String        @id @default(uuid())
-  saleId       String
-  amount       Decimal       @db.Decimal(10, 2)
-  method       PaymentMethod
-  businessDate DateTime      @default(now())
-  paidAt       DateTime      @default(now())
-  note         String?
-  createdBy    String
-  sale         Sale          @relation(fields: [saleId], references: [id])
-  user         User          @relation(fields: [createdBy], references: [id])
+  id                   String                @id @default(uuid())
+  saleId               String
+  amount               Decimal               @db.Decimal(10, 2)
+  method               PaymentMethod
+  businessDate         DateTime              @default(now())
+  paidAt               DateTime              @default(now())
+  note                 String?
+  createdBy            String
+  sale                 Sale                  @relation(fields: [saleId], references: [id])
+  user                 User                  @relation(fields: [createdBy], references: [id])
+  financialTransaction FinancialTransaction?
 
   @@index([saleId])
   @@index([businessDate])
@@ -808,6 +836,7 @@ model ReturnTransaction {
   user                   User                    @relation(fields: [createdBy], references: [id])
   store                  Store                   @relation(fields: [storeId], references: [id])
   invoicePolicyVersion   InvoicePolicyVersion?   @relation(fields: [invoicePolicyVersionId], references: [id], onDelete: SetNull)
+  refundLiability        RefundLiability?
 
   @@index([originalSaleId])
   @@index([storeId])
@@ -1035,34 +1064,260 @@ model ExpenseCategoryOption {
 }
 
 model StoreExpense {
-  id             String       @id @default(uuid())
-  orgId          String
-  storeId        String
-  category       String
-  amount         Decimal      @db.Decimal(10, 2)
-  date           DateTime     @db.Date
-  note           String?
-  paymentMode    String?
-  receiptUrl     String?
-  status         String       @default("APPROVED")
-  isRecurring    Boolean      @default(false)
-  recurrenceFreq String?
-  vendorGstin    String?
-  gstRate        Decimal?     @db.Decimal(5, 2)
-  gstAmount      Decimal?     @db.Decimal(10, 2)
-  isItcEligible  Boolean      @default(false)
-  createdBy      String
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  user           User         @relation(fields: [createdBy], references: [id])
-  org            Organization @relation(fields: [orgId], references: [id])
-  store          Store        @relation(fields: [storeId], references: [id])
+  id                   String                @id @default(uuid())
+  orgId                String
+  storeId              String
+  category             String
+  amount               Decimal               @db.Decimal(10, 2)
+  date                 DateTime              @db.Date
+  note                 String?
+  paymentMode          String?
+  receiptUrl           String?
+  status               String                @default("APPROVED")
+  isRecurring          Boolean               @default(false)
+  recurrenceFreq       String?
+  vendorGstin          String?
+  gstRate              Decimal?              @db.Decimal(5, 2)
+  gstAmount            Decimal?              @db.Decimal(10, 2)
+  isItcEligible        Boolean               @default(false)
+  createdBy            String
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  user                 User                  @relation(fields: [createdBy], references: [id])
+  org                  Organization          @relation(fields: [orgId], references: [id])
+  store                Store                 @relation(fields: [storeId], references: [id])
+  paymentStatus        ExpensePaymentStatus  @default(UNKNOWN)
+  paidAt               DateTime?
+  financialAccountId   String?
+  financialAccount     FinancialAccount?     @relation(fields: [financialAccountId], references: [id], onDelete: SetNull)
+  financialTransaction FinancialTransaction?
 
   @@index([orgId])
   @@index([storeId])
   @@index([date])
   @@index([status])
+  @@index([paymentStatus, paidAt])
+  @@index([financialAccountId])
   @@map("store_expenses")
+}
+
+model FinancialAccount {
+  id                 String                        @id @default(uuid())
+  orgId              String
+  storeId            String?
+  name               String
+  type               FinancialAccountType
+  openingBalance     Decimal                       @default(0) @db.Decimal(14, 2)
+  openingBalanceAsOf DateTime?                     @db.Date
+  currency           String                        @default("INR")
+  isActive           Boolean                       @default(true)
+  createdBy          String
+  createdAt          DateTime                      @default(now())
+  updatedAt          DateTime                      @updatedAt
+  org                Organization                  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  store              Store?                        @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  creator            User                          @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  transactions       FinancialTransaction[]
+  supplierPayments   SupplierPayment[]
+  refundSettlements  RefundSettlement[]
+  paidExpenses       StoreExpense[]
+  outgoingTransfers  FinancialAccountTransfer[]    @relation("FinancialTransferSource")
+  incomingTransfers  FinancialAccountTransfer[]    @relation("FinancialTransferDestination")
+  paymentMappings    PaymentMethodAccountMapping[]
+
+  @@unique([orgId, name])
+  @@index([orgId, storeId, isActive])
+  @@map("financial_accounts")
+}
+
+model PaymentMethodAccountMapping {
+  id            String           @id @default(uuid())
+  orgId         String
+  storeId       String
+  paymentMethod PaymentMethod
+  accountId     String
+  createdBy     String
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  org           Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  store         Store            @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  account       FinancialAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  creator       User             @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+
+  @@unique([orgId, storeId, paymentMethod])
+  @@index([accountId])
+  @@map("payment_method_account_mappings")
+}
+
+model FinancialTransaction {
+  id                 String                    @id @default(uuid())
+  orgId              String
+  storeId            String?
+  accountId          String?
+  direction          FinancialDirection
+  amount             Decimal                   @db.Decimal(14, 2)
+  businessDate       DateTime                  @db.Date
+  postedAt           DateTime                  @default(now())
+  referenceType      FinancialReferenceType
+  referenceId        String
+  idempotencyKey     String                    @unique
+  category           String
+  description        String?
+  metadata           Json?
+  createdBy          String
+  createdAt          DateTime                  @default(now())
+  org                Organization              @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  store              Store?                    @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  account            FinancialAccount?         @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  user               User                      @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  salePayment        SalePayment?              @relation(fields: [salePaymentId], references: [id], onDelete: Restrict)
+  salePaymentId      String?                   @unique
+  expense            StoreExpense?             @relation(fields: [expenseId], references: [id], onDelete: Restrict)
+  expenseId          String?                   @unique
+  supplierPayment    SupplierPayment?          @relation(fields: [supplierPaymentId], references: [id], onDelete: Restrict)
+  supplierPaymentId  String?                   @unique
+  refundSettlement   RefundSettlement?         @relation(fields: [refundSettlementId], references: [id], onDelete: Restrict)
+  refundSettlementId String?                   @unique
+  transfer           FinancialAccountTransfer? @relation(fields: [transferId], references: [id], onDelete: Restrict)
+  transferId         String?
+
+  @@index([orgId, businessDate])
+  @@index([storeId, businessDate])
+  @@index([accountId, businessDate])
+  @@index([referenceType, referenceId])
+  @@map("financial_transactions")
+}
+
+model FinancialAccountTransfer {
+  id                   String                 @id @default(uuid())
+  orgId                String
+  storeId              String?
+  sourceAccountId      String
+  destinationAccountId String
+  amount               Decimal                @db.Decimal(14, 2)
+  businessDate         DateTime               @db.Date
+  reference            String?
+  notes                String?
+  createdBy            String
+  idempotencyKey       String                 @unique
+  createdAt            DateTime               @default(now())
+  org                  Organization           @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  store                Store?                 @relation("FinancialTransferStore", fields: [storeId], references: [id], onDelete: Restrict)
+  sourceAccount        FinancialAccount       @relation("FinancialTransferSource", fields: [sourceAccountId], references: [id], onDelete: Restrict)
+  destinationAccount   FinancialAccount       @relation("FinancialTransferDestination", fields: [destinationAccountId], references: [id], onDelete: Restrict)
+  user                 User                   @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  transactions         FinancialTransaction[]
+
+  @@index([orgId, businessDate])
+  @@index([sourceAccountId])
+  @@index([destinationAccountId])
+  @@map("financial_account_transfers")
+}
+
+model SupplierPayable {
+  id                    String                @id @default(uuid())
+  orgId                 String
+  storeId               String
+  supplierId            String
+  purchaseOrderId       String?
+  receiptId             String?               @unique
+  supplierInvoiceNumber String?
+  invoiceDate           DateTime              @db.Date
+  dueDate               DateTime?             @db.Date
+  originalAmount        Decimal               @db.Decimal(14, 2)
+  paidAmount            Decimal               @default(0) @db.Decimal(14, 2)
+  outstandingAmount     Decimal               @db.Decimal(14, 2)
+  status                SupplierPayableStatus @default(OPEN)
+  notes                 String?
+  createdBy             String
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  org                   Organization          @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  store                 Store                 @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  supplier              Supplier              @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  purchaseOrder         PurchaseOrder?        @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  receipt               PurchaseOrderReceipt? @relation(fields: [receiptId], references: [id], onDelete: Restrict)
+  creator               User                  @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  payments              SupplierPayment[]
+
+  @@unique([orgId, receiptId, supplierInvoiceNumber])
+  @@index([orgId, storeId, status, dueDate])
+  @@index([supplierId, status])
+  @@map("supplier_payables")
+}
+
+model SupplierPayment {
+  id                   String                @id @default(uuid())
+  orgId                String
+  storeId              String
+  payableId            String
+  accountId            String?
+  amount               Decimal               @db.Decimal(14, 2)
+  method               String?
+  paymentDate          DateTime              @db.Date
+  reference            String?
+  notes                String?
+  createdBy            String
+  idempotencyKey       String                @unique
+  createdAt            DateTime              @default(now())
+  org                  Organization          @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  store                Store                 @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  payable              SupplierPayable       @relation(fields: [payableId], references: [id], onDelete: Restrict)
+  account              FinancialAccount?     @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  user                 User                  @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  financialTransaction FinancialTransaction?
+
+  @@index([orgId, paymentDate])
+  @@index([payableId, paymentDate])
+  @@map("supplier_payments")
+}
+
+model RefundLiability {
+  id                  String                @id @default(uuid())
+  orgId               String
+  storeId             String
+  returnTransactionId String                @unique
+  liabilityAmount     Decimal               @db.Decimal(14, 2)
+  settledAmount       Decimal               @default(0) @db.Decimal(14, 2)
+  outstandingAmount   Decimal               @db.Decimal(14, 2)
+  status              RefundLiabilityStatus @default(PENDING)
+  createdBy           String
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  org                 Organization          @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  store               Store                 @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  returnTransaction   ReturnTransaction     @relation(fields: [returnTransactionId], references: [id], onDelete: Restrict)
+  creator             User                  @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  settlements         RefundSettlement[]
+
+  @@index([orgId, storeId, status])
+  @@map("refund_liabilities")
+}
+
+model RefundSettlement {
+  id                   String                @id @default(uuid())
+  orgId                String
+  storeId              String
+  liabilityId          String
+  accountId            String?
+  amount               Decimal               @db.Decimal(14, 2)
+  method               String?
+  settledAt            DateTime              @db.Date
+  reference            String?
+  notes                String?
+  createdBy            String
+  idempotencyKey       String                @unique
+  createdAt            DateTime              @default(now())
+  org                  Organization          @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  store                Store                 @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  liability            RefundLiability       @relation(fields: [liabilityId], references: [id], onDelete: Restrict)
+  account              FinancialAccount?     @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  user                 User                  @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  financialTransaction FinancialTransaction?
+
+  @@index([orgId, settledAt])
+  @@index([liabilityId, settledAt])
+  @@map("refund_settlements")
 }
 
 model ExpenseBudget {
@@ -2008,6 +2263,47 @@ enum PaymentStatus {
   PAID
   PARTIAL
   PENDING
+}
+
+enum FinancialAccountType {
+  CASH
+  BANK
+  UPI_SETTLEMENT
+  OTHER
+}
+
+enum FinancialDirection {
+  INFLOW
+  OUTFLOW
+}
+
+enum FinancialReferenceType {
+  SALE_PAYMENT
+  EXPENSE
+  SUPPLIER_PAYMENT
+  REFUND_SETTLEMENT
+  ACCOUNT_TRANSFER
+  ADJUSTMENT
+}
+
+enum ExpensePaymentStatus {
+  UNKNOWN
+  UNPAID
+  PAID
+}
+
+enum SupplierPayableStatus {
+  OPEN
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+}
+
+enum RefundLiabilityStatus {
+  PENDING
+  PARTIAL
+  SETTLED
+  CANCELLED
 }
 
 enum ReturnStatus {
