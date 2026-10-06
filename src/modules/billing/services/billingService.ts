@@ -19,6 +19,13 @@ import { resolveInvoiceConfigurationSnapshot } from "@/modules/invoice-managemen
 import { stockAuditSnapshot } from "@/modules/stock/utils/stockMovementContract";
 import { attachReplacementCostSnapshots } from "../utils/exchangeCostSnapshot";
 import { postSalePayment } from "@/modules/finance/financeService";
+import { planRefundAccounting } from "@/modules/finance/refundAccounting";
+import { canonicalReturnRevenueAdjustment } from "@/modules/analytics/utils/canonicalMetrics";
+import {
+  businessDateEndExclusive,
+  businessDateForInstant,
+  businessDateStart,
+} from "@/modules/analytics/utils/dateRange";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -948,9 +955,7 @@ export const billingService = {
             },
           });
 
-          const deliveryIntent = null as Awaited<
-            ReturnType<typeof enqueueInvoiceDelivery>
-          > | null;
+          const deliveryIntent = null as Awaited<ReturnType<typeof enqueueInvoiceDelivery>> | null;
           // TEMP: Automatic WhatsApp invoice sending disabled.
           // Re-enable when WhatsApp billing integration is ready.
           // const deliveryIntent = preparedInvoiceDelivery
@@ -1684,12 +1689,12 @@ export const billingService = {
       for (const entry of normalizedEntries) {
         const payment = await tx.salePayment.create({
           data: {
-          saleId,
-          amount: entry.amount,
-          method: entry.method,
-          note: input.note,
-          businessDate: input.businessDate ? new Date(input.businessDate) : new Date(),
-          createdBy: userId,
+            saleId,
+            amount: entry.amount,
+            method: entry.method,
+            note: input.note,
+            businessDate: input.businessDate ? new Date(input.businessDate) : new Date(),
+            createdBy: userId,
           },
         });
         await postSalePayment(tx, payment.id, orgId);
@@ -1712,13 +1717,6 @@ export const billingService = {
           user: { select: { name: true } },
         },
       })) as any;
-
-      if (sale.customerId) {
-        await tx.customer.update({
-          where: { id: sale.customerId },
-          data: { totalSpent: { increment: paymentDelta } },
-        });
-      }
 
       return updatedSale;
     });
@@ -1754,9 +1752,23 @@ export const billingService = {
       discountAmount?: number;
       taxRate?: number;
       whatsappInvoice?: WhatsAppInvoiceSelection;
+      idempotencyKey?: string;
     },
     diagnostic?: { correlationId: string }
   ) {
+    if (input.idempotencyKey) {
+      const persisted = await prisma.returnTransaction.findFirst({
+        where: { idempotencyKey: input.idempotencyKey, originalSaleId: saleId, store: { orgId } },
+        select: { id: true },
+      });
+      if (persisted) {
+        const refreshedSale = await billingService.getSaleById(orgId, saleId);
+        const existing = refreshedSale?.returnTransactions.find(
+          (candidate) => candidate.id === persisted.id
+        );
+        if (existing) return { ...existing, invoiceDelivery: undefined };
+      }
+    }
     const supportsExchangedStatus = await supportsExchangedSaleStatus();
     const hasReturnItemsTable = await hasTable("return_transaction_items");
     const [hasLegacyReturnedItemsColumn, hasLegacyExchangedItemsColumn] = await Promise.all([
@@ -1843,7 +1855,10 @@ export const billingService = {
       validateAmount(item.total, "exchange price");
       return { ...item, total: round2(item.total) };
     });
-    const exchangedLineItems = attachReplacementCostSnapshots(pricedExchangeItems, exchangeProducts);
+    const exchangedLineItems = attachReplacementCostSnapshots(
+      pricedExchangeItems,
+      exchangeProducts
+    );
     const returnedItemsJson = returnedLineItems.map((item) => ({
       productId: item.productId,
       sizeId: item.sizeId,
@@ -1923,6 +1938,7 @@ export const billingService = {
             if (locked[0]?.updatedAt.getTime() !== sale.updatedAt.getTime())
               throw new Error("Invalid stale sale; reload before returning items");
             const returnTransactionData: any = {
+              idempotencyKey: input.idempotencyKey,
               referenceNumber,
               originalSaleId: saleId,
               storeId: sale.storeId,
@@ -1998,19 +2014,6 @@ export const billingService = {
                 : {}),
             });
 
-            if (refundAmount > 0) {
-              await tx.refundLiability.create({
-                data: {
-                  orgId,
-                  storeId: sale.storeId,
-                  returnTransactionId: returnTransaction.id,
-                  liabilityAmount: refundAmount,
-                  outstandingAmount: refundAmount,
-                  createdBy: userId,
-                },
-              });
-            }
-
             if (hasLegacyReturnedItemsColumn && hasLegacyExchangedItemsColumn) {
               await tx.$executeRaw`
               UPDATE "return_transactions"
@@ -2053,7 +2056,7 @@ export const billingService = {
               }
             }
 
-            if (refundAmount > 0) {
+            if (refundAmount > 0 && (input.refundMethod || input.refundPayments?.length)) {
               refundEntries = normalizePaymentEntries(
                 input.refundPayments,
                 input.refundMethod,
@@ -2063,24 +2066,90 @@ export const billingService = {
               if (refundTotal - refundAmount > EPSILON) {
                 throw new Error("Refund split payment total cannot exceed refund amount");
               }
+            }
 
-              await tx.salePayment.createMany({
-                data: refundEntries.map((entry) => ({
-                  saleId,
-                  amount: -entry.amount,
-                  method: entry.method,
-                  note: `Refund for return ${returnTransaction.id}`,
-                  businessDate,
+            const refundPlan = planRefundAccounting(refundAmount, refundEntries);
+            if (refundPlan.status) {
+              const liability = await tx.refundLiability.create({
+                data: {
+                  orgId,
+                  storeId: sale.storeId,
+                  returnTransactionId: returnTransaction.id,
+                  liabilityAmount: refundPlan.liabilityAmount,
+                  settledAmount: refundPlan.settledAmount,
+                  outstandingAmount: refundPlan.outstandingAmount,
+                  status: refundPlan.status,
                   createdBy: userId,
-                })),
+                },
               });
+              for (let index = 0; index < refundEntries.length; index += 1) {
+                const entry = refundEntries[index];
+                const payment = await tx.salePayment.create({
+                  data: {
+                    saleId,
+                    amount: -entry.amount,
+                    method: entry.method,
+                    note: `Refund for return ${returnTransaction.id}`,
+                    businessDate,
+                    createdBy: userId,
+                  },
+                });
+                const accountId =
+                  (
+                    await tx.paymentMethodAccountMapping.findUnique({
+                      where: {
+                        orgId_storeId_paymentMethod: {
+                          orgId,
+                          storeId: sale.storeId,
+                          paymentMethod: entry.method,
+                        },
+                      },
+                      select: { accountId: true },
+                    })
+                  )?.accountId ?? null;
+                const settlement = await tx.refundSettlement.create({
+                  data: {
+                    orgId,
+                    storeId: sale.storeId,
+                    liabilityId: liability.id,
+                    accountId,
+                    amount: entry.amount,
+                    method: entry.method,
+                    settledAt: businessDate,
+                    reference: payment.id,
+                    notes: "Immediate POS refund",
+                    createdBy: userId,
+                    idempotencyKey: `POS_REFUND:${payment.id}`,
+                  },
+                });
+                await tx.financialTransaction.create({
+                  data: {
+                    orgId,
+                    storeId: sale.storeId,
+                    accountId,
+                    direction: "OUTFLOW",
+                    amount: entry.amount,
+                    businessDate,
+                    referenceType: "REFUND_SETTLEMENT",
+                    referenceId: settlement.id,
+                    idempotencyKey: `REFUND_SETTLEMENT:${settlement.id}`,
+                    category: "CUSTOMER_REFUND",
+                    description: `Immediate refund for ${returnTransaction.referenceNumber}`,
+                    createdBy: userId,
+                    salePaymentId: payment.id,
+                    refundSettlementId: settlement.id,
+                  },
+                });
+              }
             }
 
             if (sale.customerId) {
               await tx.customer.update({
                 where: { id: sale.customerId },
                 data: {
-                  totalSpent: { increment: netAmount },
+                  totalSpent: {
+                    increment: canonicalReturnRevenueAdjustment({ netAmount, refundAmount }),
+                  },
                 },
               });
             }
@@ -2268,6 +2337,19 @@ export const billingService = {
         }
         return result;
       } catch (error) {
+        if (input.idempotencyKey) {
+          const persisted = await prisma.returnTransaction.findUnique({
+            where: { idempotencyKey: input.idempotencyKey },
+            select: { id: true, originalSaleId: true, store: { select: { orgId: true } } },
+          });
+          if (persisted?.originalSaleId === saleId && persisted.store.orgId === orgId) {
+            const refreshedSale = await billingService.getSaleById(orgId, saleId);
+            const existing = refreshedSale?.returnTransactions.find(
+              (candidate) => candidate.id === persisted.id
+            );
+            if (existing) return { ...existing, invoiceDelivery: undefined };
+          }
+        }
         if (attempt < 5 && isInvoiceNumberConflict(error)) {
           // Retry on reference/invoice unique conflicts
           continue;
@@ -2290,13 +2372,15 @@ export const billingService = {
     pendingRefundAmount: number;
     pendingRefundCount: number;
   }> {
-    const today = new Date();
-    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59);
-
-    // Previous month
-    const startOfPrevMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-    const endOfPrevMonth = new Date(today.getFullYear(), today.getMonth(), 0, 23, 59, 59);
+    const today = businessDateForInstant(new Date());
+    const [year, month] = today.split("-").map(Number);
+    const monthKey = `${year}-${String(month).padStart(2, "0")}-01`;
+    const previousMonthDate = new Date(Date.UTC(year, month - 2, 1));
+    const previousMonthKey = `${previousMonthDate.getUTCFullYear()}-${String(previousMonthDate.getUTCMonth() + 1).padStart(2, "0")}-01`;
+    const startOfMonth = businessDateStart(monthKey);
+    const endOfMonth = businessDateEndExclusive(today);
+    const startOfPrevMonth = businessDateStart(previousMonthKey);
+    const endOfPrevMonth = startOfMonth;
 
     // Fetch all data in parallel
     const [
@@ -2305,7 +2389,6 @@ export const billingService = {
       receivables,
       partialSalesByCustomer,
       allExchanges,
-      refundedSales,
       returnRefunds,
       thisMonthReturnRefunds,
       prevMonthReturnRefunds,
@@ -2313,12 +2396,17 @@ export const billingService = {
       pendingRefundCount,
     ] = await Promise.all([
       prisma.salePayment.aggregate({
-        where: { businessDate: { gte: startOfMonth, lte: endOfMonth }, sale: { store: { orgId } } },
+        where: {
+          amount: { gt: 0 },
+          businessDate: { gte: startOfMonth, lt: endOfMonth },
+          sale: { store: { orgId } },
+        },
         _sum: { amount: true },
       }),
       prisma.salePayment.aggregate({
         where: {
-          businessDate: { gte: startOfPrevMonth, lte: endOfPrevMonth },
+          businessDate: { gte: startOfPrevMonth, lt: endOfPrevMonth },
+          amount: { gt: 0 },
           sale: { store: { orgId } },
         },
         _sum: { amount: true },
@@ -2334,32 +2422,29 @@ export const billingService = {
       prisma.returnTransaction.count({
         where: { store: { orgId }, type: { in: ["EXCHANGE", "RETURN_EXCHANGE"] } },
       }),
-      prisma.sale.count({
-        where: { store: { orgId }, status: "REFUNDED" },
-      }),
       prisma.returnTransaction.count({
         where: { store: { orgId }, refundAmount: { gt: 0 } },
       }),
       prisma.returnTransaction.count({
         where: {
           store: { orgId },
-          businessDate: { gte: startOfMonth, lte: endOfMonth },
+          businessDate: { gte: startOfMonth, lt: endOfMonth },
           refundAmount: { gt: 0 },
         },
       }),
       prisma.returnTransaction.count({
         where: {
           store: { orgId },
-          businessDate: { gte: startOfPrevMonth, lte: endOfPrevMonth },
+          businessDate: { gte: startOfPrevMonth, lt: endOfPrevMonth },
           refundAmount: { gt: 0 },
         },
       }),
-      prisma.returnTransaction.aggregate({
-        where: { store: { orgId }, refundAmount: { gt: 0 } },
-        _sum: { refundAmount: true },
+      prisma.refundLiability.aggregate({
+        where: { orgId, status: { in: ["PENDING", "PARTIAL"] }, outstandingAmount: { gt: 0 } },
+        _sum: { outstandingAmount: true },
       }),
-      prisma.returnTransaction.count({
-        where: { store: { orgId }, refundAmount: { gt: 0 } },
+      prisma.refundLiability.count({
+        where: { orgId, status: { in: ["PENDING", "PARTIAL"] }, outstandingAmount: { gt: 0 } },
       }),
     ]);
 
@@ -2382,8 +2467,8 @@ export const billingService = {
           : 0
         : ((thisMonthReturnRefunds - prevMonthReturnRefunds) / prevMonthReturnRefunds) * 100;
 
-    const pendingRefundAmount = Number(pendingRefunds._sum.refundAmount ?? 0);
-    const refundCount = refundedSales + returnRefunds;
+    const pendingRefundAmount = Number(pendingRefunds._sum.outstandingAmount ?? 0);
+    const refundCount = returnRefunds;
 
     return {
       totalCollected,

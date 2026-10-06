@@ -61,7 +61,7 @@ export const GET = async (request: Request) => {
     if (!isBusinessDate(from) || !isBusinessDate(to) || from > to) {
       return NextResponse.json(
         { error: "A valid from/to accounting period is required" },
-        { status: 400 },
+        { status: 400 }
       );
     }
 
@@ -72,7 +72,13 @@ export const GET = async (request: Request) => {
       storeId,
     };
 
-    const [ledgerCutoverDate, modernPayments, salesWithoutLedger, receivableAggregate] = await Promise.all([
+    const [
+      ledgerCutoverDate,
+      modernPayments,
+      salesWithoutLedger,
+      receivableAggregate,
+      refundSettlements,
+    ] = await Promise.all([
       getPaymentLedgerCutoverDate(),
       prisma.salePayment.findMany({
         where: {
@@ -118,6 +124,14 @@ export const GET = async (request: Request) => {
         },
         _sum: { amountDue: true },
       }),
+      prisma.refundSettlement.aggregate({
+        where: {
+          orgId: user.orgId,
+          storeId,
+          settledAt: { gte: rangeStart, lt: rangeEndExclusive },
+        },
+        _sum: { amount: true },
+      }),
     ]);
 
     const normalizedPayments: NormalizedPayment[] = modernPayments.map((payment) => ({
@@ -136,15 +150,18 @@ export const GET = async (request: Request) => {
       const isConfirmedPaid = sale.paymentStatus === "PAID" && Number(sale.amountDue) === 0;
 
       if (!isLegacy) {
-        console.warn("[payment-method-distribution] Sale after ledger cutover has no SalePayment rows", {
-          saleId: sale.id,
-          invoiceNumber: sale.invoiceNumber,
-          transactionDate: sale.transactionDate,
-          createdAt: sale.createdAt,
-          paymentStatus: sale.paymentStatus,
-          amountPaid: Number(sale.amountPaid),
-          amountDue: Number(sale.amountDue),
-        });
+        console.warn(
+          "[payment-method-distribution] Sale after ledger cutover has no SalePayment rows",
+          {
+            saleId: sale.id,
+            invoiceNumber: sale.invoiceNumber,
+            transactionDate: sale.transactionDate,
+            createdAt: sale.createdAt,
+            paymentStatus: sale.paymentStatus,
+            amountPaid: Number(sale.amountPaid),
+            amountDue: Number(sale.amountDue),
+          }
+        );
         continue;
       }
 
@@ -161,11 +178,12 @@ export const GET = async (request: Request) => {
 
       const amountPaid = Number(sale.amountPaid);
       const finalPayableAmount = Number(sale.finalPayableAmount ?? 0);
-      const amount = amountPaid > 0
-        ? amountPaid
-        : finalPayableAmount > 0
-          ? finalPayableAmount
-          : Number(sale.total);
+      const amount =
+        amountPaid > 0
+          ? amountPaid
+          : finalPayableAmount > 0
+            ? finalPayableAmount
+            : Number(sale.total);
 
       if (amount <= 0) continue;
 
@@ -180,10 +198,13 @@ export const GET = async (request: Request) => {
     }
 
     const distribution = aggregatePaymentEntries(normalizedPayments);
+    const refundsPaid = Number(Number(refundSettlements._sum.amount ?? 0).toFixed(2));
 
     return NextResponse.json({
       methods: distribution.methods,
       totalReceived: distribution.totalReceived,
+      refundsPaid,
+      netCustomerMovement: Number((distribution.totalReceived - refundsPaid).toFixed(2)),
       amountReceivable: Number(Number(receivableAggregate._sum.amountDue ?? 0).toFixed(2)),
       scope,
     });

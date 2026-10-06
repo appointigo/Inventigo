@@ -13,5 +13,7 @@ export interface PaymentMethodDistributionResponse {
   scope?: { type: "STORE"; storeId: string; storeName: string };
   methods: PaymentMethodDistribution[];
   totalReceived: number;
+  refundsPaid: number;
+  netCustomerMovement: number;
   amountReceivable: number;
 }

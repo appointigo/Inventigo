@@ -1,7 +1,43 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import type { AdjustStockInput, StockLevelFilters, StockLevelRow, MovementHistoryFilters, StockMovementRow } from "../types";
+import type {
+  AdjustStockInput,
+  StockLevelFilters,
+  StockLevelRow,
+  MovementHistoryFilters,
+  StockMovementRow,
+} from "../types";
 import { resolveStockDelta, stockAuditSnapshot } from "../utils/stockMovementContract";
+
+const stockInclude = {
+  product: {
+    include: {
+      category: { select: { name: true } },
+      brand: { select: { name: true } },
+    },
+  },
+  size: { select: { label: true } },
+} satisfies Prisma.StockEntryInclude;
+
+type StockEntryWithDetails = Prisma.StockEntryGetPayload<{ include: typeof stockInclude }>;
+const toStockLevelRow = (entry: StockEntryWithDetails): StockLevelRow => ({
+  id: entry.id,
+  productId: entry.productId,
+  productName: entry.product.name,
+  sku: entry.product.sku,
+  externalBarcode: entry.product.externalBarcode ?? null,
+  variantSku: entry.variantSku ?? null,
+  attributes: (entry.product.attributes ?? {}) as Record<string, unknown>,
+  categoryName: entry.product.category.name,
+  brandName: entry.product.brand.name,
+  sizeId: entry.sizeId,
+  sizeLabel: entry.size.label,
+  quantity: entry.quantity,
+  reorderLevel: entry.reorderLevel,
+  reorderQuantity: entry.reorderQuantity,
+  status: entry.quantity === 0 ? "OUT" : entry.quantity <= entry.reorderLevel ? "LOW" : "OK",
+  lastRestockedAt: entry.lastRestockedAt,
+});
 
 /**
  * Central Stock Service — THE single source of truth for all inventory mutations.
@@ -21,8 +57,20 @@ export const stockService = {
   /**
    * Get stock levels with filters, joined with product/category/brand info.
    */
-  async getStockLevels(filters: StockLevelFilters): Promise<{ items: StockLevelRow[]; total: number }> {
-    const { storeId, categoryId, brandId, productId, lowStockOnly, outOfStockOnly, search, page = 1, pageSize = 20 } = filters;
+  async getStockLevels(
+    filters: StockLevelFilters
+  ): Promise<{ items: StockLevelRow[]; total: number }> {
+    const {
+      storeId,
+      categoryId,
+      brandId,
+      productId,
+      lowStockOnly,
+      outOfStockOnly,
+      search,
+      page = 1,
+      pageSize = 20,
+    } = filters;
 
     const where: Record<string, unknown> = { storeId };
 
@@ -46,26 +94,29 @@ export const stockService = {
 
     if (outOfStockOnly) {
       where.quantity = 0;
-    } 
-    else if (lowStockOnly) {
+    } else if (lowStockOnly) {
       // Prisma doesn't support field-to-field comparison in where directly
       // We'll filter after query or use raw SQL
       // For now, fetch all and filter
     }
 
+    if (lowStockOnly) {
+      const entries = await prisma.stockEntry.findMany({
+        where,
+        include: stockInclude,
+        orderBy: [{ product: { name: "asc" } }, { size: { sortOrder: "asc" } }],
+      });
+      const matches = entries.map(toStockLevelRow).filter((item) => item.status !== "OK");
+      return {
+        items: matches.slice((page - 1) * pageSize, page * pageSize),
+        total: matches.length,
+      };
+    }
+
     const [entries, total] = await Promise.all([
       prisma.stockEntry.findMany({
         where,
-        include: {
-          product: {
-            include: {
-              category: { select: { name: true } },
-              brand: { select: { name: true } },
-              // attributes for dynamic columns (same as billing page)
-            },
-          },
-          size: { select: { label: true } },
-        },
+        include: stockInclude,
         skip: (page - 1) * pageSize,
         take: pageSize,
         orderBy: [{ product: { name: "asc" } }, { size: { sortOrder: "asc" } }],
@@ -73,37 +124,24 @@ export const stockService = {
       prisma.stockEntry.count({ where }),
     ]);
 
-    let items: StockLevelRow[] = entries.map((entry) => ({
-      id: entry.id,
-      productId: entry.productId,
-      productName: entry.product.name,
-      sku: entry.product.sku,
-      externalBarcode: entry.product.externalBarcode ?? null,
-      variantSku: entry.variantSku ?? null,
-      attributes: (entry.product.attributes ?? {}) as Record<string, unknown>,
-      categoryName: entry.product.category.name,
-      brandName: entry.product.brand.name,
-      sizeId: entry.sizeId,
-      sizeLabel: entry.size.label,
-      quantity: entry.quantity,
-      reorderLevel: entry.reorderLevel,
-      reorderQuantity: entry.reorderQuantity,
-      status: entry.quantity === 0 ? "OUT" : entry.quantity <= entry.reorderLevel ? "LOW" : "OK",
-      lastRestockedAt: entry.lastRestockedAt,
-    }));
+    return { items: entries.map(toStockLevelRow), total };
+  },
 
-    // Post-filter for low stock if needed
-    if (lowStockOnly) {
-      items = items.filter((item) => item.status === "LOW" || item.status === "OUT");
-    }
-
-    return { items, total };
+  async getAllStockLevels(storeId: string): Promise<StockLevelRow[]> {
+    const entries = await prisma.stockEntry.findMany({
+      where: { storeId },
+      include: stockInclude,
+      orderBy: [{ product: { name: "asc" } }, { size: { sortOrder: "asc" } }],
+    });
+    return entries.map(toStockLevelRow);
   },
 
   /**
    * Get stock movement history (audit log).
    */
-  async getMovementHistory(filters: MovementHistoryFilters): Promise<{ items: StockMovementRow[]; total: number }> {
+  async getMovementHistory(
+    filters: MovementHistoryFilters
+  ): Promise<{ items: StockMovementRow[]; total: number }> {
     const { storeId, productId, type, startDate, endDate, page = 1, pageSize = 20 } = filters;
 
     const where: Record<string, unknown> = { storeId };
@@ -133,7 +171,10 @@ export const stockService = {
     // break dashboard APIs due to strict relation hydration.
     const creatorIds = Array.from(new Set(movements.map((m) => m.createdBy).filter(Boolean)));
     const users = creatorIds.length
-      ? await prisma.user.findMany({ where: { id: { in: creatorIds } }, select: { id: true, name: true } })
+      ? await prisma.user.findMany({
+          where: { id: { in: creatorIds } },
+          select: { id: true, name: true },
+        })
       : [];
     const userNameById = new Map(users.map((u) => [u.id, u.name]));
 
@@ -159,27 +200,65 @@ export const stockService = {
   },
 };
 
-export async function adjustStockWithClient(
-  tx: Prisma.TransactionClient,
-  input: AdjustStockInput,
-) {
-  const { orgId, productId, sizeId, storeId, quantity, type, operation, reason, referenceType, referenceId, businessDate, userId } = input;
+export async function adjustStockWithClient(tx: Prisma.TransactionClient, input: AdjustStockInput) {
+  const {
+    orgId,
+    productId,
+    sizeId,
+    storeId,
+    quantity,
+    type,
+    operation,
+    reason,
+    referenceType,
+    referenceId,
+    businessDate,
+    userId,
+  } = input;
   const [store, product] = await Promise.all([
     tx.store.findFirst({ where: { id: storeId, orgId, isActive: true }, select: { id: true } }),
-    tx.product.findFirst({ where: { id: productId, orgId, category: { sizes: { some: { id: sizeId } } } }, select: { id: true } }),
+    tx.product.findFirst({
+      where: { id: productId, orgId, category: { sizes: { some: { id: sizeId } } } },
+      select: { id: true },
+    }),
   ]);
   if (!store || !product) throw new Error("Stock target is outside the selected store scope");
-  const existing = await tx.stockEntry.findUnique({ where: { productId_sizeId_storeId: { productId, sizeId, storeId } }, select: { quantity: true } });
+  const existing = await tx.stockEntry.findUnique({
+    where: { productId_sizeId_storeId: { productId, sizeId, storeId } },
+    select: { quantity: true },
+  });
   const quantityBefore = existing?.quantity ?? 0;
   const deltaQuantity = resolveStockDelta({ type, quantity, quantityBefore, operation });
   const audit = stockAuditSnapshot(quantityBefore, deltaQuantity);
   const stockEntry = await tx.stockEntry.upsert({
     where: { productId_sizeId_storeId: { productId, sizeId, storeId } },
-    update: { quantity: { increment: deltaQuantity }, lastRestockedAt: deltaQuantity > 0 ? new Date() : undefined },
-    create: { productId, sizeId, storeId, quantity: audit.quantityAfter, reorderLevel: 5, reorderQuantity: 20, lastRestockedAt: deltaQuantity > 0 ? new Date() : null },
+    update: {
+      quantity: { increment: deltaQuantity },
+      lastRestockedAt: deltaQuantity > 0 ? new Date() : undefined,
+    },
+    create: {
+      productId,
+      sizeId,
+      storeId,
+      quantity: audit.quantityAfter,
+      reorderLevel: 5,
+      reorderQuantity: 20,
+      lastRestockedAt: deltaQuantity > 0 ? new Date() : null,
+    },
   });
   const movement = await tx.stockMovement.create({
-    data: { productId, sizeId, storeId, type, ...audit, reason, referenceType: referenceType ?? "MANUAL", referenceId, movementDate: businessDate ?? new Date(), createdBy: userId },
+    data: {
+      productId,
+      sizeId,
+      storeId,
+      type,
+      ...audit,
+      reason,
+      referenceType: referenceType ?? "MANUAL",
+      referenceId,
+      movementDate: businessDate ?? new Date(),
+      createdBy: userId,
+    },
   });
   return { stockEntry, movement };
 }

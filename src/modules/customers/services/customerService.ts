@@ -10,6 +10,7 @@ import type {
 } from "../types";
 import { syncWhatsAppContactForCustomer } from "@/modules/whatsapp/services/WhatsAppContactService";
 import { customerIntelligenceService } from "./customerIntelligenceService";
+import { canonicalCustomerOrderValue, sumMoney } from "@/modules/analytics/utils/canonicalMetrics";
 
 const RECENT_DAYS = 7;
 const INACTIVE_DAYS = 180;
@@ -660,31 +661,35 @@ export const customerService = {
   },
 
   async getCustomerStats(orgId: string, customerId: string): Promise<CustomerStatsDto> {
-    const [visits, spend, latest] = await Promise.all([
-      prisma.sale.count({
-        where: { customerId, status: "COMPLETED", store: { orgId } },
-      }),
-      prisma.sale.aggregate({
-        where: { customerId, status: "COMPLETED", store: { orgId } },
-        _sum: { total: true },
-      }),
-      // Use transactionDate (may be backdated) as the canonical purchase date;
-      // fall back to createdAt for records created before the transactionDate
-      // migration (20260509000000).  We order by transactionDate DESC so that
-      // a backdated sale that is actually the customer’s most-recent visit shows
-      // up correctly.
-      prisma.sale.findFirst({
-        where: { customerId, status: "COMPLETED", store: { orgId } },
-        orderBy: { transactionDate: "desc" },
-        select: { transactionDate: true, createdAt: true },
-      }),
-    ]);
-
-    const lastPurchaseDate = latest?.transactionDate ?? latest?.createdAt ?? null;
+    const sales = await prisma.sale.findMany({
+      where: {
+        customerId,
+        status: { in: ["COMPLETED", "EXCHANGED", "REFUNDED"] },
+        store: { orgId },
+      },
+      orderBy: { transactionDate: "desc" },
+      select: {
+        total: true,
+        finalPayableAmount: true,
+        transactionDate: true,
+        createdAt: true,
+        returnTransactions: { select: { netAmount: true, refundAmount: true } },
+      },
+    });
+    const retained = sales
+      .map((sale) => ({
+        date: sale.transactionDate ?? sale.createdAt,
+        amount: canonicalCustomerOrderValue({
+          saleAmount: sale.finalPayableAmount ?? sale.total,
+          returns: sale.returnTransactions,
+        }),
+      }))
+      .filter((sale) => sale.amount > 0);
+    const lastPurchaseDate = retained[0]?.date ?? null;
 
     return {
-      totalVisits: visits,
-      totalSpend: Number(spend._sum.total ?? 0),
+      totalVisits: retained.length,
+      totalSpend: sumMoney(retained.map((sale) => sale.amount)),
       lastPurchaseDate: lastPurchaseDate ? lastPurchaseDate.toISOString() : null,
     };
   },

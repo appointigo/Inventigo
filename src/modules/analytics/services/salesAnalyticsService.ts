@@ -2,6 +2,8 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import type { AnalyticsGroup, FinancialEvent, SalesAnalyticsResponse } from "../types";
 import { aggregateFinancialEvents, calculateReturnCostEvent } from "../utils/financialAggregation";
+import { canonicalReturnRevenueAdjustment } from "../utils/canonicalMetrics";
+import { businessDateEndExclusive, businessDateForInstant } from "../utils/dateRange";
 
 const saleSelect = {
   transactionDate: true,
@@ -45,10 +47,9 @@ export const salesAnalyticsService = {
     storeId: string,
     from: Date,
     to: Date,
-    group: AnalyticsGroup,
+    group: AnalyticsGroup
   ): Promise<SalesAnalyticsResponse> {
-    const endExclusive = new Date(to);
-    endExclusive.setDate(endExclusive.getDate() + 1);
+    const endExclusive = businessDateEndExclusive(businessDateForInstant(to));
     const scope = { storeId, store: { orgId } };
     const [sales, returns] = await Promise.all([
       prisma.sale.findMany({
@@ -82,9 +83,7 @@ export const salesAnalyticsService = {
         returnValue: 0,
         returnCount: 0,
         exchangeCount: 0,
-        completenessReasons: costs.some((cost) => cost === null)
-          ? ["MISSING_SALE_ITEM_COST"]
-          : [],
+        completenessReasons: costs.some((cost) => cost === null) ? ["MISSING_SALE_ITEM_COST"] : [],
       };
     });
 
@@ -93,38 +92,36 @@ export const salesAnalyticsService = {
         transaction.sale.items.map((item) => [
           variantKey(item.productId, item.sizeId),
           item.costPrice === null ? null : number(item.costPrice),
-        ]),
+        ])
       );
       const returnedItems = transaction.items.filter(
-        (item) => item.returnedProductId && item.returnedSizeId && item.returnedQuantity > 0,
+        (item) => item.returnedProductId && item.returnedSizeId && item.returnedQuantity > 0
       );
       const replacementItems = transaction.items.filter(
-        (item) => item.newProductId && (item.newQuantity ?? 0) > 0,
+        (item) => item.newProductId && (item.newQuantity ?? 0) > 0
       );
 
       const returnedRevenue = returnedItems.reduce(
-        (sum, item) => sum + number(item.returnedLineAmount ?? number(item.returnedUnitPrice) * item.returnedQuantity),
-        0,
+        (sum, item) =>
+          sum +
+          number(item.returnedLineAmount ?? number(item.returnedUnitPrice) * item.returnedQuantity),
+        0
       );
       const returnedCosts = returnedItems.map((item) => {
-        const unitCost = originalCosts.get(variantKey(item.returnedProductId!, item.returnedSizeId!));
+        const unitCost = originalCosts.get(
+          variantKey(item.returnedProductId!, item.returnedSizeId!)
+        );
         return unitCost == null ? null : unitCost * item.returnedQuantity;
       });
-      const replacementRevenue = replacementItems.reduce(
-        (sum, item) => sum + number(item.newUnitPrice) * number(item.newQuantity),
-        0,
-      );
       const replacementCosts = replacementItems.map((item) =>
-        item.newCostPrice === null ? null : number(item.newCostPrice) * number(item.newQuantity),
+        item.newCostPrice === null ? null : number(item.newCostPrice) * number(item.newQuantity)
       );
       const hasDetailedItems = returnedItems.length > 0 || replacementItems.length > 0;
-      const revenue = hasDetailedItems
-        ? replacementRevenue - returnedRevenue
-        : transaction.type === "RETURN"
-          ? -number(transaction.refundAmount)
-          : number(transaction.netAmount);
+      const revenue = canonicalReturnRevenueAdjustment(transaction);
       const { cogs, completenessReasons } = calculateReturnCostEvent(
-        returnedCosts, replacementCosts, hasDetailedItems,
+        returnedCosts,
+        replacementCosts,
+        hasDetailedItems
       );
 
       events.push({

@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { allocateMoney } from "@/modules/analytics/utils/canonicalMetrics";
 import { businessDateForInstant } from "@/modules/analytics/utils/dateRange";
 import { resolveSaleLineRevenue } from "@/modules/inventory-intelligence/utils/metrics";
 import { businessDaysBetween } from "@/modules/procurement-intelligence/procurementRules";
@@ -114,6 +115,7 @@ export const replenishmentService = {
       prisma.returnTransaction.findMany({
         where: { storeId, store: { orgId }, businessDate: { gte: from, lt: endExclusive } },
         select: {
+          finalPayable: true,
           items: {
             select: {
               returnedProductId: true,
@@ -277,6 +279,14 @@ export const replenishmentService = {
           item.costPrice === null ? null : n(item.costPrice),
         ])
       );
+      const replacementItems = transaction.items.filter(
+        (item) => item.newProductId && item.newSizeId && (item.newQuantity ?? 0) > 0
+      );
+      const replacementRevenue = allocateMoney(
+        transaction.finalPayable,
+        replacementItems.map((item) => n(item.newUnitPrice) * (item.newQuantity ?? 0))
+      );
+      let replacementIndex = 0;
       for (const item of transaction.items) {
         if (item.returnedProductId && item.returnedSizeId) {
           const row = getFinancial(variant(item.returnedProductId, item.returnedSizeId));
@@ -291,7 +301,7 @@ export const replenishmentService = {
         if (item.newProductId && item.newSizeId && (item.newQuantity ?? 0) > 0) {
           const row = getFinancial(variant(item.newProductId, item.newSizeId));
           row.units += item.newQuantity ?? 0;
-          row.revenue += n(item.newUnitPrice) * n(item.newQuantity);
+          row.revenue += replacementRevenue[replacementIndex++] ?? 0;
           if (item.newCostPrice === null) row.costComplete = false;
           else row.cogs += n(item.newCostPrice) * n(item.newQuantity);
         }

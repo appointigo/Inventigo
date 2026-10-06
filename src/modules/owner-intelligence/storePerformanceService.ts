@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { canonicalReturnRevenueAdjustment } from "@/modules/analytics/utils/canonicalMetrics";
 import {
   aggregateFinancialEvents,
   calculateReturnCostEvent,
@@ -198,10 +199,6 @@ export const storePerformanceService = {
           sum + n(item.returnedLineAmount ?? n(item.returnedUnitPrice) * item.returnedQuantity),
         0
       );
-      const replacementRevenue = replacements.reduce(
-        (sum, item) => sum + n(item.newUnitPrice) * n(item.newQuantity),
-        0
-      );
       const calculated = calculateReturnCostEvent(
         returned.map((item) => {
           const cost = costs.get(variant(item.returnedProductId!, item.returnedSizeId!));
@@ -214,12 +211,7 @@ export const storePerformanceService = {
       );
       push(transaction.storeId, {
         date: transaction.businessDate,
-        revenue:
-          returned.length + replacements.length
-            ? replacementRevenue - returnedRevenue
-            : transaction.type === "RETURN"
-              ? -n(transaction.refundAmount)
-              : n(transaction.netAmount),
+        revenue: canonicalReturnRevenueAdjustment(transaction),
         cogs: calculated.cogs,
         discount: 0,
         orderCount: 0,
@@ -371,23 +363,7 @@ export const storePerformanceService = {
       for (const transaction of returns.filter(
         (item) => item.storeId === store.id && item.businessDate >= from && item.sale.customerId
       )) {
-        const returned = transaction.items.reduce(
-          (sum, item) =>
-            sum +
-            (item.returnedProductId
-              ? n(item.returnedLineAmount ?? n(item.returnedUnitPrice) * item.returnedQuantity)
-              : 0),
-          0
-        );
-        const replacement = transaction.items.reduce(
-          (sum, item) => sum + (item.newProductId ? n(item.newUnitPrice) * n(item.newQuantity) : 0),
-          0
-        );
-        const adjustment = transaction.items.length
-          ? replacement - returned
-          : transaction.type === "RETURN"
-            ? -n(transaction.refundAmount)
-            : n(transaction.netAmount);
+        const adjustment = canonicalReturnRevenueAdjustment(transaction);
         identified += adjustment;
         if (
           firstPurchaseMap.get(transaction.sale.customerId!)?.getTime() !==

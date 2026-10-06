@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { allocateMoney } from "@/modules/analytics/utils/canonicalMetrics";
 import { demandIntelligenceService } from "@/modules/demand-intelligence/services/demandIntelligenceService";
 import type { Prisma } from "@prisma/client";
 import type {
@@ -59,6 +60,7 @@ const saleSelect = {
 
 const returnSelect = {
   businessDate: true,
+  finalPayable: true,
   items: {
     select: {
       returnedProductId: true,
@@ -237,6 +239,14 @@ function aggregateTransactions(sales: SaleRecord[], returns: ReturnRecord[]): Ag
         item.costPrice === null ? null : Number(item.costPrice),
       ])
     );
+    const replacementItems = transaction.items.filter(
+      (item) => item.newProductId && item.newSizeId && (item.newQuantity ?? 0) > 0
+    );
+    const replacementRevenue = allocateMoney(
+      transaction.finalPayable,
+      replacementItems.map((item) => Number(item.newUnitPrice ?? 0) * (item.newQuantity ?? 0))
+    );
+    let replacementIndex = 0;
     transaction.items.forEach((item) => {
       if (
         item.returnedProductId &&
@@ -282,7 +292,7 @@ function aggregateTransactions(sales: SaleRecord[], returns: ReturnRecord[]): Ag
           brand: item.newProduct.brand.name,
           sizeId: item.newSizeId,
           size: item.newSize.label,
-          revenue: Number(item.newUnitPrice ?? 0) * quantity,
+          revenue: replacementRevenue[replacementIndex++] ?? 0,
           units: quantity,
           cost: item.newCostPrice === null ? null : Number(item.newCostPrice) * quantity,
           date: transaction.businessDate,

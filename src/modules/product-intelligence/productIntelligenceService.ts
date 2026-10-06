@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { allocateMoney } from "@/modules/analytics/utils/canonicalMetrics";
 import { inventoryIntelligenceService } from "@/modules/inventory-intelligence/services/inventoryIntelligenceService";
 import { resolveSaleLineRevenue } from "@/modules/inventory-intelligence/utils/metrics";
 import type { AnalyticsPeriod } from "@/modules/inventory-intelligence/types";
@@ -78,6 +79,7 @@ export const productIntelligenceService = {
         where: { storeId, store: { orgId }, businessDate: { gte: start, lt: end } },
         select: {
           businessDate: true,
+          finalPayable: true,
           sale: {
             select: { items: { select: { productId: true, sizeId: true, costPrice: true } } },
           },
@@ -129,6 +131,14 @@ export const productIntelligenceService = {
           item.costPrice == null ? null : Number(item.costPrice),
         ])
       );
+      const replacementItems = transaction.items.filter(
+        (item) => item.newProductId && (item.newQuantity ?? 0) > 0
+      );
+      const replacementRevenue = allocateMoney(
+        transaction.finalPayable,
+        replacementItems.map((item) => Number(item.newUnitPrice ?? 0) * (item.newQuantity ?? 0))
+      );
+      let replacementIndex = 0;
       for (const item of transaction.items) {
         if (item.returnedProductId && item.returnedQuantity > 0) {
           const row = get(item.returnedProductId);
@@ -152,7 +162,7 @@ export const productIntelligenceService = {
         if (item.newProductId && (item.newQuantity ?? 0) > 0) {
           const row = get(item.newProductId);
           const quantity = item.newQuantity ?? 0;
-          row.revenue += Number(item.newUnitPrice ?? 0) * quantity;
+          row.revenue += replacementRevenue[replacementIndex++] ?? 0;
           row.units += quantity;
           if (item.newCostPrice == null) row.costComplete = false;
           else row.cogs += Number(item.newCostPrice) * quantity;

@@ -1,11 +1,25 @@
 "use client";
 
-import { allocatePricingSnapshots, resolveItemPrice, type ItemPriceAdjustment } from "../utils/pricingEngine";
+import {
+  allocatePricingSnapshots,
+  resolveItemPrice,
+  type ItemPriceAdjustment,
+} from "../utils/pricingEngine";
 import { roundTo2 } from "@/shared/utils/money";
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
-import type { Sale, SaleFilters, SaleSummary, CartItem, CreateSaleInput, PaymentMethodType, SplitPaymentEntry, WhatsAppInvoiceSelection, InvoiceDeliveryState } from "../types";
+import type {
+  Sale,
+  SaleFilters,
+  SaleSummary,
+  CartItem,
+  CreateSaleInput,
+  PaymentMethodType,
+  SplitPaymentEntry,
+  WhatsAppInvoiceSelection,
+  InvoiceDeliveryState,
+} from "../types";
 
 export async function createSaleRequest(input: CreateSaleInput): Promise<Sale> {
   const requestId = crypto.randomUUID();
@@ -28,7 +42,12 @@ export function useSales(initialFilters?: SaleFilters) {
   const [filters, setFilters] = useState<SaleFilters>(initialFilters ?? {});
   const [page, setPage] = useState<number>(1);
   const [limit, setLimit] = useState<number>(20);
-  const [pagination, setPagination] = useState<{ page: number; limit: number; total: number; totalPages: number }>({ page: 1, limit: 20, total: 0, totalPages: 1 });
+  const [pagination, setPagination] = useState<{
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  }>({ page: 1, limit: 20, total: 0, totalPages: 1 });
   const [stats, setStats] = useState<Record<string, number> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const activeRequestIdRef = useRef(0);
@@ -103,27 +122,37 @@ export function useSales(initialFilters?: SaleFilters) {
 
       if (Array.isArray(payload)) {
         setSales(payload as SaleSummary[]);
-        setPagination({ page, limit, total: payload.length, totalPages: Math.max(1, Math.ceil(payload.length / limit)) });
+        setPagination({
+          page,
+          limit,
+          total: payload.length,
+          totalPages: Math.max(1, Math.ceil(payload.length / limit)),
+        });
         setStats(null);
       } else if (payload && payload.data) {
         setSales(payload.data as SaleSummary[]);
-        setPagination(payload.pagination ?? { page, limit, total: (payload.data?.length ?? 0), totalPages: Math.max(1, Math.ceil((payload.data?.length ?? 0) / limit)) });
+        setPagination(
+          payload.pagination ?? {
+            page,
+            limit,
+            total: payload.data?.length ?? 0,
+            totalPages: Math.max(1, Math.ceil((payload.data?.length ?? 0) / limit)),
+          }
+        );
         setStats(payload.stats ?? null);
       } else {
         setSales([]);
         setPagination({ page, limit, total: 0, totalPages: 1 });
         setStats(null);
       }
-    } 
-    catch (error) {
+    } catch (error) {
       if (error instanceof Error && error.name === "AbortError") {
         return;
       }
       if (requestId === activeRequestIdRef.current) {
         setError(error instanceof Error ? error.message : "Failed to fetch sales");
       }
-    } 
-    finally {
+    } finally {
       if (requestId === activeRequestIdRef.current) {
         setLoading(false);
       }
@@ -193,7 +222,12 @@ export function useSales(initialFilters?: SaleFilters) {
     payload: {
       type: "RETURN" | "EXCHANGE" | "RETURN_EXCHANGE";
       returnedItems: Array<{ productId: string; sizeId: string; quantity: number; total: number }>;
-      exchangedItems?: Array<{ productId: string; sizeId: string; quantity: number; total: number }>;
+      exchangedItems?: Array<{
+        productId: string;
+        sizeId: string;
+        quantity: number;
+        total: number;
+      }>;
       refundAmount: number;
       offsetAmount: number;
       refundMethod?: PaymentMethodType;
@@ -203,16 +237,23 @@ export function useSales(initialFilters?: SaleFilters) {
       condition?: string;
       notes?: string;
       whatsappInvoice?: WhatsAppInvoiceSelection;
+      idempotencyKey?: string;
     }
   ) => {
-    const requestId = crypto.randomUUID();
+    const requestId = payload.idempotencyKey ?? crypto.randomUUID();
     const res = await fetch(`/api/billing/${encodeURIComponent(saleId)}/return`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-request-id": requestId },
+      headers: {
+        "Content-Type": "application/json",
+        "x-request-id": requestId,
+        "Idempotency-Key": requestId,
+      },
       body: JSON.stringify(payload),
     });
     if (!res.ok) {
-      const payload = await res.json().catch(() => ({ error: "Failed to process return/exchange" }));
+      const payload = await res
+        .json()
+        .catch(() => ({ error: "Failed to process return/exchange" }));
       throw new Error(payload?.error || "Failed to process return/exchange");
     }
     const transaction = await res.json();
@@ -254,15 +295,17 @@ export function useCart() {
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [promoCodeId, setPromoCodeId] = useState<string | null>(null);
-  const [transactionDate, setTransactionDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [transactionDate, setTransactionDate] = useState<string>(
+    new Date().toISOString().split("T")[0]
+  );
   const [splitMode, setSplitMode] = useState(false);
-  const [splitPayments, setSplitPayments] = useState<SplitPaymentEntry[]>([{ method: "CASH", amount: 0 }]);
+  const [splitPayments, setSplitPayments] = useState<SplitPaymentEntry[]>([
+    { method: "CASH", amount: 0 },
+  ]);
 
   const addItem = (item: CartItem) => {
     setItems((prev) => {
-      const existing = prev.find(
-        (i) => i.productId === item.productId && i.sizeId === item.sizeId
-      );
+      const existing = prev.find((i) => i.productId === item.productId && i.sizeId === item.sizeId);
       if (existing) {
         return prev.map((i) =>
           i.productId === item.productId && i.sizeId === item.sizeId
@@ -270,30 +313,45 @@ export function useCart() {
             : i
         );
       }
-      return [...prev, { ...item, originalUnitPrice: item.originalUnitPrice ?? item.unitPrice, itemDiscountType: item.itemDiscountType ?? "NONE", itemDiscountValue: item.itemDiscountValue ?? 0 }];
+      return [
+        ...prev,
+        {
+          ...item,
+          originalUnitPrice: item.originalUnitPrice ?? item.unitPrice,
+          itemDiscountType: item.itemDiscountType ?? "NONE",
+          itemDiscountValue: item.itemDiscountValue ?? 0,
+        },
+      ];
     });
   };
 
   const updateQuantity = (productId: string, sizeId: string, quantity: number) => {
     setItems((prev) =>
-      prev.map((i) =>
-        i.productId === productId && i.sizeId === sizeId ? { ...i, quantity } : i
-      )
+      prev.map((i) => (i.productId === productId && i.sizeId === sizeId ? { ...i, quantity } : i))
     );
   };
 
-  const updateItemPricing = (productId: string, sizeId: string, adjustment: ItemPriceAdjustment) => {
-    setItems((prev) => prev.map((item) => {
-      if (item.productId !== productId || item.sizeId !== sizeId) return item;
-      const originalUnitPrice = item.originalUnitPrice ?? item.unitPrice;
-      return { ...item, ...adjustment, originalUnitPrice, unitPrice: resolveItemPrice(originalUnitPrice, adjustment) };
-    }));
+  const updateItemPricing = (
+    productId: string,
+    sizeId: string,
+    adjustment: ItemPriceAdjustment
+  ) => {
+    setItems((prev) =>
+      prev.map((item) => {
+        if (item.productId !== productId || item.sizeId !== sizeId) return item;
+        const originalUnitPrice = item.originalUnitPrice ?? item.unitPrice;
+        return {
+          ...item,
+          ...adjustment,
+          originalUnitPrice,
+          unitPrice: resolveItemPrice(originalUnitPrice, adjustment),
+        };
+      })
+    );
   };
 
   const removeItem = (productId: string, sizeId: string) => {
-    setItems((prev) =>
-      prev.filter((i) => !(i.productId === productId && i.sizeId === sizeId))
-    );
+    setItems((prev) => prev.filter((i) => !(i.productId === productId && i.sizeId === sizeId)));
   };
 
   const clearCart = () => {
@@ -308,17 +366,26 @@ export function useCart() {
     setCustomerPhone("");
     setCustomerEmail("");
     setPromoCodeId(null);
-    setTransactionDate(new Date().toISOString().split('T')[0]);
+    setTransactionDate(new Date().toISOString().split("T")[0]);
     setSplitMode(false);
     setSplitPayments([{ method: "CASH", amount: 0 }]);
   };
 
   const subtotal = items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-  const pricing = allocatePricingSnapshots(items.map((item) => ({
-    productId: item.productId, quantity: item.quantity, mrp: item.originalUnitPrice ?? item.unitPrice,
-    sellingPrice: item.unitPrice,
-  })), { discountType: discountMode, discountPercent: discountPct,
-    discountAmount: roundTo2(subtotal * discountPct / 100), taxRate: taxPct });
+  const pricing = allocatePricingSnapshots(
+    items.map((item) => ({
+      productId: item.productId,
+      quantity: item.quantity,
+      mrp: item.originalUnitPrice ?? item.unitPrice,
+      sellingPrice: item.unitPrice,
+    })),
+    {
+      discountType: discountMode,
+      discountPercent: discountPct,
+      discountAmount: roundTo2((subtotal * discountPct) / 100),
+      taxRate: taxPct,
+    }
+  );
   const { discountAmount, taxAmount } = pricing;
   const total = Math.round(pricing.total);
   const amountDue = Math.max(total - amountPaid, 0);

@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { canonicalCustomerOrderValue } from "@/modules/analytics/utils/canonicalMetrics";
 import { summarizeIntegrity } from "../utils/integritySummary";
 
 export type IntegrityIssue = {
@@ -15,7 +16,7 @@ const issue = (
   severity: IntegrityIssue["severity"],
   description: string,
   rows: Array<{ id: string }>,
-  count = rows.length,
+  count = rows.length
 ): IntegrityIssue => ({
   code,
   severity,
@@ -34,54 +35,106 @@ export const dataIntegrityService = {
       ORDER BY finished_at ASC
       LIMIT 1
     `;
-    const paymentLedgerCutover = cutoverRows[0]?.finished_at ?? new Date("2026-05-13T00:00:00.000Z");
-    const [saleItemTotal, missingSaleCostTotal, missingSaleCosts, zeroSaleCostTotal, zeroSaleCosts,
-      replacementsTotal, missingReplacementCostTotal, missingReplacementCosts, missingPaymentTotal,
-      missingPayments, negativeStockTotal, negativeStock, ambiguousAdjustmentTotal,
-      ambiguousAdjustments, crossStoreCountRows, crossStoreRows, customers] = await Promise.all([
+    const paymentLedgerCutover =
+      cutoverRows[0]?.finished_at ?? new Date("2026-05-13T00:00:00.000Z");
+    const [
+      saleItemTotal,
+      missingSaleCostTotal,
+      missingSaleCosts,
+      zeroSaleCostTotal,
+      zeroSaleCosts,
+      replacementsTotal,
+      missingReplacementCostTotal,
+      missingReplacementCosts,
+      missingPaymentTotal,
+      missingPayments,
+      negativeStockTotal,
+      negativeStock,
+      ambiguousAdjustmentTotal,
+      ambiguousAdjustments,
+      crossStoreCountRows,
+      crossStoreRows,
+      customers,
+    ] = await Promise.all([
       prisma.saleItem.count({ where: { sale: { storeId, store: { orgId } } } }),
       prisma.saleItem.count({ where: { costPrice: null, sale: { storeId, store: { orgId } } } }),
       prisma.saleItem.findMany({
         where: { costPrice: null, sale: { storeId, store: { orgId } } },
-        select: { id: true }, take: 100,
+        select: { id: true },
+        take: 100,
       }),
       prisma.saleItem.count({
-        where: { costPrice: { equals: new Prisma.Decimal(0) }, sale: { storeId, store: { orgId } } },
+        where: {
+          costPrice: { equals: new Prisma.Decimal(0) },
+          sale: { storeId, store: { orgId } },
+        },
       }),
       prisma.saleItem.findMany({
-        where: { costPrice: { equals: new Prisma.Decimal(0) }, sale: { storeId, store: { orgId } } },
-        select: { id: true }, take: 100,
+        where: {
+          costPrice: { equals: new Prisma.Decimal(0) },
+          sale: { storeId, store: { orgId } },
+        },
+        select: { id: true },
+        take: 100,
       }),
       prisma.returnTransactionItem.count({
-        where: { newProductId: { not: null }, newQuantity: { gt: 0 }, returnTransaction: { storeId, store: { orgId } } },
+        where: {
+          newProductId: { not: null },
+          newQuantity: { gt: 0 },
+          returnTransaction: { storeId, store: { orgId } },
+        },
       }),
       prisma.returnTransactionItem.count({
-        where: { newProductId: { not: null }, newQuantity: { gt: 0 }, newCostPrice: null, returnTransaction: { storeId, store: { orgId } } },
+        where: {
+          newProductId: { not: null },
+          newQuantity: { gt: 0 },
+          newCostPrice: null,
+          returnTransaction: { storeId, store: { orgId } },
+        },
       }),
       prisma.returnTransactionItem.findMany({
-        where: { newProductId: { not: null }, newQuantity: { gt: 0 }, newCostPrice: null, returnTransaction: { storeId, store: { orgId } } },
-        select: { id: true }, take: 100,
+        where: {
+          newProductId: { not: null },
+          newQuantity: { gt: 0 },
+          newCostPrice: null,
+          returnTransaction: { storeId, store: { orgId } },
+        },
+        select: { id: true },
+        take: 100,
       }),
       prisma.sale.count({
-        where: { storeId, store: { orgId }, createdAt: { gte: paymentLedgerCutover }, amountPaid: { gt: 0 }, payments: { none: {} } },
+        where: {
+          storeId,
+          store: { orgId },
+          createdAt: { gte: paymentLedgerCutover },
+          amountPaid: { gt: 0 },
+          payments: { none: {} },
+        },
       }),
       prisma.sale.findMany({
         where: {
-          storeId, store: { orgId }, createdAt: { gte: paymentLedgerCutover },
-          amountPaid: { gt: 0 }, payments: { none: {} },
+          storeId,
+          store: { orgId },
+          createdAt: { gte: paymentLedgerCutover },
+          amountPaid: { gt: 0 },
+          payments: { none: {} },
         },
-        select: { id: true }, take: 100,
+        select: { id: true },
+        take: 100,
       }),
       prisma.stockEntry.count({ where: { storeId, store: { orgId }, quantity: { lt: 0 } } }),
       prisma.stockEntry.findMany({
-        where: { storeId, store: { orgId }, quantity: { lt: 0 } }, select: { id: true }, take: 100,
+        where: { storeId, store: { orgId }, quantity: { lt: 0 } },
+        select: { id: true },
+        take: 100,
       }),
       prisma.stockMovement.count({
         where: { storeId, store: { orgId }, type: "ADJUSTMENT", deltaQuantity: null },
       }),
       prisma.stockMovement.findMany({
         where: { storeId, store: { orgId }, type: "ADJUSTMENT", deltaQuantity: null },
-        select: { id: true }, take: 100,
+        select: { id: true },
+        take: 100,
       }),
       prisma.$queryRaw<Array<{ count: number }>>`
         SELECT COUNT(*)::int AS count
@@ -108,9 +161,12 @@ export const dataIntegrityService = {
           totalSpent: true,
           sales: {
             where: { store: { orgId }, status: { in: ["COMPLETED", "EXCHANGED", "REFUNDED"] } },
-            select: { total: true },
+            select: {
+              total: true,
+              finalPayableAmount: true,
+              returnTransactions: { select: { netAmount: true, refundAmount: true } },
+            },
           },
-          returnTransactions: { select: { netAmount: true } },
         },
         orderBy: { updatedAt: "desc" },
         take: 100,
@@ -119,26 +175,80 @@ export const dataIntegrityService = {
 
     const customerDrift = customers
       .filter((customer) => {
-        const canonical = customer.sales.reduce((sum, sale) => sum + Number(sale.total), 0) +
-          customer.returnTransactions.reduce((sum, transaction) => sum + Number(transaction.netAmount), 0);
+        const canonical = customer.sales.reduce(
+          (sum, sale) =>
+            sum +
+            canonicalCustomerOrderValue({
+              saleAmount: sale.finalPayableAmount ?? sale.total,
+              returns: sale.returnTransactions,
+            }),
+          0
+        );
         return Math.abs(canonical - customer.totalSpent) > 0.01;
       })
       .map((customer) => ({ id: customer.id }));
 
     const issues = [
-      issue("MISSING_SALE_ITEM_COST", "error", "Sale items without an immutable cost snapshot.", missingSaleCosts, missingSaleCostTotal),
-      issue("ZERO_SALE_ITEM_COST", "warning", "Sale items with a zero cost snapshot; verify that zero is intentional.", zeroSaleCosts, zeroSaleCostTotal),
-      issue("MISSING_EXCHANGE_REPLACEMENT_COST", "error", "Exchange replacements without an immutable cost snapshot.", missingReplacementCosts, missingReplacementCostTotal),
-      issue("MISSING_PAYMENT_LEDGER", "error", "Post-cutover paid sales without payment ledger rows.", missingPayments, missingPaymentTotal),
-      issue("NEGATIVE_STOCK", "error", "Stock entries with a negative quantity.", negativeStock, negativeStockTotal),
-      issue("AMBIGUOUS_STOCK_ADJUSTMENT", "warning", "Legacy stock adjustments without a signed delta.", ambiguousAdjustments, ambiguousAdjustmentTotal),
-      issue("STORE_SCOPE_MISMATCH", "error", "Stock rows whose product and store belong to different organizations.", crossStoreRows, crossStoreCountRows[0]?.count ?? 0),
-      issue("CUSTOMER_TOTAL_DRIFT", "warning", "Cached customer lifetime total differs from canonical transaction history (latest 100 store customers checked).", customerDrift),
+      issue(
+        "MISSING_SALE_ITEM_COST",
+        "error",
+        "Sale items without an immutable cost snapshot.",
+        missingSaleCosts,
+        missingSaleCostTotal
+      ),
+      issue(
+        "ZERO_SALE_ITEM_COST",
+        "warning",
+        "Sale items with a zero cost snapshot; verify that zero is intentional.",
+        zeroSaleCosts,
+        zeroSaleCostTotal
+      ),
+      issue(
+        "MISSING_EXCHANGE_REPLACEMENT_COST",
+        "error",
+        "Exchange replacements without an immutable cost snapshot.",
+        missingReplacementCosts,
+        missingReplacementCostTotal
+      ),
+      issue(
+        "MISSING_PAYMENT_LEDGER",
+        "error",
+        "Post-cutover paid sales without payment ledger rows.",
+        missingPayments,
+        missingPaymentTotal
+      ),
+      issue(
+        "NEGATIVE_STOCK",
+        "error",
+        "Stock entries with a negative quantity.",
+        negativeStock,
+        negativeStockTotal
+      ),
+      issue(
+        "AMBIGUOUS_STOCK_ADJUSTMENT",
+        "warning",
+        "Legacy stock adjustments without a signed delta.",
+        ambiguousAdjustments,
+        ambiguousAdjustmentTotal
+      ),
+      issue(
+        "STORE_SCOPE_MISMATCH",
+        "error",
+        "Stock rows whose product and store belong to different organizations.",
+        crossStoreRows,
+        crossStoreCountRows[0]?.count ?? 0
+      ),
+      issue(
+        "CUSTOMER_TOTAL_DRIFT",
+        "warning",
+        "Cached customer lifetime total differs from canonical transaction history (latest 100 store customers checked).",
+        customerDrift
+      ),
     ];
     const totalCostRows = saleItemTotal + replacementsTotal;
     const completeCostRows = Math.max(
       0,
-      totalCostRows - missingSaleCostTotal - missingReplacementCostTotal,
+      totalCostRows - missingSaleCostTotal - missingReplacementCostTotal
     );
     return {
       scope: { type: "STORE" as const, storeId },

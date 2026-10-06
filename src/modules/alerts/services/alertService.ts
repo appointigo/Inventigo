@@ -73,7 +73,11 @@ export const alertService = {
     return mapConfig(config);
   },
 
-  async update(id: string, orgId: string, values: Partial<AlertConfigFormValues>): Promise<AlertConfig | null> {
+  async update(
+    id: string,
+    orgId: string,
+    values: Partial<AlertConfigFormValues>
+  ): Promise<AlertConfig | null> {
     const existing = await prisma.alertConfig.findFirst({ where: { id, orgId } });
     if (!existing) return null;
 
@@ -108,16 +112,13 @@ export const alertService = {
 
     // Cron callers may deliberately inspect all stores; user-facing callers pass one explicit store.
     const stores = await prisma.store.findMany({
-      where: { orgId, ...(storeId ? { id: storeId } : {}) }, select: { id: true },
+      where: { orgId, ...(storeId ? { id: storeId } : {}) },
+      select: { id: true },
     });
     const lowStockMap = new Map<string, LowStockItem>();
 
     for (const store of stores) {
-      const { items: allStock } = await stockService.getStockLevels({
-        storeId: store.id,
-        page: 1,
-        pageSize: 10000,
-      });
+      const allStock = await stockService.getAllStockLevels(store.id);
 
       for (const config of activeConfigs) {
         for (const row of allStock) {

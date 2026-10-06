@@ -27,11 +27,7 @@ export const reportsService = {
   ): Promise<StockReportRow[]> {
     const resolvedStoreId = storeId;
 
-    const { items: allStock } = await stockService.getStockLevels({
-      storeId: resolvedStoreId,
-      page: 1,
-      pageSize: 10000,
-    });
+    const allStock = await stockService.getAllStockLevels(resolvedStoreId);
 
     const products = await prisma.product.findMany({
       where: { orgId },
@@ -41,7 +37,7 @@ export const reportsService = {
 
     let result: StockReportRow[] = allStock.map((row) => {
       const costPrice = costPriceMap.get(row.productId) ?? 0;
-      return { ...row, costPrice, stockValue: row.quantity * costPrice };
+      return { ...row, costPrice, stockValue: Math.max(0, row.quantity) * costPrice };
     });
 
     if (filters?.categoryName) {
@@ -64,13 +60,19 @@ export const reportsService = {
   ): Promise<StockMovementRow[]> {
     const resolvedStoreId = storeId;
 
-    const { items } = await stockService.getMovementHistory({
+    const movementFilters = {
       storeId: resolvedStoreId,
       startDate: filters?.startDate ? new Date(filters.startDate) : undefined,
       endDate: filters?.endDate ? new Date(filters.endDate) : undefined,
-      page: 1,
-      pageSize: 10000,
-    });
+      pageSize: 1000,
+    };
+    const first = await stockService.getMovementHistory({ ...movementFilters, page: 1 });
+    const items = [...first.items];
+    for (let page = 2; items.length < first.total; page += 1) {
+      const next = await stockService.getMovementHistory({ ...movementFilters, page });
+      items.push(...next.items);
+      if (next.items.length === 0) break;
+    }
 
     if (filters?.type) {
       return items.filter((m) => m.type === filters.type);

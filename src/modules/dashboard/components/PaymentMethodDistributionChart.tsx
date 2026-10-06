@@ -2,20 +2,14 @@
 
 import { useMemo } from "react";
 import { Empty } from "antd";
-import {
-  Cell,
-  Legend,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-} from "recharts";
+import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import type { PieLabelRenderProps, TooltipContentProps } from "recharts";
 import type { PaymentMethodDistribution } from "@/modules/dashboard/services/paymentMethodService";
 
 interface PaymentMethodDistributionChartProps {
   distributionData?: PaymentMethodDistribution[];
   amountReceivable?: number;
+  refundsPaid?: number;
   activeBucketLabel?: string;
   loading?: boolean;
   height?: number;
@@ -32,14 +26,12 @@ const DEFAULT_COLOR_SEQUENCE = Object.values(PAYMENT_METHOD_COLORS);
 export default function PaymentMethodDistributionChart({
   distributionData: distributionDataProp,
   amountReceivable = 0,
+  refundsPaid = 0,
   activeBucketLabel,
   loading = false,
   height = 300,
 }: PaymentMethodDistributionChartProps) {
-  const distributionData = useMemo(
-    () => distributionDataProp ?? [],
-    [distributionDataProp],
-  );
+  const distributionData = useMemo(() => distributionDataProp ?? [], [distributionDataProp]);
 
   const paymentDistributionTotal = useMemo(() => {
     return distributionData.reduce((sum, entry) => sum + entry.value, 0);
@@ -56,7 +48,9 @@ export default function PaymentMethodDistributionChart({
 
   const renderCustomLabel = (props: PieLabelRenderProps) => {
     const payload = (props.payload ?? props) as Partial<PaymentMethodDistribution>;
-    const percentage = payload?.percentage ?? (typeof props?.percent === "number" ? Math.round(props.percent * 100) : 0);
+    const percentage =
+      payload?.percentage ??
+      (typeof props?.percent === "number" ? Math.round(props.percent * 100) : 0);
     const x = typeof props?.x === "number" ? props.x : 0;
     const y = typeof props?.y === "number" ? props.y : 0;
 
@@ -86,9 +80,7 @@ export default function PaymentMethodDistributionChart({
         }}
       >
         {activeBucketLabel ? (
-          <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 6 }}>
-            {activeBucketLabel}
-          </div>
+          <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 6 }}>{activeBucketLabel}</div>
         ) : null}
         <div style={{ fontSize: 12, fontWeight: 600, color: "#111827", marginBottom: 4 }}>
           {name}
@@ -103,7 +95,9 @@ export default function PaymentMethodDistributionChart({
         <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 2 }}>
           Coverage: {percentage}% of chart total
         </div>
-        <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 2 }}>Percentage: {percentage}%</div>
+        <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 2 }}>
+          Percentage: {percentage}%
+        </div>
         <div style={{ fontSize: 12, color: "#6b7280" }}>Payment entries: {count ?? 0}</div>
       </div>
     );
@@ -125,7 +119,13 @@ export default function PaymentMethodDistributionChart({
       ) : (
         <div style={{ width: "100%", minWidth: 0 }}>
           <div style={{ width: "100%", height }}>
-            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} initialDimension={{ width: 360, height }}>
+            <ResponsiveContainer
+              width="100%"
+              height="100%"
+              minWidth={0}
+              minHeight={0}
+              initialDimension={{ width: 360, height }}
+            >
               <PieChart margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
                 <Pie
                   data={chartData}
@@ -159,7 +159,8 @@ export default function PaymentMethodDistributionChart({
 
                     return (
                       <span style={{ fontSize: 12, color: "#6b7280" }}>
-                        {data.name}: {data.value.toLocaleString("en-IN", { style: "currency", currency: "INR" })}
+                        {data.name}:{" "}
+                        {data.value.toLocaleString("en-IN", { style: "currency", currency: "INR" })}
                       </span>
                     );
                   }}
@@ -179,12 +180,20 @@ export default function PaymentMethodDistributionChart({
             }}
           >
             <div style={{ textAlign: "center" }}>
-              <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 4 }}>
-                Total Received
-              </div>
+              <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 4 }}>Total Received</div>
               <div style={{ fontSize: 18, fontWeight: 600, color: "#111827" }}>
                 ₹
                 {paymentDistributionTotal.toLocaleString("en-IN", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </div>
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 4 }}>Refunds Paid</div>
+              <div style={{ fontSize: 18, fontWeight: 600, color: "#dc2626" }}>
+                ₹
+                {refundsPaid.toLocaleString("en-IN", {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2,
                 })}

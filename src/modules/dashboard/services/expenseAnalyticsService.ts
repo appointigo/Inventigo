@@ -1,6 +1,11 @@
 import dayjs from "dayjs";
 import { prisma } from "@/lib/db";
-import { analyticsBucketKey } from "@/modules/analytics/utils/dateRange";
+import {
+  analyticsBucketKey,
+  businessDateEndExclusive,
+  businessDateForInstant,
+} from "@/modules/analytics/utils/dateRange";
+import { roundMoney, sumMoney } from "@/modules/analytics/utils/canonicalMetrics";
 import type { ExpenseAnalyticsResponse } from "../types";
 
 const validPeriods = new Set(["daily", "weekly", "monthly", "yearly"]);
@@ -25,8 +30,7 @@ const buildDateFilter = (startDate?: Date, endDate?: Date) => {
       (where.date as Record<string, Date>).gte = startDate;
     }
     if (endDate) {
-      const endExclusive = new Date(endDate);
-      endExclusive.setDate(endExclusive.getDate() + 1);
+      const endExclusive = businessDateEndExclusive(businessDateForInstant(endDate));
       (where.date as Record<string, Date>).lt = endExclusive;
     }
   }
@@ -49,7 +53,11 @@ const buildTrendLabel = (period: string, value: string) => {
 };
 
 export const expenseAnalyticsService = {
-  async getAnalytics(orgId: string, storeId: string, options: AnalyticsOptions = {}): Promise<ExpenseAnalyticsResponse> {
+  async getAnalytics(
+    orgId: string,
+    storeId: string,
+    options: AnalyticsOptions = {}
+  ): Promise<ExpenseAnalyticsResponse> {
     const period = normalizePeriod(options.period);
     const where = buildDateFilter(options.startDate, options.endDate);
 
@@ -67,7 +75,7 @@ export const expenseAnalyticsService = {
       orderBy: { date: "asc" },
     });
 
-    const totals = rows.reduce((sum, row) => sum + Number(row.amount ?? 0), 0);
+    const totals = sumMoney(rows.map((row) => row.amount));
     const trendMap = new Map<string, number>();
     const breakdownMap = new Map<string, number>();
 
@@ -77,7 +85,14 @@ export const expenseAnalyticsService = {
       breakdownMap.set(category, (breakdownMap.get(category) ?? 0) + amount);
 
       const dateValue = row.date instanceof Date ? row.date : new Date(row.date);
-      const group = period === "daily" ? "day" : period === "weekly" ? "week" : period === "yearly" ? "year" : "month";
+      const group =
+        period === "daily"
+          ? "day"
+          : period === "weekly"
+            ? "week"
+            : period === "yearly"
+              ? "year"
+              : "month";
       const key = analyticsBucketKey(dateValue, group);
 
       trendMap.set(key, (trendMap.get(key) ?? 0) + amount);
@@ -88,7 +103,7 @@ export const expenseAnalyticsService = {
       .map(([key, amount]) => {
         return {
           label: buildTrendLabel(period, key),
-          amount: Number(amount.toFixed(2)),
+          amount: roundMoney(amount),
           period: key,
         };
       });
@@ -96,15 +111,15 @@ export const expenseAnalyticsService = {
     const breakdown = Array.from(breakdownMap.entries())
       .map(([category, amount]) => ({
         category,
-        amount: Number(amount.toFixed(2)),
+        amount: roundMoney(amount),
         percentage: totals > 0 ? Math.round((amount / totals) * 100) : 0,
       }))
       .sort((a, b) => b.amount - a.amount);
 
     return {
       summary: {
-        totalExpense: Number(totals.toFixed(2)),
-        averageExpense: rows.length > 0 ? Number((totals / rows.length).toFixed(2)) : 0,
+        totalExpense: totals,
+        averageExpense: rows.length > 0 ? roundMoney(totals / rows.length) : 0,
         transactionCount: rows.length,
       },
       trend,

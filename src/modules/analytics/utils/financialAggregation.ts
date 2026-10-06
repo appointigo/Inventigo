@@ -13,13 +13,14 @@ import {
   businessDateForInstant,
   nextAnalyticsBucket,
 } from "./dateRange.ts";
+import { roundMoney, sumMoney } from "./canonicalMetrics.ts";
 
-const round = (value: number) => Number(value.toFixed(2));
+const round = roundMoney;
 
 export function calculateReturnCostEvent(
   returnedCosts: Array<number | null>,
   replacementCosts: Array<number | null>,
-  hasDetailedItems = returnedCosts.length > 0 || replacementCosts.length > 0,
+  hasDetailedItems = returnedCosts.length > 0 || replacementCosts.length > 0
 ) {
   const reasons: DataCompletenessReason[] = [];
   if (!hasDetailedItems) reasons.push("LEGACY_RETURN_WITHOUT_ITEMS");
@@ -32,7 +33,7 @@ export function calculateReturnCostEvent(
     cogs: complete
       ? round(
           replacementCosts.reduce<number>((sum, cost) => sum + (cost ?? 0), 0) -
-            returnedCosts.reduce<number>((sum, cost) => sum + (cost ?? 0), 0),
+            returnedCosts.reduce<number>((sum, cost) => sum + (cost ?? 0), 0)
         )
       : null,
     completenessReasons: reasons,
@@ -46,7 +47,8 @@ export function bucketStart(date: Date, group: AnalyticsGroup) {
 export function bucketLabel(period: string, group: AnalyticsGroup) {
   const value = dayjs(period);
   if (group === "day") return value.format("DD MMM");
-  if (group === "week") return `${value.format("DD MMM")} – ${dayjs(addBusinessDays(period, 6)).format("DD MMM")}`;
+  if (group === "week")
+    return `${value.format("DD MMM")} – ${dayjs(addBusinessDays(period, 6)).format("DD MMM")}`;
   if (group === "year") return value.format("YYYY");
   return value.format("MMM YYYY");
 }
@@ -66,7 +68,7 @@ export function aggregateFinancialEvents(
   events: FinancialEvent[],
   from: Date,
   to: Date,
-  group: AnalyticsGroup,
+  group: AnalyticsGroup
 ): SalesAnalyticsResponse {
   const grouped = new Map<string, FinancialEvent[]>();
   for (const event of events) {
@@ -76,26 +78,26 @@ export function aggregateFinancialEvents(
 
   const trend: SalesAnalyticsPoint[] = buildBucketKeys(from, to, group).map((period) => {
     const rows = grouped.get(period) ?? [];
-    const revenue = round(rows.reduce((sum, row) => sum + row.revenue, 0));
+    const revenue = sumMoney(rows.map((row) => row.revenue));
     const costComplete = rows.every((row) => row.cogs !== null);
-    const cogs = costComplete ? round(rows.reduce((sum, row) => sum + (row.cogs ?? 0), 0)) : null;
+    const cogs = costComplete ? sumMoney(rows.map((row) => row.cogs ?? 0)) : null;
     return {
       period,
       label: bucketLabel(period, group),
       revenue,
       cogs,
       grossProfit: cogs === null ? null : round(revenue - cogs),
-      discount: round(rows.reduce((sum, row) => sum + row.discount, 0)),
+      discount: sumMoney(rows.map((row) => row.discount)),
       orders: rows.reduce((sum, row) => sum + row.orderCount, 0),
-      returnValue: round(rows.reduce((sum, row) => sum + row.returnValue, 0)),
+      returnValue: sumMoney(rows.map((row) => row.returnValue)),
       returns: rows.reduce((sum, row) => sum + row.returnCount, 0),
       exchanges: rows.reduce((sum, row) => sum + row.exchangeCount, 0),
     };
   });
 
-  const revenue = round(trend.reduce((sum, row) => sum + row.revenue, 0));
+  const revenue = sumMoney(trend.map((row) => row.revenue));
   const cogsComplete = trend.every((row) => row.cogs !== null);
-  const cogs = cogsComplete ? round(trend.reduce((sum, row) => sum + (row.cogs ?? 0), 0)) : null;
+  const cogs = cogsComplete ? sumMoney(trend.map((row) => row.cogs ?? 0)) : null;
   const orders = trend.reduce((sum, row) => sum + row.orders, 0);
   const grossProfit = cogs === null ? null : round(revenue - cogs);
   const reasons = events.flatMap((event) => event.completenessReasons ?? []);
@@ -110,7 +112,8 @@ export function aggregateFinancialEvents(
       group,
     },
     methodology: {
-      revenue: "Final billed sale totals, less returned lines, plus replacement exchange lines.",
+      revenue:
+        "Final billed sale totals plus signed return adjustments (net amount minus refund amount).",
       cogs: "Immutable cost captured on each original sale item.",
       returns: "Returns reverse historical item revenue and cost on their business date.",
       grossProfitReliable: cogsComplete,
@@ -121,7 +124,7 @@ export function aggregateFinancialEvents(
     completeness: {
       overall: dataCompleteness(reasons),
       revenue: dataCompleteness(
-        reasons.filter((reason) => reason === "LEGACY_RETURN_WITHOUT_ITEMS"),
+        reasons.filter((reason) => reason === "LEGACY_RETURN_WITHOUT_ITEMS")
       ),
       cogs: dataCompleteness(costReasons, !cogsComplete),
       grossProfit: dataCompleteness(costReasons, !cogsComplete),
@@ -130,10 +133,10 @@ export function aggregateFinancialEvents(
       revenue,
       cogs,
       grossProfit,
-      discounts: round(trend.reduce((sum, row) => sum + row.discount, 0)),
+      discounts: sumMoney(trend.map((row) => row.discount)),
       orders,
       averageOrderValue: orders > 0 ? round(revenue / orders) : 0,
-      returnValue: round(trend.reduce((sum, row) => sum + row.returnValue, 0)),
+      returnValue: sumMoney(trend.map((row) => row.returnValue)),
       returns: trend.reduce((sum, row) => sum + row.returns, 0),
       exchanges: trend.reduce((sum, row) => sum + row.exchanges, 0),
     },

@@ -25,6 +25,7 @@
     "test:release6": "node --experimental-transform-types --test src/modules/stock-transfers/transferPolicy.test.ts",
     "test:release7": "node --experimental-transform-types --test src/modules/finance/financeRules.test.ts src/modules/finance/financeAccess.test.ts",
     "test:release8": "node --experimental-transform-types --test src/modules/forecasting/forecastRules.test.ts src/modules/forecasting/forecastScope.test.ts",
+    "test:numerical-integrity": "node --experimental-transform-types --test src/modules/analytics/metrics/metricRegistry.test.ts src/modules/analytics/utils/canonicalMetrics.test.ts src/modules/analytics/utils/numericalReconciliation.test.ts src/modules/finance/refundAccounting.test.ts",
     "test:pricing-catalog": "node --experimental-transform-types --test src/modules/marketing/pricingCatalog.test.ts",
     "prisma:fix-exchanged-sales": "node prisma/scripts/fix-exchanged-sales-and-backfill-returns.js",
     "vercel-build": "if [ \"$VERCEL_ENV\" = \"production\" ]; then npx prisma migrate deploy; fi && npm run build",

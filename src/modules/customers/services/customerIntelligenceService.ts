@@ -1,5 +1,9 @@
 import "server-only";
 import { prisma } from "@/lib/db";
+import {
+  canonicalCustomerOrderValue,
+  toMinorUnits,
+} from "@/modules/analytics/utils/canonicalMetrics";
 import type { CustomerGroupFilter, CustomerSortField, SortDirection } from "../types";
 import {
   DEFAULT_BUSINESS_TIME_ZONE,
@@ -10,14 +14,6 @@ import {
 import { paginateCustomerRows } from "../customerPagination";
 
 const DAY_MS = 86_400_000;
-const toPaise = (value: { toFixed(digits: number): string } | number | string | null) => {
-  const fixed =
-    typeof value === "object" && value ? value.toFixed(2) : Number(value ?? 0).toFixed(2);
-  const negative = fixed.startsWith("-");
-  const [whole, fraction = "00"] = fixed.replace("-", "").split(".");
-  const result = Number(whole) * 100 + Number(fraction.padEnd(2, "0").slice(0, 2));
-  return negative ? -result : result;
-};
 const median = (values: number[]) => {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
@@ -95,17 +91,14 @@ async function buildPopulation(orgId: string, storeId?: string | null, now = new
   const computed = customers.map((customer) => {
     const orders = customer.sales
       .map((sale) => {
-        const adjustment = sale.returnTransactions.reduce(
-          (sum, item) =>
-            sum +
-            (item.type === "RETURN"
-              ? -toPaise(item.refundAmount)
-              : toPaise(item.netAmount) - toPaise(item.refundAmount)),
-          0
-        );
         return {
           date: sale.transactionDate,
-          retained: Math.max(0, toPaise(sale.finalPayableAmount ?? sale.total) + adjustment),
+          retained: toMinorUnits(
+            canonicalCustomerOrderValue({
+              saleAmount: sale.finalPayableAmount ?? sale.total,
+              returns: sale.returnTransactions,
+            })
+          ),
         };
       })
       .filter((order) => order.retained > 0)

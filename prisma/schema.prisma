@@ -806,6 +806,7 @@ model SalePayment {
 
 model ReturnTransaction {
   id                     String                  @id @default(uuid())
+  idempotencyKey         String?                 @unique
   referenceNumber        String                  @unique
   originalSaleId         String
   storeId                String

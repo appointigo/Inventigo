@@ -1,10 +1,11 @@
 import { expenseAnalyticsService } from "@/modules/dashboard/services/expenseAnalyticsService";
 import type { AnalyticsGroup, ProfitabilityResponse } from "../types";
 import { salesAnalyticsService } from "./salesAnalyticsService";
+import { roundMoney } from "../utils/canonicalMetrics";
 
 const expensePeriod = (group: AnalyticsGroup) =>
   group === "day" ? "daily" : group === "week" ? "weekly" : group === "year" ? "yearly" : "monthly";
-const round = (value: number) => Number(value.toFixed(2));
+const round = roundMoney;
 
 export const profitabilityAnalyticsService = {
   async getAnalytics(
@@ -12,7 +13,7 @@ export const profitabilityAnalyticsService = {
     storeId: string,
     from: Date,
     to: Date,
-    group: AnalyticsGroup,
+    group: AnalyticsGroup
   ): Promise<ProfitabilityResponse> {
     const [sales, expenses] = await Promise.all([
       salesAnalyticsService.getAnalytics(orgId, storeId, from, to, group),
@@ -43,7 +44,8 @@ export const profitabilityAnalyticsService = {
         netProfit,
         grossMarginPct:
           grossProfit !== null && revenue !== 0 ? round((grossProfit / revenue) * 100) : null,
-        netMarginPct: netProfit !== null && revenue !== 0 ? round((netProfit / revenue) * 100) : null,
+        netMarginPct:
+          netProfit !== null && revenue !== 0 ? round((netProfit / revenue) * 100) : null,
         breakEvenRevenue:
           sales.summary.cogs === null ? null : round(sales.summary.cogs + operatingExpenses),
       },
