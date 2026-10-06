@@ -22,6 +22,7 @@
     "test:release3": "node --experimental-transform-types --test src/modules/owner-intelligence/ownerAnalytics.test.ts",
     "test:release4": "node --experimental-transform-types --test src/modules/procurement-intelligence/procurementRules.test.ts",
     "test:release5": "node --experimental-transform-types --test src/modules/replenishment/replenishmentPolicy.test.ts",
+    "test:release6": "node --experimental-transform-types --test src/modules/stock-transfers/transferPolicy.test.ts",
     "test:pricing-catalog": "node --experimental-transform-types --test src/modules/marketing/pricingCatalog.test.ts",
     "prisma:fix-exchanged-sales": "node prisma/scripts/fix-exchanged-sales-and-backfill-returns.js",
     "vercel-build": "if [ \"$VERCEL_ENV\" = \"production\" ]; then npx prisma migrate deploy; fi && npm run build",

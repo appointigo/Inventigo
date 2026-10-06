@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Alert, Button, Drawer, Select, Skeleton, Table, Tag, Typography } from "antd";
 import type { ColumnsType, TablePaginationConfig } from "antd/es/table";
 import { useStore } from "@/providers/StoreProvider";
+import { useCurrentUser } from "@/modules/auth/hooks/useAuth";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
 import type { ProductIntelligenceResponse, ProductIntelligenceRow } from "./types";
 import styles from "./ProductIntelligencePage.module.css";
@@ -32,6 +33,7 @@ const periods = [
 export default function ProductIntelligencePage() {
   const router = useRouter();
   const { storeId } = useStore();
+  const { user } = useCurrentUser();
   const [period, setPeriod] = useState("monthly");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -78,6 +80,42 @@ export default function ProductIntelligencePage() {
       return response.json() as Promise<ProductIntelligenceResponse>;
     },
   });
+  const transferQuery = useQuery({
+    queryKey: [
+      "product-transfer-opportunities",
+      storeId,
+      query.data?.range.start,
+      query.data?.range.end,
+    ],
+    enabled: Boolean(storeId && query.data && user && !user.storeId),
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        from: new Date(query.data!.range.start).toISOString().slice(0, 10),
+        to: new Date(new Date(query.data!.range.end).getTime() - 1).toISOString().slice(0, 10),
+      });
+      const response = await fetch(`/api/transfer-recommendations?${params}`);
+      if (!response.ok) return { items: [] };
+      return response.json() as Promise<{
+        items: Array<{
+          productId: string;
+          destinationStoreId: string;
+          sourceStoreName: string | null;
+          recommendedQuantity: number;
+          remainingSupplierRequirement: number;
+        }>;
+      }>;
+    },
+  });
+  const transferFor = useCallback(
+    (productId: string) =>
+      transferQuery.data?.items.find(
+        (item) =>
+          item.productId === productId &&
+          item.destinationStoreId === storeId &&
+          item.recommendedQuantity > 0
+      ),
+    [storeId, transferQuery.data]
+  );
   const columns = useMemo<ColumnsType<ProductIntelligenceRow>>(
     () => [
       {
@@ -146,15 +184,22 @@ export default function ProductIntelligencePage() {
         title: "Recommended",
         dataIndex: "replenishment",
         width: 145,
-        render: (value: ProductIntelligenceRow["replenishment"]) =>
-          value ? (
+        render: (value: ProductIntelligenceRow["replenishment"], row) => {
+          const transfer = transferFor(row.productId);
+          return transfer ? (
+            <span>
+              {transfer.recommendedQuantity} transfer
+              <div className={styles.muted}>from {transfer.sourceStoreName}</div>
+            </span>
+          ) : value ? (
             <span>
               {value.recommendedQuantity == null ? "—" : `${value.recommendedQuantity} units`}
               <div className={styles.muted}>{value.evidenceQuality} evidence</div>
             </span>
           ) : (
             "Not evaluated"
-          ),
+          );
+        },
       },
       {
         title: "Cover",
@@ -187,7 +232,7 @@ export default function ProductIntelligencePage() {
         ),
       },
     ],
-    []
+    [transferFor]
   );
   const onTable = (pagination: TablePaginationConfig) => {
     setPage(pagination.current ?? 1);
@@ -390,6 +435,14 @@ export default function ProductIntelligencePage() {
               </article>
             </div>
             <Typography.Title level={4}>Replenishment recommendation</Typography.Title>
+            {transferFor(selected.productId) ? (
+              <Alert
+                showIcon
+                type="success"
+                message={`${transferFor(selected.productId)!.recommendedQuantity} units can be transferred from ${transferFor(selected.productId)!.sourceStoreName}`}
+                description={`${transferFor(selected.productId)!.remainingSupplierRequirement} units remain for supplier replenishment.`}
+              />
+            ) : null}
             {selected.replenishment ? (
               <>
                 <Tag color={statusColors[selected.replenishment.type] ?? "blue"}>

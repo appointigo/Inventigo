@@ -280,6 +280,7 @@ export function calculateReplenishment(input: ReplenishmentInput) {
       lateInbound,
       excessUnits,
       inventoryValue,
+      unitCost: input.unitCost,
       excessInventoryValue,
       grossMarginPercent: input.grossMarginPercent,
     },

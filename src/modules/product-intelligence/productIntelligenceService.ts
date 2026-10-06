@@ -169,59 +169,76 @@ export const productIntelligenceService = {
     const signalMap = new Map(signalRows.map((row) => [row.productId, row]));
     // Inventory service exposes the complete product set through its valuation/signals only in grouped views;
     // load lightweight product metadata and current stock to include products with no period activity.
-    const [products, inboundItems, replenishmentSnapshots] = await Promise.all([
-      prisma.product.findMany({
-        where: {
-          orgId,
-          OR: [
-            { stockEntries: { some: { storeId } } },
-            {
-              saleItems: {
-                some: { sale: { storeId, transactionDate: { gte: start, lt: end } } },
+    const [products, inboundItems, transferInboundItems, replenishmentSnapshots] =
+      await Promise.all([
+        prisma.product.findMany({
+          where: {
+            orgId,
+            OR: [
+              { stockEntries: { some: { storeId } } },
+              {
+                saleItems: {
+                  some: { sale: { storeId, transactionDate: { gte: start, lt: end } } },
+                },
               },
-            },
-          ],
-        },
-        select: {
-          id: true,
-          name: true,
-          sku: true,
-          isActive: true,
-          costPrice: true,
-          category: { select: { id: true, name: true } },
-          brand: { select: { id: true, name: true } },
-          stockEntries: { where: { storeId }, select: { quantity: true } },
-        },
-      }),
-      prisma.purchaseOrderItem.findMany({
-        where: {
-          purchaseOrder: {
-            storeId,
-            store: { orgId },
-            status: { in: ["ORDERED", "PARTIALLY_RECEIVED"] },
+            ],
           },
-        },
-        select: {
-          productId: true,
-          sizeId: true,
-          quantity: true,
-          purchaseOrder: { select: { expectedDeliveryDate: true } },
-          receiptItems: { select: { quantityAccepted: true } },
-        },
-      }),
-      prisma.replenishmentRecommendation.findMany({
-        where: { orgId, storeId, observationFrom: start, observationTo: end },
-        orderBy: { evaluatedAt: "desc" },
-        select: {
-          productId: true,
-          sizeId: true,
-          type: true,
-          recommendedQuantity: true,
-          evidenceQuality: true,
-          reasons: true,
-        },
-      }),
-    ]);
+          select: {
+            id: true,
+            name: true,
+            sku: true,
+            isActive: true,
+            costPrice: true,
+            category: { select: { id: true, name: true } },
+            brand: { select: { id: true, name: true } },
+            stockEntries: { where: { storeId }, select: { quantity: true } },
+          },
+        }),
+        prisma.purchaseOrderItem.findMany({
+          where: {
+            purchaseOrder: {
+              storeId,
+              store: { orgId },
+              status: { in: ["ORDERED", "PARTIALLY_RECEIVED"] },
+            },
+          },
+          select: {
+            productId: true,
+            sizeId: true,
+            quantity: true,
+            purchaseOrder: { select: { expectedDeliveryDate: true } },
+            receiptItems: { select: { quantityAccepted: true } },
+          },
+        }),
+        prisma.stockTransferItem.findMany({
+          where: {
+            transfer: {
+              orgId,
+              destinationStoreId: storeId,
+              status: { in: ["DISPATCHED", "PARTIALLY_RECEIVED"] },
+            },
+          },
+          select: {
+            productId: true,
+            dispatchedQuantity: true,
+            receivedQuantity: true,
+            damagedQuantity: true,
+            transfer: { select: { expectedArrivalAt: true } },
+          },
+        }),
+        prisma.replenishmentRecommendation.findMany({
+          where: { orgId, storeId, observationFrom: start, observationTo: end },
+          orderBy: { evaluatedAt: "desc" },
+          select: {
+            productId: true,
+            sizeId: true,
+            type: true,
+            recommendedQuantity: true,
+            evidenceQuality: true,
+            reasons: true,
+          },
+        }),
+      ]);
     const inboundByProduct = new Map<
       string,
       { quantity: number; expectedDate: string | null; overdue: boolean }
@@ -240,6 +257,24 @@ export const productIntelligenceService = {
         overdue: false,
       };
       const expected = item.purchaseOrder.expectedDeliveryDate?.toISOString().slice(0, 10) ?? null;
+      current.quantity += open;
+      if (expected && (!current.expectedDate || expected < current.expectedDate))
+        current.expectedDate = expected;
+      if (expected && expected < today) current.overdue = true;
+      inboundByProduct.set(item.productId, current);
+    }
+    for (const item of transferInboundItems) {
+      const open = Math.max(
+        0,
+        item.dispatchedQuantity - item.receivedQuantity - item.damagedQuantity
+      );
+      if (!open) continue;
+      const current = inboundByProduct.get(item.productId) ?? {
+        quantity: 0,
+        expectedDate: null,
+        overdue: false,
+      };
+      const expected = item.transfer.expectedArrivalAt?.toISOString().slice(0, 10) ?? null;
       current.quantity += open;
       if (expected && (!current.expectedDate || expected < current.expectedDate))
         current.expectedDate = expected;

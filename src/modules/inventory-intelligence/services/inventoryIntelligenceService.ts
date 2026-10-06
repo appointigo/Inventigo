@@ -133,7 +133,7 @@ type AggregateResult = {
 const round = (value: number, digits = 2) => Number(value.toFixed(digits));
 const variantKey = (productId: string, sizeId: string) => `${productId}:${sizeId}`;
 const isInboundMovement = (type: string) =>
-  type === "IN" || type === "RETURN" || type === "EXCHANGE_IN";
+  type === "IN" || type === "RETURN" || type === "EXCHANGE_IN" || type === "TRANSFER_IN";
 
 const dayKey = (date: Date) => {
   const shifted = new Date(date.getTime() + OFFSET_MS);
@@ -424,7 +424,7 @@ export const inventoryIntelligenceService = {
     const current = aggregateTransactions(currentSales, currentReturns);
     const comparison = aggregateTransactions(comparisonSales, comparisonReturns);
     const stockHistoryReliable = !movements.some(
-      (movement) => movement.type === "ADJUSTMENT" && movement.deltaQuantity === null,
+      (movement) => movement.type === "ADJUSTMENT" && movement.deltaQuantity === null
     );
     const currentQuantities = new Map(
       stockEntries.map((entry) => [variantKey(entry.productId, entry.sizeId), entry.quantity])
@@ -506,7 +506,7 @@ export const inventoryIntelligenceService = {
         const delta = resolveMovementDelta(
           movement.type,
           movement.quantity,
-          movement.deltaQuantity,
+          movement.deltaQuantity
         );
         return delta !== null && delta > 0 ? total + delta : total;
       }, 0);
@@ -1236,17 +1236,22 @@ export const inventoryIntelligenceService = {
         )
       : null;
 
-    const valuation = (dimension: "brand" | "category") => buildInventoryValuation(
-      Array.from(currentQuantities.entries()).flatMap(([key, quantity]) => {
-        const meta = stockMeta.get(key);
-        return meta ? [{
-          dimensionId: dimension === "brand" ? meta.brandId : meta.categoryId,
-          dimensionLabel: dimension === "brand" ? meta.brand : meta.category,
-          quantity,
-          unitCost: meta.costPrice,
-        }] : [];
-      }),
-    );
+    const valuation = (dimension: "brand" | "category") =>
+      buildInventoryValuation(
+        Array.from(currentQuantities.entries()).flatMap(([key, quantity]) => {
+          const meta = stockMeta.get(key);
+          return meta
+            ? [
+                {
+                  dimensionId: dimension === "brand" ? meta.brandId : meta.categoryId,
+                  dimensionLabel: dimension === "brand" ? meta.brand : meta.category,
+                  quantity,
+                  unitCost: meta.costPrice,
+                },
+              ]
+            : [];
+        })
+      );
 
     return {
       scope: { type: "STORE", storeId: store.id, storeName: store.name },

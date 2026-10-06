@@ -15,6 +15,8 @@ const typeColors: Record<string, string> = {
   SALE: "volcano",
   RETURN: "blue",
   ADJUSTMENT: "orange",
+  TRANSFER_IN: "cyan",
+  TRANSFER_OUT: "purple",
 };
 
 const MovementHistoryTable = ({ movements, loading }: MovementHistoryTableProps) => {
@@ -49,8 +51,19 @@ const MovementHistoryTable = ({ movements, loading }: MovementHistoryTableProps)
       width: 80,
       align: "center",
       render: (qty: number, record) => {
-        const prefix = record.type === "IN" || record.type === "RETURN" ? "+" : record.type === "ADJUSTMENT" ? (qty >= 0 ? "+" : "") : "-";
-        return <span style={{ fontWeight: 500 }}>{prefix}{Math.abs(qty)}</span>;
+        const prefix = ["IN", "RETURN", "TRANSFER_IN"].includes(record.type)
+          ? "+"
+          : record.type === "ADJUSTMENT"
+            ? qty >= 0
+              ? "+"
+              : ""
+            : "-";
+        return (
+          <span style={{ fontWeight: 500 }}>
+            {prefix}
+            {Math.abs(qty)}
+          </span>
+        );
       },
     },
     {
@@ -69,7 +82,8 @@ const MovementHistoryTable = ({ movements, loading }: MovementHistoryTableProps)
       title: "Date",
       dataIndex: "movementDate",
       width: 160,
-      render: (date: string) => new Date(date).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }),
+      render: (date: string) =>
+        new Date(date).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }),
     },
   ];
 
@@ -83,6 +97,6 @@ const MovementHistoryTable = ({ movements, loading }: MovementHistoryTableProps)
       size="middle"
     />
   );
-}
+};
 
 export default MovementHistoryTable;

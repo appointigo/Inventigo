@@ -44,6 +44,14 @@ type Data = {
     suppliers: Array<{ id: string; name: string }>;
   };
 };
+type TransferOpportunity = {
+  productId: string;
+  sizeId: string;
+  destinationStoreId: string;
+  sourceStoreName: string | null;
+  recommendedQuantity: number;
+  remainingSupplierRequirement: number;
+};
 const colors: Record<string, string> = {
   REORDER: "red",
   STOCKOUT_RISK: "volcano",
@@ -66,6 +74,7 @@ export default function ReplenishmentPage() {
   const { message } = App.useApp();
   const { user } = useCurrentUser();
   const canCreatePO = Boolean(user && ["OWNER", "ADMIN", "MANAGER"].includes(user.role));
+  const canViewTransfers = Boolean(canCreatePO && user && !user.storeId);
   const query = useQuery({
     queryKey: [
       "replenishment",
@@ -98,6 +107,16 @@ export default function ReplenishmentPage() {
       return response.json() as Promise<Data>;
     },
   });
+  const transferQuery = useQuery({
+    queryKey: ["transfer-recommendations", range.from, range.to],
+    enabled: Boolean(storeId && canViewTransfers),
+    queryFn: async () => {
+      const params = new URLSearchParams({ from: range.from, to: range.to, group: range.group });
+      const response = await fetch(`/api/transfer-recommendations?${params}`);
+      if (!response.ok) return { items: [] as TransferOpportunity[] };
+      return response.json() as Promise<{ items: TransferOpportunity[] }>;
+    },
+  });
   if (!storeId)
     return (
       <main className={styles.page}>
@@ -105,11 +124,19 @@ export default function ReplenishmentPage() {
       </main>
     );
   const data = query.data;
-  const createPO = (row: Row) => {
+  const transferFor = (row: Row) =>
+    transferQuery.data?.items.find(
+      (item) =>
+        item.destinationStoreId === storeId &&
+        item.productId === row.productId &&
+        item.sizeId === row.sizeId &&
+        item.recommendedQuantity > 0
+    );
+  const createPO = (row: Row, quantity = row.recommendedQuantity ?? 1) => {
     const params = new URLSearchParams({
       productId: row.productId,
       sizeId: row.sizeId,
-      quantity: String(row.recommendedQuantity ?? 1),
+      quantity: String(quantity),
       recommendationId: row.recommendationId,
     });
     if (row.supplierId) params.set("supplierId", row.supplierId);
@@ -264,7 +291,19 @@ export default function ReplenishmentPage() {
                 {
                   title: "Recommended",
                   dataIndex: "recommendedQuantity",
-                  render: (value) => (value === null ? "—" : `${value} units`),
+                  render: (value, row) => {
+                    const transfer = transferFor(row);
+                    if (transfer)
+                      return (
+                        <span>
+                          {transfer.recommendedQuantity} transfer
+                          <small className={styles.muted}>
+                            {transfer.remainingSupplierRequirement} supplier
+                          </small>
+                        </span>
+                      );
+                    return value === null ? "—" : `${value} units`;
+                  },
                 },
                 {
                   title: "Action",
@@ -280,8 +319,32 @@ export default function ReplenishmentPage() {
                 },
                 {
                   title: "",
-                  render: (_, row) =>
-                    canCreatePO && row.type === "REORDER" && row.recommendedQuantity ? (
+                  render: (_, row) => {
+                    const transfer = transferFor(row);
+                    if (transfer)
+                      return (
+                        <Space>
+                          <Button
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              router.push("/dashboard/inventory-intelligence/transfers");
+                            }}
+                          >
+                            Transfer available
+                          </Button>
+                          {transfer.remainingSupplierRequirement > 0 ? (
+                            <Button
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                createPO(row, transfer.remainingSupplierRequirement);
+                              }}
+                            >
+                              PO remainder
+                            </Button>
+                          ) : null}
+                        </Space>
+                      );
+                    return canCreatePO && row.type === "REORDER" && row.recommendedQuantity ? (
                       <Button
                         onClick={(event) => {
                           event.stopPropagation();
@@ -290,7 +353,8 @@ export default function ReplenishmentPage() {
                       >
                         Create PO draft
                       </Button>
-                    ) : null,
+                    ) : null;
+                  },
                 },
               ]}
             />
@@ -323,9 +387,24 @@ export default function ReplenishmentPage() {
                 <strong>{String(value ?? "Unavailable")}</strong>
               </p>
             ))}
+            {transferFor(selected) ? (
+              <Alert
+                showIcon
+                type="success"
+                title={`${transferFor(selected)!.recommendedQuantity} units available from ${transferFor(selected)!.sourceStoreName}`}
+                description={`${transferFor(selected)!.remainingSupplierRequirement} units remain for supplier replenishment.`}
+              />
+            ) : null}
             {canCreatePO ? (
               <Space wrap>
-                {selected.type === "REORDER" && selected.recommendedQuantity ? (
+                {transferFor(selected) ? (
+                  <Button
+                    type="primary"
+                    onClick={() => router.push("/dashboard/inventory-intelligence/transfers")}
+                  >
+                    Review transfer
+                  </Button>
+                ) : selected.type === "REORDER" && selected.recommendedQuantity ? (
                   <Button type="primary" onClick={() => createPO(selected)}>
                     Create reviewable PO draft
                   </Button>

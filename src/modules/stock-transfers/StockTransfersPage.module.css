@@ -1,0 +1,55 @@
+.page {
+  padding: 24px;
+  display: grid;
+  gap: 18px;
+}
+.header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+.header h1 {
+  margin: 4px 0;
+  font-size: 30px;
+}
+.header p,
+.muted {
+  color: #667085;
+  margin: 0;
+}
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  gap: 12px;
+}
+.metrics article,
+.surface {
+  background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 12px;
+  padding: 16px;
+}
+.metrics span {
+  color: #667085;
+  display: block;
+}
+.metrics strong {
+  font-size: 24px;
+}
+.reasons {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: #667085;
+}
+@media (max-width: 760px) {
+  .page {
+    padding: 14px;
+  }
+  .header {
+    flex-direction: column;
+  }
+  .metrics {
+    grid-template-columns: 1fr;
+  }
+}

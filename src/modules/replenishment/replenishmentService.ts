@@ -6,6 +6,7 @@ import { businessDaysBetween } from "@/modules/procurement-intelligence/procurem
 import {
   calculateReplenishment,
   REPLENISHMENT_POLICY,
+  type InboundEvidence,
   type LeadTimeSource,
   type ReplenishmentInput,
 } from "./replenishmentPolicy";
@@ -41,6 +42,7 @@ export const replenishmentService = {
       returns,
       demands,
       openItems,
+      transferItems,
       receiptEvidence,
       lastSales,
       ambiguousAdjustments,
@@ -162,6 +164,23 @@ export const replenishmentService = {
           receiptItems: { select: { quantityAccepted: true } },
         },
       }),
+      prisma.stockTransferItem.findMany({
+        where: {
+          transfer: {
+            orgId,
+            destinationStoreId: storeId,
+            status: { in: ["DISPATCHED", "PARTIALLY_RECEIVED"] },
+          },
+        },
+        select: {
+          productId: true,
+          sizeId: true,
+          dispatchedQuantity: true,
+          receivedQuantity: true,
+          damagedQuantity: true,
+          transfer: { select: { expectedArrivalAt: true } },
+        },
+      }),
       prisma.purchaseOrderReceiptItem.findMany({
         where: {
           receipt: {
@@ -205,6 +224,7 @@ export const replenishmentService = {
       string,
       { units: number; revenue: number; cogs: number; costComplete: boolean }
     >();
+    const transferInbound = new Map<string, InboundEvidence[]>();
     const getFinancial = (key: string) => {
       const value = financial.get(key) ?? { units: 0, revenue: 0, cogs: 0, costComplete: true };
       financial.set(key, value);
@@ -289,6 +309,24 @@ export const replenishmentService = {
         },
       ]);
     }
+    for (const item of transferItems) {
+      const quantity = Math.max(
+        0,
+        item.dispatchedQuantity - item.receivedQuantity - item.damagedQuantity
+      );
+      if (!quantity) continue;
+      const expectedDate = item.transfer.expectedArrivalAt?.toISOString().slice(0, 10) ?? null;
+      const row: InboundEvidence = {
+        quantity,
+        expectedInDays: item.transfer.expectedArrivalAt
+          ? businessDaysBetween(today, item.transfer.expectedArrivalAt)
+          : null,
+        expectedDate,
+        overdue: Boolean(expectedDate && expectedDate < todayKey),
+      };
+      const key = variant(item.productId, item.sizeId);
+      transferInbound.set(key, [...(transferInbound.get(key) ?? []), row]);
+    }
     const productLead = new Map<string, number[]>();
     const supplierLead = new Map<string, number[]>();
     for (const evidence of receiptEvidence) {
@@ -340,6 +378,7 @@ export const replenishmentService = {
       const key = variant(entry.productId, entry.sizeId);
       const f = financial.get(key) ?? { units: 0, revenue: 0, cogs: 0, costComplete: true };
       const inboundRows = inbound.get(key) ?? [];
+      const allInboundRows = [...inboundRows, ...(transferInbound.get(key) ?? [])];
       const preferred = inboundRows[0]
         ? { supplierId: inboundRows[0].supplierId, supplier: inboundRows[0].supplier }
         : (entry.product.productSuppliers.find((link) => link.isDefault) ??
@@ -380,7 +419,7 @@ export const replenishmentService = {
         leadTimeDays,
         leadTimeSource,
         leadTimeSamples,
-        inbound: inboundRows,
+        inbound: allInboundRows,
         daysSinceSale: lastSale ? Math.max(0, businessDaysBetween(lastSale, today)) : null,
         productAgeDays: Math.max(0, businessDaysBetween(entry.product.createdAt, today)),
         grossMarginPercent: margin,
@@ -458,7 +497,7 @@ export const replenishmentService = {
         (priority[b.severity] ?? 0) - (priority[a.severity] ?? 0) ||
         (b.evidence.excessInventoryValue as number) - (a.evidence.excessInventoryValue as number)
     );
-    const pageSize = Math.min(100, Math.max(1, query.pageSize ?? 50));
+    const pageSize = Math.min(500, Math.max(1, query.pageSize ?? 50));
     const page = Math.max(1, query.page ?? 1);
     const summary = {
       reorder: openRows.filter((row) => row.type === "REORDER").length,

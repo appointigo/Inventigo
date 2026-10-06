@@ -14,8 +14,10 @@ export function resolveStockDelta(input: {
   if (operation === "SET") return quantity - quantityBefore;
   if (operation === "ADD") return Math.abs(quantity);
   if (operation === "REMOVE") return -Math.abs(quantity);
-  if (type === "IN" || type === "RETURN" || type === "EXCHANGE_IN") return Math.abs(quantity);
-  if (type === "OUT" || type === "SALE" || type === "EXCHANGE_OUT") return -Math.abs(quantity);
+  if (type === "IN" || type === "RETURN" || type === "EXCHANGE_IN" || type === "TRANSFER_IN")
+    return Math.abs(quantity);
+  if (type === "OUT" || type === "SALE" || type === "EXCHANGE_OUT" || type === "TRANSFER_OUT")
+    return -Math.abs(quantity);
   return quantity;
 }
 

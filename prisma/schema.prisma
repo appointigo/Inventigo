@@ -49,6 +49,7 @@ model Organization {
   whatsappWebhookEvents        WhatsAppWebhookEvent[]
   customerFollowUps            CustomerFollowUp[]
   replenishmentRecommendations ReplenishmentRecommendation[]
+  stockTransfers               StockTransfer[]
 
   @@map("organizations")
 }
@@ -96,6 +97,8 @@ model Store {
   preferredCustomers           Customer[]                    @relation("PreferredCustomerStore")
   customerFollowUps            CustomerFollowUp[]
   replenishmentRecommendations ReplenishmentRecommendation[]
+  outgoingStockTransfers       StockTransfer[]               @relation("StockTransferSource")
+  incomingStockTransfers       StockTransfer[]               @relation("StockTransferDestination")
 
   @@unique([code, orgId])
   @@index([orgId])
@@ -171,6 +174,10 @@ model User {
   createdCustomerFollowUps  CustomerFollowUp[]     @relation("FollowUpCreator")
   storeExpenses             StoreExpense[]
   purchaseOrderReceipts     PurchaseOrderReceipt[]
+  requestedStockTransfers   StockTransfer[]        @relation("StockTransferRequestedBy")
+  approvedStockTransfers    StockTransfer[]        @relation("StockTransferApprovedBy")
+  dispatchedStockTransfers  StockTransfer[]        @relation("StockTransferDispatchedBy")
+  receivedStockTransfers    StockTransfer[]        @relation("StockTransferReceivedBy")
   org                       Organization?          @relation(fields: [orgId], references: [id])
   store                     Store?                 @relation(fields: [storeId], references: [id])
 
@@ -292,6 +299,7 @@ model Product {
   productSuppliers             ProductSupplier[]
   purchaseOrderReceiptItems    PurchaseOrderReceiptItem[]
   replenishmentRecommendations ReplenishmentRecommendation[]
+  stockTransferItems           StockTransferItem[]
 
   @@unique([sku, orgId])
   @@index([orgId])
@@ -318,6 +326,7 @@ model Size {
   newItems                     ReturnTransactionItem[]       @relation("NewSize")
   purchaseOrderReceiptItems    PurchaseOrderReceiptItem[]
   replenishmentRecommendations ReplenishmentRecommendation[]
+  stockTransferItems           StockTransferItem[]
 
   @@unique([label, categoryId])
   @@index([categoryId])
@@ -532,6 +541,64 @@ model ReplenishmentRecommendation {
   @@index([orgId, storeId, createdAt])
   @@index([storeId, type, disposition])
   @@map("replenishment_recommendations")
+}
+
+model StockTransfer {
+  id                     String              @id @default(uuid())
+  orgId                  String
+  sourceStoreId          String
+  destinationStoreId     String
+  status                 StockTransferStatus @default(DRAFT)
+  requestedById          String
+  approvedById           String?
+  dispatchedById         String?
+  receivedById           String?
+  requestedAt            DateTime            @default(now())
+  approvedAt             DateTime?
+  dispatchedAt           DateTime?
+  receivedAt             DateTime?
+  cancelledAt            DateTime?
+  expectedArrivalAt      DateTime?
+  notes                  String?
+  recommendationEvidence Json?
+  outcome                Json?
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+  org                    Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  sourceStore            Store               @relation("StockTransferSource", fields: [sourceStoreId], references: [id])
+  destinationStore       Store               @relation("StockTransferDestination", fields: [destinationStoreId], references: [id])
+  requestedBy            User                @relation("StockTransferRequestedBy", fields: [requestedById], references: [id])
+  approvedBy             User?               @relation("StockTransferApprovedBy", fields: [approvedById], references: [id])
+  dispatchedBy           User?               @relation("StockTransferDispatchedBy", fields: [dispatchedById], references: [id])
+  receivedBy             User?               @relation("StockTransferReceivedBy", fields: [receivedById], references: [id])
+  items                  StockTransferItem[]
+
+  @@index([orgId, status, createdAt])
+  @@index([sourceStoreId, status])
+  @@index([destinationStoreId, status])
+  @@map("stock_transfers")
+}
+
+model StockTransferItem {
+  id                 String        @id @default(uuid())
+  transferId         String
+  productId          String
+  sizeId             String
+  requestedQuantity  Int
+  approvedQuantity   Int           @default(0)
+  dispatchedQuantity Int           @default(0)
+  receivedQuantity   Int           @default(0)
+  damagedQuantity    Int           @default(0)
+  notes              String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  transfer           StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  product            Product       @relation(fields: [productId], references: [id])
+  size               Size          @relation(fields: [sizeId], references: [id])
+
+  @@unique([transferId, productId, sizeId])
+  @@index([productId, sizeId])
+  @@map("stock_transfer_items")
 }
 
 model Purchase {
@@ -1867,6 +1934,8 @@ enum StockMovementType {
   RETURN
   EXCHANGE_IN
   EXCHANGE_OUT
+  TRANSFER_IN
+  TRANSFER_OUT
 }
 
 enum ReferenceType {
@@ -1875,6 +1944,16 @@ enum ReferenceType {
   MANUAL
   RETURN
   EXCHANGE
+  TRANSFER
+}
+
+enum StockTransferStatus {
+  DRAFT
+  APPROVED
+  DISPATCHED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
 }
 
 enum PurchaseOrderStatus {
