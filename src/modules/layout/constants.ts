@@ -79,6 +79,7 @@ export const MODULE_NAVIGATION: ModuleNavigation[] = [
       { key: "customer-actions", path: "/dashboard/customers/action-center", name: "Action Center", icon: TeamOutlined, roles: ALL_ROLES },
       { key: "returns", path: "/dashboard/billing?view=return-exchange", name: "Returns & Exchanges", icon: FileTextOutlined, roles: ALL_ROLES },
       { key: "sales-analytics", path: "/dashboard/sales/analytics", name: "Analytics", icon: BarChartOutlined, roles: ALL_ROLES },
+      { key: "owner-intelligence", path: "/dashboard/sales/analytics/owner", name: "Owner Intelligence", icon: RiseOutlined, roles: ADMIN_MANAGER },
       { key: "whatsapp", path: "/dashboard/whatsapp/overview", name: "WhatsApp", icon: WhatsAppOutlined, roles: ADMIN_ONLY },
     ],
   },
@@ -110,6 +111,7 @@ export const MODULE_NAVIGATION: ModuleNavigation[] = [
       { key: "expenses", path: "/dashboard/expenses", name: "Expenses", icon: AccountBookOutlined, roles: ADMIN_MANAGER },
       { key: "expense-analytics", path: "/dashboard/expenses/analytics", name: "Expense Analytics", icon: BarChartOutlined, roles: ADMIN_MANAGER },
       { key: "profitability", path: "/dashboard/expenses/profitability", name: "Profitability", icon: RiseOutlined, roles: ADMIN_MANAGER },
+      { key: "margin-leakage", path: "/dashboard/expenses/profitability/leakage", name: "Margin Leakage", icon: PercentageOutlined, roles: ADMIN_MANAGER },
       { key: "receivables", path: "/dashboard/expenses/receivables", name: "Receivables", icon: DollarOutlined, roles: ADMIN_MANAGER },
       { key: "gst", path: "/dashboard/expenses/gst", name: "GST & ITC", icon: PercentageOutlined, roles: ADMIN_MANAGER },
     ],
@@ -130,6 +132,7 @@ export const MODULE_NAVIGATION: ModuleNavigation[] = [
       { key: "inventory-intelligence", path: "/dashboard/inventory-intelligence", name: "Inventory Intelligence", icon: InboxOutlined, roles: ADMIN_MANAGER },
       { key: "demand-intelligence", path: "/dashboard/demand", name: "Demand Intelligence", icon: ShoppingOutlined, roles: ADMIN_MANAGER },
       { key: "movement-history", path: "/dashboard/stock?view=movements", name: "Movement History", icon: UnorderedListOutlined, roles: ADMIN_MANAGER },
+      { key: "store-performance", path: "/dashboard/reports/store-performance", name: "Store Performance", icon: ShopOutlined, roles: ADMIN_ONLY },
     ],
   },
   {

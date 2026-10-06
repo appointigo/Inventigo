@@ -19,6 +19,7 @@
     "test:demand-intelligence": "node --experimental-transform-types --test src/modules/demand-intelligence/utils/demandAnalytics.test.ts src/modules/demand-intelligence/utils/demandValidation.test.ts src/modules/demand-intelligence/utils/demandSecurity.test.ts",
     "test:customers": "node --experimental-transform-types --test src/modules/customers/utils/customerDateWindow.test.ts src/modules/customers/customerQueries.test.ts src/modules/customers/customerNavigation.test.ts src/modules/customers/customerPagination.test.ts src/modules/customers/customerDirectoryState.test.ts src/modules/customers/customerInvoiceAccess.test.ts src/modules/customers/customerFollowUpSchemas.test.ts src/modules/customers/customerPurchasePresentation.test.ts",
     "test:release2": "node --experimental-transform-types --test src/modules/product-intelligence/productDecisionRules.test.ts src/modules/customer-action/customerSegments.test.ts src/modules/receivables/receivableAging.test.ts",
+    "test:release3": "node --experimental-transform-types --test src/modules/owner-intelligence/ownerAnalytics.test.ts",
     "test:pricing-catalog": "node --experimental-transform-types --test src/modules/marketing/pricingCatalog.test.ts",
     "prisma:fix-exchanged-sales": "node prisma/scripts/fix-exchanged-sales-and-backfill-returns.js",
     "vercel-build": "if [ \"$VERCEL_ENV\" = \"production\" ]; then npx prisma migrate deploy; fi && npm run build",
