@@ -18,6 +18,8 @@ export type StoreVariantPosition = {
   coverDays: number | null;
   unfulfilledDemand: number;
   unitCost: number;
+  forecastUpperDemand30?: number | null;
+  forecastEvidenceQuality?: TransferEvidenceQuality | null;
 };
 
 export type TransferRecommendation = {
@@ -63,7 +65,12 @@ export function buildTransferRecommendations(
     const requirement = Math.max(
       0,
       destination.recommendedQuantity ??
-        destination.targetStock - destination.currentStock - destination.usefulInbound
+        destination.targetStock - destination.currentStock - destination.usefulInbound,
+      destination.forecastUpperDemand30 && destination.forecastEvidenceQuality !== "LOW"
+        ? Math.ceil(
+            destination.forecastUpperDemand30 - destination.currentStock - destination.usefulInbound
+          )
+        : 0
     );
     if (requirement <= 0) continue;
     if (destination.evidenceQuality === "LOW") {
@@ -86,7 +93,11 @@ export function buildTransferRecommendations(
           source.evidenceQuality !== "LOW"
       )
       .map((source) => {
-        const protectedStock = Math.max(source.reorderPoint, 0);
+        const forecastProtection =
+          source.forecastUpperDemand30 && source.forecastEvidenceQuality !== "LOW"
+            ? Math.ceil(source.forecastUpperDemand30)
+            : 0;
+        const protectedStock = Math.max(source.reorderPoint, forecastProtection, 0);
         const transferable = Math.max(0, source.currentStock - protectedStock);
         const quantity = Math.min(requirement, transferable);
         const velocity =
@@ -142,6 +153,11 @@ export function buildTransferRecommendations(
       reasons: [
         `${destination.storeName} requires ${requirement} units after timely inbound`,
         `${best.source.storeName} can release ${best.transferable} units while retaining ${best.protectedStock}`,
+        ...(best.source.forecastUpperDemand30 && best.source.forecastEvidenceQuality !== "LOW"
+          ? [
+              `Source protection includes its ${best.source.forecastUpperDemand30}-unit 30-day upper forecast`,
+            ]
+          : []),
         remaining
           ? `${remaining} units still require supplier replenishment`
           : "The transfer can cover the full destination requirement",

@@ -283,6 +283,7 @@ export function calculateReplenishment(input: ReplenishmentInput) {
       unitCost: input.unitCost,
       excessInventoryValue,
       grossMarginPercent: input.grossMarginPercent,
+      forecast: undefined as Record<string, unknown> | undefined,
     },
   };
 }

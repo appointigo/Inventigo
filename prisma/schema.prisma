@@ -58,6 +58,7 @@ model Organization {
   supplierPayments             SupplierPayment[]
   refundLiabilities            RefundLiability[]
   refundSettlements            RefundSettlement[]
+  demandForecasts              DemandForecast[]
 
   @@map("organizations")
 }
@@ -115,6 +116,7 @@ model Store {
   supplierPayments              SupplierPayment[]
   refundLiabilities             RefundLiability[]
   refundSettlements             RefundSettlement[]
+  demandForecasts               DemandForecast[]
 
   @@unique([code, orgId])
   @@index([orgId])
@@ -324,6 +326,7 @@ model Product {
   purchaseOrderReceiptItems    PurchaseOrderReceiptItem[]
   replenishmentRecommendations ReplenishmentRecommendation[]
   stockTransferItems           StockTransferItem[]
+  demandForecasts              DemandForecast[]
 
   @@unique([sku, orgId])
   @@index([orgId])
@@ -351,6 +354,7 @@ model Size {
   purchaseOrderReceiptItems    PurchaseOrderReceiptItem[]
   replenishmentRecommendations ReplenishmentRecommendation[]
   stockTransferItems           StockTransferItem[]
+  demandForecasts              DemandForecast[]
 
   @@unique([label, categoryId])
   @@index([categoryId])
@@ -1318,6 +1322,57 @@ model RefundSettlement {
   @@index([orgId, settledAt])
   @@index([liabilityId, settledAt])
   @@map("refund_settlements")
+}
+
+model DemandForecast {
+  id               String                        @id @default(uuid())
+  orgId            String
+  storeId          String
+  productId        String
+  sizeId           String
+  snapshotDate     DateTime                      @db.Date
+  generatedAt      DateTime                      @default(now())
+  horizonDays      Int
+  readiness        ForecastReadiness
+  evidenceQuality  RecommendationEvidenceQuality
+  method           String?
+  expectedQuantity Decimal?                      @db.Decimal(12, 3)
+  lowerBound       Decimal?                      @db.Decimal(12, 3)
+  upperBound       Decimal?                      @db.Decimal(12, 3)
+  trend            String
+  historyFrom      DateTime?                     @db.Date
+  historyTo        DateTime?                     @db.Date
+  modelVersion     String
+  policyVersion    String
+  evidence         Json
+  evaluation       Json?
+  createdAt        DateTime                      @default(now())
+  org              Organization                  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  store            Store                         @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product          Product                       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  size             Size                          @relation(fields: [sizeId], references: [id], onDelete: Cascade)
+  outcome          DemandForecastOutcome?
+
+  @@unique([storeId, productId, sizeId, snapshotDate, horizonDays, modelVersion])
+  @@index([orgId, storeId, snapshotDate])
+  @@index([storeId, readiness, horizonDays])
+  @@map("demand_forecasts")
+}
+
+model DemandForecastOutcome {
+  id                String         @id @default(uuid())
+  forecastId        String         @unique
+  actualQuantity    Decimal        @db.Decimal(12, 3)
+  absoluteError     Decimal        @db.Decimal(12, 3)
+  bias              Decimal        @db.Decimal(12, 3)
+  stockoutDistorted Boolean        @default(false)
+  actualFrom        DateTime       @db.Date
+  actualTo          DateTime       @db.Date
+  evaluatedAt       DateTime       @default(now())
+  forecast          DemandForecast @relation(fields: [forecastId], references: [id], onDelete: Cascade)
+
+  @@index([evaluatedAt])
+  @@map("demand_forecast_outcomes")
 }
 
 model ExpenseBudget {
@@ -2304,6 +2359,12 @@ enum RefundLiabilityStatus {
   PARTIAL
   SETTLED
   CANCELLED
+}
+
+enum ForecastReadiness {
+  READY
+  LIMITED
+  NOT_READY
 }
 
 enum ReturnStatus {

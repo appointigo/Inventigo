@@ -203,3 +203,31 @@ test("receipt increases destination only by received units and reconciles damage
     inTransitDelta: -20,
   });
 });
+
+test("forecast-aware transfer protects source upper demand", () => {
+  const rows = buildTransferRecommendations([
+    position({
+      storeId: "source",
+      storeName: "Source",
+      action: "NO_REORDER",
+      currentStock: 50,
+      targetStock: 12,
+      reorderPoint: 8,
+      forecastUpperDemand30: 35,
+      forecastEvidenceQuality: "HIGH",
+    }),
+    position({
+      storeId: "destination",
+      storeName: "Destination",
+      action: "REORDER",
+      currentStock: 2,
+      targetStock: 20,
+      reorderPoint: 10,
+      recommendedQuantity: 18,
+      forecastUpperDemand30: 30,
+      forecastEvidenceQuality: "HIGH",
+    }),
+  ]);
+  assert.equal(rows[0].sourceProtectedStock, 35);
+  assert.equal(rows[0].recommendedQuantity, 15);
+});

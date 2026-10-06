@@ -18,6 +18,7 @@ export const transferRecommendationService = {
       dataset.items.map((row) => {
         const stock = Number(row.evidence.stock ?? row.currentStock);
         const inventoryValue = Number(row.evidence.inventoryValue ?? 0);
+        const forecast = row.evidence.forecast as Record<string, unknown> | undefined;
         return {
           storeId: dataset.scope.storeId,
           storeName: dataset.scope.storeName,
@@ -36,6 +37,10 @@ export const transferRecommendationService = {
           coverDays: row.evidence.coverDays === null ? null : Number(row.evidence.coverDays ?? 0),
           unfulfilledDemand: Number(row.evidence.unfulfilledDemand ?? 0),
           unitCost: Number(row.evidence.unitCost ?? (stock > 0 ? inventoryValue / stock : 0)),
+          forecastUpperDemand30: forecast ? Number(forecast.upper30Days ?? 0) : null,
+          forecastEvidenceQuality: forecast
+            ? (String(forecast.evidenceQuality) as StoreVariantPosition["forecastEvidenceQuality"])
+            : null,
         };
       })
     );

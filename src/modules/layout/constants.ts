@@ -262,6 +262,13 @@ export const MODULE_NAVIGATION: ModuleNavigation[] = [
         roles: ALL_ROLES,
       },
       {
+        key: "forecasting",
+        path: "/dashboard/inventory-intelligence/forecasting",
+        name: "Forecasting",
+        icon: RiseOutlined,
+        roles: ADMIN_MANAGER,
+      },
+      {
         key: "demand",
         path: "/dashboard/demand",
         name: "Demand Intelligence",

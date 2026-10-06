@@ -10,6 +10,7 @@ import {
   type LeadTimeSource,
   type ReplenishmentInput,
 } from "./replenishmentPolicy";
+import { forecastAwareRequirement, forecastStockout } from "@/modules/forecasting/forecastRules";
 
 const n = (value: unknown) => Number(value ?? 0);
 const variant = (productId: string, sizeId: string) => `${productId}:${sizeId}`;
@@ -35,6 +36,11 @@ export const replenishmentService = {
     } = {}
   ) {
     const historyStart = new Date(endExclusive.getTime() - 365 * 86_400_000);
+    const latestForecastSnapshot = await prisma.demandForecast.findFirst({
+      where: { orgId, storeId, horizonDays: 30 },
+      orderBy: { snapshotDate: "desc" },
+      select: { snapshotDate: true },
+    });
     const [
       store,
       stock,
@@ -46,6 +52,7 @@ export const replenishmentService = {
       receiptEvidence,
       lastSales,
       ambiguousAdjustments,
+      forecasts,
     ] = await Promise.all([
       prisma.store.findFirstOrThrow({
         where: { id: storeId, orgId },
@@ -213,6 +220,27 @@ export const replenishmentService = {
           movementDate: { gte: from, lt: endExclusive },
         },
       }),
+      prisma.demandForecast.findMany({
+        where: {
+          orgId,
+          storeId,
+          horizonDays: 30,
+          snapshotDate: latestForecastSnapshot?.snapshotDate ?? new Date(0),
+          readiness: { in: ["READY", "LIMITED"] },
+        },
+        select: {
+          productId: true,
+          sizeId: true,
+          expectedQuantity: true,
+          lowerBound: true,
+          upperBound: true,
+          evidenceQuality: true,
+          method: true,
+          snapshotDate: true,
+          evaluation: true,
+        },
+        orderBy: { snapshotDate: "desc" },
+      }),
     ]);
     const activeDays = new Set(sales.map((sale) => businessDateForInstant(sale.transactionDate)))
       .size;
@@ -343,6 +371,11 @@ export const replenishmentService = {
     const lastSaleMap = new Map(
       lastSales.map((row) => [variant(row.productId, row.sizeId), row._max.movementDate])
     );
+    const latestForecast = new Map<string, (typeof forecasts)[number]>();
+    for (const forecast of forecasts) {
+      const forecastKey = variant(forecast.productId, forecast.sizeId);
+      if (!latestForecast.has(forecastKey)) latestForecast.set(forecastKey, forecast);
+    }
     const specificDemand = new Map<string, number>();
     const productDemand = new Map<string, number>();
     for (const request of demands) {
@@ -427,7 +460,85 @@ export const replenishmentService = {
         stockHistoryReliable: ambiguousAdjustments === 0,
         asOfDate: todayKey,
       };
-      const recommendation = calculateReplenishment(input);
+      let recommendation = calculateReplenishment(input);
+      const forecast = latestForecast.get(key);
+      if (
+        forecast &&
+        forecast.expectedQuantity !== null &&
+        forecast.upperBound !== null &&
+        forecast.lowerBound !== null
+      ) {
+        const expected = n(forecast.expectedQuantity);
+        const upper = n(forecast.upperBound);
+        const lower = n(forecast.lowerBound);
+        const adjusted = forecastAwareRequirement({
+          deterministicQuantity: recommendation.recommendedQuantity,
+          currentStock: entry.quantity,
+          usefulInbound: n(recommendation.evidence.usefulInbound),
+          safetyStock: n(recommendation.evidence.safetyStock),
+          leadTimeDays,
+          forecast30: { expected, upper, evidence: forecast.evidenceQuality },
+        });
+        const stockout = forecastStockout({
+          currentStock: entry.quantity,
+          usefulInbound: n(recommendation.evidence.usefulInbound),
+          transferInbound: 0,
+          forecast: { expected, lower, upper, horizonDays: 30 },
+        });
+        const predictiveExcessUnits = Math.max(
+          0,
+          Math.floor(entry.quantity + n(recommendation.evidence.usefulInbound) - upper)
+        );
+        const canPromote =
+          recommendation.reasonCodes.includes("STOCK_SUFFICIENT") &&
+          adjusted.quantity !== null &&
+          adjusted.quantity > 0 &&
+          ["CRITICAL", "HIGH"].includes(stockout.risk);
+        recommendation = {
+          ...recommendation,
+          ...(recommendation.type === "REORDER" || canPromote
+            ? {
+                type: "REORDER" as const,
+                severity: stockout.risk === "CRITICAL" ? "CRITICAL" : "HIGH",
+                recommendedQuantity: adjusted.quantity,
+              }
+            : {}),
+          reasonCodes: [
+            ...new Set([
+              ...recommendation.reasonCodes,
+              "FORECAST_EVIDENCE",
+              ...(canPromote ? ["FORECAST_STOCKOUT_RISK"] : []),
+              ...(predictiveExcessUnits > 0 ? ["FORECAST_EXCESS"] : []),
+            ]),
+          ],
+          reasons: [
+            ...recommendation.reasons,
+            `30-day forecast ${expected} units (${lower}–${upper}) using ${forecast.method}`,
+            ...(canPromote ? [`Forecast-adjusted requirement is ${adjusted.quantity} units`] : []),
+            ...(predictiveExcessUnits > 0 &&
+            ["OVERSTOCK", "MARKDOWN_CANDIDATE"].includes(recommendation.type)
+              ? [`${predictiveExcessUnits} units remain above the forecast upper bound`]
+              : []),
+          ],
+          evidence: {
+            ...recommendation.evidence,
+            forecast: {
+              snapshotDate: forecast.snapshotDate.toISOString().slice(0, 10),
+              expected30Days: expected,
+              lower30Days: lower,
+              upper30Days: upper,
+              evidenceQuality: forecast.evidenceQuality,
+              method: forecast.method,
+              historicalEvaluation: forecast.evaluation,
+              adjustmentSource: adjusted.source,
+              stockoutRisk: stockout.risk,
+              shortageUnits: stockout.shortageUnits,
+              shortageWindow: stockout.shortageWindow,
+              predictiveExcessUnits,
+            },
+          },
+        };
+      }
       return {
         recommendationId: `${storeId}:${key}:${from.toISOString()}:${endExclusive.toISOString()}`,
         productId: entry.productId,
