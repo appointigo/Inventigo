@@ -36,8 +36,17 @@ function mapConfig(
 
 const include = {
   category: { select: { name: true } },
-  product: { select: { name: true } },
 } as const;
+
+async function mapConfigWithProduct<T extends Parameters<typeof mapConfig>[0]>(raw: T) {
+  const product = raw.productId
+    ? await prisma.product.findFirst({
+        where: { id: raw.productId, orgId: raw.orgId },
+        select: { name: true },
+      })
+    : null;
+  return mapConfig({ ...raw, product });
+}
 
 export const alertService = {
   async list(orgId: string): Promise<AlertConfig[]> {
@@ -46,7 +55,7 @@ export const alertService = {
       include,
       orderBy: { createdAt: "desc" },
     });
-    return configs.map(mapConfig);
+    return Promise.all(configs.map(mapConfigWithProduct));
   },
 
   async getById(id: string, orgId: string): Promise<AlertConfig | null> {
@@ -54,7 +63,7 @@ export const alertService = {
       where: { id, orgId },
       include,
     });
-    return config ? mapConfig(config) : null;
+    return config ? mapConfigWithProduct(config) : null;
   },
 
   async create(orgId: string, values: AlertConfigFormValues): Promise<AlertConfig> {
@@ -70,7 +79,7 @@ export const alertService = {
       },
       include,
     });
-    return mapConfig(config);
+    return mapConfigWithProduct(config);
   },
 
   async update(
@@ -93,7 +102,7 @@ export const alertService = {
       },
       include,
     });
-    return mapConfig(config);
+    return mapConfigWithProduct(config);
   },
 
   async delete(id: string, orgId: string): Promise<boolean> {

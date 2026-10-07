@@ -29,7 +29,17 @@
     "**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
-    "**/*.mts"
+    "**/*.mts",
+    ".next-e2e/dev/types/**/*.ts",
+    ".next-e2e/dev/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules", "prisma", "**/__tests__/**", "**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"]
+  "exclude": [
+    "node_modules",
+    "prisma",
+    "**/__tests__/**",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx"
+  ]
 }

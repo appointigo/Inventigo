@@ -21,15 +21,12 @@ async function ensureStoreExists(orgId: string, storeId: string) {
 }
 
 async function ensurePolicies(orgId: string, storeId: string) {
-  await Promise.all(
-    (Object.entries(DEFAULT_STORE_LEAVE_POLICY) as Array<[LeaveType, number]>).map(([leaveType, allocated]) =>
-      prisma.storeLeavePolicy.upsert({
-        where: { storeId_leaveType: { storeId, leaveType } },
-        update: {},
-        create: { orgId, storeId, leaveType, allocated },
-      })
-    )
-  );
+  await prisma.storeLeavePolicy.createMany({
+    data: (Object.entries(DEFAULT_STORE_LEAVE_POLICY) as Array<[LeaveType, number]>).map(
+      ([leaveType, allocated]) => ({ orgId, storeId, leaveType, allocated }),
+    ),
+    skipDuplicates: true,
+  });
 }
 
 function toRecord(row: {

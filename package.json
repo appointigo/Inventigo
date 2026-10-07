@@ -27,6 +27,12 @@
     "test:release8": "node --experimental-transform-types --test src/modules/forecasting/forecastRules.test.ts src/modules/forecasting/forecastScope.test.ts",
     "test:numerical-integrity": "node --experimental-transform-types --test src/modules/analytics/metrics/metricRegistry.test.ts src/modules/analytics/utils/canonicalMetrics.test.ts src/modules/analytics/utils/numericalReconciliation.test.ts src/modules/finance/refundAccounting.test.ts",
     "test:pricing-catalog": "node --experimental-transform-types --test src/modules/marketing/pricingCatalog.test.ts",
+    "e2e:prepare": "node e2e/setup/prepare.mjs",
+    "test:e2e:safety": "node --test e2e/setup/environment.test.mjs",
+    "test:e2e": "node e2e/setup/run.mjs",
+    "test:e2e:ui": "node e2e/setup/run.mjs --ui",
+    "test:e2e:headed": "node e2e/setup/run.mjs --headed",
+    "test:e2e:report": "playwright show-report e2e/playwright-report",
     "prisma:fix-exchanged-sales": "node prisma/scripts/fix-exchanged-sales-and-backfill-returns.js",
     "vercel-build": "if [ \"$VERCEL_ENV\" = \"production\" ]; then npx prisma migrate deploy; fi && npm run build",
     "postinstall": "prisma generate"
@@ -71,6 +77,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "20.19.37",
     "@types/papaparse": "^5.5.2",

@@ -71,7 +71,12 @@ export const POST = async (request: NextRequest) => {
   }
   catch (error) {
     const message = error instanceof Error ? error.message : "Internal server error";
-    const status = /required|invalid|insufficient|not found|inactive|expired|limit/i.test(message) ? 400 : 500;
+    const status =
+      /required|invalid|insufficient|not found|inactive|expired|limit|exceed|greater than|must match/i.test(
+        message,
+      )
+        ? 400
+        : 500;
     console.warn("[Billing] request_failed", { requestId, organizationId: user.orgId, storeId: user.storeId, operation: "CREATE_SALE", errorCode: message, httpStatus: status, durationMs: Date.now() - startedAt });
     return NextResponse.json({ error: message, requestId }, { status, headers: { "x-request-id": requestId } });
   }

@@ -1,0 +1,208 @@
+{
+  "boundary": "20261007120000_add_return_idempotency",
+  "migrations": [
+    {
+      "name": "000_init",
+      "sha256": "f562b5b95bb7470f9d6326c81b3752a389ce0084fb59d090593bbe319001b00c"
+    },
+    {
+      "name": "20260422000000_add_product_mrp",
+      "sha256": "677f6cf7fcb8d36e17c98abf1030d19917490476f67148402b7fa441e9a86a92"
+    },
+    {
+      "name": "20260424120000_add_customer_colors_budgets",
+      "sha256": "4caad707d86a67cea9295a3901c75cfa7e9d98ee337aab218593ef4f97013d5f"
+    },
+    {
+      "name": "20260424_init",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "20260505120000_add_returns_and_partial_payments",
+      "sha256": "362677cacf699b8ad3f84975916e970d978221c8bf70dee685ae4f0ec97f1ba0"
+    },
+    {
+      "name": "20260509000000_add_transaction_date_to_sales",
+      "sha256": "4d4e4966f5647be3d2f402f318ffc87f82e83d8cb0a8a0e57085754ff228dc4f"
+    },
+    {
+      "name": "20260510000000_add_return_transaction_reference_number",
+      "sha256": "8d632599634f587435973da965bd34643e638b5fdb7c7380e57ce4cc8a932f8b"
+    },
+    {
+      "name": "20260513000001_backdated_billing_ledger",
+      "sha256": "2084524b1ac0343b42f2f5717c4b958b3ccad0cedfa1b6d3d00dd184c46fbc38"
+    },
+    {
+      "name": "20260513000002_pricing_snapshots",
+      "sha256": "d7e94ca3b4bb0989758a89b9107022eae878153781725f34992eeb6375906293"
+    },
+    {
+      "name": "20260514001947_add_round_off_fields",
+      "sha256": "422203197425a8795f044db77f420ce9d456fb30310f442902bd4df13a819ac3"
+    },
+    {
+      "name": "20260514002000_enhance_return_transaction",
+      "sha256": "23faafc01accdf68cafb462327f6410a8c4f5d8d80442c5a95cd52b26fcf86e0"
+    },
+    {
+      "name": "20260514003000_add_return_transaction_items",
+      "sha256": "370253b105bc738610d77edd0b7a862d9ef3c9c96680fdca9fd01d3bc1f46215"
+    },
+    {
+      "name": "20260725000000_fix_sales_transaction_date_backfill_and_defaults",
+      "sha256": "81eede43ff2f97259216a771ec93aafd49d542d49772a3da7c0e20c2bed1bea9"
+    },
+    {
+      "name": "20260903000000_add_whatsapp_foundation",
+      "sha256": "cb007665584a5d45746ba62befd9664184d72c94a205396f8f896db2d2bda3d6"
+    },
+    {
+      "name": "20260903070000_add_whatsapp_credentials",
+      "sha256": "a0a0f50b32c098340f4c20b8e70b192f8eb37b287a2525bdfe85ccd76c0e2b59"
+    },
+    {
+      "name": "20260903100000_enforce_whatsapp_sender_defaults",
+      "sha256": "8321d453f452635bf64d9019c634a36e3887ef2b90d075f12d1158c72f2b3a26"
+    },
+    {
+      "name": "20260903170000_add_whatsapp_contacts_consent",
+      "sha256": "10954a724062fe9f021a3e0190bd99f6694e8083ee9bcea239b4cfbcde2b5110"
+    },
+    {
+      "name": "20260903180000_add_whatsapp_campaigns",
+      "sha256": "dafa97c6135f5973bcaf28c518a8ab82488e9f21d9359c3e743ad2f2e46adfc2"
+    },
+    {
+      "name": "20260903190000_add_whatsapp_campaign_queue",
+      "sha256": "16987bee08acf4296891ba02efb129b7bb8e7fd3b79629f1e13f091414ea58df"
+    },
+    {
+      "name": "20260903200000_add_whatsapp_automations",
+      "sha256": "29bb79bef78bb935fdc90c4f3e0aece463cdc9dac02f7477c51544aa14980026"
+    },
+    {
+      "name": "20260903210000_add_whatsapp_conversations",
+      "sha256": "885d7b91857a1e78d5a0289e93e1303e266e1be54f273c4b3dc4ffb1d0d2a692"
+    },
+    {
+      "name": "20260903220000_harden_whatsapp_dispatch",
+      "sha256": "6bb51c23d61b7cb5c6cba75967b523cbbc669a676b593ac06be0bcde3fdc5889"
+    },
+    {
+      "name": "20260906000000_item_negotiated_pricing",
+      "sha256": "aeb6cbbf2cc62dddca4dfbf24ed49e97381bde0061c43bc627ebe550a01dbeec"
+    },
+    {
+      "name": "20260907000000_optimize_product_inventory_search",
+      "sha256": "bf1024ff950aed2395b80a0ae40ce1c8eb0e99c7b2c9b52213f61b8df9489be8"
+    },
+    {
+      "name": "20260912000000_add_purchases_foundation",
+      "sha256": "a11854dfe591c95ead28e1e69b129a98405b7f818008af579c0fd2c18e2cbf83"
+    },
+    {
+      "name": "20260912010000_enable_rare_thread_purchases",
+      "sha256": "15f7884e3f9a8029301e5c5b22f1291346fa7d1faab2b9461e58b94aec5da0f5"
+    },
+    {
+      "name": "20260918090000_add_whatsapp_template_source",
+      "sha256": "81531b31c378671180050c904ba2b016f863871cd0b1cb2e65e4bf388c3d0eca"
+    },
+    {
+      "name": "20260918100000_add_whatsapp_campaign_delivery_statuses",
+      "sha256": "52e9ba2ec375f8500179f2de417acda338648b60a6e66d51d655db3c07fc7f6b"
+    },
+    {
+      "name": "20260918110000_add_sale_exchanged_status",
+      "sha256": "1d3c36defca702f62f7f02f95ed593c98547ed3d8bafa30423babd0f803c4062"
+    },
+    {
+      "name": "20260921000000_inventory_intelligence_indexes",
+      "sha256": "626087169359b5bb19c6fc0f11b07f75dd8be012553b9ca42d42ec059f3e2c62"
+    },
+    {
+      "name": "20260921180000_demand_intelligence",
+      "sha256": "a2886d7982ced87333bcdedb4f72edb766a2478a059017f35403a41ddc6e0b40"
+    },
+    {
+      "name": "20260923000000_add_default_invoice_template",
+      "sha256": "07d425bddb257adcfeda57ea6e5a1f0aeb6acbd64b716a0ba4f85db8f3f46069"
+    },
+    {
+      "name": "20260923120000_add_exchange_integrity",
+      "sha256": "195d7bdf36fd9277f89fd57a0535f5eb6ead0d73c19e84dddd5390396d821402"
+    },
+    {
+      "name": "20260925000000_add_invoice_management",
+      "sha256": "5ecb53a175ecd0927b1524fcd7971c0ca6330414db046b00ba22ce6116349726"
+    },
+    {
+      "name": "20260925180000_extend_invoice_policy_content",
+      "sha256": "64b40e5a57ca28144f7b94d0ebca35d3491f4aeb2a1218cfdb65d1c61eead1cf"
+    },
+    {
+      "name": "20260925200000_add_customer_intelligence_foundation",
+      "sha256": "e35ec4f1c937352cc942926669976c8df11adbfff820d1f2a1aef0b1693cefd8"
+    },
+    {
+      "name": "20260925210000_complete_customer_followups",
+      "sha256": "c569844792f4c119a73a30c3800d622af908ef9d9bb519b4a417b96730cfdad9"
+    },
+    {
+      "name": "20260926120000_add_followup_creator",
+      "sha256": "744b46ad14544e75837b92a414ccb24c10af7ecd404989ce723b8c62e0b2adb9"
+    },
+    {
+      "name": "20261002000000_add_tenant_feature_entitlements",
+      "sha256": "fcf7838847e11eb3ebce2e71a7e1fdf7377f16975e6dd84d5b7d63680499ca92"
+    },
+    {
+      "name": "20261003120000_add_may_return_visits",
+      "sha256": "9dcf50f644c4c59b5574db02a25d7c36d4d5ca01320a5d56515254602c9e353e"
+    },
+    {
+      "name": "20261003130000_reconcile_schema_metadata",
+      "sha256": "31c64c81051c1d2ed69f9c59f036907a41c8db6329c0149adbf9eb1a0ae0d463"
+    },
+    {
+      "name": "20261004000000_add_customer_visit_return_outcome",
+      "sha256": "ad8e967cb45380c66edaea5c021b08e6ce0f18618a18377cf331c2a7395a1e60"
+    },
+    {
+      "name": "20261005090000_add_exchange_cost_and_stock_audit",
+      "sha256": "669fc92a68cd69bdc10b591011cb143d3427d9f4e63191d34668c42f4ed00351"
+    },
+    {
+      "name": "20261006120000_add_procurement_receipt_evidence",
+      "sha256": "52fa96ae1832613c7bfb16e2b9027537bef21e997cef2a8e67c7579cbd009b44"
+    },
+    {
+      "name": "20261006121000_backfill_deterministic_product_suppliers",
+      "sha256": "7dd4d163eb2023653464eba87009399f7b320cd30a55a916f99f0885e96d4261"
+    },
+    {
+      "name": "20261006130000_add_replenishment_recommendations",
+      "sha256": "8b2d4d78ffb65b6dc76c93082f0f0a435fac9079fbf8f7b148d90e88b872d6c3"
+    },
+    {
+      "name": "20261006150000_add_stock_transfers",
+      "sha256": "de5ccc057cfec8b2dd77d460e56cacfbfa369e6fa0b7907b08082989da0aaca3"
+    },
+    {
+      "name": "20261006190000_add_cash_payables_financial_planning",
+      "sha256": "406263d0758bc49a1beaa8e938b4a5b19420dde15076b5bbbf32bcbfbe300a39"
+    },
+    {
+      "name": "20261006210000_add_predictive_forecasting",
+      "sha256": "b43984b496a6252edd350f508d0d46c5eae2d17163ae94ba4d5f5ea1bad920ae"
+    },
+    {
+      "name": "20261007120000_add_return_idempotency",
+      "sha256": "dcce6d76bdc4f2cc34c0c93fe3cd9f5321a242005ae9873c5e2f68c141b6f153"
+    }
+  ],
+  "schemaSha256": "f826b6df4b2be14374c0504d46ef7c0fa27773100da101a4089b3ea8752544c7",
+  "baselineSqlSha256": "bbe8235fbe366144faafe0ead18e858c943081cd868e1a5ab42e9be510c2023f",
+  "databaseObjectsSqlSha256": "77aa03f0b99c19b077f4f0840014daaf0676bf2317c7b730e4cfb8ef25dea158"
+}
