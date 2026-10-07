@@ -27,6 +27,7 @@ for (const [name, overrides] of [
   ["real email domain", { E2E_USER_EMAIL: "person@example.com" }],
   ["external credentials", { RESEND_API_KEY: "real-key" }],
   ["external recipients", { WHATSAPP_INVOICE_SMOKE_TEST_RECIPIENT: "+919999999999" }],
+  ["client-configured test adapter", { E2E_DEMO_DELIVERY_ADAPTER: "capture" }],
 ]) {
   test(`rejects ${name}`, () => {
     assert.throws(() => assertSafeE2EEnvironment({ ...safe, ...overrides }), /REFUSING/);

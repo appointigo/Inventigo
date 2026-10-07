@@ -1,5 +1,8 @@
 import { after, NextRequest, NextResponse } from "next/server";
-import { billingService } from "@/modules/billing/services/billingService";
+import {
+  billingService,
+  SaleIdempotencyConflictError,
+} from "@/modules/billing/services/billingService";
 import { requireOrgAuth } from "@/lib/auth.middleware";
 import type { SaleHistoryStatusFilter } from "@/modules/billing/types";
 import { prisma } from "@/lib/db";
@@ -38,6 +41,10 @@ export const GET = async (request: NextRequest) => {
 }
 export const POST = async (request: NextRequest) => {
   const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
+  const idempotencyKey =
+    request.headers.get("idempotency-key")?.trim() ||
+    request.headers.get("x-request-id")?.trim() ||
+    crypto.randomUUID();
   const startedAt = Date.now();
   let user;
   try { 
@@ -53,8 +60,14 @@ export const POST = async (request: NextRequest) => {
 
   console.info("[Billing] request_received", { requestId, organizationId: user.orgId, storeId: user.storeId, operation: "CREATE_SALE" });
   try {
+    if (idempotencyKey.length > 200) {
+      throw new Error("Invalid idempotency key");
+    }
     const body = await request.json();
-    const sale = await billingService.createSale(user.orgId!, user.storeId, user.id, body, { correlationId: requestId });
+    const sale = await billingService.createSale(user.orgId!, user.storeId, user.id, body, {
+      correlationId: requestId,
+      idempotencyKey,
+    });
     if (sale.invoiceDelivery) {
       const dispatch = beginImmediateInvoiceDispatch(
         prisma,
@@ -72,7 +85,9 @@ export const POST = async (request: NextRequest) => {
   catch (error) {
     const message = error instanceof Error ? error.message : "Internal server error";
     const status =
-      /required|invalid|insufficient|not found|inactive|expired|limit|exceed|greater than|must match/i.test(
+      error instanceof SaleIdempotencyConflictError
+        ? 409
+        : /required|invalid|insufficient|not found|inactive|expired|limit|exceed|greater than|must match/i.test(
         message,
       )
         ? 400

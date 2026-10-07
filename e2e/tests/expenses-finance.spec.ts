@@ -58,10 +58,9 @@ test("expense summary filters by business year and keeps expense out of sales", 
   expect(await e2eDb.sale.count()).toBe(salesBefore);
 });
 
-test("known defect: zero and negative expenses are rejected without persistence", async ({
+test("zero and negative expenses are rejected without persistence", async ({
   page,
 }, testInfo) => {
-  test.fail(true, "P1-001: expense creation does not validate positive monetary amounts");
   const note = "E2E invalid expense boundary";
   const responses = [];
   for (const amount of [0, -0.01]) {
@@ -98,10 +97,9 @@ test("known defect: zero and negative expenses are rejected without persistence"
   expect(persisted).toHaveLength(0);
 });
 
-test("known defect: a paid expense cannot be edited away from its cash ledger", async ({
+test("a paid expense cannot be edited away from its cash ledger", async ({
   page,
 }, testInfo) => {
-  test.fail(true, "P0-004: editing a settled expense breaks expense-to-ledger reconciliation");
   const created = await expectJson<{ id: string }>(
     await apiFetch(page, "/api/expenses", {
       method: "POST",
@@ -128,6 +126,15 @@ test("known defect: a paid expense cannot be edited away from its cash ledger", 
     method: "PUT",
     data: { amount: 500 },
   });
+  const dateUpdate = await apiFetch(page, `/api/expenses/${created.id}`, {
+    method: "PUT",
+    data: { date: "2026-09-30" },
+  });
+  const metadataUpdate = await apiFetch(page, `/api/expenses/${created.id}`, {
+    method: "PUT",
+    data: { receiptUrl: "https://example.invalid/e2e-receipt" },
+  });
+  const deletion = await apiFetch(page, `/api/expenses/${created.id}`, { method: "DELETE" });
   const persisted = await e2eDb.storeExpense.findUniqueOrThrow({
     where: { id: created.id },
     include: { financialTransaction: true },
@@ -136,6 +143,9 @@ test("known defect: a paid expense cannot be edited away from its cash ledger", 
     body: JSON.stringify(
       {
         updateStatus: update.status,
+        dateUpdateStatus: dateUpdate.status,
+        metadataUpdateStatus: metadataUpdate.status,
+        deletionStatus: deletion.status,
         updateBody: update.body,
         expenseAmount: Number(persisted.amount),
         ledgerAmount: Number(persisted.financialTransaction?.amount ?? 0),
@@ -146,8 +156,40 @@ test("known defect: a paid expense cannot be edited away from its cash ledger", 
     ),
     contentType: "application/json",
   });
-  await e2eDb.financialTransaction.deleteMany({ where: { expenseId: created.id } });
-  await e2eDb.storeExpense.delete({ where: { id: created.id } });
   expect(update.status).toBe(409);
+  expect(dateUpdate.status).toBe(409);
+  expect(metadataUpdate.status).toBe(200);
+  expect(deletion.status).toBe(409);
+  expect(persisted.receiptUrl).toBe("https://example.invalid/e2e-receipt");
+  expect(persisted.date.toISOString().split("T")[0]).not.toBe("2026-09-30");
   expect(Number(persisted.amount)).toBe(Number(persisted.financialTransaction?.amount));
+});
+
+test("an unpaid expense can be financially edited before settlement", async ({ page }) => {
+  const created = await expectJson<{ id: string }>(
+    await apiFetch(page, "/api/expenses", {
+      method: "POST",
+      data: {
+        storeId: E2E_IDS.store,
+        category: "Other",
+        amount: 125,
+        date: "2026-10-01",
+        note: "E2E unpaid expense edit probe",
+        paymentMode: "CASH",
+        isRecurring: false,
+      },
+    }),
+    201,
+  );
+  await expectJson(
+    await apiFetch(page, `/api/expenses/${created.id}`, {
+      method: "PUT",
+      data: { amount: 150, date: "2026-10-02", category: "Rent" },
+    }),
+    200,
+  );
+  const persisted = await e2eDb.storeExpense.findUniqueOrThrow({ where: { id: created.id } });
+  expectMoney(persisted.amount, 150);
+  expect(persisted.date.toISOString().split("T")[0]).toBe("2026-10-02");
+  expect(persisted.category).toBe("Rent");
 });

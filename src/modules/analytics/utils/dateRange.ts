@@ -82,6 +82,13 @@ export function businessDateStart(
   );
 }
 
+/** UTC-midnight storage value for a PostgreSQL DATE carrying a business-date label. */
+export function businessDateStorageDate(value: string) {
+  const parsed = parseDateParts(value);
+  if (!parsed) throw new Error("Invalid business date");
+  return parsed.date;
+}
+
 export function businessDateEndExclusive(
   value: string,
   offsetMinutes = STOCKIVA_TIME_ZONE_OFFSET_MINUTES,

@@ -102,8 +102,12 @@ export default defineConfig({
     timeout: 120_000,
     env: {
       ...process.env,
+      ...Object.fromEntries(externalEffectVariables.map((key) => [key, ""])),
       NODE_ENV: "test",
       E2E_NEXT_DIST_DIR: ".next-e2e",
+      E2E_DEMO_DELIVERY_ADAPTER: "capture",
+      E2E_DEMO_DELIVERY_CAPTURE_PATH: "e2e/test-results/demo-request-deliveries.jsonl",
+      E2E_DEMO_DELIVERY_PLAN: "success,failure",
       // Fixed local-only credential for the sole non-WhatsApp cron. The outer
       // safety gate still rejects CRON_SECRET from .env.e2e or the shell.
       CRON_SECRET: "stockiva-e2e-reorder-secret",

@@ -96,25 +96,87 @@ test("SUPER_ADMIN reads global scope and audited feature/user mutations persist 
   }
 });
 
-test("known defect: deactivating a user invalidates its already-issued session", async ({ browser }, testInfo) => {
-  test.fail(true, "P0-005: JWT authorization does not re-check the active-user state");
+test("deactivating a user invalidates its already-issued session", async ({ browser }, testInfo) => {
   const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
   const page = await context.newPage();
-  await login(page, "e2e.staff@stockiva.invalid");
-  await e2eDb.user.update({ where: { id: E2E_IDS.staffUser }, data: { isActive: false } });
+  await login(page, process.env.E2E_USER_EMAIL!);
+  await expectJson(await apiFetch(page, "/api/products"), 200);
+  await e2eDb.user.update({ where: { id: E2E_IDS.user }, data: { isActive: false } });
   try {
-    const response = await apiFetch(page, "/api/products");
+    const [response, financialMutation, inventoryMutation] = await Promise.all([
+      apiFetch(page, "/api/products"),
+      apiFetch(page, "/api/expenses", {
+        method: "POST",
+        data: {
+          storeId: E2E_IDS.store,
+          category: "Other",
+          amount: 1,
+          date: "2026-10-07",
+          note: "E2E inactive session must not persist",
+        },
+      }),
+      apiFetch(page, "/api/stock", {
+        method: "POST",
+        data: {
+          storeId: E2E_IDS.store,
+          productId: E2E_IDS.product,
+          sizeId: E2E_IDS.size,
+          quantity: 1,
+          type: "IN",
+          reason: "E2E inactive session must not persist",
+        },
+      }),
+    ]);
     await testInfo.attach("inactive-session-evidence.json", {
       body: Buffer.from(JSON.stringify({
-        user: await e2eDb.user.findUnique({ where: { id: E2E_IDS.staffUser }, select: { id: true, role: true, isActive: true } }),
+        user: await e2eDb.user.findUnique({ where: { id: E2E_IDS.user }, select: { id: true, role: true, isActive: true } }),
         apiStatus: response.status,
         apiBody: response.body,
+        financialMutationStatus: financialMutation.status,
+        inventoryMutationStatus: inventoryMutation.status,
       }, null, 2)),
       contentType: "application/json",
     });
     await expectJson(response, 401);
+    await expectJson(financialMutation, 401);
+    await expectJson(inventoryMutation, 401);
+    expect(await e2eDb.storeExpense.count({ where: { note: "E2E inactive session must not persist" } })).toBe(0);
+    expect(await e2eDb.stockMovement.count({ where: { reason: "E2E inactive session must not persist" } })).toBe(0);
+    await page.goto("/dashboard");
+    await expect(page).toHaveURL(/\/login/);
   } finally {
-    await e2eDb.user.update({ where: { id: E2E_IDS.staffUser }, data: { isActive: true } });
+    await e2eDb.user.update({ where: { id: E2E_IDS.user }, data: { isActive: true } });
+    await context.close();
+  }
+});
+
+test("an existing session uses current role, store and organization claims", async ({ browser }) => {
+  const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
+  const page = await context.newPage();
+  await login(page, "e2e.staff@stockiva.invalid");
+  const original = await e2eDb.user.findUniqueOrThrow({ where: { id: E2E_IDS.staffUser } });
+  await e2eDb.user.update({
+    where: { id: E2E_IDS.staffUser },
+    data: {
+      role: "ADMIN",
+      storeId: E2E_IDS.foreignStore,
+      orgId: E2E_IDS.foreignOrganization,
+    },
+  });
+  try {
+    const session = await expectJson<{
+      user: { role: string; storeId: string | null; orgId: string | null };
+    }>(await apiFetch(page, "/api/auth/session"), 200);
+    expect(session.user).toMatchObject({
+      role: "ADMIN",
+      storeId: E2E_IDS.foreignStore,
+      orgId: E2E_IDS.foreignOrganization,
+    });
+  } finally {
+    await e2eDb.user.update({
+      where: { id: E2E_IDS.staffUser },
+      data: { role: original.role, storeId: original.storeId, orgId: original.orgId },
+    });
     await context.close();
   }
 });

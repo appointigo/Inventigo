@@ -1,6 +1,16 @@
 import type { Role } from "@prisma/client";
 import type { AuthUser } from "./auth.middleware";
 
+const FINANCE_AND_REPORTING_ROLES = new Set<Role>(["OWNER", "ADMIN", "MANAGER"]);
+
+export function canAccessExpenses(role: Role): boolean {
+  return FINANCE_AND_REPORTING_ROLES.has(role);
+}
+
+export function canAccessReports(role: Role): boolean {
+  return FINANCE_AND_REPORTING_ROLES.has(role);
+}
+
 export function canManageUsers(role: Role): boolean {
   return role === "OWNER" || role === "ADMIN";
 }

@@ -2,8 +2,7 @@ import { expect, test } from "@playwright/test";
 import { apiFetch, expectJson, salePayload } from "../helpers/business";
 import { E2E_IDS, e2eDb } from "../helpers/database";
 
-test("known defect: deleting a sold product preserves historical sale and stock evidence", async ({ page }, testInfo) => {
-  test.fail(true, "P0-006: product deletion erases historical sale items and stock movements");
+test("deleting a sold product preserves historical sale and stock evidence", async ({ page }, testInfo) => {
   const phone = "9990000898";
   const sku = "E2E-DELETE-HISTORY";
   const product = await expectJson<{ id: string }>(
@@ -51,10 +50,14 @@ test("known defect: deleting a sold product preserves historical sale and stock 
       product: await e2eDb.product.findUnique({ where: { id: product.id } }),
       sale: await e2eDb.sale.findUnique({
         where: { id: sale.id },
-        include: { items: true, payments: true },
+        include: { items: true, payments: true, customer: true },
       }),
       productMovements: await e2eDb.stockMovement.count({ where: { productId: product.id } }),
     };
+    const invoice = await apiFetch(
+      page,
+      `/api/customers/${evidence.sale?.customerId}/invoices/${sale.id}`,
+    );
     await testInfo.attach("sold-product-delete-evidence.json", {
       body: Buffer.from(JSON.stringify(evidence, null, 2)),
       contentType: "application/json",
@@ -62,7 +65,10 @@ test("known defect: deleting a sold product preserves historical sale and stock 
     expect(deletion.status).toBe(409);
     expect(evidence.product).not.toBeNull();
     expect(evidence.sale?.items).toHaveLength(1);
+    expect(Number(evidence.sale?.items[0].costPrice)).toBe(200);
+    expect(evidence.sale?.customer?.mobile).toBe(phone);
     expect(evidence.productMovements).toBeGreaterThanOrEqual(2);
+    await expectJson(invoice, 200);
   } finally {
     const paymentIds = (await e2eDb.salePayment.findMany({ where: { saleId: sale.id }, select: { id: true } })).map((row) => row.id);
     await e2eDb.financialTransaction.deleteMany({ where: { salePaymentId: { in: paymentIds } } });

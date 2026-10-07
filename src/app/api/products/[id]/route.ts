@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { productService } from "@/modules/products/services/productService";
+import {
+  productService,
+  ProductHistoryConflictError,
+} from "@/modules/products/services/productService";
 import { requireOrgAuth } from "@/lib/auth.middleware";
 import { AnalyticsAccessError, resolveAnalyticsStore } from "@/modules/analytics/services/analyticsAccess";
 
@@ -74,7 +77,10 @@ export const DELETE = async (_request: Request, { params }: { params: Promise<{ 
     if (!deleted) return NextResponse.json({ error: "Product not found" }, { status: 404 });
     return NextResponse.json({ success: true });
   } 
-  catch {
+  catch (error) {
+    if (error instanceof ProductHistoryConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { reportsService } from "@/modules/dashboard/services/reportsService";
 import { requireOrgAuth } from "@/lib/auth.middleware";
 import { AnalyticsAccessError, resolveAnalyticsStore } from "@/modules/analytics/services/analyticsAccess";
+import { canAccessReports } from "@/lib/rbac";
 
 export const GET = async (request: Request) => {
   let user;
@@ -11,6 +12,7 @@ export const GET = async (request: Request) => {
   catch { 
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 }); 
   }
+  if (!canAccessReports(user.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   try {
     const { searchParams } = new URL(request.url);

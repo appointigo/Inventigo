@@ -14,6 +14,13 @@ import { normalizeNameKey, normalizeSku } from "@/shared/utils/normalization";
 import { buildVariantSku } from "@/shared/services/barcodeService";
 import { stockAuditSnapshot } from "@/modules/stock/utils/stockMovementContract";
 
+export class ProductHistoryConflictError extends Error {
+  constructor() {
+    super("Product has inventory or historical references; deactivate it instead");
+    this.name = "ProductHistoryConflictError";
+  }
+}
+
 const buildInclude = (storeId?: string) => ({
   category: { select: { name: true } },
   brand: { select: { name: true } },
@@ -524,14 +531,33 @@ export const productService = {
     const existing = await prisma.product.findFirst({ where: { id, orgId } });
     if (!existing) return false;
 
-    await prisma.$transaction(async (tx) => {
-      // Delete in FK dependency order (children first, product last)
-      await tx.saleItem.deleteMany({ where: { productId: id } });
-      await tx.purchaseOrderItem.deleteMany({ where: { productId: id } });
-      await tx.stockMovement.deleteMany({ where: { productId: id } });
-      await tx.stockEntry.deleteMany({ where: { productId: id } });
-      await tx.product.delete({ where: { id } });
-    });
+    const referenceCounts = await Promise.all([
+      prisma.saleItem.count({ where: { productId: id } }),
+      prisma.purchaseOrderItem.count({ where: { productId: id } }),
+      prisma.purchaseOrderReceiptItem.count({ where: { productId: id } }),
+      prisma.stockEntry.count({ where: { productId: id } }),
+      prisma.stockMovement.count({ where: { productId: id } }),
+      prisma.returnTransactionItem.count({
+        where: { OR: [{ returnedProductId: id }, { newProductId: id }] },
+      }),
+      prisma.stockTransferItem.count({ where: { productId: id } }),
+      prisma.demandRequest.count({ where: { productId: id } }),
+      prisma.productSupplier.count({ where: { productId: id } }),
+      prisma.replenishmentRecommendation.count({ where: { productId: id } }),
+      prisma.demandForecast.count({ where: { productId: id } }),
+    ]);
+    if (referenceCounts.some((count) => count > 0)) {
+      throw new ProductHistoryConflictError();
+    }
+
+    try {
+      await prisma.product.delete({ where: { id } });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
+        throw new ProductHistoryConflictError();
+      }
+      throw error;
+    }
 
     return true;
   },

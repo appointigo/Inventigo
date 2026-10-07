@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireOrgAuth } from "@/lib/auth.middleware";
+import { canAccessReports } from "@/lib/rbac";
 import {
   AnalyticsAccessError,
   resolveAnalyticsStoreId,
@@ -14,6 +15,7 @@ export async function GET(request: Request) {
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  if (!canAccessReports(user.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   try {
     const searchParams = new URL(request.url).searchParams;

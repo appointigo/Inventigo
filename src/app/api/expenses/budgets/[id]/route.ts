@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { expenseBudgetService } from "@/modules/expenses/services/expenseBudgetService";
 import { requireOrgAuth } from "@/lib/auth.middleware";
+import { canAccessExpenses } from "@/lib/rbac";
 
 export async function DELETE(
   _request: Request,
@@ -12,6 +13,7 @@ export async function DELETE(
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  if (!canAccessExpenses(user.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
   try {

@@ -63,8 +63,7 @@ test("invitation token is scoped, expiring and single-use without sending email"
   }
 });
 
-test("known defect: a foreign tenant cannot revoke an organization invitation", async ({ browser, page }, testInfo) => {
-  test.fail(true, "P1-005: invitation DELETE has no organization authorization");
+test("only a same-tenant owner or admin can revoke an organization invitation", async ({ browser, page }, testInfo) => {
   const email = "e2e.revoke.attack@stockiva.invalid";
   await e2eDb.invitation.deleteMany({ where: { email } });
   const created = await expectJson<{ inviteLink: string }>(
@@ -78,6 +77,8 @@ test("known defect: a foreign tenant cannot revoke an organization invitation", 
   const invitation = await e2eDb.invitation.findUniqueOrThrow({ where: { token } });
   const foreign = await browser.newContext({ storageState: { cookies: [], origins: [] } });
   const foreignPage = await foreign.newPage();
+  const staff = await browser.newContext({ storageState: { cookies: [], origins: [] } });
+  const staffPage = await staff.newPage();
   try {
     await foreignPage.goto("/login");
     await foreignPage.getByPlaceholder("Email address").fill("e2e.foreign.owner@stockiva.invalid");
@@ -99,8 +100,26 @@ test("known defect: a foreign tenant cannot revoke an organization invitation", 
     });
     expect([403, 404]).toContain(response.status);
     expect(persistedAfterAttack).not.toBeNull();
+
+    await staffPage.goto("/login");
+    await staffPage.getByPlaceholder("Email address").fill("e2e.staff@stockiva.invalid");
+    await staffPage.getByPlaceholder("Password").fill(process.env.E2E_USER_PASSWORD!);
+    await staffPage.locator("form").getByRole("button", { name: "Sign In", exact: true }).click();
+    await expect(staffPage).toHaveURL(/\/dashboard/);
+    await expectJson(
+      await apiFetch(staffPage, `/api/invitations/${invitation.id}`, { method: "DELETE" }),
+      403,
+    );
+    expect(await e2eDb.invitation.findUnique({ where: { id: invitation.id } })).not.toBeNull();
+
+    await expectJson(
+      await apiFetch(page, `/api/invitations/${invitation.id}`, { method: "DELETE" }),
+      200,
+    );
+    expect(await e2eDb.invitation.findUnique({ where: { id: invitation.id } })).toBeNull();
   } finally {
     await foreign.close();
+    await staff.close();
     await e2eDb.invitation.deleteMany({ where: { email } });
   }
 });

@@ -1,6 +1,6 @@
 # Stockiva non-WhatsApp E2E discovery — final report
 
-Date: 2026-10-07. Database: reset-only `stockiva_e2e`. No production behavior was remediated in this phase.
+Discovery date: 2026-10-07. Database: reset-only `stockiva_e2e`. This document preserves discovery-time results and separately records the current remediation state. Discovery itself made no production fixes; subsequent controlled remediation has fixed and verified all 12 defects.
 
 ## 1. Coverage movement
 
@@ -13,7 +13,7 @@ Date: 2026-10-07. Database: reset-only `stockiva_e2e`. No production behavior wa
 | N/A | 1 | 1 |
 | WhatsApp deferred | 11 | 11 |
 
-The matrix grew from 130 to 133 scenarios because direct API validation, database constraint proof, and destructive referential integrity were made explicit. Playwright grew from 72 to 88 executable tests: **76 normal regressions + 12 expected defect reproductions**.
+At discovery close, the matrix grew from 130 to 133 scenarios because direct API validation, database constraint proof, and destructive referential integrity were made explicit. Playwright grew from 72 to 88 executable tests: **76 normal regressions + 12 expected defect reproductions**. This is historical discovery-time inventory, not the current regression count.
 
 ## 2. Remaining gaps
 
@@ -28,11 +28,11 @@ Every remaining non-WhatsApp gap, exact prerequisite, future test level, and rel
 | P2 | None | None |
 | P3 | None | None |
 
-All 12 are **NOT FIXED** and retain reproducible expected-failure coverage plus JSON evidence where persistence/security evidence is material.
+Discovery originally closed with all 12 **NOT FIXED**. Controlled remediation subsequently fixed all six P0 and all six P1 defects with normal regression coverage; no expected defect failures remain.
 
 ## 4. External integration readiness
 
-- **Email:** Demo validation/delivery is currently unreachable publicly (P1-006). Auth verification/resend directly owns provider behavior and forgot-password remains TODO. A local mail capture adapter is required to prove recipients, subject/template, token expiry/single use, delivery failure, and retries. No email was sent.
+- **Email:** The public demo route now uses a route-specific, server-controlled E2E capture adapter. Anonymous validation, exact outbound lead payload, 202 success, deterministic delivery failure, and narrow public authorization are verified without network access. Auth verification/resend and forgot-password remain separate gaps requiring their own safe mail/token harness. No email was sent.
 - **OAuth:** With credentials absent, `/api/auth/providers` exposes credentials only and Google is absent. Callback, state/nonce, account mapping, and provider failure require a local OIDC stub. No OAuth provider was contacted.
 - **Blob/storage:** Anonymous upload returns 401 and authenticated calls fail closed without provider credentials. MIME/size/object/tenant/replacement/deletion behavior requires a local blob adapter/emulator. No blob provider was contacted.
 - **Other providers:** Low-stock notification delivery is simulated logging only; the authorized cron did not contact email/SMS. No external provider was contacted.
@@ -48,7 +48,7 @@ Proven with a directly seeded disposable SUPER_ADMIN in a clean context:
 - a disposable global feature flag can be created/toggled and produces two audit rows;
 - user deactivate/reactivate persists and is audited.
 
-Not proven: real pricing/billing-provider changes or every announcement UI field. A security defect was proven: an already-issued user JWT remains usable after the authoritative user row is deactivated (P0-005).
+Not proven at discovery time: real pricing/billing-provider changes or every announcement UI field. Discovery proved P0-005; subsequent remediation now revalidates authoritative user state and its normal regression passes.
 
 ## 6. Cron results
 
@@ -85,24 +85,24 @@ Persisted forecasting/outlook E2E remains deferred until the shared multi-period
 - Product bulk import creates exactly one product, stock row, and opening quantity; duplicate retry is 422/atomic; negative price is 400; foreign store is 403.
 - Category/brand create-update-delete works for disposable unreferenced rows; cross-tenant IDs are hidden; referenced seeded category/brand deletion returns 409.
 - Inactive product remains persisted and discoverable through the inactive filter while a new sale is rejected atomically.
-- Destructive product deletion is unsafe: it removes historical sale items and stock movements while retaining the sale/payment/ledger (P0-006).
+- Discovery proved destructive product deletion was unsafe (P0-006). Current remediation rejects referenced deletion and verifies that product, sale/COGS, invoice/customer, and stock evidence survives.
 - Malformed JSON for all three bulk endpoints returns controlled 400, not 500.
 
 ## 9. Security results
 
 - **Platform admin:** privileged/tenant separation passes; stale inactive-user session fails as P0-005.
-- **Tenant isolation:** product, stock, analytics, customer, sale, invoice/PDF, supplier, PO, expense, catalog, store, and team probes remain scoped. Invitation DELETE fails tenant scoping as P1-005.
-- **Permissions:** purchasing/finance controls pass where enforced; known STAFF expense/report bypass P0-003 remains.
-- **Sessions:** logout/protected navigation passes; deactivation does not revoke an issued JWT.
+- **Tenant isolation:** product, stock, analytics, customer, sale, invoice/PDF, supplier, PO, expense, catalog, store, team, and invitation probes are scoped.
+- **Permissions:** purchasing, finance, reporting, expense, and invitation-management controls pass, including direct STAFF method checks.
+- **Sessions:** logout/protected navigation passes; authoritative session revalidation immediately denies deactivated users and refreshes changed role/store/organization claims.
 - **Feature entitlements:** no non-WhatsApp tenant feature exists, so enforcement is N/A. Global admin feature-flag authorization/audit was proven, but it is not a tenant entitlement gate.
 - **Direct API attacks:** anonymous critical APIs, malformed JSON, invalid IDs, foreign stores, duplicate imports, referenced deletes, and unsupported monetary/quantity boundaries return controlled responses except registered defects.
 - **Database invariants:** same-store transfer, zero requested transfer quantity, and negative purchase money were rejected by real CHECK constraints.
 
 ## 10. Validation counts
 
-- E2E safety: **9/9 passed**.
-- Playwright inventory: **88 tests in 26 files**: 1 setup + 87 chromium; **76 normal regressions + 12 expected defect reproductions**.
-- Consolidated Playwright run before final classification: **86/87 intended outcomes**, with the sole unexpected failure becoming P1-006; focused final run covers P1-006 and P0-006 as expected failures.
+- E2E safety: **10/10 passed**.
+- Discovery-time Playwright inventory: **88 tests in 26 files**: 1 setup + 87 chromium; **76 normal regressions + 12 expected defect reproductions**.
+- Current remediation result: **92/92 executable Playwright tests passed** in the full non-WhatsApp regression, all as normal regressions; expected defect reproductions: **0**. P1-006 focused verification also passed 6/6, including setup and five external-boundary cases.
 - Deterministic domain/unit suites: **129/129 passed**.
 - Invoice/PDF/document controls: **23/23 passed** when the server-only service suite is run with the required `react-server` export condition; includes long-list pagination, escaping/special content, discount, partial payment, return, and all three exchange settlement shapes.
 - Numerical integrity: **14/14 passed** (included in the 129 domain total).
@@ -111,8 +111,12 @@ Persisted forecasting/outlook E2E remains deferred until the shared multi-period
 - Targeted ESLint: **passed**.
 - `git diff --check`: **passed**.
 
-## 11. Discovery completion decision
+## 11. Discovery and remediation decisions
 
-Every non-WhatsApp scenario is now automated, covered at a defensible lower level, blocked by an exact external/product prerequisite, deferred behind an exact fixture, or N/A. Provider limitations and all 12 defects are explicit. No defect was fixed.
+Discovery-time decision: every non-WhatsApp scenario was automated, covered at a defensible lower level, blocked by an exact external/product prerequisite, deferred behind an exact fixture, or N/A. Provider limitations and all 12 defects were explicit; no defect was fixed during discovery.
 
 **DISCOVERY COMPLETE — READY FOR REMEDIATION**
+
+Current remediation decision: all 12 registered defects are fixed and verified with ordinary regressions. P1-006 now has offline success-payload and controlled-failure proof, with no external provider contact.
+
+**12/12 FIXED + VERIFIED — READY FOR FINAL RELEASE VALIDATION**

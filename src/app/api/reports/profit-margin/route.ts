@@ -1,14 +1,12 @@
 import { NextResponse } from "next/server";
-import { Role } from "@prisma/client";
 import { requireOrgAuth } from "@/lib/auth.middleware";
+import { canAccessReports } from "@/lib/rbac";
 import {
   AnalyticsAccessError,
   resolveAnalyticsStoreId,
 } from "@/modules/analytics/services/analyticsAccess";
 import { salesAnalyticsService } from "@/modules/analytics/services/salesAnalyticsService";
 import { AnalyticsQueryError, parseAnalyticsQuery } from "@/modules/analytics/utils/analyticsQuery";
-
-const ALLOWED_ROLES = new Set<Role>([Role.OWNER, Role.ADMIN, Role.MANAGER]);
 
 export async function GET(request: Request) {
   let user;
@@ -17,7 +15,7 @@ export async function GET(request: Request) {
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!ALLOWED_ROLES.has(user.role)) {
+  if (!canAccessReports(user.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

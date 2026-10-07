@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
-import { expenseService } from "@/modules/expenses/services/expenseService";
+import {
+  expenseService,
+  InvalidExpenseAmountError,
+} from "@/modules/expenses/services/expenseService";
 import { requireOrgAuth } from "@/lib/auth.middleware";
 import { AnalyticsAccessError, resolveAnalyticsStore } from "@/modules/analytics/services/analyticsAccess";
+import { canAccessExpenses } from "@/lib/rbac";
 
 export async function GET(request: Request) {
   let user;
@@ -9,6 +13,9 @@ export async function GET(request: Request) {
     user = await requireOrgAuth();
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!canAccessExpenses(user.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   try {
@@ -41,6 +48,9 @@ export async function POST(request: Request) {
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  if (!canAccessExpenses(user.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   try {
     const body = await request.json();
@@ -56,6 +66,9 @@ export async function POST(request: Request) {
   } catch (err) {
     if (err instanceof AnalyticsAccessError) {
       return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    if (err instanceof InvalidExpenseAmountError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
     }
     console.error("[expenses POST]", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

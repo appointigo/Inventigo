@@ -13,6 +13,11 @@ const externalEffectVariables = [
   "WHATSAPP_INVOICE_SMOKE_TEST_DELIVERY_ID",
   "WHATSAPP_INVOICE_SMOKE_TEST_RECIPIENT",
 ];
+const serverControlledTestVariables = [
+  "E2E_DEMO_DELIVERY_ADAPTER",
+  "E2E_DEMO_DELIVERY_CAPTURE_PATH",
+  "E2E_DEMO_DELIVERY_PLAN",
+];
 
 export function loadE2EEnvironment(root = process.cwd()) {
   const envPath = path.join(root, ".env.e2e");
@@ -85,6 +90,12 @@ export function assertSafeE2EEnvironment(env = process.env) {
   if (configuredExternalEffects.length) {
     failures.push(
       `External delivery/cron credentials must be absent in E2E: ${configuredExternalEffects.join(", ")}`,
+    );
+  }
+  const configuredServerControls = serverControlledTestVariables.filter((key) => env[key]);
+  if (configuredServerControls.length) {
+    failures.push(
+      `Server-controlled E2E adapters cannot be supplied by the outer environment: ${configuredServerControls.join(", ")}`,
     );
   }
 

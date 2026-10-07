@@ -704,6 +704,8 @@ model PurchaseItemOption {
 model Sale {
   id                     String                @id @default(uuid())
   storeId                String
+  idempotencyKey         String?
+  idempotencyPayloadHash String?
   invoiceNumber          String                @unique
   customerName           String?
   customerPhone          String?
@@ -748,6 +750,7 @@ model Sale {
   @@index([status])
   @@index([promoCodeId])
   @@index([invoicePolicyVersionId])
+  @@unique([storeId, idempotencyKey])
   @@map("sales")
 }
 

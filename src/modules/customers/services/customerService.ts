@@ -10,6 +10,7 @@ import type {
 } from "../types";
 import { syncWhatsAppContactForCustomer } from "@/modules/whatsapp/services/WhatsAppContactService";
 import { customerIntelligenceService } from "./customerIntelligenceService";
+import { phoneSearchDigits } from "../utils/customerSearch";
 import { canonicalCustomerOrderValue, sumMoney } from "@/modules/analytics/utils/canonicalMetrics";
 
 const RECENT_DAYS = 7;
@@ -314,6 +315,7 @@ export const customerService = {
     const page = Math.max(1, Number(params?.page ?? 1));
     const pageSize = Math.min(100, Math.max(1, Number(params?.pageSize ?? 10)));
     const search = params?.search?.trim();
+    const searchDigits = phoneSearchDigits(search);
     const type = params?.type ?? "all";
     const highSpenderThreshold =
       Number.isFinite(params?.highSpenderThreshold) && (params?.highSpenderThreshold ?? 0) > 0
@@ -329,7 +331,9 @@ export const customerService = {
       andFilters.push({
         OR: [
           { name: { contains: search, mode: "insensitive" as const } },
-          { mobile: { contains: search, mode: "insensitive" as const } },
+          ...(searchDigits
+            ? [{ mobile: { contains: searchDigits, mode: "insensitive" as const } }]
+            : []),
         ],
       });
     }

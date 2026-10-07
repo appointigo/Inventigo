@@ -113,10 +113,9 @@ test("customer create, normalize, update, search and pagination validation are s
   await expectJson(await apiFetch(page, "/api/customers?type=not-a-filter"), 400);
 });
 
-test("known defect: alphanumeric customer name search does not become a phone-digit OR", async ({
+test("alphanumeric customer name search does not become a phone-digit OR", async ({
   page,
 }, testInfo) => {
-  test.fail(true, "P1-003: digits inside a name query broaden matching to every phone containing them");
   const response = await apiFetch(
     page,
     "/api/customers?search=E2E%20Updated&page=1&pageSize=10&sortBy=name&sortDirection=asc",

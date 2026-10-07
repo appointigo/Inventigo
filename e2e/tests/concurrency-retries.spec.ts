@@ -73,10 +73,9 @@ async function createPayable(page: Page, suffix: string) {
   );
 }
 
-test("known defect: a retried sale request must create only one business transaction", async ({
+test("a retried sale request creates only one business transaction", async ({
   page,
 }, testInfo) => {
-  test.fail(true, "P0-001: sale creation has no durable idempotency contract");
   const phone = "9990000801";
   const before = {
     sales: await e2eDb.sale.count({ where: { customerPhone: phone } }),
@@ -103,13 +102,26 @@ test("known defect: a retried sale request must create only one business transac
     data: salePayload(phone),
     headers: { "x-request-id": "e2e-identical-sale-retry" },
   };
-  const first = await apiFetch(page, "/api/billing", request);
-  const second = await apiFetch(page, "/api/billing", request);
+  const peer = await authenticatedPeer(page);
+  const [first, second] = await Promise.all([
+    apiFetch(page, "/api/billing", request),
+    apiFetch(peer, "/api/billing", request),
+  ]);
+  const replay = await apiFetch(page, "/api/billing", request);
+  const conflictingReplay = await apiFetch(page, "/api/billing", {
+    ...request,
+    data: salePayload(phone, { amountPaid: 999 }),
+  });
+  const firstBody = first.body as { id: string };
+  const secondBody = second.body as { id: string };
+  const replayBody = replay.body as { id: string };
 
   const customer = await e2eDb.customer.findFirstOrThrow({ where: { mobile: phone } });
   const stockAfter = await e2eDb.stockEntry.findUniqueOrThrow({ where: { id: stockBefore.id } });
   const evidence = {
-    responseStatuses: [first.status, second.status],
+    responseStatuses: [first.status, second.status, replay.status],
+    responseSaleIds: [firstBody.id, secondBody.id, replayBody.id],
+    conflictingReplayStatus: conflictingReplay.status,
     saleDelta: (await e2eDb.sale.count({ where: { customerPhone: phone } })) - before.sales,
     itemDelta: (await e2eDb.saleItem.count({ where: { sale: { customerPhone: phone } } })) - before.items,
     paymentDelta:
@@ -137,7 +149,9 @@ test("known defect: a retried sale request must create only one business transac
     contentType: "application/json",
   });
   expect(evidence).toEqual({
-    responseStatuses: [201, 201],
+    responseStatuses: [201, 201, 201],
+    responseSaleIds: [firstBody.id, firstBody.id, firstBody.id],
+    conflictingReplayStatus: 409,
     saleDelta: 1,
     itemDelta: 1,
     paymentDelta: 1,
@@ -146,6 +160,7 @@ test("known defect: a retried sale request must create only one business transac
     stockDelta: -1,
     customerLifetimeSpend: 1000,
   });
+  await peer.close();
 });
 
 test("two concurrent clients cannot sell more than the last available unit", async ({ page }) => {
@@ -192,7 +207,6 @@ test("two concurrent clients cannot sell more than the last available unit", asy
 test("concurrent receivable collections cannot exceed the outstanding amount", async ({
   page,
 }, testInfo) => {
-  test.fail(true, "P0-002: concurrent receivable collection can exceed the outstanding balance");
   const sale = await createSale(page, "9990000810", { amountPaid: 600 });
   const peer = await authenticatedPeer(page);
   const [left, right] = await Promise.all([
@@ -227,6 +241,7 @@ test("concurrent receivable collections cannot exceed the outstanding amount", a
   expect(Number(persisted.amountDue)).toBe(0);
   expect(persisted.payments).toHaveLength(2);
   expect(persisted.payments.filter((payment) => payment.financialTransaction)).toHaveLength(2);
+  expect(evidence.collectedTotal).toBe(1000);
   await peer.close();
 });
 

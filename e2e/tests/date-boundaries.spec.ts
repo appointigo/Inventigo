@@ -9,10 +9,9 @@ test.afterAll(async () => {
 type SalesAnalytics = { summary: { revenue: number; orders: number } };
 type FinanceSummary = { movement: { inflows: number; outflows: number; net: number } };
 
-test("known defect: Finance month boundary uses the same IST business day as analytics", async ({
+test("Finance month boundary uses the same IST business day as analytics", async ({
   page,
 }, testInfo) => {
-  test.fail(true, "P1-002: Finance month movement uses UTC boundaries while analytics uses IST");
   const analytics = async (date: string) =>
     expectJson<SalesAnalytics>(
       await apiFetch(

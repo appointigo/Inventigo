@@ -12,6 +12,7 @@ import {
   type CustomerDatePreset,
 } from "../utils/customerDateWindow";
 import { paginateCustomerRows } from "../customerPagination";
+import { phoneSearchDigits } from "../utils/customerSearch";
 
 const DAY_MS = 86_400_000;
 const median = (values: number[]) => {
@@ -177,7 +178,7 @@ export const customerIntelligenceService = {
       never_purchased: population.filter((row) => row.groups.includes("Never Purchased")).length,
     };
     const text = query.search?.trim().toLocaleLowerCase("en-IN") ?? "";
-    const digits = query.search?.replace(/\D/g, "") ?? "";
+    const digits = phoneSearchDigits(query.search);
     const dateWindow = query.lastPurchaseDays
       ? getCustomerDateWindow(
           query.lastPurchaseDays,
@@ -191,7 +192,7 @@ export const customerIntelligenceService = {
         (group === "all" || row.groups.includes(groupLabel[group])) &&
         (!text ||
           row.name?.toLocaleLowerCase("en-IN").includes(text) ||
-          (digits && row.mobile.includes(digits))) &&
+          (digits !== null && row.mobile.includes(digits))) &&
         (!dateWindow || isInCustomerDateWindow(row.lastPurchaseAt, dateWindow)) &&
         (query.minSpend === undefined || row.totalSpent >= query.minSpend) &&
         (query.maxSpend === undefined || row.totalSpent <= query.maxSpend) &&

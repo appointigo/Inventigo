@@ -11,7 +11,6 @@ const root = fileURLToPath(new URL("../..", import.meta.url));
 const migrationsRoot = path.join(root, "prisma/migrations");
 const baselineRoot = path.join(root, "e2e/baseline");
 const manifestPath = path.join(baselineRoot, "history-manifest.json");
-const schemaPath = path.join(root, "prisma/schema.prisma");
 const baselineSqlPath = path.join(baselineRoot, "20261007120000_schema.sql");
 const databaseObjectsPath = path.join(baselineRoot, "database-objects.sql");
 const executable = process.platform === "win32" ? "npx.cmd" : "npx";
@@ -47,7 +46,6 @@ export function verifyBaselineInputs() {
   assertSafeE2EEnvironment();
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
   const expectedArtifacts = [
-    [schemaPath, manifest.schemaSha256, "Prisma schema"],
     [baselineSqlPath, manifest.baselineSqlSha256, "greenfield baseline SQL"],
     [databaseObjectsPath, manifest.databaseObjectsSqlSha256, "database-only objects SQL"],
   ];

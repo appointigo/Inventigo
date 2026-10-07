@@ -4,7 +4,9 @@ import {
   analyticsGroupForRange,
   buildAnalyticsSearchParams,
   businessDateEndExclusive,
+  businessDateForInstant,
   businessDateStart,
+  businessDateStorageDate,
   parseAnalyticsDateRange,
   resolveAnalyticsDateRange,
 } from "./dateRange.ts";
@@ -49,6 +51,10 @@ test("falls back safely when URL custom dates are incomplete", () => {
 test("converts complete business days to explicit IST boundaries", () => {
   assert.equal(businessDateStart("2026-10-04").toISOString(), "2026-10-03T18:30:00.000Z");
   assert.equal(businessDateEndExclusive("2026-10-04").toISOString(), "2026-10-04T18:30:00.000Z");
+  assert.equal(businessDateStorageDate("2026-10-04").toISOString(), "2026-10-04T00:00:00.000Z");
+  assert.equal(businessDateForInstant(new Date("2026-12-31T18:29:59.999Z")), "2026-12-31");
+  assert.equal(businessDateForInstant(new Date("2026-12-31T18:30:00.000Z")), "2027-01-01");
+  assert.equal(businessDateForInstant(new Date("2026-12-31T18:31:00.000Z")), "2027-01-01");
 });
 
 test("combines the selected store and custom date range in analytics requests", () => {

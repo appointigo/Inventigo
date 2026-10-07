@@ -37,10 +37,9 @@ test("one-paise underpayment remains a precise receivable", async ({ page }) => 
 
 });
 
-test("known defect: one-paise overpayment follows cash-clamp and non-cash rejection policy", async ({
+test("one-paise overpayment follows cash-clamp and non-cash rejection policy", async ({
   page,
 }, testInfo) => {
-  test.fail(true, "P1-004: the billing epsilon accepts and persists a one-paise overpayment");
   const attempts = [
     { method: "CASH", phone: "9990000604" },
     { method: "CARD", phone: "9990000603" },

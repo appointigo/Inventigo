@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { expenseCategoryService } from "@/modules/expenses/services/expenseCategoryService";
 import { requireOrgAuth } from "@/lib/auth.middleware";
+import { canAccessExpenses } from "@/lib/rbac";
 
 export async function DELETE(
   _request: Request,
@@ -13,7 +14,7 @@ export async function DELETE(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!["OWNER", "ADMIN", "MANAGER"].includes(user.role)) {
+  if (!canAccessExpenses(user.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

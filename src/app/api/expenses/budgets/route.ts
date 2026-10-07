@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { expenseBudgetService } from "@/modules/expenses/services/expenseBudgetService";
 import { requireOrgAuth } from "@/lib/auth.middleware";
 import { AnalyticsAccessError, resolveAnalyticsStore } from "@/modules/analytics/services/analyticsAccess";
+import { canAccessExpenses } from "@/lib/rbac";
 
 export async function GET(request: Request) {
   let user;
@@ -10,6 +11,7 @@ export async function GET(request: Request) {
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  if (!canAccessExpenses(user.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   try {
     const { searchParams } = new URL(request.url);
@@ -39,6 +41,7 @@ export async function POST(request: Request) {
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  if (!canAccessExpenses(user.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   try {
     const body = await request.json();

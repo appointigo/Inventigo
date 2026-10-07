@@ -63,46 +63,81 @@ test("staff cannot invoke purchasing or finance mutations through direct APIs", 
   await context.close();
 });
 
-test("known defect: staff cannot bypass hidden Finance and Reports navigation via APIs", async ({
+test("staff cannot bypass Finance and Reports authorization through pages or APIs", async ({
   browser,
+  page,
 }, testInfo) => {
-  test.fail(true, "P0-003: STAFF authorization is enforced in navigation but not these APIs");
-  const { context, page } = await loginAs(browser, "e2e.staff@stockiva.invalid");
-  await expect(page.getByRole("link", { name: "Finance" })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Reports" })).toHaveCount(0);
+  const expenseData = {
+    storeId: E2E_IDS.store,
+    category: "Other",
+    amount: 1,
+    date: new Date().toISOString().slice(0, 10),
+    note: "E2E authorization probe",
+    paymentMode: "CASH",
+    isRecurring: false,
+  };
+  const ownerExpense = await expectJson<{ id: string }>(
+    await apiFetch(page, "/api/expenses", { method: "POST", data: expenseData }),
+    201,
+  );
+  expect((await apiFetch(page, `/api/reports?type=stock&storeId=${E2E_IDS.store}`)).status).toBe(200);
 
-  const expense = await apiFetch(page, "/api/expenses", {
+  const { context: adminContext, page: adminPage } = await loginAs(
+    browser,
+    "e2e.org.admin@stockiva.invalid",
+  );
+  const adminExpense = await expectJson<{ id: string }>(
+    await apiFetch(adminPage, "/api/expenses", {
+      method: "POST",
+      data: { ...expenseData, note: "E2E admin authorization probe" },
+    }),
+    201,
+  );
+  expect(
+    (await apiFetch(adminPage, `/api/reports?type=stock&storeId=${E2E_IDS.store}`)).status,
+  ).toBe(200);
+  await adminContext.close();
+
+  const { context, page: staffPage } = await loginAs(browser, "e2e.staff@stockiva.invalid");
+  await expect(staffPage.getByRole("link", { name: "Finance" })).toHaveCount(0);
+  await expect(staffPage.getByRole("link", { name: "Reports" })).toHaveCount(0);
+  await staffPage.goto("/dashboard/expenses");
+  await expect(staffPage).toHaveURL(/\/dashboard\/?$/);
+  await staffPage.goto("/dashboard/reports");
+  await expect(staffPage).toHaveURL(/\/dashboard\/?$/);
+
+  const expenseGet = await apiFetch(staffPage, "/api/expenses");
+  const expensePost = await apiFetch(staffPage, "/api/expenses", {
     method: "POST",
-    data: {
-      storeId: E2E_IDS.store,
-      category: "Other",
-      amount: 1,
-      date: new Date().toISOString().slice(0, 10),
-      note: "E2E unauthorized staff probe",
-      paymentMode: "CASH",
-      isRecurring: false,
-    },
+    data: { ...expenseData, note: "E2E unauthorized staff probe" },
   });
-  const report = await apiFetch(page, `/api/reports?type=stock&storeId=${E2E_IDS.store}`);
+  const expensePut = await apiFetch(staffPage, `/api/expenses/${ownerExpense.id}`, {
+    method: "PUT",
+    data: { note: "unauthorized edit" },
+  });
+  const expenseDelete = await apiFetch(staffPage, `/api/expenses/${ownerExpense.id}`, {
+    method: "DELETE",
+  });
+  const report = await apiFetch(
+    staffPage,
+    `/api/reports?type=stock&storeId=${E2E_IDS.store}`,
+  );
+  const evidence = {
+    expenseGetStatus: expenseGet.status,
+    expensePostStatus: expensePost.status,
+    expensePutStatus: expensePut.status,
+    expenseDeleteStatus: expenseDelete.status,
+    reportStatus: report.status,
+  };
   await testInfo.attach("staff-authorization-evidence.json", {
-    body: JSON.stringify(
-      {
-        expenseStatus: expense.status,
-        expenseBody: expense.body,
-        reportStatus: report.status,
-        reportBody: report.body,
-      },
-      null,
-      2,
-    ),
+    body: JSON.stringify(evidence, null, 2),
     contentType: "application/json",
   });
-  if (expense.status === 201 && typeof expense.body === "object" && expense.body !== null) {
-    const id = (expense.body as { id?: string }).id;
-    if (id) await e2eDb.storeExpense.deleteMany({ where: { id } });
-  }
   await context.close();
-  expect([expense.status, report.status]).toEqual([403, 403]);
+  expect(Object.values(evidence)).toEqual([403, 403, 403, 403, 403]);
+  expect(await e2eDb.storeExpense.findUnique({ where: { id: ownerExpense.id } })).not.toBeNull();
+  await expectJson(await apiFetch(page, `/api/expenses/${ownerExpense.id}`, { method: "DELETE" }), 204);
+  await expectJson(await apiFetch(page, `/api/expenses/${adminExpense.id}`, { method: "DELETE" }), 204);
 });
 
 test("direct foreign IDs cannot be read, changed, invoiced or deleted", async ({ browser, page }) => {

@@ -108,7 +108,7 @@ export async function createSale(
   const response = await apiFetch(page, "/api/billing", {
     method: "POST",
     data: salePayload(phone, overrides),
-    headers: { "x-request-id": `e2e-sale-${phone}` },
+    headers: { "x-request-id": `e2e-sale-${phone}-${crypto.randomUUID()}` },
   });
   return expectJson<{ id: string; invoiceNumber: string }>(response, 201);
 }

@@ -12,6 +12,12 @@ import {
 import { prisma } from "@/lib/db";
 import { accountBalance, cashCoverage, operatingWorkingCapital, payableAging, payableState, refundState, roundMoney } from "./financeRules";
 import type { FinanceSummary } from "./types";
+import {
+  addBusinessDays,
+  businessDateForInstant,
+  businessDateStorageDate,
+  nextAnalyticsBucket,
+} from "@/modules/analytics/utils/dateRange";
 
 type Db = Prisma.TransactionClient;
 const money = (value: Prisma.Decimal | number | null | undefined) => Number(value ?? 0);
@@ -57,7 +63,7 @@ export async function postSalePayment(db: Db, salePaymentId: string, orgId: stri
       accountId,
       direction: FinancialDirection.INFLOW,
       amount: payment.amount,
-      businessDate: payment.businessDate,
+      businessDate: businessDateStorageDate(businessDateForInstant(payment.businessDate)),
       referenceType: FinancialReferenceType.SALE_PAYMENT,
       referenceId: payment.id,
       idempotencyKey: `SALE_PAYMENT:${payment.id}`,
@@ -220,8 +226,13 @@ export const financeService = {
       if (expense.paymentStatus === ExpensePaymentStatus.PAID) throw new Error("Expense is already paid");
       if (input.accountId) await assertAccount(tx, orgId, input.accountId, expense.storeId);
       const paidAt = date(input.paidAt, "Paid date");
-      const updated = await tx.storeExpense.update({ where: { id: expense.id }, data: { paymentStatus: ExpensePaymentStatus.PAID, paidAt, financialAccountId: input.accountId ?? null } });
-      await tx.financialTransaction.create({ data: { orgId, storeId: expense.storeId, accountId: input.accountId ?? null, direction: FinancialDirection.OUTFLOW, amount: expense.amount, businessDate: paidAt, referenceType: FinancialReferenceType.EXPENSE, referenceId: expense.id, idempotencyKey: `EXPENSE:${expense.id}`, category: `EXPENSE:${expense.category}`, description: expense.note, createdBy: userId, expenseId: expense.id } });
+      const claimed = await tx.storeExpense.updateMany({
+        where: { id: expense.id, orgId, paymentStatus: { not: ExpensePaymentStatus.PAID } },
+        data: { paymentStatus: ExpensePaymentStatus.PAID, paidAt, financialAccountId: input.accountId ?? null },
+      });
+      if (claimed.count !== 1) throw new Error("Expense is already paid");
+      const updated = await tx.storeExpense.findUniqueOrThrow({ where: { id: expense.id } });
+      await tx.financialTransaction.create({ data: { orgId, storeId: updated.storeId, accountId: input.accountId ?? null, direction: FinancialDirection.OUTFLOW, amount: updated.amount, businessDate: paidAt, referenceType: FinancialReferenceType.EXPENSE, referenceId: updated.id, idempotencyKey: `EXPENSE:${updated.id}`, category: `EXPENSE:${updated.category}`, description: updated.note, createdBy: userId, expenseId: updated.id } });
       return updated;
     });
   },
@@ -253,11 +264,13 @@ export const financeService = {
 
   async summary(orgId: string, storeId: string | null): Promise<FinanceSummary> {
     const now = new Date();
-    const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-    const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
-    const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-    const in7 = new Date(dayStart.getTime() + 7 * 86_400_000);
-    const in30 = new Date(dayStart.getTime() + 30 * 86_400_000);
+    const today = businessDateForInstant(now);
+    const monthStart = `${today.slice(0, 8)}01`;
+    const from = businessDateStorageDate(monthStart);
+    const to = businessDateStorageDate(nextAnalyticsBucket(monthStart, "month"));
+    const dayStart = businessDateStorageDate(today);
+    const in7 = businessDateStorageDate(addBusinessDays(today, 7));
+    const in30 = businessDateStorageDate(addBusinessDays(today, 30));
     const accountWhere: Prisma.FinancialAccountWhereInput = { orgId, isActive: true, ...(storeId ? { storeId } : {}) };
     const rowWhere = storeId ? { orgId, storeId } : { orgId };
     const [accounts, movement, payables, refunds, receivables, stocks, unmappedCount, store, inboundOrders, excessRecommendations, unknownExpenseCount] = await Promise.all([

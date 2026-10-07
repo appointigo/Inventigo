@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
+import { requireOrgAuth } from "@/lib/auth.middleware";
+import { canManageUsers } from "@/lib/rbac";
 
 // GET /api/invitations/[token] — validate and fetch invite info (public, no auth)
 export const GET = async (
@@ -128,14 +130,25 @@ export const DELETE = async (
   { params }: { params: Promise<{ token: string }> }
 ) => {
   const { token: invitationId } = await params;
+  let user;
+  try {
+    user = await requireOrgAuth();
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (!canManageUsers(user.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   try {
-    const inv = await prisma.invitation.findUnique({ where: { id: invitationId } });
-    if (!inv) {
+    const deleted = await prisma.invitation.deleteMany({
+      where: { id: invitationId, orgId: user.orgId },
+    });
+    if (deleted.count !== 1) {
       return NextResponse.json({ error: "Invitation not found" }, { status: 404 });
     }
 
-    await prisma.invitation.delete({ where: { id: invitationId } });
     return NextResponse.json({ message: "Invitation revoked" });
   } 
   catch (err) {

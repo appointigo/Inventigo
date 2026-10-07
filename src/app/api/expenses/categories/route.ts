@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { expenseCategoryService } from "@/modules/expenses/services/expenseCategoryService";
 import { requireOrgAuth } from "@/lib/auth.middleware";
+import { canAccessExpenses } from "@/lib/rbac";
 
 export async function GET() {
   let user;
@@ -9,6 +10,7 @@ export async function GET() {
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  if (!canAccessExpenses(user.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   try {
     let categories = await expenseCategoryService.list(user.orgId);
@@ -31,8 +33,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Only ADMIN / MANAGER / OWNER can manage categories
-  if (!["OWNER", "ADMIN", "MANAGER"].includes(user.role)) {
+  if (!canAccessExpenses(user.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

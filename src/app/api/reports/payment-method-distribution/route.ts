@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireOrgAuth } from "@/lib/auth.middleware";
+import { canAccessReports } from "@/lib/rbac";
 import {
   AnalyticsAccessError,
   resolveAnalyticsStore,
@@ -50,6 +51,7 @@ export const GET = async (request: Request) => {
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  if (!canAccessReports(user.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   try {
     const { searchParams } = new URL(request.url);

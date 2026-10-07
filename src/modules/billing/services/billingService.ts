@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
+import { createHash } from "node:crypto";
 import type { CreateSaleInput, Sale, SaleItem, SaleFilters, SaleSummary } from "../types";
 import { createWhatsAppAutomationReader } from "@/modules/whatsapp/server";
 import {
@@ -20,7 +21,10 @@ import { stockAuditSnapshot } from "@/modules/stock/utils/stockMovementContract"
 import { attachReplacementCostSnapshots } from "../utils/exchangeCostSnapshot";
 import { postSalePayment } from "@/modules/finance/financeService";
 import { planRefundAccounting } from "@/modules/finance/refundAccounting";
-import { canonicalReturnRevenueAdjustment } from "@/modules/analytics/utils/canonicalMetrics";
+import {
+  canonicalReturnRevenueAdjustment,
+  toMinorUnits,
+} from "@/modules/analytics/utils/canonicalMetrics";
 import {
   businessDateEndExclusive,
   businessDateForInstant,
@@ -137,6 +141,29 @@ const generateReturnReferenceNumber = async (storeId: string, attempt = 0): Prom
 
 const EPSILON = 0.01;
 const VALID_PAYMENT_METHODS = new Set(["CASH", "CARD", "UPI"]);
+
+export class SaleIdempotencyConflictError extends Error {
+  constructor() {
+    super("Idempotency key was already used for a different sale request");
+    this.name = "SaleIdempotencyConflictError";
+  }
+}
+
+const canonicalizeForHash = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(canonicalizeForHash);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, entry]) => entry !== undefined)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entry]) => [key, canonicalizeForHash(entry)])
+    );
+  }
+  return value;
+};
+
+const salePayloadHash = (input: CreateSaleInput): string =>
+  createHash("sha256").update(JSON.stringify(canonicalizeForHash(input))).digest("hex");
 
 type NormalizedPaymentEntry = {
   method: "CASH" | "CARD" | "UPI";
@@ -650,8 +677,40 @@ export const billingService = {
     storeId: string,
     userId: string,
     input: CreateSaleInput,
-    diagnostic?: { correlationId: string }
+    diagnostic?: { correlationId: string; idempotencyKey?: string; idempotencyLockAcquired?: boolean }
   ): Promise<Sale> {
+    const idempotencyKey = diagnostic?.idempotencyKey;
+    if (idempotencyKey && !diagnostic?.idempotencyLockAcquired) {
+      const lockScope = `CREATE_SALE:${orgId}:${storeId}:${idempotencyKey}`;
+      return prisma.$transaction(
+        async (tx) => {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockScope}, 0))`;
+          return billingService.createSale(orgId, storeId, userId, input, {
+            ...diagnostic,
+            idempotencyLockAcquired: true,
+          });
+        },
+        { maxWait: 10_000, timeout: 60_000 }
+      );
+    }
+    const idempotencyPayloadHash = idempotencyKey ? salePayloadHash(input) : undefined;
+
+    if (!(await prisma.store.findFirst({ where: { id: storeId, orgId, isActive: true } })))
+      throw new Error("Invalid store");
+
+    if (idempotencyKey) {
+      const existing = await prisma.sale.findUnique({
+        where: { storeId_idempotencyKey: { storeId, idempotencyKey } },
+        include: saleInclude,
+      });
+      if (existing) {
+        if (existing.idempotencyPayloadHash !== idempotencyPayloadHash) {
+          throw new SaleIdempotencyConflictError();
+        }
+        return toSaleDto(existing);
+      }
+    }
+
     if (!input.customerPhone?.trim()) {
       throw new Error("Customer mobile number is required");
     }
@@ -673,8 +732,6 @@ export const billingService = {
       keys.add(key);
       validateAmount(item.unitPrice, "unit price");
     }
-    if (!(await prisma.store.findFirst({ where: { id: storeId, orgId, isActive: true } })))
-      throw new Error("Invalid store");
     const products = await prisma.product.findMany({
       where: { id: { in: input.items.map((item) => item.productId) }, orgId, isActive: true },
       select: { id: true, mrp: true, basePrice: true, costPrice: true },
@@ -790,12 +847,13 @@ export const billingService = {
     );
     let splitCollected = round2(paymentEntries.reduce((sum, entry) => sum + entry.amount, 0));
 
-    const overpayment = round2(splitCollected - finalPayableAmount);
+    const finalPayableMinor = toMinorUnits(finalPayableAmount);
+    const overpaymentMinor = toMinorUnits(splitCollected) - finalPayableMinor;
     const singleCashPaymentEntry =
       paymentEntries.length === 1 && paymentEntries[0].method === "CASH";
 
-    if (overpayment > EPSILON) {
-      if (singleCashPaymentEntry && overpayment <= 1) {
+    if (overpaymentMinor > 0) {
+      if (singleCashPaymentEntry && overpaymentMinor <= 100) {
         // Accept minor cash tendering differences by clamping the recorded payment
         // to the invoice total. The actual cash drawer can handle the change.
         paymentEntries[0].amount = finalPayableAmount;
@@ -808,7 +866,7 @@ export const billingService = {
       }
     }
 
-    if (Math.abs(splitCollected - requestedAmountPaid) > EPSILON) {
+    if (toMinorUnits(splitCollected) !== toMinorUnits(requestedAmountPaid)) {
       throw new Error("Split payment total must match amount paid");
     }
 
@@ -826,6 +884,8 @@ export const billingService = {
           const created = await tx.sale.create({
             data: {
               storeId,
+              idempotencyKey,
+              idempotencyPayloadHash,
               invoiceNumber,
               customerId: customer.id,
               invoicePolicyVersionId: invoiceConfiguration.policyVersionId,
@@ -1008,6 +1068,18 @@ export const billingService = {
         }
         return result;
       } catch (error) {
+        if (idempotencyKey) {
+          const existing = await prisma.sale.findUnique({
+            where: { storeId_idempotencyKey: { storeId, idempotencyKey } },
+            include: saleInclude,
+          });
+          if (existing) {
+            if (existing.idempotencyPayloadHash !== idempotencyPayloadHash) {
+              throw new SaleIdempotencyConflictError();
+            }
+            return toSaleDto(existing);
+          }
+        }
         if (attempt < 5 && isInvoiceNumberConflict(error)) {
           continue;
         }
@@ -1675,17 +1747,30 @@ export const billingService = {
       );
     }
 
-    const amountPaid = Number(sale.amountPaid ?? 0) + paymentDelta;
-    const finalPayableAmount = Number(sale.finalPayableAmount ?? sale.total);
-    const amountDue = Math.max(finalPayableAmount - amountPaid, 0);
-    const paymentStatus = amountPaid >= finalPayableAmount ? "PAID" : "PARTIAL";
-
     const primaryMethodForSale = getPrimaryPaymentMethod(
       normalizedEntries,
       input.method ?? sale.paymentMethod
     );
 
     const updated = await prisma.$transaction(async (tx) => {
+      const claimed = await tx.sale.updateMany({
+        where: {
+          id: saleId,
+          store: { orgId },
+          status: "COMPLETED",
+          paymentStatus: { in: ["PENDING", "PARTIAL"] },
+          amountDue: { gte: paymentDelta },
+        },
+        data: {
+          amountPaid: { increment: paymentDelta },
+          amountDue: { decrement: paymentDelta },
+          paymentMethod: primaryMethodForSale,
+        },
+      });
+      if (claimed.count !== 1) {
+        throw new Error("Payment exceeds outstanding amount or sale is already paid");
+      }
+
       for (const entry of normalizedEntries) {
         const payment = await tx.salePayment.create({
           data: {
@@ -1700,15 +1785,18 @@ export const billingService = {
         await postSalePayment(tx, payment.id, orgId);
       }
 
+      const balances = await tx.sale.findUniqueOrThrow({
+        where: { id: saleId },
+        select: { amountDue: true },
+      });
+      const paymentStatus = Number(balances.amountDue) <= 0 ? "PAID" : "PARTIAL";
+
       // Cast to `any` so toSaleDto can access dynamic includes (payments, user)
       // without fighting Prisma's deep-conditional return type inference.
       const updatedSale = (await tx.sale.update({
         where: { id: saleId },
         data: {
-          amountPaid: { increment: paymentDelta },
-          amountDue,
           paymentStatus,
-          paymentMethod: primaryMethodForSale,
         },
         include: {
           items: { include: { product: true, size: true } },

@@ -6,6 +6,7 @@ const publicRoutes = [
   "/login",
   "/api/auth",
   "/api/cron",
+  "/api/demo-requests",
   "/api/whatsapp/webhook",
   "/verify-email",
   "/onboarding",

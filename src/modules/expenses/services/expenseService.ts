@@ -1,5 +1,26 @@
 import { prisma } from "@/lib/db";
+import { ExpensePaymentStatus } from "@prisma/client";
 import type { ExpenseFormValues, StoreExpense, ExpenseListFilters, ExpenseSummary, ExpenseCategoryTotals, ExpenseMonthSummary, ExpenseCategory } from "../types";
+
+export class SettledExpenseConflictError extends Error {
+  constructor(message = "Paid expenses cannot be financially changed or deleted") {
+    super(message);
+    this.name = "SettledExpenseConflictError";
+  }
+}
+
+export class InvalidExpenseAmountError extends Error {
+  constructor() {
+    super("Expense amount must be a finite number greater than zero");
+    this.name = "InvalidExpenseAmountError";
+  }
+}
+
+const assertPositiveAmount = (amount: unknown) => {
+  if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
+    throw new InvalidExpenseAmountError();
+  }
+};
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const toDto = (e: any): StoreExpense => ({
@@ -67,6 +88,7 @@ export const expenseService = {
   },
 
   async create(values: ExpenseFormValues, userId: string, orgId: string): Promise<StoreExpense> {
+    assertPositiveAmount(values.amount);
     const row = await prisma.storeExpense.create({
       data: {
         orgId,
@@ -96,12 +118,19 @@ export const expenseService = {
     orgId: string,
     values: Partial<Omit<ExpenseFormValues, "storeId">>
   ): Promise<StoreExpense | null> {
+    if (values.amount !== undefined) assertPositiveAmount(values.amount);
     const existing = await prisma.storeExpense.findFirst({ where: { id, orgId } });
     if (!existing) return null;
 
-    const row = await prisma.storeExpense.update({
-      where: { id },
-      data: {
+    const changesFinancialMeaning =
+      (values.amount !== undefined && Number(existing.amount) !== values.amount) ||
+      (values.category !== undefined && existing.category !== values.category) ||
+      (values.date !== undefined && existing.date.toISOString().split("T")[0] !== values.date);
+    if (changesFinancialMeaning && existing.paymentStatus === ExpensePaymentStatus.PAID) {
+      throw new SettledExpenseConflictError();
+    }
+
+    const data = {
         ...(values.category    !== undefined && { category: values.category }),
         ...(values.amount      !== undefined && { amount: values.amount }),
         ...(values.date        !== undefined && { date: new Date(values.date) }),
@@ -114,7 +143,25 @@ export const expenseService = {
         ...(values.gstRate        !== undefined && { gstRate: values.gstRate ?? null }),
         ...(values.gstAmount      !== undefined && { gstAmount: values.gstAmount ?? null }),
         ...(values.isItcEligible  !== undefined && { isItcEligible: values.isItcEligible }),
-      },
+    };
+
+    if (changesFinancialMeaning) {
+      const updated = await prisma.storeExpense.updateMany({
+        where: { id, orgId, paymentStatus: { not: ExpensePaymentStatus.PAID } },
+        data,
+      });
+      if (updated.count !== 1) {
+        if (await prisma.storeExpense.findFirst({ where: { id, orgId } })) {
+          throw new SettledExpenseConflictError();
+        }
+        return null;
+      }
+    } else {
+      await prisma.storeExpense.update({ where: { id }, data });
+    }
+
+    const row = await prisma.storeExpense.findUniqueOrThrow({
+      where: { id },
       include: expenseInclude,
     });
     return toDto(row);
@@ -123,7 +170,13 @@ export const expenseService = {
   async remove(id: string, orgId: string): Promise<boolean> {
     const existing = await prisma.storeExpense.findFirst({ where: { id, orgId } });
     if (!existing) return false;
-    await prisma.storeExpense.delete({ where: { id } });
+    if (existing.paymentStatus === ExpensePaymentStatus.PAID) {
+      throw new SettledExpenseConflictError();
+    }
+    const deleted = await prisma.storeExpense.deleteMany({
+      where: { id, orgId, paymentStatus: { not: ExpensePaymentStatus.PAID } },
+    });
+    if (deleted.count !== 1) throw new SettledExpenseConflictError();
     return true;
   },
 
@@ -168,4 +221,3 @@ export const expenseService = {
     return { year, storeId, grandTotal, byCategory, byMonth };
   },
 };
-
