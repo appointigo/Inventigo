@@ -68,7 +68,8 @@ export function aggregateFinancialEvents(
   events: FinancialEvent[],
   from: Date,
   to: Date,
-  group: AnalyticsGroup
+  group: AnalyticsGroup,
+  customersServed = 0,
 ): SalesAnalyticsResponse {
   const grouped = new Map<string, FinancialEvent[]>();
   for (const event of events) {
@@ -135,6 +136,7 @@ export function aggregateFinancialEvents(
       grossProfit,
       discounts: sumMoney(trend.map((row) => row.discount)),
       orders,
+      customersServed,
       averageOrderValue: orders > 0 ? round(revenue / orders) : 0,
       returnValue: sumMoney(trend.map((row) => row.returnValue)),
       returns: trend.reduce((sum, row) => sum + row.returns, 0),

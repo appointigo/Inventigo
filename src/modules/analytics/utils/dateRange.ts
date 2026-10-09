@@ -2,9 +2,17 @@ import type { AnalyticsGroup } from "../types";
 
 export type AnalyticsDatePreset =
   | "today"
+  | "yesterday"
+  | "thisWeek"
+  | "lastWeek"
   | "7d"
   | "30d"
   | "thisMonth"
+  | "lastMonth"
+  | "thisQuarter"
+  | "lastQuarter"
+  | "thisYear"
+  | "lastYear"
   | "90d"
   | "12m"
   | "custom";
@@ -102,8 +110,19 @@ export function analyticsGroupForRange(from: string, to: string): AnalyticsGroup
   if (!start || !end || start.date > end.date) throw new Error("Invalid analytics date range");
   const inclusiveDays = Math.floor((end.date.getTime() - start.date.getTime()) / DAY_MS) + 1;
   if (inclusiveDays <= 31) return "day";
-  if (inclusiveDays <= 210) return "week";
+  if (inclusiveDays <= 120) return "week";
   return "month";
+}
+
+function calendarDate(year: number, month: number, day: number) {
+  const value = new Date(Date.UTC(year, month - 1, day));
+  return `${value.getUTCFullYear()}-${pad(value.getUTCMonth() + 1)}-${pad(value.getUTCDate())}`;
+}
+
+function groupForPreset(preset: Exclude<AnalyticsDatePreset, "custom">): AnalyticsGroup {
+  if (preset === "thisQuarter" || preset === "lastQuarter" || preset === "90d") return "week";
+  if (preset === "thisYear" || preset === "lastYear" || preset === "12m") return "month";
+  return "day";
 }
 
 export function analyticsBucketKey(value: Date | string, group: AnalyticsGroup) {
@@ -146,6 +165,16 @@ export function resolveAnalyticsDateRange(
     ({ from, to } = custom);
   } else if (preset === "today") {
     from = today;
+  } else if (preset === "yesterday") {
+    from = addBusinessDays(today, -1);
+    to = from;
+  } else if (preset === "thisWeek") {
+    const day = parseDateParts(today)!.date.getUTCDay();
+    from = addBusinessDays(today, -((day + 6) % 7));
+  } else if (preset === "lastWeek") {
+    const day = parseDateParts(today)!.date.getUTCDay();
+    to = addBusinessDays(today, -((day + 6) % 7) - 1);
+    from = addBusinessDays(to, -6);
   } else if (preset === "7d") {
     from = addBusinessDays(today, -6);
   } else if (preset === "30d") {
@@ -154,6 +183,27 @@ export function resolveAnalyticsDateRange(
     from = addBusinessDays(today, -89);
   } else if (preset === "12m") {
     from = addBusinessDays(today, -364);
+  } else if (preset === "lastMonth") {
+    const current = parseDateParts(today)!;
+    to = calendarDate(current.year, current.month, 0);
+    const previous = parseDateParts(to)!;
+    from = calendarDate(previous.year, previous.month, 1);
+  } else if (preset === "thisQuarter" || preset === "lastQuarter") {
+    const current = parseDateParts(today)!;
+    const quarterStartMonth = Math.floor((current.month - 1) / 3) * 3 + 1;
+    if (preset === "thisQuarter") {
+      from = calendarDate(current.year, quarterStartMonth, 1);
+    } else {
+      to = calendarDate(current.year, quarterStartMonth, 0);
+      const previous = parseDateParts(to)!;
+      from = calendarDate(previous.year, Math.floor((previous.month - 1) / 3) * 3 + 1, 1);
+    }
+  } else if (preset === "thisYear") {
+    from = `${today.slice(0, 4)}-01-01`;
+  } else if (preset === "lastYear") {
+    const year = Number(today.slice(0, 4)) - 1;
+    from = `${year}-01-01`;
+    to = `${year}-12-31`;
   } else {
     from = `${today.slice(0, 8)}01`;
   }
@@ -164,7 +214,12 @@ export function resolveAnalyticsDateRange(
   if (end.date.getTime() - start.date.getTime() > 730 * DAY_MS) {
     throw new Error("Analytics ranges cannot exceed two years");
   }
-  return { preset, from, to, group: analyticsGroupForRange(from, to) };
+  return {
+    preset,
+    from,
+    to,
+    group: preset === "custom" ? analyticsGroupForRange(from, to) : groupForPreset(preset),
+  };
 }
 
 export function parseAnalyticsDateRange(
@@ -174,7 +229,9 @@ export function parseAnalyticsDateRange(
 ) {
   const rawPreset = searchParams.get("period") as AnalyticsDatePreset | null;
   const supported = new Set<AnalyticsDatePreset>([
-    "today", "7d", "30d", "thisMonth", "90d", "12m", "custom",
+    "today", "yesterday", "thisWeek", "lastWeek", "7d", "30d", "thisMonth",
+    "lastMonth", "thisQuarter", "lastQuarter", "thisYear", "lastYear", "90d",
+    "12m", "custom",
   ]);
   const preset = rawPreset && supported.has(rawPreset) ? rawPreset : defaultPreset;
   try {

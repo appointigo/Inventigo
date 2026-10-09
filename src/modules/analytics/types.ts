@@ -49,6 +49,7 @@ export type SalesAnalyticsResponse = {
     grossProfit: number | null;
     discounts: number;
     orders: number;
+    customersServed: number;
     averageOrderValue: number;
     returnValue: number;
     returns: number;

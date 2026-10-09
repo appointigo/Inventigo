@@ -68,12 +68,12 @@ export function WhatsAppInvoiceSelector({
           <Typography.Text strong>WhatsApp invoice</Typography.Text>
           <Switch checked={value.enabled} disabled={loading || !deliveryAvailable} onChange={enabled => onChange({ ...value, enabled, consentConfirmed: enabled || undefined })} />
         </Space>
-        {options?.warning ? <Alert type="warning" showIcon message={options.warning} /> : null}
+        {options?.warning ? <Alert type="warning" showIcon title={options.warning} /> : null}
         {options && options.enabled && !configuredTemplateId ? (
           <Alert
             type="warning"
             showIcon
-            message={`No default ${transactionKind === "EXCHANGE" ? "exchange" : "sale"} invoice template is configured for this Store.`}
+            title={`No default ${transactionKind === "EXCHANGE" ? "exchange" : "sale"} invoice template is configured for this Store.`}
           />
         ) : null}
         {value.enabled ? (

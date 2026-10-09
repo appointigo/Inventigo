@@ -7,7 +7,11 @@ import dayjs from "dayjs";
 import { Alert, Button, Empty, Skeleton, Tag, Typography } from "antd";
 import {
   ArrowRightOutlined,
+  BarChartOutlined,
+  ClockCircleOutlined,
+  CloseCircleOutlined,
   DollarOutlined,
+  FileTextOutlined,
   InboxOutlined,
   RiseOutlined,
   ShoppingCartOutlined,
@@ -15,9 +19,11 @@ import {
   WarningOutlined,
 } from "@ant-design/icons";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import AnalyticsDateFilter, { type AnalyticsDateFilterOption } from "@/modules/analytics/components/AnalyticsDateFilter";
+import { useProfitabilityAnalytics } from "@/modules/analytics/hooks/useAnalytics";
+import { useAnalyticsDateRange } from "@/modules/analytics/hooks/useAnalyticsDateRange";
+import { businessDateEndExclusive, businessDateStart, type AnalyticsDatePreset } from "@/modules/analytics/utils/dateRange";
 import { useDashboard } from "@/modules/dashboard/hooks/useDashboard";
-import { useExpenseAnalytics } from "@/modules/dashboard/hooks/useExpenseAnalytics";
-import { calculateProfitabilityMetrics } from "@/modules/dashboard/services/profitabilityService";
 import { useLowStockAlerts } from "@/modules/alerts/hooks/useAlerts";
 import { useSales } from "@/modules/billing/hooks/useBilling";
 import { useDemandIntelligence } from "@/modules/demand-intelligence/hooks/useDemandIntelligence";
@@ -29,14 +35,6 @@ import styles from "./dashboard.module.css";
 const { Text, Title } = Typography;
 const subscribeToHydration = () => () => undefined;
 
-type SalesTrendRow = {
-  period: string;
-  total_revenue: number;
-  total_discount: number;
-  net_profit: number | null;
-  transaction_count?: number;
-};
-
 const currency = (value: number, compact = false) => new Intl.NumberFormat("en-IN", {
   style: "currency",
   currency: "INR",
@@ -47,6 +45,44 @@ const currency = (value: number, compact = false) => new Intl.NumberFormat("en-I
 const finiteNumber = (value: unknown) => {
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const PERIOD_LABELS: Record<AnalyticsDatePreset, string> = {
+  today: "Today",
+  yesterday: "Yesterday",
+  thisWeek: "This Week",
+  lastWeek: "Last Week",
+  thisMonth: "This Month",
+  lastMonth: "Last Month",
+  thisQuarter: "This Quarter",
+  lastQuarter: "Last Quarter",
+  thisYear: "This Year",
+  lastYear: "Last Year",
+  "7d": "Last 7 Days",
+  "30d": "Last 30 Days",
+  "90d": "Last 90 Days",
+  "12m": "Last 12 Months",
+  custom: "Custom",
+};
+
+const DASHBOARD_PRESETS = ["today", "thisWeek", "thisMonth", "thisQuarter", "thisYear", "custom"] as const;
+
+const DASHBOARD_DATE_OPTIONS: AnalyticsDateFilterOption[] = [
+  { value: "today", label: "Today" },
+  { value: "thisWeek", label: "This Week" },
+  { value: "thisMonth", label: "This Month" },
+  { value: "thisQuarter", label: "This Quarter" },
+  { value: "thisYear", label: "This Year" },
+  { value: "custom", label: "Custom" },
+];
+
+const dateRangeLabel = (from: string, to: string) => {
+  if (from === to) return dayjs(from).format("DD MMM YYYY");
+  const start = dayjs(from);
+  const end = dayjs(to);
+  return start.year() === end.year()
+    ? `${start.format("DD MMM")}–${end.format("DD MMM YYYY")}`
+    : `${start.format("DD MMM YYYY")}–${end.format("DD MMM YYYY")}`;
 };
 
 function DashboardSection({ title, description, action, children, className = "" }: {
@@ -71,76 +107,33 @@ function DashboardContent() {
   const router = useRouter();
   const { data: session } = useSession();
   const { storeId, storeName } = useStore();
-  const [customerCount, setCustomerCount] = useState<number | null>(null);
   const [releaseActions, setReleaseActions] = useState<{ customerActions: number; receivables: number } | null>(null);
-  const [trend, setTrend] = useState<SalesTrendRow[]>([]);
-  const [trendLoading, setTrendLoading] = useState(true);
-  const end = dayjs().endOf("day");
-  const start = end.subtract(29, "day").startOf("day");
-  const startDate = start.format("YYYY-MM-DD");
-  const endDate = end.format("YYYY-MM-DD");
+  const { range, selectPreset, selectCustom } = useAnalyticsDateRange("thisMonth", DASHBOARD_PRESETS);
+  const startDate = range.from;
+  const endDate = range.to;
+  const periodLabel = `${PERIOD_LABELS[range.preset]} · ${dateRangeLabel(range.from, range.to)}`;
 
   const { data, loading, error } = useDashboard(storeId ?? undefined);
+  const profitability = useProfitabilityAnalytics({
+    storeId: storeId ?? undefined,
+    period: range.preset,
+    from: range.from,
+    to: range.to,
+    group: range.group,
+  });
   const { items: lowStockItems, loading: lowStockLoading } = useLowStockAlerts(storeId ?? undefined);
   const { sales, loading: salesLoading, setFilters, setLimit } = useSales({ startDate, endDate });
-  const { data: expenses, loading: expensesLoading } = useExpenseAnalytics(storeId, "monthly", startDate, endDate);
   const inventory = useInventoryIntelligence({ storeId: storeId ?? undefined, period: "monthly", comparisonMode: "previousPeriod" });
-  const demand = useDemandIntelligence(storeId ?? undefined, start.toISOString(), end.toISOString());
+  const demand = useDemandIntelligence(
+    storeId ?? undefined,
+    businessDateStart(range.from).toISOString(),
+    businessDateEndExclusive(range.to).toISOString(),
+  );
 
   useEffect(() => {
     setLimit(100);
     setFilters({ startDate, endDate });
   }, [endDate, setFilters, setLimit, startDate]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    if (!storeId) {
-      const timeout = window.setTimeout(() => {
-        setTrend([]);
-        setTrendLoading(false);
-      }, 0);
-      return () => window.clearTimeout(timeout);
-    }
-    const loadingTimeout = window.setTimeout(() => setTrendLoading(true), 0);
-    const params = new URLSearchParams({ group: "day", from: startDate, to: endDate, storeId });
-    fetch(`/api/reports/sales-breakdown-v2?${params}`, { signal: controller.signal })
-      .then((response) => response.ok ? response.json() : [])
-      .then((rows: unknown) => {
-        if (!Array.isArray(rows)) {
-          setTrend([]);
-          return;
-        }
-        setTrend(rows.flatMap((row): SalesTrendRow[] => {
-          if (!row || typeof row !== "object") return [];
-          const value = row as Partial<SalesTrendRow>;
-          if (typeof value.period !== "string" || !dayjs(value.period).isValid()) return [];
-          return [{
-            period: value.period,
-            total_revenue: finiteNumber(value.total_revenue),
-            total_discount: finiteNumber(value.total_discount),
-            net_profit: value.net_profit == null ? null : finiteNumber(value.net_profit),
-            transaction_count: finiteNumber(value.transaction_count),
-          }];
-        }));
-      })
-      .catch((requestError) => { if (requestError instanceof Error && requestError.name !== "AbortError") setTrend([]); })
-      .finally(() => setTrendLoading(false));
-    return () => {
-      window.clearTimeout(loadingTimeout);
-      controller.abort();
-    };
-  }, [endDate, startDate, storeId]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const params = new URLSearchParams({ page: "1", pageSize: "1" });
-    if (storeId) params.set("storeId", storeId);
-    fetch(`/api/customers?${params}`, { signal: controller.signal })
-      .then((response) => response.ok ? response.json() : null)
-      .then((payload) => setCustomerCount(typeof payload?.total === "number" ? payload.total : null))
-      .catch(() => setCustomerCount(null));
-    return () => controller.abort();
-  }, [storeId]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -156,28 +149,8 @@ function DashboardContent() {
     return () => controller.abort();
   }, [storeId]);
 
-  const summary = useMemo(() => {
-    const revenue = trend.reduce((sum, row) => sum + finiteNumber(row.total_revenue), 0);
-    const grossProfitReliable = trend.every((row) => row.net_profit !== null);
-    const grossProfit = trend.reduce((sum, row) => sum + finiteNumber(row.net_profit), 0);
-    const orders = trend.reduce((sum, row) => sum + finiteNumber(row.transaction_count), 0);
-    const operatingExpenses = finiteNumber(expenses?.summary?.totalExpense);
-    return { orders, grossProfitReliable, ...calculateProfitabilityMetrics({ revenue, grossProfit, operatingExpenses }) };
-  }, [expenses?.summary?.totalExpense, trend]);
-
-  const revenueComparison = useMemo(() => {
-    const midpoint = Math.floor(trend.length / 2);
-    const previous = trend.slice(0, midpoint).reduce((sum, row) => sum + finiteNumber(row.total_revenue), 0);
-    const current = trend.slice(midpoint).reduce((sum, row) => sum + finiteNumber(row.total_revenue), 0);
-    if (!previous) return current > 0 ? 100 : 0;
-    return Math.round(((current - previous) / previous) * 100);
-  }, [trend]);
-
-  const chartData = trend.map((row) => ({
-    label: dayjs(row.period).format("DD MMM"),
-    revenue: finiteNumber(row.total_revenue),
-    grossProfit: row.net_profit,
-  }));
+  const summary = profitability.data?.summary;
+  const chartData = profitability.data?.trend ?? [];
 
   const alerts = useMemo(() => Array.isArray(lowStockItems) ? lowStockItems : [], [lowStockItems]);
   const inventoryOverstock = useMemo(() => Array.isArray(inventory.data?.overstock) ? inventory.data.overstock : [], [inventory.data]);
@@ -211,7 +184,7 @@ function DashboardContent() {
   ];
 
   const firstName = session?.user?.name?.split(" ")[0] || "there";
-  const dashboardLoading = loading || trendLoading || expensesLoading;
+  const periodLoading = profitability.isLoading || profitability.isFetching;
 
   return (
     <main className={styles.page}>
@@ -221,24 +194,33 @@ function DashboardContent() {
           <Title level={1}>Good {dayjs().hour() < 12 ? "morning" : dayjs().hour() < 17 ? "afternoon" : "evening"}, {firstName}</Title>
           <Text type="secondary">Here&apos;s what&apos;s happening with your business right now.</Text>
         </div>
-        <div className={styles.periodPill}>Last 30 days · {start.format("DD MMM")}–{end.format("DD MMM YYYY")}</div>
+        <div className={styles.periodControl}>
+          <AnalyticsDateFilter
+            range={range}
+            onPreset={selectPreset}
+            onCustom={selectCustom}
+            options={DASHBOARD_DATE_OPTIONS}
+          />
+          <span>{periodLabel}</span>
+        </div>
       </header>
 
       {error ? <Alert type="error" showIcon message="Some dashboard data could not be loaded" description={error} /> : null}
+      {profitability.isError ? <Alert type="error" showIcon message="Dashboard analytics could not be loaded" description={profitability.error.message} action={<Button onClick={() => profitability.refetch()}>Try again</Button>} /> : null}
 
       <section className={styles.metricGrid} aria-label="Business performance summary">
         {[
-          { label: "Net sales", value: currency(summary.revenue), helper: `${revenueComparison >= 0 ? "+" : ""}${revenueComparison}% vs prior 15 days`, icon: DollarOutlined, tone: "blue" },
-          { label: "Net profit", value: summary.grossProfitReliable ? currency(summary.netProfit) : "Unavailable", helper: summary.grossProfitReliable ? `${summary.netProfitMarginPct}% margin after expenses` : "Historical exchange cost is incomplete", icon: RiseOutlined, tone: summary.netProfit >= 0 ? "green" : "red" },
-          { label: "Orders", value: summary.orders.toLocaleString("en-IN"), helper: "Completed transactions", icon: ShoppingCartOutlined, tone: "violet" },
-          { label: "Customers", value: customerCount == null ? "—" : customerCount.toLocaleString("en-IN"), helper: "Customer relationships", icon: TeamOutlined, tone: "slate" },
-          { label: "Low stock", value: String(finiteNumber(data?.kpis?.lowStockCount)), helper: alerts.length ? "Action recommended" : "Inventory healthy", icon: WarningOutlined, tone: "amber" },
+          { label: "Net sales", value: summary ? currency(summary.revenue) : "—", helper: periodLabel, icon: DollarOutlined, tone: "blue", pending: periodLoading },
+          { label: "Net profit", value: summary?.netProfit == null ? "Unavailable" : currency(summary.netProfit), helper: summary?.netMarginPct == null ? "Historical cost evidence is incomplete" : `${summary.netMarginPct}% margin after expenses`, icon: RiseOutlined, tone: (summary?.netProfit ?? 0) >= 0 ? "green" : "red", pending: periodLoading },
+          { label: "Orders", value: summary ? summary.orders.toLocaleString("en-IN") : "—", helper: `${PERIOD_LABELS[range.preset]} · Completed transactions`, icon: ShoppingCartOutlined, tone: "violet", pending: periodLoading },
+          { label: "Customers served", value: summary ? summary.customersServed.toLocaleString("en-IN") : "—", helper: "Unique identified purchasing customers", icon: TeamOutlined, tone: "slate", pending: periodLoading },
+          { label: "Low stock", value: String(finiteNumber(data?.kpis?.lowStockCount)), helper: alerts.length ? "Current state · Action recommended" : "Current state · Inventory healthy", icon: WarningOutlined, tone: "amber", pending: loading },
         ].map((metric) => {
           const Icon = metric.icon;
           return (
             <article key={metric.label} className={styles.metricCard} data-tone={metric.tone}>
               <div className={styles.metricTop}><span>{metric.label}</span><span className={styles.metricIcon}><Icon /></span></div>
-              {dashboardLoading ? <Skeleton.Input active size="small" /> : <strong>{metric.value}</strong>}
+              {metric.pending ? <Skeleton.Input active size="small" /> : <strong>{metric.value}</strong>}
               <small>{metric.helper}</small>
             </article>
           );
@@ -246,8 +228,8 @@ function DashboardContent() {
       </section>
 
       <div className={styles.primaryGrid}>
-        <DashboardSection title="Sales performance" description="Revenue and gross profit trend across the last 30 days" action={{ label: "View Sales Analytics", onClick: () => router.push("/dashboard/sales/analytics") }} className={styles.salesSection}>
-          {trendLoading ? <Skeleton active paragraph={{ rows: 6 }} /> : chartData.length === 0 ? <Empty description="No sales yet in this period" /> : (
+        <DashboardSection title="Sales performance" description={`${periodLabel} · ${range.group === "day" ? "Daily" : range.group === "week" ? "Weekly" : "Monthly"} grouping`} action={{ label: "View Sales Analytics", onClick: () => router.push(`/dashboard/sales/analytics?period=${range.preset}${range.preset === "custom" ? `&from=${range.from}&to=${range.to}` : ""}`) }} className={styles.salesSection}>
+          {periodLoading ? <Skeleton active paragraph={{ rows: 6 }} /> : chartData.length === 0 ? <Empty description="No sales yet in this period" /> : (
             <div className={styles.chartWrap}>
               <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} initialDimension={{ width: 720, height: 290 }}>
                 <AreaChart data={chartData} margin={{ top: 12, right: 8, left: -16, bottom: 0 }}>
@@ -278,30 +260,55 @@ function DashboardContent() {
       </div>
 
       <div className={styles.insightGrid}>
-        <DashboardSection title="Inventory health" description="Current inventory position" action={{ label: "View inventory intelligence", onClick: () => router.push("/dashboard/inventory-intelligence") }}>
-          <div className={styles.inventoryValue}><span>Total inventory value</span><strong>{currency(finiteNumber(data?.kpis?.totalStockValue))}</strong></div>
-          <div className={styles.healthGrid}>
-            {[{ label: "Products", value: finiteNumber(data?.kpis?.totalProducts) }, { label: "Low stock", value: stockSummary.lowStock }, { label: "Out of stock", value: stockSummary.outOfStock }, { label: "Slow / dead", value: stockSummary.slowMoving + stockSummary.deadStock }].map((item) => <div key={item.label}><strong>{item.value}</strong><span>{item.label}</span></div>)}
-          </div>
+        <DashboardSection title="Inventory health" description="Current state · Current inventory position" action={{ label: "View inventory intelligence", onClick: () => router.push("/dashboard/inventory-intelligence") }}>
+          {loading || lowStockLoading || inventory.isLoading ? <Skeleton active paragraph={{ rows: 4 }} /> : <>
+            <div className={styles.inventoryValuePanel}>
+              <span className={styles.insightMetricIcon} data-tone="blue"><InboxOutlined /></span>
+              <span><small>Total inventory value</small><strong>{currency(finiteNumber(data?.kpis?.totalStockValue))}</strong></span>
+            </div>
+            <div className={styles.inventoryMiniGrid}>
+              {[
+                { label: "Products", value: finiteNumber(data?.kpis?.totalProducts), icon: InboxOutlined, tone: "blue" },
+                { label: "Low stock", value: stockSummary.lowStock, icon: WarningOutlined, tone: "amber" },
+                { label: "Out of stock", value: stockSummary.outOfStock, icon: CloseCircleOutlined, tone: "red" },
+                { label: "Slow / dead", value: stockSummary.slowMoving + stockSummary.deadStock, icon: ClockCircleOutlined, tone: "purple" },
+              ].map((item) => {
+                const Icon = item.icon;
+                return <div className={styles.inventoryMiniCard} key={item.label}><span className={styles.insightMetricIcon} data-tone={item.tone}><Icon /></span><span><strong>{item.value}</strong><small>{item.label}</small></span></div>;
+              })}
+            </div>
+          </>}
         </DashboardSection>
 
-        <DashboardSection title="Profitability snapshot" description="Last 30 days" action={{ label: "View Profitability", onClick: () => router.push("/dashboard/expenses/profitability") }}>
-          <div className={styles.healthGrid}>
+        <DashboardSection title="Profitability snapshot" description={periodLabel} action={{ label: "View Profitability", onClick: () => router.push(`/dashboard/expenses/profitability?period=${range.preset}${range.preset === "custom" ? `&from=${range.from}&to=${range.to}` : ""}`) }}>
+          {periodLoading ? <Skeleton active paragraph={{ rows: 4 }} /> : <div className={styles.profitGrid}>
             {[
-              { label: "Revenue", value: currency(summary.revenue) },
-              { label: "Gross profit", value: summary.grossProfitReliable ? currency(summary.grossProfit) : "—" },
-              { label: "Expenses", value: currency(summary.operatingExpenses) },
-              { label: "Net profit", value: summary.grossProfitReliable ? currency(summary.netProfit) : "—" },
-            ].map((item) => <div key={item.label}><strong>{item.value}</strong><span>{item.label}</span></div>)}
-          </div>
-          {!summary.grossProfitReliable ? <p className={styles.insightNote}><WarningOutlined /> Profit is unavailable because some exchange lines lack historical cost.</p> : null}
+              { label: "Revenue", value: summary ? currency(summary.revenue) : "—", icon: RiseOutlined, tone: "green" },
+              { label: "Gross profit", value: summary?.grossProfit == null ? "Unavailable" : currency(summary.grossProfit), icon: DollarOutlined, tone: "blue" },
+              { label: "Expenses", value: summary ? currency(summary.operatingExpenses) : "—", icon: FileTextOutlined, tone: "red" },
+              { label: "Net profit", value: summary?.netProfit == null ? "Unavailable" : currency(summary.netProfit), icon: RiseOutlined, tone: "purple" },
+            ].map((item) => {
+              const Icon = item.icon;
+              return <div className={styles.profitTile} data-tone={item.tone} key={item.label}><span className={styles.insightMetricIcon} data-tone={item.tone}><Icon /></span><strong>{item.value}</strong><small>{item.label}</small></div>;
+            })}
+          </div>}
+          {profitability.data && !profitability.data.methodology.grossProfitReliable ? <p className={styles.insightNote}><WarningOutlined /> Profit is unavailable because some exchange lines lack historical cost.</p> : null}
         </DashboardSection>
 
-        <DashboardSection title="Demand insight" description={demand.data?.evidenceNote || "Customer demand signals"} action={{ label: "View demand intelligence", onClick: () => router.push("/dashboard/demand") }}>
-          {demand.isLoading ? <Skeleton active paragraph={{ rows: 4 }} /> : !demand.data || demand.data.evidence === "none" ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Demand intelligence will appear once enough customer activity is recorded" /> : (
+        <DashboardSection title="Demand insight" description={`${periodLabel} · ${demand.data?.evidenceNote || "Customer demand signals"}`} action={{ label: "View demand intelligence", onClick: () => router.push("/dashboard/demand") }}>
+          {demand.isError ? <Alert type="error" showIcon message="Demand insight could not be loaded" /> : demand.isLoading ? <Skeleton active paragraph={{ rows: 4 }} /> : !demand.data || demand.data.evidence === "none" ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Demand intelligence will appear once enough customer activity is recorded" /> : (
             <>
               <div className={styles.demandHeadline}><span>Observed demand</span><strong>{finiteNumber(demand.data.demand?.observedDemand)}</strong><Tag color={demand.data.evidence === "reliable" ? "green" : "gold"}>{demand.data.evidence} evidence</Tag></div>
-              <div className={styles.demandStats}><div><strong>{demand.data.demand?.fulfillmentRate == null ? "—" : `${finiteNumber(demand.data.demand.fulfillmentRate)}%`}</strong><span>Fulfilled</span></div><div><strong>{finiteNumber(demand.data.demand?.unfulfilledQuantity)}</strong><span>Units missed</span></div><div><strong>{demand.data.visits?.conversionRate == null ? "—" : `${finiteNumber(demand.data.visits.conversionRate)}%`}</strong><span>Conversion</span></div></div>
+              <div className={styles.demandStats}>
+                {[
+                  { label: "Fulfilled", value: demand.data.demand?.fulfillmentRate == null ? "—" : `${finiteNumber(demand.data.demand.fulfillmentRate)}%`, icon: ShoppingCartOutlined, tone: "blue" },
+                  { label: "Units missed", value: finiteNumber(demand.data.demand?.unfulfilledQuantity), icon: CloseCircleOutlined, tone: "red" },
+                  { label: "Conversion", value: demand.data.visits?.conversionRate == null ? "—" : `${finiteNumber(demand.data.visits.conversionRate)}%`, icon: BarChartOutlined, tone: "purple" },
+                ].map((item) => {
+                  const Icon = item.icon;
+                  return <div key={item.label}><span className={styles.insightMetricIcon} data-tone={item.tone}><Icon /></span><strong>{item.value}</strong><small>{item.label}</small></div>;
+                })}
+              </div>
               {Array.isArray(demand.data.requirements) && demand.data.requirements[0] ? <p className={styles.insightNote}><InboxOutlined /> Highest signal: <strong>{demand.data.requirements[0].requirement || "Unspecified demand"}</strong></p> : null}
             </>
           )}

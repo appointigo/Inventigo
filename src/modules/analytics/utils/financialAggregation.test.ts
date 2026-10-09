@@ -44,7 +44,19 @@ test("fills empty daily and weekly buckets with finite zeroes", () => {
   ]);
   assert.equal(daily.summary.cogs, 0);
   assert.equal(daily.summary.grossProfit, 0);
+  assert.equal(daily.summary.orders, 0);
+  assert.equal(daily.summary.customersServed, 0);
   assert.equal(daily.completeness.cogs.status, "COMPLETE");
+});
+
+test("carries the canonical unique identified-customer count without changing sales math", () => {
+  const result = aggregateFinancialEvents([
+    { date: from, revenue: 2_000, cogs: 1_000, discount: 0, orderCount: 2, returnValue: 0, returnCount: 0, exchangeCount: 0 },
+  ], from, to, "day", 1);
+  assert.equal(result.summary.customersServed, 1);
+  assert.equal(result.summary.revenue, 2_000);
+  assert.equal(result.summary.orders, 2);
+  assert.equal(result.summary.grossProfit, 1_000);
 });
 
 test("replacement exchange cost handles pure returns, higher/lower replacements, and missing snapshots", () => {

@@ -9,15 +9,20 @@ import {
   type AnalyticsDateRange,
 } from "../utils/dateRange";
 
-export function useAnalyticsDateRange(defaultPreset: AnalyticsDatePreset = "30d") {
+export function useAnalyticsDateRange(
+  defaultPreset: AnalyticsDatePreset = "30d",
+  allowedPresets?: readonly AnalyticsDatePreset[],
+) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
   const serialized = searchParams.toString();
-  const range = useMemo(
-    () => parseAnalyticsDateRange(new URLSearchParams(serialized), defaultPreset),
-    [defaultPreset, serialized],
-  );
+  const range = useMemo(() => {
+    const parsed = parseAnalyticsDateRange(new URLSearchParams(serialized), defaultPreset);
+    return allowedPresets && !allowedPresets.includes(parsed.preset)
+      ? resolveAnalyticsDateRange(defaultPreset)
+      : parsed;
+  }, [allowedPresets, defaultPreset, serialized]);
   const setRange = useCallback((next: AnalyticsDateRange) => {
     const params = new URLSearchParams(serialized);
     params.set("period", next.preset);

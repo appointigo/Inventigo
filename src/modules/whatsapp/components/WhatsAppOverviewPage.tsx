@@ -8,7 +8,6 @@ import {
   Card,
   Col,
   Empty,
-  List,
   Progress,
   Row,
   Space,
@@ -170,7 +169,9 @@ export default function WhatsAppOverviewPage() {
             </Paragraph>
           </div>
           <Space>
-            <Tooltip title={syncDisabled ? "Connect a WhatsApp account before syncing." : undefined}>
+            <Tooltip
+              title={syncDisabled ? "Connect a WhatsApp account before syncing." : undefined}
+            >
               <span>
                 <Button
                   icon={<ReloadOutlined />}
@@ -260,44 +261,67 @@ export default function WhatsAppOverviewPage() {
               percent={data.setupProgress.percent}
               status={data.readiness === "ACTION_REQUIRED" ? "exception" : "active"}
             />
-            <List
-              grid={{ gutter: 12, xs: 1, sm: 2, lg: 3 }}
-              dataSource={data.setupProgress.steps}
-              renderItem={(step) => (
-                <List.Item>
+            <div
+              role="list"
+              aria-label="Messaging readiness steps"
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
+                gap: 12,
+                marginTop: 12,
+              }}
+            >
+              {data.setupProgress.steps.map((step) => (
+                <div
+                  key={step.key}
+                  role="listitem"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    minWidth: 0,
+                    padding: "8px 10px",
+                    border: "1px solid #f0f0f0",
+                    borderRadius: 8,
+                  }}
+                >
                   <Tag color={step.complete ? "green" : "default"}>
                     {step.complete ? "Complete" : "Pending"}
-                  </Tag>{" "}
-                  {step.label}
-                </List.Item>
-              )}
-            />
+                  </Tag>
+                  <span>{step.label}</span>
+                </div>
+              ))}
+            </div>
           </Surface>
           <Surface>
             <Title level={4}>Connected WABAs ({data.wabas.total})</Title>
-            <List
-              dataSource={data.wabas.items}
-              locale={{ emptyText: <Empty description="No connected WABAs" /> }}
-              renderItem={(waba) => (
-                <List.Item>
-                  <List.Item.Meta
-                    title={
-                      <Space>
-                        {waba.businessName || "WhatsApp Business Account"}
-                        <Tag color={waba.status === "ACTIVE" ? "green" : "orange"}>
-                          {waba.status}
-                        </Tag>
-                      </Space>
-                    }
-                    description={
+            {data.wabas.items.length ? (
+              <div role="list" aria-label="Connected WhatsApp Business Accounts">
+                {data.wabas.items.map((waba, index) => (
+                  <div
+                    key={waba.id}
+                    role="listitem"
+                    style={{
+                      padding: "12px 0",
+                      borderBottom:
+                        index === data.wabas.items.length - 1 ? undefined : "1px solid #f0f0f0",
+                    }}
+                  >
+                    <Space wrap>
+                      <Text strong>{waba.businessName || "WhatsApp Business Account"}</Text>
+                      <Tag color={waba.status === "ACTIVE" ? "green" : "orange"}>{waba.status}</Tag>
+                    </Space>
+                    <div>
                       <Text type="secondary" title={waba.metaWabaId}>
                         {shortId(waba.metaWabaId)} · {waba.phoneCount} phone number(s)
                       </Text>
-                    }
-                  />
-                </List.Item>
-              )}
-            />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <Empty description="No connected WABAs" />
+            )}
           </Surface>
           <Surface>
             <Title level={4}>Phone Numbers</Title>
@@ -312,13 +336,24 @@ export default function WhatsAppOverviewPage() {
           </Surface>
           <Surface>
             <Title level={4}>Store WhatsApp Profiles ({data.storeProfiles.total})</Title>
-            <List
-              grid={{ gutter: 16, xs: 1, md: 2 }}
-              dataSource={data.storeProfiles.items}
-              locale={{ emptyText: <Empty description="No Store WhatsApp profiles configured" /> }}
-              renderItem={(profile) => (
-                <List.Item>
-                  <Card size="small" title={`${profile.store.name} (${profile.store.code})`}>
+            {data.storeProfiles.items.length ? (
+              <div
+                role="list"
+                aria-label="Store WhatsApp profiles"
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                  gap: 16,
+                }}
+              >
+                {data.storeProfiles.items.map((profile) => (
+                  <Card
+                    key={profile.id}
+                    role="listitem"
+                    size="small"
+                    title={`${profile.store.name} (${profile.store.code})`}
+                    style={{ height: "100%" }}
+                  >
                     <Text strong>{profile.displayName}</Text>
                     <br />
                     <Text type="secondary">
@@ -326,9 +361,11 @@ export default function WhatsAppOverviewPage() {
                       {profile.supportPhone ? ` · ${profile.supportPhone}` : ""}
                     </Text>
                   </Card>
-                </List.Item>
-              )}
-            />
+                ))}
+              </div>
+            ) : (
+              <Empty description="No Store WhatsApp profiles configured" />
+            )}
           </Surface>
         </>
       )}

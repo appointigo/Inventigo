@@ -3,13 +3,14 @@
 import { useQuery } from "@tanstack/react-query";
 import type { PaymentMethodDistributionResponse } from "@/modules/dashboard/services/paymentMethodService";
 import type { AnalyticsGroup, ProfitabilityResponse, SalesAnalyticsResponse } from "../types";
-import { buildAnalyticsSearchParams } from "../utils/dateRange";
+import { buildAnalyticsSearchParams, type AnalyticsDatePreset } from "../utils/dateRange";
 
 export type AnalyticsFilters = {
   storeId?: string;
   from: string;
   to: string;
   group: AnalyticsGroup;
+  period?: AnalyticsDatePreset;
 };
 
 async function fetchJson<T>(url: string, signal: AbortSignal): Promise<T> {
@@ -28,7 +29,7 @@ const queryString = (filters: AnalyticsFilters) => buildAnalyticsSearchParams({
 
 export function useSalesAnalytics(filters: AnalyticsFilters) {
   return useQuery({
-    queryKey: ["sales-analytics", filters],
+    queryKey: ["sales-analytics", filters.storeId, filters.period, filters.from, filters.to, filters.group],
     enabled: Boolean(filters.storeId && filters.from && filters.to),
     staleTime: 60_000,
     queryFn: ({ signal }) =>
@@ -38,7 +39,7 @@ export function useSalesAnalytics(filters: AnalyticsFilters) {
 
 export function usePaymentDistribution(filters: AnalyticsFilters) {
   return useQuery({
-    queryKey: ["payment-distribution", filters.storeId, filters.from, filters.to],
+    queryKey: ["payment-distribution", filters.storeId, filters.period, filters.from, filters.to, filters.group],
     enabled: Boolean(filters.storeId && filters.from && filters.to),
     staleTime: 60_000,
     queryFn: ({ signal }) => {
@@ -57,7 +58,7 @@ export function usePaymentDistribution(filters: AnalyticsFilters) {
 
 export function useProfitabilityAnalytics(filters: AnalyticsFilters) {
   return useQuery({
-    queryKey: ["profitability-analytics", filters],
+    queryKey: ["profitability-analytics", filters.storeId, filters.period, filters.from, filters.to, filters.group],
     enabled: Boolean(filters.storeId && filters.from && filters.to),
     staleTime: 60_000,
     queryFn: ({ signal }) =>

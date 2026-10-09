@@ -81,11 +81,16 @@ export default function WhatsAppBusinessAccountsPage() {
         { method: kind === "sync" ? "POST" : "DELETE" }
       );
       if (!res.ok) throw new Error();
-      const result = await res.json() as { disconnectMode?: string; localCredentialRemoved?: boolean };
+      const result = (await res.json()) as {
+        disconnectMode?: string;
+        localCredentialRemoved?: boolean;
+      };
       message.success(
-        kind === "sync" ? "Business account synced" : result.localCredentialRemoved
-          ? "Disconnected locally and removed Stockiva credentials"
-          : "Business account disconnected locally"
+        kind === "sync"
+          ? "Business account synced"
+          : result.localCredentialRemoved
+            ? "Disconnected locally and removed Stockiva credentials"
+            : "Business account disconnected locally"
       );
       setSelected(undefined);
       await load();
@@ -179,7 +184,7 @@ export default function WhatsAppBusinessAccountsPage() {
         )}
       </Surface>
       <Drawer
-        width={520}
+        size={520}
         title="Business account details"
         open={Boolean(selected)}
         onClose={() => setSelected(undefined)}

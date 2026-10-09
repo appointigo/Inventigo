@@ -2,7 +2,8 @@
 .hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
 .hero h1 { margin: 3px 0 4px !important; font-size: clamp(24px, 3vw, 31px) !important; line-height: 1.18 !important; letter-spacing: -.7px; }
 .eyebrow { color: #2563eb !important; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-.periodPill { flex: 0 0 auto; border: 1px solid #e1e7ef; border-radius: 9px; padding: 8px 11px; background: #fff; color: #64748b; font-size: 12px; }
+.periodControl { flex: 0 1 auto; display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.periodControl > span { color: #64748b; font-size: 12px; white-space: nowrap; }
 .metricGrid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }
 .metricCard { min-width: 0; border: 1px solid #e6ebf1; border-radius: 12px; background: #fff; padding: 16px; box-shadow: 0 1px 2px rgba(15, 23, 42, .02); }
 .metricTop { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #64748b; font-size: 12px; font-weight: 600; }
@@ -16,7 +17,7 @@
 .metricCard small { color: #8491a3; font-size: 11px; }
 .primaryGrid, .insightGrid, .bottomGrid { display: grid; gap: 14px; margin-top: 14px; }
 .primaryGrid { grid-template-columns: minmax(0, 1.75fr) minmax(300px, .75fr); }
-.insightGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.insightGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; }
 .bottomGrid { grid-template-columns: minmax(0, 1.65fr) minmax(280px, .65fr); }
 .section { min-width: 0; border: 1px solid #e6ebf1; border-radius: 13px; background: #fff; padding: 18px; box-shadow: 0 1px 2px rgba(15, 23, 42, .02); }
 .sectionHeader { min-height: 44px; display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
@@ -34,17 +35,38 @@
 .attentionList small { margin-top: 3px; color: #94a3b8; font-size: 11px; }
 .attentionIcon { width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; color: #d97706; background: #fffbeb; }
 .attentionIcon[data-tone="info"] { color: #2563eb; background: #eff6ff; }
-.inventoryValue { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; border-bottom: 1px solid #eef2f6; padding-bottom: 16px; }
-.inventoryValue span { color: #64748b; font-size: 12px; }
-.inventoryValue strong { color: #0f172a; font-size: 24px; }
-.healthGrid, .demandStats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 15px; }
-.healthGrid div, .demandStats div { border-radius: 9px; background: #f8fafc; padding: 11px; }
-.healthGrid strong, .healthGrid span, .demandStats strong, .demandStats span { display: block; }
-.healthGrid strong, .demandStats strong { color: #1e293b; font-size: 18px; }
-.healthGrid span, .demandStats span { margin-top: 3px; color: #8491a3; font-size: 10px; }
-.demandHeadline { display: flex; align-items: center; gap: 10px; color: #64748b; font-size: 12px; }
-.demandHeadline strong { margin-right: auto; color: #0f172a; font-size: 24px; }
-.demandStats { grid-template-columns: repeat(3, 1fr); }
+.inventoryValuePanel { width: 100%; min-width: 0; display: flex; align-items: center; gap: 14px; border-radius: 11px; background: linear-gradient(135deg, #f1f7ff 0%, #f8fbff 100%); padding: 16px; }
+.inventoryValuePanel > span:last-child { min-width: 0; }
+.inventoryValuePanel small, .inventoryValuePanel strong { display: block; }
+.inventoryValuePanel small { color: #64748b; font-size: 11px; }
+.inventoryValuePanel strong { margin-top: 3px; color: #0f172a; font-size: clamp(21px, 2vw, 27px); line-height: 1.2; overflow-wrap: anywhere; }
+.inventoryMiniGrid { width: 100%; min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
+.inventoryMiniCard { min-width: 0; display: flex; align-items: center; gap: 11px; border-radius: 10px; background: #f8fafc; padding: 12px; }
+.inventoryMiniCard > span:last-child { min-width: 0; }
+.inventoryMiniCard strong, .inventoryMiniCard small { display: block; }
+.inventoryMiniCard strong { color: #1e293b; font-size: 18px; line-height: 1.15; }
+.inventoryMiniCard small { margin-top: 3px; color: #8491a3; font-size: 10px; line-height: 1.25; }
+.insightMetricIcon { width: 31px; height: 31px; flex: 0 0 31px; display: inline-flex; align-items: center; justify-content: center; border-radius: 9px; background: #eff6ff; color: #2563eb; font-size: 15px; }
+.insightMetricIcon[data-tone="green"] { color: #16a34a; background: #ecfdf3; }
+.insightMetricIcon[data-tone="amber"] { color: #d97706; background: #fff7e6; }
+.insightMetricIcon[data-tone="red"] { color: #dc2626; background: #fff1f2; }
+.insightMetricIcon[data-tone="purple"] { color: #7c3aed; background: #f5f3ff; }
+.profitGrid { width: 100%; min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.profitTile { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; border-radius: 11px; background: #f8fafc; padding: 13px; }
+.profitTile[data-tone="green"] { background: linear-gradient(135deg, #f0fdf4, #f7fff9); }
+.profitTile[data-tone="blue"] { background: linear-gradient(135deg, #eff6ff, #f8fbff); }
+.profitTile[data-tone="red"] { background: linear-gradient(135deg, #fff1f2, #fff8f8); }
+.profitTile[data-tone="purple"] { background: linear-gradient(135deg, #f5f3ff, #faf8ff); }
+.profitTile strong { max-width: 100%; margin-top: 11px; color: #0f172a; font-size: clamp(16px, 1.55vw, 24px); line-height: 1.15; letter-spacing: -.45px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.profitTile small { margin-top: 5px; color: #8491a3; font-size: 11px; }
+.demandHeadline { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; color: #64748b; font-size: 12px; }
+.demandHeadline strong { color: #0f172a; font-size: 24px; }
+.demandHeadline :global(.ant-tag) { margin: 0; white-space: nowrap; }
+.demandStats { width: 100%; min-width: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; margin-top: 15px; }
+.demandStats > div { min-width: 0; border-radius: 10px; background: #f8fafc; padding: 11px; }
+.demandStats strong, .demandStats small { display: block; }
+.demandStats strong { margin-top: 9px; color: #1e293b; font-size: 18px; line-height: 1.15; }
+.demandStats small { margin-top: 4px; color: #8491a3; font-size: 10px; line-height: 1.25; }
 .insightNote { margin: 13px 0 0; border-radius: 9px; background: #eff6ff; padding: 10px 12px; color: #475569; font-size: 11px; }
 .insightNote :global(.anticon) { margin-right: 6px; color: #2563eb; }
 .tableScroll { width: 100%; overflow-x: auto; }
@@ -62,5 +84,5 @@
 .productList small { margin-top: 3px; color: #94a3b8; font-size: 10px; }
 .productList b { color: #2563eb; font-size: 11px; font-weight: 650; }
 @media (max-width: 1180px) { .metricGrid { grid-template-columns: repeat(3, 1fr); } .primaryGrid, .bottomGrid { grid-template-columns: 1fr; } .insightGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 800px) { .page { padding: 18px 14px 28px; } .hero { align-items: flex-start; flex-direction: column; gap: 12px; } .metricGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .metricCard:last-child { grid-column: 1 / -1; } .insightGrid { grid-template-columns: 1fr; } .healthGrid { grid-template-columns: repeat(2, 1fr); } .chartWrap { height: 235px; } }
-@media (max-width: 420px) { .metricGrid { grid-template-columns: 1fr; } .metricCard:last-child { grid-column: auto; } .section { padding: 15px; } .sectionHeader { align-items: flex-start; flex-direction: column; } }
+@media (max-width: 800px) { .page { padding: 18px 14px 28px; } .hero { align-items: flex-start; flex-direction: column; gap: 12px; } .periodControl { width: 100%; justify-content: flex-start; } .periodControl > span { white-space: normal; } .metricGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .metricCard:last-child { grid-column: 1 / -1; } .insightGrid { grid-template-columns: 1fr; } .chartWrap { height: 235px; } }
+@media (max-width: 420px) { .metricGrid { grid-template-columns: 1fr; } .metricCard:last-child { grid-column: auto; } .section { padding: 15px; } .sectionHeader { align-items: flex-start; flex-direction: column; } .demandHeadline { grid-template-columns: minmax(0, 1fr) auto; } .demandHeadline :global(.ant-tag) { grid-column: 1 / -1; justify-self: start; } .demandStats { gap: 6px; } .demandStats > div { padding: 9px; } }

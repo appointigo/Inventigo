@@ -1227,11 +1227,10 @@ const ReturnExchangeView = ({
         <Drawer
           title="Review & Settle"
           placement={mobile ? "bottom" : "right"}
-          height={mobile ? "90dvh" : undefined}
+          size={mobile ? "90dvh" : 520}
           onClose={() => setDrawerOpen(false)}
           open={drawerOpen}
           styles={{
-            wrapper: { width: mobile ? "100%" : 520 },
             body: { padding: 0, display: "flex", flexDirection: "column" },
           }}
           footer={

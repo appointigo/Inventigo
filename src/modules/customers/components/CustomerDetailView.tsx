@@ -13,7 +13,6 @@ import {
   Descriptions,
   Empty,
   Grid,
-  List,
   Pagination,
   Popover,
   Space,
@@ -24,7 +23,7 @@ import {
   Tooltip,
   Typography,
 } from "antd";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { ColumnsType } from "antd/es/table";
 import type { CustomerDetailDto, CustomerSaleSummaryDto } from "../types";
 import { formatPurchaseItem, getAdditionalItemCount } from "../customerPurchasePresentation";
@@ -94,6 +93,30 @@ const PurchaseItemsSummary = ({ items }: { items: CustomerSaleSummaryDto["items"
     </div>
   );
 };
+const DetailListRow = ({
+  title,
+  description,
+  extra,
+  actions,
+}: {
+  title: ReactNode;
+  description: ReactNode;
+  extra?: ReactNode;
+  actions?: ReactNode;
+}) => (
+  <div className={styles.detailListRow} role="listitem">
+    <div className={styles.detailListMain}>
+      <div className={styles.detailListTitle}>{title}</div>
+      <div className={styles.detailListDescription}>{description}</div>
+    </div>
+    {extra || actions ? (
+      <div className={styles.detailListExtra}>
+        {extra}
+        {actions}
+      </div>
+    ) : null}
+  </div>
+);
 export default function CustomerDetailView({
   customer,
   loading,
@@ -202,7 +225,7 @@ export default function CustomerDetailView({
       : []),
   ];
   const overview = (
-    <Space direction="vertical" size={16} style={{ width: "100%" }}>
+    <Space orientation="vertical" size={16} style={{ width: "100%" }}>
       <Card size="small" title="Basic information">
         <Descriptions column={1} size="small">
           <Descriptions.Item label="Name">{customer.name || "—"}</Descriptions.Item>
@@ -269,18 +292,16 @@ export default function CustomerDetailView({
         }
       >
         {customer.demandRequests.length ? (
-          <List
-            size="small"
-            dataSource={customer.demandRequests.slice(0, 3)}
-            renderItem={(item) => (
-              <List.Item extra={<Tag>{plainLabel(item.status)}</Tag>}>
-                <List.Item.Meta
-                  title={item.requirement}
-                  description={`${plainLabel(item.reason)} · ${item.storeName} · ${new Date(item.createdAt).toLocaleDateString("en-IN")}`}
-                />
-              </List.Item>
-            )}
-          />
+          <div className={styles.detailList} role="list" aria-label="Recent unfulfilled demand">
+            {customer.demandRequests.slice(0, 3).map((item) => (
+              <DetailListRow
+                key={item.id}
+                title={item.requirement}
+                description={`${plainLabel(item.reason)} · ${item.storeName} · ${new Date(item.createdAt).toLocaleDateString("en-IN")}`}
+                extra={<Tag>{plainLabel(item.status)}</Tag>}
+              />
+            ))}
+          </div>
         ) : (
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -340,7 +361,7 @@ export default function CustomerDetailView({
                       </Tag>
                     </div>
                   </div>
-                  <Space direction="vertical" align="end">
+                  <Space orientation="vertical" align="end">
                     <Typography.Text strong>{money(sale.total)}</Typography.Text>
                     {onViewInvoice ? (
                       <Tooltip title="View Invoice">
@@ -391,10 +412,10 @@ export default function CustomerDetailView({
       key: "demand",
       label: "Demand",
       children: customer.demandRequests.length ? (
-        <List
-          dataSource={customer.demandRequests}
-          renderItem={(item) => (
-            <List.Item
+        <div className={styles.detailList} role="list" aria-label="Customer demand requests">
+          {customer.demandRequests.map((item) => (
+            <DetailListRow
+              key={item.id}
               extra={
                 <Space>
                   <Tag>{plainLabel(item.status)}</Tag>
@@ -406,20 +427,17 @@ export default function CustomerDetailView({
                   ) : null}
                 </Space>
               }
-            >
-              <List.Item.Meta
-                title={item.requirement}
-                description={`${new Date(item.createdAt).toLocaleDateString("en-IN")} · ${item.storeName} · ${item.fulfilledQuantity}/${item.requestedQuantity} fulfilled · ${plainLabel(item.reason)}${
-                  Object.keys(item.attributes).length
-                    ? ` · ${Object.entries(item.attributes)
-                        .map(([key, value]) => `${key}: ${String(value)}`)
-                        .join(", ")}`
-                    : ""
-                }`}
-              />
-            </List.Item>
-          )}
-        />
+              title={item.requirement}
+              description={`${new Date(item.createdAt).toLocaleDateString("en-IN")} · ${item.storeName} · ${item.fulfilledQuantity}/${item.requestedQuantity} fulfilled · ${plainLabel(item.reason)}${
+                Object.keys(item.attributes).length
+                  ? ` · ${Object.entries(item.attributes)
+                      .map(([key, value]) => `${key}: ${String(value)}`)
+                      .join(", ")}`
+                  : ""
+              }`}
+            />
+          ))}
+        </div>
       ) : (
         <Empty description="No demand requests recorded" />
       ),
@@ -429,73 +447,56 @@ export default function CustomerDetailView({
       label: "Engagement",
       children:
         customer.followUps.length || customer.visits.length ? (
-          <Space direction="vertical" style={{ width: "100%" }} size={16}>
+          <Space orientation="vertical" style={{ width: "100%" }} size={16}>
             <Card size="small" title="Recorded visits">
               {customer.visits.length ? (
-                <List
-                  dataSource={customer.visits}
-                  renderItem={(visit) => (
-                    <List.Item>
-                      <List.Item.Meta
-                        title={`${plainLabel(visit.outcome)}${visit.returnConfirmedAt ? ` · Returned${visit.returnOutcome ? ` · ${plainLabel(visit.returnOutcome)}` : " · Outcome Unknown"}` : ""} · ${visit.storeName}`}
-                        description={`${new Date(visit.visitedAt).toLocaleString("en-IN")}${visit.expectedReturnPeriod ? ` · Expected: ${plainLabel(visit.expectedReturnPeriod)}` : ""}${visit.notes ? ` · ${visit.notes}` : ""}`}
-                      />
-                    </List.Item>
-                  )}
-                />
+                <div className={styles.detailList} role="list" aria-label="Recorded visits">
+                  {customer.visits.map((visit) => (
+                    <DetailListRow
+                      key={visit.id}
+                      title={`${plainLabel(visit.outcome)}${visit.returnConfirmedAt ? ` · Returned${visit.returnOutcome ? ` · ${plainLabel(visit.returnOutcome)}` : " · Outcome Unknown"}` : ""} · ${visit.storeName}`}
+                      description={`${new Date(visit.visitedAt).toLocaleString("en-IN")}${visit.expectedReturnPeriod ? ` · Expected: ${plainLabel(visit.expectedReturnPeriod)}` : ""}${visit.notes ? ` · ${visit.notes}` : ""}`}
+                    />
+                  ))}
+                </div>
               ) : (
                 <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No visits recorded" />
               )}
             </Card>
             <Card size="small" title="Follow-ups">
               {customer.followUps.length ? (
-                <List
-                  dataSource={customer.followUps}
-                  renderItem={(item) => (
-                    <List.Item
-                      actions={
-                        item.status === "OPEN"
-                          ? [
-                              <Button
-                                size="small"
-                                key="start"
-                                onClick={() => updateFollowUp(item.id, "IN_PROGRESS")}
-                              >
-                                Start
-                              </Button>,
-                            ]
-                          : item.status === "IN_PROGRESS"
-                            ? [
-                                <Button
-                                  size="small"
-                                  type="primary"
-                                  key="complete"
-                                  onClick={() => updateFollowUp(item.id, "COMPLETED")}
-                                >
-                                  Complete
-                                </Button>,
-                              ]
-                            : item.status === "COMPLETED" || item.status === "CANCELLED"
-                              ? [
-                                  <Button
-                                    size="small"
-                                    key="reopen"
-                                    onClick={() => updateFollowUp(item.id, "OPEN")}
-                                  >
-                                    Reopen
-                                  </Button>,
-                                ]
-                              : []
-                      }
+                <div className={styles.detailList} role="list" aria-label="Customer follow-ups">
+                  {customer.followUps.map((item) => (
+                    <DetailListRow
+                      key={item.id}
+                      title={item.title}
+                      description={`${plainLabel(item.type)} · ${plainLabel(item.priority)} · ${item.storeName}${item.assigneeName ? ` · ${item.assigneeName}` : ""}${item.dueAt ? ` · due ${new Date(item.dueAt).toLocaleString("en-IN")}` : ""}${item.note ? ` · ${item.note}` : ""}`}
                       extra={<Tag>{plainLabel(item.status)}</Tag>}
-                    >
-                      <List.Item.Meta
-                        title={item.title}
-                        description={`${plainLabel(item.type)} · ${plainLabel(item.priority)} · ${item.storeName}${item.assigneeName ? ` · ${item.assigneeName}` : ""}${item.dueAt ? ` · due ${new Date(item.dueAt).toLocaleString("en-IN")}` : ""}${item.note ? ` · ${item.note}` : ""}`}
-                      />
-                    </List.Item>
-                  )}
-                />
+                      actions={
+                        item.status === "OPEN" ? (
+                          <Button
+                            size="small"
+                            onClick={() => updateFollowUp(item.id, "IN_PROGRESS")}
+                          >
+                            Start
+                          </Button>
+                        ) : item.status === "IN_PROGRESS" ? (
+                          <Button
+                            size="small"
+                            type="primary"
+                            onClick={() => updateFollowUp(item.id, "COMPLETED")}
+                          >
+                            Complete
+                          </Button>
+                        ) : item.status === "COMPLETED" || item.status === "CANCELLED" ? (
+                          <Button size="small" onClick={() => updateFollowUp(item.id, "OPEN")}>
+                            Reopen
+                          </Button>
+                        ) : null
+                      }
+                    />
+                  ))}
+                </div>
               ) : (
                 <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No follow-ups recorded" />
               )}

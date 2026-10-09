@@ -72,3 +72,56 @@
 .mobileCardMain {
   min-width: 0;
 }
+.detailList {
+  width: 100%;
+}
+
+.detailListRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.detailListRow:last-child {
+  border-bottom: 0;
+}
+
+.detailListMain {
+  min-width: 0;
+}
+
+.detailListTitle {
+  color: rgba(0, 0, 0, 0.88);
+  font-weight: 500;
+}
+
+.detailListDescription {
+  margin-top: 4px;
+  color: rgba(0, 0, 0, 0.45);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.detailListExtra {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .detailListRow {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .detailListExtra {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+}

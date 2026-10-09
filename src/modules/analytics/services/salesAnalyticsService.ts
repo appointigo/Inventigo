@@ -7,6 +7,7 @@ import { businessDateEndExclusive, businessDateForInstant } from "../utils/dateR
 
 const saleSelect = {
   transactionDate: true,
+  customerId: true,
   total: true,
   discountAmount: true,
   items: { select: { quantity: true, costPrice: true } },
@@ -137,6 +138,9 @@ export const salesAnalyticsService = {
       });
     }
 
-    return aggregateFinancialEvents(events, from, to, group);
+    const customersServed = new Set(
+      sales.flatMap((sale) => sale.customerId ? [sale.customerId] : []),
+    ).size;
+    return aggregateFinancialEvents(events, from, to, group, customersServed);
   },
 };
