@@ -15,13 +15,15 @@ export function useExpenses(filters?: Partial<ExpenseListFilters>) {
       if (filters?.storeId) params.set("storeId", filters.storeId);
       if (filters?.month) params.set("month", String(filters.month));
       if (filters?.year) params.set("year", String(filters.year));
+      if (filters?.startDate) params.set("startDate", filters.startDate);
+      if (filters?.endDate) params.set("endDate", filters.endDate);
       const qs = params.toString();
       const res = await fetch(`/api/expenses${qs ? `?${qs}` : ""}`);
       if (res.ok) setExpenses(await res.json());
     } finally {
       setLoading(false);
     }
-  }, [filters?.storeId, filters?.month, filters?.year]);
+  }, [filters?.storeId, filters?.month, filters?.year, filters?.startDate, filters?.endDate]);
 
   useEffect(() => {
     fetchExpenses();

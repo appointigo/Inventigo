@@ -64,7 +64,6 @@ A cloud-hosted inventory management application for a clothing retail brand with
 | Data Fetching | TanStack Query (React Query) | 5.x |
 | Validation | Zod | 3.x |
 | Image Storage | Vercel Blob | latest |
-| Barcode Scan | html5-qrcode | 2.x |
 | Barcode Generate | react-barcode | 1.x |
 | Email | Resend | latest |
 | SMS | Twilio | latest |
@@ -795,7 +794,6 @@ stockiva/
 │   │   │
 │   │   ├── barcode/
 │   │   │   ├── components/
-│   │   │   │   ├── BarcodeScanner.tsx  ← Camera-based scanning
 │   │   │   │   ├── BarcodeGenerator.tsx ← Generate Code128 per SKU
 │   │   │   │   └── LabelPrinter.tsx    ← Printable barcode label sheets
 │   │   │   ├── services/
@@ -900,7 +898,7 @@ stockiva/
 | # | Task | Details |
 |---|---|---|
 | 1.1 | Initialize Next.js 14 | App Router, TypeScript, `src/` directory, ESLint, Prettier |
-| 1.2 | Install dependencies | antd, @ant-design/pro-components, @ant-design/charts, prisma, @prisma/client, next-auth, @tanstack/react-query, @vercel/blob, bcryptjs, zod, html5-qrcode, react-barcode, resend |
+| 1.2 | Install dependencies | antd, @ant-design/pro-components, @ant-design/charts, prisma, @prisma/client, next-auth, @tanstack/react-query, @vercel/blob, bcryptjs, zod, react-barcode, resend |
 | 1.3 | Configure Prisma | Connect to Neon PostgreSQL, define **complete schema** (all tables including Store, Sale, SaleItem) |
 | 1.4 | Run migrations | `npx prisma migrate dev --name init` — creates all tables |
 | 1.5 | Create seed script | Default Store ("Main Store"), 3 users (admin/manager/staff), 7 categories with attributeSchemas, 5 brands, sizes per category, 20+ sample products, stock entries |
@@ -1091,16 +1089,12 @@ stockiva/
 | # | Task | Details |
 |---|---|---|
 | 7.1 | BarcodeGenerator | Generate Code128 barcode for each product SKU using react-barcode |
-| 7.2 | BarcodeScanner | Camera-based scan page using html5-qrcode, supports Code128/EAN-13/UPC-A |
 | 7.3 | Barcode lookup API | `app/api/barcode/lookup/route.ts` — GET ?sku=XXX → product details + stock levels |
-| 7.4 | Scan → action flow | Scan barcode → display product info + current stock → quick actions: adjust stock, view details, add to PO |
 | 7.5 | LabelPrinter | Generate printable barcode label sheets (multiple labels per page) as PDF using @react-pdf/renderer |
 | 7.6 | Product detail integration | Show barcode on product detail page, "Print Label" button |
 
 **Verification:**
 - Generate barcode for a product → visible Code128 image
-- Scan barcode with phone camera → correct product loads with stock info
-- Quick actions (adjust, view) work from scan result
 - Print labels → generates valid PDF with correct barcodes
 
 ---
@@ -1355,7 +1349,6 @@ ALERT_PHONE="+91XXXXXXXXXX"
     "@vercel/blob": "latest",
     "bcryptjs": "^2.x",
     "zod": "^3.x",
-    "html5-qrcode": "^2.x",
     "react-barcode": "^1.x",
     "@react-pdf/renderer": "^3.x",
     "resend": "latest",

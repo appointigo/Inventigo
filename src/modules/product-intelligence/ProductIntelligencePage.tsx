@@ -4,7 +4,17 @@ import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Alert, Button, Drawer, Select, Skeleton, Table, Tag, Typography } from "antd";
+import {
+  AppstoreOutlined,
+  BarChartOutlined,
+  ClockCircleOutlined,
+  InboxOutlined,
+  ShoppingCartOutlined,
+  SyncOutlined,
+  WarningOutlined,
+} from "@ant-design/icons";
 import type { ColumnsType, TablePaginationConfig } from "antd/es/table";
+import InventoryKpiGrid from "@/modules/inventory/components/InventoryKpiGrid";
 import { useStore } from "@/providers/StoreProvider";
 import { useCurrentUser } from "@/modules/auth/hooks/useAuth";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
@@ -275,22 +285,53 @@ export default function ProductIntelligencePage() {
           message={query.error instanceof Error ? query.error.message : "Unable to load"}
         />
       ) : null}
-      <section className={styles.summary}>
-        {[
-          { l: "Reorder", v: query.data?.summary.reorder },
-          { l: "Demand gaps", v: query.data?.summary.demandGap },
-          { l: "Overstock", v: query.data?.summary.overstock },
-          { l: "Slow moving", v: query.data?.summary.slowMoving },
-          { l: "Dead stock", v: query.data?.summary.deadStock },
-          { l: "High returns", v: query.data?.summary.highReturn },
-          { l: "Inbound stock", v: query.data?.summary.inboundStock },
-        ].map((x) => (
-          <article key={x.l}>
-            <span>{x.l}</span>
-            <strong>{x.v ?? "—"}</strong>
-          </article>
-        ))}
-      </section>
+      <InventoryKpiGrid
+        label="Product intelligence summary"
+        items={[
+          {
+            label: "Reorder",
+            value: query.data?.summary.reorder ?? "—",
+            icon: <ShoppingCartOutlined />,
+            tone: "blue",
+          },
+          {
+            label: "Demand gaps",
+            value: query.data?.summary.demandGap ?? "—",
+            icon: <BarChartOutlined />,
+            tone: "orange",
+          },
+          {
+            label: "Overstock",
+            value: query.data?.summary.overstock ?? "—",
+            icon: <AppstoreOutlined />,
+            tone: "red",
+          },
+          {
+            label: "Slow moving",
+            value: query.data?.summary.slowMoving ?? "—",
+            icon: <ClockCircleOutlined />,
+            tone: "purple",
+          },
+          {
+            label: "Dead stock",
+            value: query.data?.summary.deadStock ?? "—",
+            icon: <WarningOutlined />,
+            tone: "red",
+          },
+          {
+            label: "High returns",
+            value: query.data?.summary.highReturn ?? "—",
+            icon: <SyncOutlined />,
+            tone: "green",
+          },
+          {
+            label: "Inbound stock",
+            value: query.data?.summary.inboundStock ?? "—",
+            icon: <InboxOutlined />,
+            tone: "blue",
+          },
+        ]}
+      />
       <div className={styles.filters}>
         <Select
           allowClear
@@ -373,7 +414,7 @@ export default function ProductIntelligencePage() {
         )}
       </section>
       <Drawer
-        width={620}
+        size={620}
         open={Boolean(selected)}
         onClose={() => setSelected(null)}
         title={selected?.product}

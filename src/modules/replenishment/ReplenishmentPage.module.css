@@ -1,14 +1,23 @@
 .page {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   padding: 24px;
   display: grid;
   gap: 20px;
-  max-width: 1600px;
   margin: 0 auto;
+  overflow-x: hidden;
 }
 .header {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   display: flex;
   justify-content: space-between;
   gap: 24px;
+}
+.header > * {
+  min-width: 0;
 }
 .header span {
   color: #2563eb;
@@ -27,35 +36,66 @@
 }
 .controls,
 .filters {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   display: flex;
   gap: 10px;
   align-items: flex-start;
   flex-wrap: wrap;
 }
+.controls {
+  width: auto;
+  flex: 0 1 auto;
+  justify-content: flex-end;
+}
 .filters > div {
-  min-width: 170px;
+  min-width: min(170px, 100%);
+  max-width: 260px;
+  flex: 1 1 170px;
 }
-.metrics {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 12px;
-}
-.metrics article,
 .surface {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   background: #fff;
   border: 1px solid #e7ebf0;
   border-radius: 12px;
   padding: 18px;
 }
-.metrics article {
-  display: grid;
-  gap: 7px;
+.tableSurface {
+  position: relative;
+  overflow: hidden;
 }
-.metrics span {
-  color: #64748b;
+.actionTable {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
-.metrics strong {
-  font-size: 20px;
+.actionTable :global(.ant-table),
+.actionTable :global(.ant-table-container),
+.actionTable :global(.ant-table-content) {
+  max-width: 100%;
+  min-width: 0;
+}
+.actionTable :global(.ant-table-content) {
+  overflow-x: auto !important;
+  overscroll-behavior-x: contain;
+}
+.actionTable :global(.ant-table-cell-fix-left) {
+  background: #fff;
+}
+.page :global(.ant-alert-message),
+.page :global(.ant-alert-description) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.actionTable :global(.ant-table-thead > tr > th) {
+  white-space: nowrap;
+  word-break: keep-all;
+}
+.noWrapHeading {
+  white-space: nowrap;
 }
 .detail ul {
   padding-left: 20px;
@@ -76,5 +116,16 @@
   }
   .header {
     display: grid;
+  }
+  .controls,
+  .filters > div {
+    width: 100%;
+    max-width: 100%;
+  }
+  .controls {
+    justify-content: flex-start;
+  }
+  .surface {
+    padding: 12px;
   }
 }

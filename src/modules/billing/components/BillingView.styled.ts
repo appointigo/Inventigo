@@ -931,41 +931,10 @@ export const SecureText = styled.div`
   @media (max-height: 820px) { margin-top: 3px; }
 `;
 
-// ─── Camera scan button (shown in ScanHeroBox) ────────────────────────────────
-
 export const ScanHeroInputRow = styled.div`
   display: flex;
   align-items: center;
   gap: 8px;
-`;
-
-export const CameraScanBtn = styled.button`
-  flex-shrink: 0;
-  height: 48px;
-  padding: 0 16px;
-  background: linear-gradient(135deg, #2563eb, #4f46e5);
-  border: none;
-  border-radius: 10px;
-  color: #fff;
-  font-size: 13px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: opacity 0.15s, transform 0.1s;
-
-  &:hover  { opacity: 0.92; }
-  &:active { transform: scale(0.97); }
-  &:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-    background: #9ca3af;
-  }
-
-  @media (max-height: 820px) { height: 44px; }
-  @media (max-height: 740px) { height: 42px; }
 `;
 
 export const CheckoutToolsRow = styled.div`

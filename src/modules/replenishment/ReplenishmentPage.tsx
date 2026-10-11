@@ -2,12 +2,21 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Alert, App, Button, Drawer, Select, Skeleton, Space, Table, Tag } from "antd";
+import {
+  AppstoreOutlined,
+  InboxOutlined,
+  ShoppingCartOutlined,
+  StopOutlined,
+  TagsOutlined,
+  WarningOutlined,
+} from "@ant-design/icons";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/providers/StoreProvider";
 import AnalyticsDateFilter from "@/modules/analytics/components/AnalyticsDateFilter";
 import { useAnalyticsDateRange } from "@/modules/analytics/hooks/useAnalyticsDateRange";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
 import { useCurrentUser } from "@/modules/auth/hooks/useAuth";
+import InventoryKpiGrid from "@/modules/inventory/components/InventoryKpiGrid";
 import styles from "./ReplenishmentPage.module.css";
 type Row = {
   recommendationId: string;
@@ -201,23 +210,54 @@ export default function ReplenishmentPage() {
             title={`${data.range.activeTradingDays} trading days observed across ${data.range.observationDays} calendar days`}
             description={`${data.methodology.velocity} ${data.methodology.inbound}`}
           />
-          <section className={styles.metrics}>
-            {[
-              ["Reorder now", data.summary.reorder],
-              ["Stockout risk", data.summary.stockoutRisk],
-              ["Inbound covers", data.summary.inboundCovers],
-              ["Overstock", data.summary.overstock],
-              ["Markdown", data.summary.markdown],
-              ["Do not reorder", data.summary.noReorder],
-              ["Low evidence", data.summary.monitor],
-              ["Excess value", formatCurrency(data.summary.excessInventoryValue)],
-            ].map(([label, value]) => (
-              <article key={label}>
-                <span>{label}</span>
-                <strong>{value}</strong>
-              </article>
-            ))}
-          </section>
+          <InventoryKpiGrid
+            label="Inventory action summary"
+            items={[
+              {
+                label: "Reorder now",
+                value: data.summary.reorder,
+                icon: <ShoppingCartOutlined />,
+                tone: "blue",
+              },
+              {
+                label: "Stockout risk",
+                value: data.summary.stockoutRisk,
+                icon: <WarningOutlined />,
+                tone: "red",
+              },
+              {
+                label: "Inbound covers",
+                value: data.summary.inboundCovers,
+                icon: <InboxOutlined />,
+                tone: "cyan",
+              },
+              {
+                label: "Overstock",
+                value: data.summary.overstock,
+                icon: <AppstoreOutlined />,
+                tone: "orange",
+                secondary: `Excess value ${formatCurrency(data.summary.excessInventoryValue)}`,
+              },
+              {
+                label: "Markdown",
+                value: data.summary.markdown,
+                icon: <TagsOutlined />,
+                tone: "purple",
+              },
+              {
+                label: "Do not reorder",
+                value: data.summary.noReorder,
+                icon: <StopOutlined />,
+                tone: "red",
+              },
+              {
+                label: "Low evidence",
+                value: data.summary.monitor,
+                icon: <WarningOutlined />,
+                tone: "orange",
+              },
+            ]}
+          />
           <div className={styles.filters}>
             <Select
               allowClear
@@ -256,10 +296,11 @@ export default function ReplenishmentPage() {
               options={data.filters.suppliers.map((row) => ({ value: row.id, label: row.name }))}
             />
           </div>
-          <section className={styles.surface}>
+          <section className={`${styles.surface} ${styles.tableSurface}`}>
             <Table
+              className={styles.actionTable}
               rowKey="recommendationId"
-              scroll={{ x: 1500 }}
+              scroll={{ x: 1580 }}
               dataSource={data.items}
               onRow={(row) => ({ onClick: () => setSelected(row) })}
               columns={[
@@ -276,21 +317,27 @@ export default function ReplenishmentPage() {
                     </>
                   ),
                 },
-                { title: "Stock", dataIndex: "currentStock" },
-                { title: "Velocity/day", render: (_, row) => row.evidence.velocity },
+                { title: "Stock", dataIndex: "currentStock", width: 80 },
+                { title: "Velocity/day", width: 110, render: (_, row) => row.evidence.velocity },
                 {
                   title: "Cover",
+                  width: 130,
                   render: (_, row) =>
                     row.evidence.coverDays === null
                       ? "Insufficient history"
                       : `${row.evidence.coverDays}d`,
                 },
-                { title: "Inbound", render: (_, row) => row.evidence.totalInbound },
-                { title: "Lead time", render: (_, row) => `${row.evidence.leadTimeDays}d` },
-                { title: "Demand", render: (_, row) => row.evidence.unfulfilledDemand },
+                { title: "Inbound", width: 90, render: (_, row) => row.evidence.totalInbound },
                 {
-                  title: "Recommended",
+                  title: "Lead time",
+                  width: 100,
+                  render: (_, row) => `${row.evidence.leadTimeDays}d`,
+                },
+                { title: "Demand", width: 90, render: (_, row) => row.evidence.unfulfilledDemand },
+                {
+                  title: <span className={styles.noWrapHeading}>Recommended</span>,
                   dataIndex: "recommendedQuantity",
+                  width: 150,
                   render: (value, row) => {
                     const transfer = transferFor(row);
                     if (transfer)
@@ -308,6 +355,7 @@ export default function ReplenishmentPage() {
                 {
                   title: "Action",
                   dataIndex: "type",
+                  width: 175,
                   render: (value: string) => (
                     <Tag color={colors[value]}>{value.replaceAll("_", " ")}</Tag>
                   ),
@@ -315,10 +363,12 @@ export default function ReplenishmentPage() {
                 {
                   title: "Evidence",
                   dataIndex: "evidenceQuality",
+                  width: 105,
                   render: (value: string) => <Tag>{value}</Tag>,
                 },
                 {
                   title: "",
+                  width: 270,
                   render: (_, row) => {
                     const transfer = transferFor(row);
                     if (transfer)
@@ -362,7 +412,7 @@ export default function ReplenishmentPage() {
         </>
       )}
       <Drawer
-        width={620}
+        size={620}
         open={Boolean(selected)}
         onClose={() => setSelected(null)}
         title={selected ? `${selected.product} · ${selected.variant}` : "Recommendation"}

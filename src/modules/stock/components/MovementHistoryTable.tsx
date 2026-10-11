@@ -3,10 +3,15 @@
 import { Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { StockMovementRow } from "../types";
+import { INVENTORY_PAGE_SIZE_OPTIONS } from "../utils/pagination";
 
 interface MovementHistoryTableProps {
   movements: StockMovementRow[];
   loading: boolean;
+  page: number;
+  pageSize: number;
+  total: number;
+  onPaginationChange: (page: number, pageSize: number) => void;
 }
 
 const typeColors: Record<string, string> = {
@@ -19,7 +24,14 @@ const typeColors: Record<string, string> = {
   TRANSFER_OUT: "purple",
 };
 
-const MovementHistoryTable = ({ movements, loading }: MovementHistoryTableProps) => {
+const MovementHistoryTable = ({
+  movements,
+  loading,
+  page,
+  pageSize,
+  total,
+  onPaginationChange,
+}: MovementHistoryTableProps) => {
   const columns: ColumnsType<StockMovementRow> = [
     {
       title: "Product",
@@ -93,7 +105,15 @@ const MovementHistoryTable = ({ movements, loading }: MovementHistoryTableProps)
       dataSource={movements}
       rowKey="id"
       loading={loading}
-      pagination={{ pageSize: 10, showSizeChanger: true, showTotal: (t) => `${t} movements` }}
+      pagination={{
+        current: page,
+        pageSize,
+        total,
+        pageSizeOptions: INVENTORY_PAGE_SIZE_OPTIONS,
+        showSizeChanger: true,
+        onChange: onPaginationChange,
+        showTotal: (t) => `${t} movements`,
+      }}
       size="middle"
     />
   );

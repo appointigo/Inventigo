@@ -81,6 +81,8 @@ export type ExpenseListFilters = {
   storeId?: string;
   month?: number; // 1–12
   year?: number;
+  startDate?: string; // inclusive business date, YYYY-MM-DD
+  endDate?: string; // inclusive business date, YYYY-MM-DD
 };
 
 export type ExpenseCategoryTotals = Partial<Record<ExpenseCategory, number>>;

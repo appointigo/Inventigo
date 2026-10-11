@@ -85,7 +85,7 @@ MANAGER  (mid-level — invited by OWNER/ADMIN)
 
 STAFF  (floor staff — invited by any higher role)
     │
-    ├── Read-only on products/stock, can scan barcodes
+    ├── Read-only on products/stock
     └── Cannot see Settings / Billing / Team Management in nav
 ```
 
@@ -474,7 +474,6 @@ All service functions (`productService`, `brandService`, `categoryService`, etc.
 | Delete products | ✗ | ✅ | ✅ | ✗ | ✗ |
 | Upload product images | ✗ | ✅ | ✅ | ✅ | ✗ |
 | Manage stock | ✗ | ✅ | ✅ | ✅ | ✗ |
-| Scan barcode | ✗ | ✅ | ✅ | ✅ | ✅ |
 | Manage brands | ✗ | ✅ | ✅ | ✗ | ✗ |
 | Manage categories | ✗ | ✅ | ✅ | ✗ | ✗ |
 | Invite team members | ✗ | ✅ | ✅ | ✗ | ✗ |

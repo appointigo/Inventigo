@@ -359,7 +359,6 @@ export default function ProductsPage() {
         duplicateLoadingId={duplicateLoadingId}
         onDelete={handleDelete}
         onBulkUpload={() => setBulkDrawerOpen(true)}
-        onScan={() => router.push("/dashboard/scan")}
         attributeSchema={categoryAttributeSchema}
         attributeFilters={attributeFilters}
         onAttributeChange={handleAttributeChange}

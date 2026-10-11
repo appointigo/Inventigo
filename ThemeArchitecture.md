@@ -4,7 +4,7 @@
 
 Stockiva uses a **dual-layer theming system**: Ant Design's token system controls all AntD components, while Emotion's `ThemeProvider` makes typed design tokens available to every custom styled component via `p.theme`.
 
-A CSS custom-properties bridge (`[data-theme]` on `<html>`) covers the remaining edge cases — Ant Design nested popups, third-party libraries (html5-qrcode), and inline JSX styles.
+A CSS custom-properties bridge (`[data-theme]` on `<html>`) covers the remaining edge cases — Ant Design nested popups and inline JSX styles.
 
 ---
 
@@ -119,7 +119,6 @@ Key token overrides (dark values shown):
 The `data-theme` attribute on `<html>` (set by ThemeProvider's `useEffect`) switches a full set of CSS custom properties. These cover:
 
 - **Inline `style={}` JSX** props (e.g. `StockTable.tsx` render functions where `p.theme` is unavailable)
-- **Third-party libraries** that inject their own HTML (e.g. html5-qrcode)
 - **Ant Design nested content** (popovers, drawups) that escape the styled-component tree
 
 ```css

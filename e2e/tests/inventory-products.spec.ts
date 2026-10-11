@@ -55,7 +55,7 @@ test("product create, opening stock, edit and search remain linked", async ({ pa
   const search = await apiFetch(page, "/api/products?search=Updated%20Product&page=1&pageSize=10");
   const results = await expectJson<{ items: Array<{ id: string; name: string }> }>(search, 200);
   expect(results.items).toContainEqual(
-    expect.objectContaining({ id: product.id, name: "E Two E Updated Product" }),
+    expect.objectContaining({ id: product.id, name: "E Two E Updated Product" })
   );
 });
 
@@ -123,11 +123,47 @@ test("manual stock in/out records signed audit snapshots and blocks negative sto
   });
   await expectJson(rejected, 422);
   expect((await e2eDb.stockEntry.findUniqueOrThrow({ where: { id: before.id } })).quantity).toBe(
-    after.quantity,
+    after.quantity
   );
 });
 
-test("stock search and low/out-of-stock filters return complete scoped results", async ({ page }) => {
+test("stock levels and movements return distinct controlled pagination slices", async ({
+  page,
+}) => {
+  type Page<T> = { items: T[]; total: number; page: number; pageSize: number };
+
+  const firstStock = await expectJson<Page<{ id: string }>>(
+    await apiFetch(page, "/api/stock?paginated=true&page=1&pageSize=1"),
+    200
+  );
+  const secondStock = await expectJson<Page<{ id: string }>>(
+    await apiFetch(page, "/api/stock?paginated=true&page=2&pageSize=1"),
+    200
+  );
+  expect(firstStock.total).toBeGreaterThan(1);
+  expect(firstStock).toMatchObject({ page: 1, pageSize: 1 });
+  expect(secondStock).toMatchObject({ page: 2, pageSize: 1 });
+  expect(firstStock.items).toHaveLength(1);
+  expect(secondStock.items).toHaveLength(1);
+  expect(secondStock.items[0].id).not.toBe(firstStock.items[0].id);
+
+  const firstMovement = await expectJson<Page<{ id: string }>>(
+    await apiFetch(page, "/api/stock/movements?paginated=true&page=1&pageSize=1"),
+    200
+  );
+  const secondMovement = await expectJson<Page<{ id: string }>>(
+    await apiFetch(page, "/api/stock/movements?paginated=true&page=2&pageSize=1"),
+    200
+  );
+  expect(firstMovement.total).toBeGreaterThan(1);
+  expect(firstMovement.items).toHaveLength(1);
+  expect(secondMovement.items).toHaveLength(1);
+  expect(secondMovement.items[0].id).not.toBe(firstMovement.items[0].id);
+});
+
+test("stock search and low/out-of-stock filters return complete scoped results", async ({
+  page,
+}) => {
   const search = await apiFetch(page, "/api/stock?search=E2E-P1-TEE");
   const searched = await expectJson<Array<{ productId: string }>>(search, 200);
   expect(searched.map((row) => row.productId)).toContain(E2E_IDS.secondProduct);

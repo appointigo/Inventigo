@@ -2,9 +2,16 @@
 
 import { useState } from "react";
 import { Table, Button, Space, Tag, Input, Popconfirm, Tooltip, Flex, Empty } from "antd";
-import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, UploadOutlined } from "@ant-design/icons";
+import {
+  PlusOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  SearchOutlined,
+  UploadOutlined,
+} from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { Category } from "../types";
+import { INVENTORY_PAGE_SIZE_OPTIONS, validInventoryPage } from "@/modules/stock/utils/pagination";
 
 interface CategoryTableProps {
   categories: Category[];
@@ -15,14 +22,24 @@ interface CategoryTableProps {
   onBulkUpload?: () => void;
 }
 
-const CategoryTable = ({ categories, loading, onAdd, onEdit, onDelete, onBulkUpload }: CategoryTableProps) => {
+const CategoryTable = ({
+  categories,
+  loading,
+  onAdd,
+  onEdit,
+  onDelete,
+  onBulkUpload,
+}: CategoryTableProps) => {
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const filtered = categories.filter(
     (c) =>
       c.name.toLowerCase().includes(search.toLowerCase()) ||
       c.slug.toLowerCase().includes(search.toLowerCase())
   );
+  const currentPage = validInventoryPage(filtered.length, page, pageSize);
 
   const columns: ColumnsType<Category> = [
     {
@@ -82,11 +99,7 @@ const CategoryTable = ({ categories, loading, onAdd, onEdit, onDelete, onBulkUpl
       render: (_, record) => (
         <Space>
           <Tooltip title="Edit" destroyOnHidden>
-            <Button
-              type="text"
-              icon={<EditOutlined />}
-              onClick={() => onEdit(record)}
-            />
+            <Button type="text" icon={<EditOutlined />} onClick={() => onEdit(record)} />
           </Tooltip>
           <Popconfirm
             title="Delete category"
@@ -123,7 +136,10 @@ const CategoryTable = ({ categories, loading, onAdd, onEdit, onDelete, onBulkUpl
           placeholder="Search categories..."
           prefix={<SearchOutlined />}
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(1);
+          }}
           allowClear
           style={{ maxWidth: 300 }}
         />
@@ -143,26 +159,41 @@ const CategoryTable = ({ categories, loading, onAdd, onEdit, onDelete, onBulkUpl
         dataSource={filtered}
         rowKey="id"
         loading={loading}
-        pagination={{ pageSize: 10, showSizeChanger: true, showTotal: (t) => `${t} categories` }}
+        pagination={{
+          current: currentPage,
+          pageSize,
+          total: filtered.length,
+          pageSizeOptions: INVENTORY_PAGE_SIZE_OPTIONS,
+          showSizeChanger: true,
+          showTotal: (t) => `${t} categories`,
+        }}
+        onChange={(pagination) => {
+          const nextPageSize = pagination.pageSize ?? pageSize;
+          setPage(nextPageSize === pageSize ? (pagination.current ?? 1) : 1);
+          setPageSize(nextPageSize);
+        }}
         locale={{
-          emptyText: !loading && categories.length === 0 ? (
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description={
-                <span style={{ color: "#888" }}>
-                  No categories yet. Categories group your products and define their attributes.
-                </span>
-              }
-            >
-              <Button type="primary" icon={<PlusOutlined />} onClick={onAdd}>
-                Add your first category
-              </Button>
-            </Empty>
-          ) : search ? "No categories match your search" : undefined,
+          emptyText:
+            !loading && categories.length === 0 ? (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={
+                  <span style={{ color: "#888" }}>
+                    No categories yet. Categories group your products and define their attributes.
+                  </span>
+                }
+              >
+                <Button type="primary" icon={<PlusOutlined />} onClick={onAdd}>
+                  Add your first category
+                </Button>
+              </Empty>
+            ) : search ? (
+              "No categories match your search"
+            ) : undefined,
         }}
       />
     </>
   );
-}
+};
 
 export default CategoryTable;

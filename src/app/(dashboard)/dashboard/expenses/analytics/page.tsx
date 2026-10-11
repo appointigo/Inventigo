@@ -1,103 +1,164 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
+import {
+  AimOutlined,
+  BarChartOutlined,
+  CalendarOutlined,
+  InfoCircleOutlined,
+  PieChartOutlined,
+  TrophyOutlined,
+  WalletOutlined,
+} from "@ant-design/icons";
 import {
   App,
-  Badge,
   Button,
   Card,
-  Col,
   DatePicker,
-  Flex,
+  Empty,
   Form,
   InputNumber,
   Modal,
   Progress,
   Row,
-  Statistic,
+  Col,
+  Tooltip,
   Typography,
 } from "antd";
-import {
-  RiseOutlined,
-  CalendarOutlined,
-  TagOutlined,
-  TrophyOutlined,
-  DollarOutlined,
-} from "@ant-design/icons";
 import dayjs from "dayjs";
-import { useStore } from "@/providers/StoreProvider";
+import ExpenseCategorySpendChart from "@/modules/expenses/components/ExpenseCategorySpendChart";
+import ExpenseMonthlyTrendChart from "@/modules/expenses/components/ExpenseMonthlyTrendChart";
+import { useCurrentUser } from "@/modules/auth/hooks/useAuth";
 import {
+  useExpenseBudgets,
+  useExpenseCategories,
   useExpenses,
   useExpenseSummary,
-  useExpenseCategories,
-  useExpenseBudgets,
 } from "@/modules/expenses/hooks/useExpenses";
-import { useCurrentUser } from "@/modules/auth/hooks/useAuth";
-import ExpenseMonthlyTrendChart from "@/modules/expenses/components/ExpenseMonthlyTrendChart";
-import ExpenseCategoryPieChart from "@/modules/expenses/components/ExpenseCategoryPieChart";
-import type { BudgetFormValues } from "@/modules/expenses/types";
+import type { BudgetFormValues, ExpenseCategoryTotals } from "@/modules/expenses/types";
+import { useStore } from "@/providers/StoreProvider";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
+import styles from "./page.module.css";
 
-const { Title, Text } = Typography;
+const { Text, Title } = Typography;
 
-// ─── Budget Panel ─────────────────────────────────────────────────────────────
-function BudgetPanel({
-  budgets,
-  byCategory,
-  loading,
-  onEdit,
+function InfoTip({ title }: { title: string }) {
+  return (
+    <Tooltip title={title}>
+      <InfoCircleOutlined className={styles.infoIcon} aria-label={title} />
+    </Tooltip>
+  );
+}
+
+function CardTitle({
+  children,
+  icon,
+  help,
 }: {
-  budgets: { category: string; amount: number }[];
-  byCategory: Record<string, number | undefined>;
-  loading: boolean;
-  onEdit: () => void;
+  children: React.ReactNode;
+  icon: React.ReactNode;
+  help: string;
 }) {
-  if (!budgets.length) {
-    return (
-      <Card size="small" title="Budget vs Actual" loading={loading} extra={<Button size="small" onClick={onEdit}>Set Budgets</Button>}
-        styles={{ body: { minHeight: 200, display: "flex", alignItems: "center", justifyContent: "center" } }}
-      >
-        <Text type="secondary">No budgets set for this month.</Text>
-      </Card>
-    );
-  }
+  return (
+    <span className={styles.cardTitle}>
+      <span className={styles.titleIcon}>{icon}</span>
+      {children}
+      <InfoTip title={help} />
+    </span>
+  );
+}
+
+function KpiCard({
+  label,
+  help,
+  icon,
+  iconTone,
+  value,
+  meta,
+  loading,
+  categoryValue = false,
+  action,
+}: {
+  label: React.ReactNode;
+  help: string;
+  icon: React.ReactNode;
+  iconTone: "blue" | "green" | "amber";
+  value: React.ReactNode;
+  meta: React.ReactNode;
+  loading: boolean;
+  categoryValue?: boolean;
+  action?: React.ReactNode;
+}) {
+  const toneClass = iconTone === "green" ? styles.iconGreen : iconTone === "amber" ? styles.iconAmber : styles.iconBlue;
 
   return (
-    <Card
-      title="Budget vs Actual"
-      size="small"
-      loading={loading}
-      extra={<Button size="small" onClick={onEdit}>Edit</Button>}
-      styles={{ body: { minHeight: 200, display: "flex", flexDirection: "column" } }}
-    >
-      {budgets.map((b) => {
-        const actual = byCategory[b.category] ?? 0;
-        const pct = b.amount > 0 ? Math.round((actual / b.amount) * 100) : 0;
-        const status = pct >= 100 ? "exception" : pct >= 90 ? "active" : "normal";
-        const strokeColor = pct >= 100 ? "#ff4d4f" : pct >= 90 ? "#faad14" : "#52c41a";
-        return (
-          <div key={b.category} style={{ marginBottom: 16 }}>
-            <Flex justify="space-between" style={{ marginBottom: 4 }}>
-              <Text strong style={{ fontSize: 13 }}>{b.category}</Text>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                {formatCurrency(actual)} / {formatCurrency(b.amount)}
-              </Text>
-            </Flex>
-            <Progress
-              percent={Math.min(pct, 100)}
-              status={status}
-              strokeColor={strokeColor}
-              size="small"
-              format={(p) => `${p}%`}
-            />
-          </div>
-        );
-      })}
+    <Card className={styles.kpiCard} loading={loading}>
+      <div className={styles.kpiHeader}>
+        <span className={`${styles.kpiIcon} ${toneClass}`}>{icon}</span>
+        <span className={styles.kpiLabel}>{label}</span>
+        <InfoTip title={help} />
+      </div>
+      <div className={`${styles.kpiValue} ${categoryValue ? styles.categoryValue : ""}`}>{value}</div>
+      <span className={styles.kpiMeta}>{meta}</span>
+      {action}
     </Card>
   );
 }
 
-// ─── Set Budgets Modal ────────────────────────────────────────────────────────
+function BudgetPanel({
+  budgets,
+  byCategory,
+  loading,
+  canModify,
+  onEdit,
+}: {
+  budgets: { category: string; amount: number }[];
+  byCategory: ExpenseCategoryTotals;
+  loading: boolean;
+  canModify: boolean;
+  onEdit: () => void;
+}) {
+  return (
+    <Card
+      className={styles.panelCard}
+      loading={loading}
+      title={
+        <CardTitle icon={<PieChartOutlined />} help="Compare this month’s category spending with its budget.">
+          Budget vs Actual
+        </CardTitle>
+      }
+      extra={budgets.length > 0 && canModify ? <Button size="small" onClick={onEdit}>Edit</Button> : null}
+    >
+      {budgets.length === 0 ? (
+        <div className={styles.budgetEmpty}>
+          <span className={styles.budgetEmptyIcon}><AimOutlined /></span>
+          <div className={styles.budgetEmptyTitle}>No budgets set for this month</div>
+          <div className={styles.budgetEmptyCopy}>Set category-wise budgets to track spending against your plan.</div>
+          {canModify && <Button type="primary" size="small" onClick={onEdit}>Set Budgets</Button>}
+        </div>
+      ) : (
+        <div className={styles.budgetList}>
+          {budgets.map((budget) => {
+            const actual = byCategory[budget.category] ?? 0;
+            const percentage = budget.amount > 0 ? Math.round((actual / budget.amount) * 100) : 0;
+            const color = percentage >= 100 ? "#ef4444" : percentage >= 90 ? "#e9a11b" : "#3478f6";
+
+            return (
+              <div key={budget.category}>
+                <div className={styles.budgetRowHeader}>
+                  <span className={styles.budgetName}>{budget.category}</span>
+                  <span className={styles.budgetAmounts}>{formatCurrency(actual)} / {formatCurrency(budget.amount)}</span>
+                </div>
+                <Progress percent={Math.min(percentage, 100)} strokeColor={color} size="small" />
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 interface SetBudgetsModalProps {
   open: boolean;
   onClose: () => void;
@@ -113,16 +174,22 @@ function SetBudgetsModal({ open, onClose, categories, budgets, storeId, month, y
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
   const { message } = App.useApp();
-  const budgetMap = Object.fromEntries(budgets.map((b) => [b.category, b.amount]));
+  const budgetMap = Object.fromEntries(budgets.map((budget) => [budget.category, budget.amount]));
 
   const handleSave = async () => {
-    const values = form.getFieldsValue();
+    const values = form.getFieldsValue() as Record<string, number | undefined>;
     setSaving(true);
     try {
       await Promise.all(
         categories
-          .filter((c) => values[c.name] != null && Number(values[c.name]) > 0)
-          .map((c) => onSave({ storeId, category: c.name, month, year, amount: Number(values[c.name]) }))
+          .filter((category) => values[category.name] != null && Number(values[category.name]) > 0)
+          .map((category) => onSave({
+            storeId,
+            category: category.name,
+            month,
+            year,
+            amount: Number(values[category.name]),
+          })),
       );
       message.success("Budgets saved");
       onClose();
@@ -134,15 +201,24 @@ function SetBudgetsModal({ open, onClose, categories, budgets, storeId, month, y
   };
 
   return (
-    <Modal open={open} onCancel={onClose} title="Set Monthly Budgets" onOk={handleSave} okText="Save Budgets" confirmLoading={saving} width={500} destroyOnHidden>
+    <Modal
+      open={open}
+      onCancel={onClose}
+      title={`Set Monthly Budgets — ${dayjs(`${year}-${String(month).padStart(2, "0")}-01`).format("MMM YYYY")}`}
+      onOk={handleSave}
+      okText="Save Budgets"
+      confirmLoading={saving}
+      width={520}
+      destroyOnHidden
+    >
       <Text type="secondary" style={{ display: "block", marginBottom: 16, fontSize: 13 }}>
-        You&apos;ll be alerted when a category reaches 90% and 100% of its budget.
+        Set category-wise limits for the selected month.
       </Text>
-      <Form form={form} layout="vertical">
+      <Form form={form} layout="vertical" key={`${year}-${month}-${budgets.map((budget) => `${budget.category}:${budget.amount}`).join("|")}`}>
         <Row gutter={12}>
-          {categories.map((cat) => (
-            <Col span={12} key={cat.name}>
-              <Form.Item name={cat.name} label={cat.name} initialValue={budgetMap[cat.name]}>
+          {categories.map((category) => (
+            <Col xs={24} sm={12} key={category.name}>
+              <Form.Item name={category.name} label={category.name} initialValue={budgetMap[category.name]}>
                 <InputNumber style={{ width: "100%" }} prefix="₹" min={0} precision={0} placeholder="No limit" />
               </Form.Item>
             </Col>
@@ -153,210 +229,215 @@ function SetBudgetsModal({ open, onClose, categories, budgets, storeId, month, y
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
 export default function ExpenseAnalyticsPage() {
   const { storeId } = useStore();
   const { user } = useCurrentUser();
-  const { message } = App.useApp();
+  const currentMonth = dayjs();
+  const [selectedMonth, setSelectedMonth] = useState(currentMonth.month() + 1);
+  const [selectedYear, setSelectedYear] = useState(currentMonth.year());
+  const [budgetModalOpen, setBudgetModalOpen] = useState(false);
   const canModify = user?.role === "OWNER" || user?.role === "ADMIN" || user?.role === "MANAGER";
 
-  const now = dayjs();
-  const [selectedMonth, setSelectedMonth] = useState(now.month() + 1);
-  const [selectedYear, setSelectedYear] = useState(now.year());
-  const [budgetModalOpen, setBudgetModalOpen] = useState(false);
+  const selectedMonthDate = useMemo(
+    () => dayjs(`${selectedYear}-${String(selectedMonth).padStart(2, "0")}-01`),
+    [selectedMonth, selectedYear],
+  );
+  const selectedMonthStart = selectedMonthDate.startOf("month").format("YYYY-MM-DD");
+  const selectedMonthEnd = selectedMonthDate.endOf("month").format("YYYY-MM-DD");
+  const monthLabel = selectedMonthDate.format("MMM YYYY");
 
-  const { expenses, loading } = useExpenses({
+  // Month-scoped contract: this request is the single source for all selected-month metrics.
+  const { expenses: monthExpenses, loading: monthLoading } = useExpenses({
     storeId: storeId ?? undefined,
-    month: selectedMonth,
-    year: selectedYear,
+    startDate: selectedMonthStart,
+    endDate: selectedMonthEnd,
   });
 
-  const { summary, loading: summaryLoading } = useExpenseSummary(storeId, selectedYear);
+  // Year-scoped contract: the annual summary only powers Year Total and Monthly Expense Trend.
+  const { summary: yearSummary, loading: yearLoading } = useExpenseSummary(storeId, selectedYear);
   const { categories } = useExpenseCategories();
   const { budgets, loading: budgetsLoading, saveBudget, refresh: refreshBudgets } = useExpenseBudgets(
     storeId,
     selectedMonth,
-    selectedYear
+    selectedYear,
   );
 
-  const monthTotal = useMemo(() => expenses.reduce((s, e) => s + e.amount, 0), [expenses]);
-
-  const byCategoryThisMonth = useMemo(
-    () => expenses.reduce<Record<string, number>>((acc, e) => {
-      acc[e.category] = (acc[e.category] ?? 0) + e.amount;
-      return acc;
-    }, {}),
-    [expenses]
+  const monthTotal = useMemo(
+    () => monthExpenses.reduce((total, expense) => total + expense.amount, 0),
+    [monthExpenses],
   );
+  const monthByCategory = useMemo<ExpenseCategoryTotals>(() => {
+    return monthExpenses.reduce<ExpenseCategoryTotals>((totals, expense) => {
+      totals[expense.category] = (totals[expense.category] ?? 0) + expense.amount;
+      return totals;
+    }, {});
+  }, [monthExpenses]);
+  const sortedCategories = useMemo(
+    () => Object.entries(monthByCategory)
+      .map(([category, amount]) => ({ category, amount: amount ?? 0 }))
+      .filter((item) => item.amount > 0)
+      .sort((a, b) => b.amount - a.amount || a.category.localeCompare(b.category)),
+    [monthByCategory],
+  );
+  const topCategory = sortedCategories[0] ?? null;
+  const totalBudget = budgets.reduce((total, budget) => total + budget.amount, 0);
+  const budgetPercentage = totalBudget > 0 ? Math.round((monthTotal / totalBudget) * 100) : null;
 
-  const topCategory = useMemo(() => {
-    const entries = Object.entries(byCategoryThisMonth);
-    if (!entries.length) return null;
-    return entries.reduce((a, b) => (a[1] > b[1] ? a : b));
-  }, [byCategoryThisMonth]);
-
-  const totalBudget = budgets.reduce((s, b) => s + b.amount, 0);
-  const budgetPct = totalBudget > 0 ? Math.min(Math.round((monthTotal / totalBudget) * 100), 100) : null;
-  const monthLabel = dayjs(`${selectedYear}-${String(selectedMonth).padStart(2, "0")}-01`).format("MMM YYYY");
-
+  const openBudgetModal = () => setBudgetModalOpen(true);
   const handleSaveBudget = async (values: BudgetFormValues) => {
-    await saveBudget(values);
+    const saved = await saveBudget(values);
+    if (!saved) throw new Error("Budget could not be saved");
     await refreshBudgets();
-    message.success("Budget saved");
   };
 
   return (
-    <div style={{ padding: 24 }}>
-      {/* ── Header ───────────────────────────────────── */}
-      <Flex justify="space-between" align="center" style={{ marginBottom: 20 }}>
+    <main className={styles.page}>
+      <header className={styles.header}>
         <div>
-          <Title level={3} style={{ margin: 0 }}>Expense Analytics</Title>
-          <Text type="secondary" style={{ fontSize: 13 }}>
-            Deep dive into spending patterns · {monthLabel}
-          </Text>
+          <div className={styles.headingRow}>
+            <Title level={3} className={styles.heading}>Expense Analytics</Title>
+            <InfoTip title="A focused view of expense patterns, budgets, and categories." />
+          </div>
+          <span className={styles.subtitle}>Deep dive into spending patterns · {monthLabel}</span>
         </div>
         {canModify && (
-          <Button onClick={() => setBudgetModalOpen(true)} disabled={!storeId}>
-            🎯 Set Budgets
+          <Button className={styles.budgetButton} type="primary" icon={<AimOutlined />} onClick={openBudgetModal} disabled={!storeId}>
+            Set Budgets
           </Button>
         )}
-      </Flex>
+      </header>
 
-      {/* ── Period selector ──────────────────────────── */}
-      <Flex gap={12} align="center" style={{ marginBottom: 20 }}>
+      <section className={styles.periodBar} aria-label="Analytics period">
         <DatePicker.MonthPicker
-          value={dayjs(`${selectedYear}-${String(selectedMonth).padStart(2, "0")}-01`)}
+          className={styles.periodPicker}
+          value={selectedMonthDate}
           onChange={(date) => {
-            if (date) { setSelectedMonth(date.month() + 1); setSelectedYear(date.year()); }
+            if (!date) return;
+            setSelectedMonth(date.month() + 1);
+            setSelectedYear(date.year());
           }}
           format="MMM YYYY"
           allowClear={false}
         />
-        <Text type="secondary" style={{ fontSize: 13 }}>
-          Showing analytics for <Text strong>{monthLabel}</Text>
-        </Text>
-      </Flex>
+        <span className={styles.periodHelp}>Showing analytics for <strong>{monthLabel}</strong></span>
+      </section>
 
-      {/* ── KPI cards ────────────────────────────────── */}
-      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-        <Col xs={24} sm={12} xl={6}>
-          <Card size="small" loading={loading}>
-            <Statistic
-              title={<Flex align="center" gap={6}><DollarOutlined style={{ color: "#4f46e5" }} /><span>Month Total</span></Flex>}
-              value={monthTotal}
-              formatter={(v) => formatCurrency(Number(v))}
-              styles={{ content: { fontSize: 22, fontWeight: 700 } }}
-            />
-            <Text type="secondary" style={{ fontSize: 12 }}>{expenses.length} transactions</Text>
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} xl={6}>
-          <Card size="small" loading={summaryLoading}>
-            <Statistic
-              title={<Flex align="center" gap={6}><CalendarOutlined style={{ color: "#10b981" }} /><span>Year Total ({selectedYear})</span></Flex>}
-              value={summary?.grandTotal ?? 0}
-              formatter={(v) => formatCurrency(Number(v))}
-              styles={{ content: { fontSize: 22, fontWeight: 700 } }}
-            />
-            <Text type="secondary" style={{ fontSize: 12 }}>Jan–Dec {selectedYear}</Text>
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} xl={6}>
-          <Card size="small" loading={budgetsLoading}>
-            <Statistic
-              title={<Flex align="center" gap={6}><RiseOutlined style={{ color: budgetPct != null && budgetPct >= 90 ? "#f59e0b" : "#6366f1" }} /><span>Budget Used</span></Flex>}
-              value={budgetPct ?? "—"}
-              suffix={budgetPct != null ? "%" : ""}
-              styles={{
-                content: {
-                  fontSize: 22, fontWeight: 700,
-                  color: budgetPct != null && budgetPct >= 100 ? "#ef4444" : budgetPct != null && budgetPct >= 90 ? "#f59e0b" : undefined,
-                },
-              }}
-            />
-            {totalBudget > 0 ? (
-              <Text type="secondary" style={{ fontSize: 12 }}>{formatCurrency(totalBudget - monthTotal)} remaining</Text>
-            ) : (
-              <Text type="secondary" style={{ fontSize: 12 }}>No budget set</Text>
-            )}
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} xl={6}>
-          <Card size="small" loading={loading}>
-            <Statistic
-              title={<Flex align="center" gap={6}><TrophyOutlined style={{ color: "#f59e0b" }} /><span>Top Category</span></Flex>}
-              value={topCategory ? topCategory[0] : "—"}
-              styles={{ content: { fontSize: 18, fontWeight: 700 } }}
-            />
-            {topCategory && (
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                {formatCurrency(topCategory[1])} · {monthTotal > 0 ? Math.round((topCategory[1] / monthTotal) * 100) : 0}% of spend
-              </Text>
-            )}
-          </Card>
-        </Col>
-      </Row>
+      <section className={styles.kpiGrid} aria-label="Expense summary">
+        <KpiCard
+          label="Month Total"
+          help="Expenses recorded in the selected month."
+          icon={<WalletOutlined />}
+          iconTone="blue"
+          value={formatCurrency(monthTotal)}
+          meta={`${monthExpenses.length} ${monthExpenses.length === 1 ? "transaction" : "transactions"}`}
+          loading={monthLoading}
+        />
+        <KpiCard
+          label={`Year Total (${selectedYear})`}
+          help="Total expenses recorded during the selected year."
+          icon={<CalendarOutlined />}
+          iconTone="green"
+          value={formatCurrency(yearSummary?.grandTotal ?? 0)}
+          meta={`Jan – Dec ${selectedYear}`}
+          loading={yearLoading}
+        />
+        <KpiCard
+          label="Budget Used"
+          help="How much of your monthly budget has been spent."
+          icon={<PieChartOutlined />}
+          iconTone="blue"
+          value={budgetPercentage == null ? "—" : `${budgetPercentage}%`}
+          meta={budgetPercentage == null ? "No budget set" : `${formatCurrency(Math.max(totalBudget - monthTotal, 0))} remaining`}
+          loading={budgetsLoading || monthLoading}
+          action={budgetPercentage == null && canModify ? (
+            <Button className={styles.kpiAction} size="small" onClick={openBudgetModal}>Set Budgets</Button>
+          ) : undefined}
+        />
+        <KpiCard
+          label="Top Category"
+          help="The category with the highest spend in the selected month."
+          icon={<TrophyOutlined />}
+          iconTone="amber"
+          value={topCategory?.category ?? "—"}
+          meta={topCategory ? `${formatCurrency(topCategory.amount)} · ${monthTotal > 0 ? Math.round((topCategory.amount / monthTotal) * 100) : 0}% of spend` : "No expense data"}
+          loading={monthLoading}
+          categoryValue
+        />
+      </section>
 
-      {/* ── Charts ───────────────────────────────────── */}
-      <Row gutter={[16, 16]}>
-        <Col xs={24} lg={8}>
-          <BudgetPanel
-            budgets={budgets}
-            byCategory={byCategoryThisMonth}
-            loading={budgetsLoading}
-            onEdit={() => setBudgetModalOpen(true)}
-          />
-        </Col>
-        <Col xs={24} lg={8}>
-          <ExpenseCategoryPieChart
-            byCategory={summary?.byCategory ?? byCategoryThisMonth}
-            loading={summaryLoading}
-          />
-        </Col>
-        <Col xs={24} lg={8}>
-          <ExpenseMonthlyTrendChart
-            data={summary?.byMonth ?? []}
-            loading={summaryLoading}
-          />
-        </Col>
-      </Row>
+      <section className={styles.analyticsGrid} aria-label="Expense charts">
+        <ExpenseCategorySpendChart byCategory={monthByCategory} loading={monthLoading} monthLabel={monthLabel} />
+        <BudgetPanel
+          budgets={budgets}
+          byCategory={monthByCategory}
+          loading={budgetsLoading || monthLoading}
+          canModify={canModify}
+          onEdit={openBudgetModal}
+        />
+        <div className={styles.trendPanel}>
+          <ExpenseMonthlyTrendChart data={yearSummary?.byMonth ?? []} loading={yearLoading} year={selectedYear} />
+        </div>
+      </section>
 
-      {/* ── Spend by category table ───────────────────── */}
-      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-        <Col xs={24}>
-          <Card title={`Category Breakdown — ${monthLabel}`} size="small" loading={loading}>
-            {Object.entries(byCategoryThisMonth).length === 0 ? (
-              <Text type="secondary">No expenses for {monthLabel}.</Text>
-            ) : (
-              <Row gutter={[12, 12]}>
-                {Object.entries(byCategoryThisMonth)
-                  .sort((a, b) => b[1] - a[1])
-                  .map(([cat, amount]) => {
-                    const pct = monthTotal > 0 ? Math.round((amount / monthTotal) * 100) : 0;
+      <section className={styles.breakdown}>
+        <Card
+          className={styles.panelCard}
+          loading={monthLoading}
+          title={
+            <CardTitle icon={<BarChartOutlined />} help="A reconciled category view of expenses in the selected month.">
+              Category Breakdown — {monthLabel}
+            </CardTitle>
+          }
+        >
+          {sortedCategories.length === 0 ? (
+            <div className={styles.emptyBreakdown}>
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No expense data for this month." />
+            </div>
+          ) : (
+            <div className={styles.tableWrap}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th scope="col">#</th>
+                    <th scope="col">Category</th>
+                    <th scope="col">Amount (₹)</th>
+                    <th scope="col">% of Total</th>
+                    <th scope="col">Visual</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedCategories.map((item, index) => {
+                    const percentage = monthTotal > 0 ? (item.amount / monthTotal) * 100 : 0;
+                    const percentageLabel = percentage.toFixed(percentage % 1 === 0 ? 0 : 1);
                     return (
-                      <Col xs={24} sm={12} lg={8} key={cat}>
-                        <Flex justify="space-between" align="center" style={{ marginBottom: 4 }}>
-                          <Flex align="center" gap={6}>
-                            <TagOutlined style={{ color: "#6366f1", fontSize: 12 }} />
-                            <Text style={{ fontSize: 13 }}>{cat}</Text>
-                          </Flex>
-                          <Text strong style={{ fontSize: 13 }}>{formatCurrency(amount)}</Text>
-                        </Flex>
-                        <Progress
-                          percent={pct}
-                          showInfo={false}
-                          strokeColor="#6366f1"
-                          size="small"
-                        />
-                        <Text type="secondary" style={{ fontSize: 11 }}>{pct}% of total</Text>
-                      </Col>
+                      <tr key={item.category}>
+                        <td>{index + 1}</td>
+                        <td className={styles.categoryCell}>{item.category}</td>
+                        <td className={styles.amountCell}>{formatCurrency(item.amount)}</td>
+                        <td>{percentageLabel}%</td>
+                        <td>
+                          <div className={styles.visualCell}>
+                            <span className={styles.visualTrack} aria-hidden="true">
+                              <span className={styles.visualBar} style={{ width: `${percentage}%` }} />
+                            </span>
+                            <span className={styles.visualPercent}>{percentageLabel}%</span>
+                          </div>
+                        </td>
+                      </tr>
                     );
                   })}
-              </Row>
-            )}
-          </Card>
-        </Col>
-      </Row>
+                  <tr className={styles.totalRow}>
+                    <td colSpan={2}>Total</td>
+                    <td>{formatCurrency(monthTotal)}</td>
+                    <td>100%</td>
+                    <td />
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      </section>
 
       {storeId && (
         <SetBudgetsModal
@@ -370,6 +451,6 @@ export default function ExpenseAnalyticsPage() {
           onSave={handleSaveBudget}
         />
       )}
-    </div>
+    </main>
   );
 }

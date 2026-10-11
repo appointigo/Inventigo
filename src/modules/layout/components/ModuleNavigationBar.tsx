@@ -43,10 +43,10 @@ export default function ModuleNavigationBar({ role }: { role: Role }) {
         </div>
       </div>
       <style jsx>{`
-        .module-navigation { background: var(--bg-surface); border-bottom: 1px solid var(--border-primary); }
-        .module-navigation-inner { min-height: 48px; display: flex; align-items: center; gap: 20px; padding: 0 24px; }
-        .module-navigation-title { color: var(--text-primary); font-weight: 650; }
-        .module-navigation-scroll { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+        .module-navigation { width: 100%; max-width: 100%; min-width: 0; overflow: hidden; background: var(--bg-surface); border-bottom: 1px solid var(--border-primary); }
+        .module-navigation-inner { width: 100%; max-width: 100%; min-width: 0; min-height: 48px; display: flex; align-items: center; gap: 20px; padding: 0 24px; }
+        .module-navigation-title { flex: 0 0 auto; color: var(--text-primary); font-weight: 650; }
+        .module-navigation-scroll { display: flex; flex: 1 1 auto; min-width: 0; gap: 4px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
         .module-navigation-scroll::-webkit-scrollbar { display: none; }
         button { border: 0; background: transparent; color: var(--text-muted); height: 47px; padding: 0 10px; display: inline-flex; gap: 7px; align-items: center; white-space: nowrap; cursor: pointer; border-bottom: 2px solid transparent; font: inherit; font-size: 13px; }
         button:hover { color: #2563eb; }

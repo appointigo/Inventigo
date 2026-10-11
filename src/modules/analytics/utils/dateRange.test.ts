@@ -84,6 +84,19 @@ test("falls back safely when URL custom dates are incomplete", () => {
   assert.equal(parseAnalyticsDateRange(params, "30d", now).preset, "30d");
 });
 
+test("falls back to the page default for unsupported or malformed URL ranges", () => {
+  assert.deepEqual(
+    parseAnalyticsDateRange(new URLSearchParams({ period: "nextWeek" }), "today", now),
+    { preset: "today", from: "2026-10-09", to: "2026-10-09", group: "day" },
+  );
+  assert.deepEqual(
+    parseAnalyticsDateRange(new URLSearchParams({
+      period: "custom", from: "2026-10-10", to: "2026-10-01",
+    }), "today", now),
+    { preset: "today", from: "2026-10-09", to: "2026-10-09", group: "day" },
+  );
+});
+
 test("preserves exact custom dates across month and year boundaries", () => {
   assert.deepEqual(resolveAnalyticsDateRange("custom", {
     from: "2026-10-01", to: "2026-10-07",

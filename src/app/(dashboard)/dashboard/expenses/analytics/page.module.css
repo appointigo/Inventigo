@@ -1,0 +1,411 @@
+.page {
+  min-width: 0;
+  padding: 24px;
+  color: #172033;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 18px;
+}
+
+.headingRow,
+.cardTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.heading {
+  margin: 0 !important;
+  color: #172033 !important;
+  font-size: 24px !important;
+  line-height: 1.3 !important;
+  letter-spacing: -0.35px;
+}
+
+.subtitle {
+  display: block;
+  margin-top: 4px;
+  color: #7a8799;
+  font-size: 13px;
+}
+
+.infoIcon {
+  color: #9aa7b8;
+  cursor: help;
+  font-size: 13px;
+}
+
+.budgetButton {
+  min-width: 120px;
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.periodBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.periodPicker {
+  width: 126px;
+  border-radius: 8px;
+}
+
+.periodHelp {
+  color: #7a8799;
+  font-size: 13px;
+}
+
+.periodHelp strong {
+  color: #455267;
+  font-weight: 600;
+}
+
+.kpiGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.kpiCard,
+.panelCard {
+  height: 100%;
+  border-color: #e7ebf2 !important;
+  border-radius: 11px !important;
+  box-shadow: 0 2px 10px rgb(15 23 42 / 3%);
+}
+
+.kpiCard :global(.ant-card-body) {
+  min-height: 146px;
+  padding: 18px 19px;
+}
+
+.kpiHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin-bottom: 17px;
+}
+
+.kpiIcon {
+  display: inline-flex;
+  flex: 0 0 36px;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  font-size: 17px;
+}
+
+.iconBlue {
+  color: #3478f6;
+  background: #edf4ff;
+}
+
+.iconGreen {
+  color: #1c9b68;
+  background: #eaf8f1;
+}
+
+.iconAmber {
+  color: #d99516;
+  background: #fff6df;
+}
+
+.kpiLabel {
+  min-width: 0;
+  color: #657388;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.kpiValue {
+  overflow: hidden;
+  color: #182236;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.45px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.categoryValue {
+  font-size: 21px;
+}
+
+.kpiMeta {
+  display: block;
+  margin-top: 8px;
+  color: #8995a6;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.kpiAction {
+  height: 25px;
+  margin-top: 9px;
+  padding-inline: 9px;
+  border-radius: 6px;
+  font-size: 11px;
+}
+
+.analyticsGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(250px, 0.9fr) minmax(0, 1.5fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.panelCard :global(.ant-card-head) {
+  min-height: 54px;
+  padding: 0 18px;
+}
+
+.panelCard :global(.ant-card-head-title) {
+  overflow: visible;
+  white-space: normal;
+}
+
+.panelCard :global(.ant-card-body) {
+  padding: 20px 18px 22px;
+}
+
+.cardTitle {
+  color: #26354a;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.titleIcon {
+  color: #3478f6;
+}
+
+.budgetEmpty {
+  display: flex;
+  min-height: 248px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  text-align: center;
+}
+
+.budgetEmptyIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 14px;
+  border-radius: 15px;
+  color: #3478f6;
+  background: #edf4ff;
+  font-size: 23px;
+}
+
+.budgetEmptyTitle {
+  margin-bottom: 5px;
+  color: #2d3b50;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.budgetEmptyCopy {
+  max-width: 225px;
+  margin-bottom: 15px;
+  color: #8a96a7;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.budgetList {
+  display: grid;
+  gap: 16px;
+  min-height: 248px;
+  align-content: start;
+}
+
+.budgetRowHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.budgetName {
+  min-width: 0;
+  overflow: hidden;
+  color: #344258;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.budgetAmounts {
+  flex: 0 0 auto;
+  color: #8995a6;
+  font-size: 11px;
+}
+
+.breakdown {
+  margin-top: 16px;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.table th,
+.table td {
+  padding: 13px 14px;
+  border-bottom: 1px solid #edf0f4;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.table th {
+  color: #8190a4;
+  background: #fafbfd;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+}
+
+.table td {
+  color: #465469;
+  font-size: 13px;
+}
+
+.table th:nth-child(1),
+.table td:nth-child(1) {
+  width: 54px;
+  text-align: center;
+}
+
+.table th:nth-child(2) {
+  width: 28%;
+}
+
+.table th:nth-child(3) {
+  width: 20%;
+}
+
+.table th:nth-child(4) {
+  width: 15%;
+}
+
+.categoryCell {
+  color: #26354a !important;
+  font-weight: 600;
+}
+
+.amountCell {
+  color: #26354a !important;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.visualCell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.visualTrack {
+  width: min(190px, 80%);
+  height: 8px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: #edf3ff;
+}
+
+.visualBar {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #3478f6;
+}
+
+.visualPercent {
+  min-width: 42px;
+  color: #657388;
+  font-size: 12px;
+}
+
+.totalRow td {
+  border-bottom: 0;
+  color: #26354a;
+  background: #fafbfd;
+  font-weight: 700;
+}
+
+.emptyBreakdown {
+  display: grid;
+  min-height: 160px;
+  place-items: center;
+}
+
+@media (max-width: 1439px) {
+  .kpiGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .analyticsGrid {
+    grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
+  }
+
+  .trendPanel {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 767px) {
+  .page {
+    padding: 16px;
+  }
+
+  .header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .budgetButton {
+    align-self: flex-start;
+  }
+
+  .periodBar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .kpiGrid,
+  .analyticsGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .trendPanel {
+    grid-column: auto;
+  }
+}

@@ -785,9 +785,9 @@ The backend does the rest:
 
 After bulk import completes, the product detail view shows all variant SKUs and printable barcode labels — same as any manually created product.
 
-### Barcode Three-Tier Lookup (unchanged)
+### Barcode Three-Tier Lookup
 
-The barcode scanner lookup remains unchanged by this feature:
+Barcode lookup remains unchanged by this feature:
 
 1. Match `Product.sku` or `Product.externalBarcode` → return product + all stock levels
 2. Match `StockEntry.variantSku` → return product + matched variant info

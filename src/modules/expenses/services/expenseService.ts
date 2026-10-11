@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { ExpensePaymentStatus } from "@prisma/client";
 import type { ExpenseFormValues, StoreExpense, ExpenseListFilters, ExpenseSummary, ExpenseCategoryTotals, ExpenseMonthSummary, ExpenseCategory } from "../types";
+import { businessDateStorageDate } from "@/modules/analytics/utils/dateRange";
 
 export class SettledExpenseConflictError extends Error {
   constructor(message = "Paid expenses cannot be financially changed or deleted") {
@@ -61,7 +62,12 @@ const monthRange = (year: number, month: number): { gte: Date; lt: Date } => {
 export const expenseService = {
   async list(filters: ExpenseListFilters, orgId: string): Promise<StoreExpense[]> {
     const dateFilter =
-      filters.month && filters.year
+      filters.startDate && filters.endDate
+        ? {
+            gte: businessDateStorageDate(filters.startDate),
+            lte: businessDateStorageDate(filters.endDate),
+          }
+        : filters.month && filters.year
         ? monthRange(filters.year, filters.month)
         : filters.year
           ? { gte: new Date(Date.UTC(filters.year, 0, 1)), lt: new Date(Date.UTC(filters.year + 1, 0, 1)) }

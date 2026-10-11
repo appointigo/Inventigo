@@ -1,9 +1,8 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { App, Badge, Button, Empty, Input, Skeleton, Typography } from "antd";
-import { CameraOutlined, HistoryOutlined, ScanOutlined, SearchOutlined, ShoppingCartOutlined, SwapOutlined } from "@ant-design/icons";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { HistoryOutlined, ScanOutlined, SearchOutlined, ShoppingCartOutlined, SwapOutlined } from "@ant-design/icons";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createSaleRequest, useSales } from "@/modules/billing/hooks/useBilling";
 import type { VariantRow } from "@/modules/billing/types";
 import ReturnExchangeView from "@/modules/billing/components/ReturnExchangeView";
@@ -18,11 +17,6 @@ import { useMobileWorkspace } from "../context/MobileWorkspaceContext";
 import { formatCurrency } from "@/shared/utils/formatCurrency";
 import styles from "./BillingPage.module.css";
 
-const CameraBarcodeScannerModal = dynamic(
-  () => import("@/modules/barcode/components/CameraBarcodeScannerModal"),
-  { ssr: false }
-);
-
 export default function BillingPage() {
   const { message } = App.useApp();
   const { storeId } = useStore();
@@ -30,15 +24,12 @@ export default function BillingPage() {
   const { products, loading } = useProducts({ storeId: storeId ?? undefined, search: moduleSearch.billing || undefined });
   const [cartOpen, setCartOpen] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
-  const [cameraScanOpen, setCameraScanOpen] = useState(false);
-  const [cameraSupported, setCameraSupported] = useState(false);
   const [customerLoading, setCustomerLoading] = useState(false);
   const [customerStats, setCustomerStats] = useState<{
     totalVisits: number;
     totalSpend: number;
     lastPurchaseDate: string | null;
   } | null>(null);
-  const pendingCameraScanRef = useRef<string | null>(null);
   const [activeView, setActiveView] = useState<"sale" | "history" | "exchange">("sale");
   const [exchangeSaleId, setExchangeSaleId] = useState<string | undefined>();
   const salesState = useSales();
@@ -62,16 +53,6 @@ export default function BillingPage() {
       </button>
     </div>
   );
-
-  useEffect(() => {
-    if (
-      typeof window !== "undefined"
-      && typeof navigator !== "undefined"
-      && !!navigator.mediaDevices?.getUserMedia
-    ) {
-      setCameraSupported(true);
-    }
-  }, []);
 
   const variantRows = useMemo((): VariantRow[] => products.flatMap((product) =>
     product.stock.map((size) => ({
@@ -111,30 +92,6 @@ export default function BillingPage() {
     });
     message.success(`${row.productName} · ${row.sizeLabel} added`);
   }, [cart, message]);
-
-  const handleCameraScan = useCallback((decodedText: string) => {
-    pendingCameraScanRef.current = decodedText;
-    setModuleSearch("billing", decodedText);
-    setCameraScanOpen(false);
-  }, [setModuleSearch]);
-
-  useEffect(() => {
-    const pending = pendingCameraScanRef.current;
-    if (!pending || loading) {
-      return;
-    }
-
-    const normalized = pending.toLowerCase().trim();
-    const exactMatches = variantRows.filter(
-      (row) => row.variantSku?.toLowerCase() === normalized || row.externalBarcode?.toLowerCase() === normalized
-    );
-
-    if (exactMatches.length === 1) {
-      pendingCameraScanRef.current = null;
-      addVariantToCart(exactMatches[0]);
-      setModuleSearch("billing", "");
-    }
-  }, [addVariantToCart, loading, setModuleSearch, variantRows]);
 
   const handleScanEnter = useCallback(() => {
     const normalized = moduleSearch.billing.trim().toLowerCase();
@@ -284,18 +241,9 @@ export default function BillingPage() {
                 onPressEnter={handleScanEnter}
                 className={styles.searchInput}
               />
-              {cameraSupported ? (
-                <Button
-                  size="large"
-                  shape="round"
-                  icon={<CameraOutlined />}
-                  onClick={() => setCameraScanOpen(true)}
-                  className={styles.scanButton}
-                />
-              ) : null}
             </div>
             <Typography.Text type="secondary" className={styles.scanHint}>
-              Barcode scanners can type here and auto-add on Enter. Camera scan is available on supported devices.
+              Hardware barcode scanners can type here and auto-add on Enter.
             </Typography.Text>
             </div>
           </div>
@@ -377,13 +325,6 @@ export default function BillingPage() {
         onTransactionDateChange={cart.setTransactionDate}
       />
 
-      {cameraScanOpen ? (
-        <CameraBarcodeScannerModal
-          open={cameraScanOpen}
-          onScan={handleCameraScan}
-          onClose={() => setCameraScanOpen(false)}
-        />
-      ) : null}
     </>
   );
 }

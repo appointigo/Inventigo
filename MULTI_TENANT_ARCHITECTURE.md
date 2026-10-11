@@ -889,7 +889,7 @@ _To be implemented after core multi-tenancy is complete and stable._
 | 15 | **API Keys for Integrations** | Connect Tally, Shopify, WooCommerce | Low |
 | 16 | **Multi-Currency Support** | For orgs in different countries | Low |
 | 17 | **White-Label / Custom Domain** | rare-thread.stockiva.com | Low |
-| 18 | **Mobile App / PWA** | Staff scan barcodes from mobile | Low |
+| 18 | **Mobile App / PWA** | Mobile inventory and billing workflows | Low |
 | 19 | **Supplier Portal** | Read-only supplier login to check PO status | Low |
 | 20 | **Platform Admin — Impersonation** | SUPER_ADMIN can "View as..." any org for support | Low |
 

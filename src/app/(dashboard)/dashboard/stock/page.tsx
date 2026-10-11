@@ -22,16 +22,35 @@ export default function StockPage() {
   const { storeId } = useStore();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
+  const [stockPage, setStockPage] = useState(1);
+  const [stockPageSize, setStockPageSize] = useState(10);
+  const [movementPage, setMovementPage] = useState(1);
+  const [movementPageSize, setMovementPageSize] = useState(10);
   const [adjustingRow, setAdjustingRow] = useState<StockLevelRow | null>(null);
   const activeTab = searchParams.get("view") === "movements" ? "movements" : "levels";
 
-  const { stockLevels, loading, refresh } = useStockLevels({
+  const {
+    stockLevels,
+    total: stockTotal,
+    loading,
+    refresh,
+  } = useStockLevels({
     storeId: storeId ?? undefined,
     search: search || undefined,
     lowStockOnly: statusFilter === "low" || undefined,
     outOfStockOnly: statusFilter === "out" || undefined,
+    page: stockPage,
+    pageSize: stockPageSize,
   });
-  const { movements, loading: movementsLoading, refresh: refreshMovements } = useStockMovements(storeId ?? undefined);
+  const {
+    movements,
+    total: movementTotal,
+    loading: movementsLoading,
+    refresh: refreshMovements,
+  } = useStockMovements(storeId ?? undefined, {
+    page: movementPage,
+    pageSize: movementPageSize,
+  });
 
   const handleAdjust = useCallback(
     async (values: {
@@ -75,7 +94,11 @@ export default function StockPage() {
       </Typography.Title>
       <Tabs
         activeKey={activeTab}
-        onChange={(key) => router.replace(key === "movements" ? "/dashboard/stock?view=movements" : "/dashboard/stock")}
+        onChange={(key) =>
+          router.replace(
+            key === "movements" ? "/dashboard/stock?view=movements" : "/dashboard/stock"
+          )
+        }
         items={[
           {
             key: "levels",
@@ -85,10 +108,23 @@ export default function StockPage() {
                 stockLevels={stockLevels}
                 loading={loading}
                 search={search}
-                onSearchChange={setSearch}
+                onSearchChange={(value) => {
+                  setSearch(value);
+                  setStockPage(1);
+                }}
                 statusFilter={statusFilter}
-                onStatusChange={setStatusFilter}
+                onStatusChange={(value) => {
+                  setStatusFilter(value);
+                  setStockPage(1);
+                }}
                 onAdjust={setAdjustingRow}
+                page={stockPage}
+                pageSize={stockPageSize}
+                total={stockTotal}
+                onPaginationChange={(page, pageSize) => {
+                  setStockPage(pageSize === stockPageSize ? page : 1);
+                  setStockPageSize(pageSize);
+                }}
               />
             ),
           },
@@ -99,6 +135,13 @@ export default function StockPage() {
               <MovementHistoryTable
                 movements={movements}
                 loading={movementsLoading}
+                page={movementPage}
+                pageSize={movementPageSize}
+                total={movementTotal}
+                onPaginationChange={(page, pageSize) => {
+                  setMovementPage(pageSize === movementPageSize ? page : 1);
+                  setMovementPageSize(pageSize);
+                }}
               />
             ),
           },

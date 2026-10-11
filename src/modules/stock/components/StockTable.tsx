@@ -1,20 +1,11 @@
 "use client";
 
 import { useMemo } from "react";
-import { Table, Tag, Input, Select, Badge, Flex, Empty, App } from "antd";
+import { Table, Tag, Input, Select, Badge, Flex, Empty } from "antd";
 import { SearchOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { StockLevelRow } from "../types";
-import dynamic from "next/dynamic";
-import { CameraOutlined } from "@ant-design/icons";
-import { useState } from "react";
-import { CameraScanBtn } from "@/modules/billing/components/BillingView.styled";
-import { sanitizeScannedBarcode } from "@/shared/services/barcodeService";
-
-const CameraBarcodeScannerModal = dynamic(
-  () => import("@/modules/barcode/components/CameraBarcodeScannerModal"),
-  { ssr: false }
-);
+import { INVENTORY_PAGE_SIZE_OPTIONS } from "../utils/pagination";
 
 interface StockTableProps {
   stockLevels: StockLevelRow[];
@@ -24,12 +15,28 @@ interface StockTableProps {
   statusFilter: string | undefined;
   onStatusChange: (value: string | undefined) => void;
   onAdjust: (row: StockLevelRow) => void;
+  page: number;
+  pageSize: number;
+  total: number;
+  onPaginationChange: (page: number, pageSize: number) => void;
 }
 
 const statusColors = { OK: "green", LOW: "orange", OUT: "red" } as const;
 const statusLabels = { OK: "In Stock", LOW: "Low Stock", OUT: "Out of Stock" } as const;
 
-const StockTable = ({ stockLevels, loading, search, onSearchChange, statusFilter, onStatusChange, onAdjust }: StockTableProps) => {
+const StockTable = ({
+  stockLevels,
+  loading,
+  search,
+  onSearchChange,
+  statusFilter,
+  onStatusChange,
+  onAdjust,
+  page,
+  pageSize,
+  total,
+  onPaginationChange,
+}: StockTableProps) => {
   // Derive unique attribute keys from all rows (exclude internal/noise fields)
   const attributeKeys = useMemo(() => {
     const keys = new Set<string>();
@@ -38,7 +45,7 @@ const StockTable = ({ stockLevels, loading, search, onSearchChange, statusFilter
         if (k !== "unit" && k !== "supplierId") keys.add(k);
       });
     }
-    
+
     return [...keys];
   }, [stockLevels]);
 
@@ -49,8 +56,12 @@ const StockTable = ({ stockLevels, loading, search, onSearchChange, statusFilter
       sorter: (a, b) => a.productName.localeCompare(b.productName),
       render: (name: string, record) => (
         <div>
-          <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--text-primary)" }}>{name}</div>
-          <div style={{ fontSize: 11.5, color: "var(--text-faint)", marginTop: 1 }}>{record.sku}</div>
+          <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--text-primary)" }}>
+            {name}
+          </div>
+          <div style={{ fontSize: 11.5, color: "var(--text-faint)", marginTop: 1 }}>
+            {record.sku}
+          </div>
         </div>
       ),
     },
@@ -143,25 +154,9 @@ const StockTable = ({ stockLevels, loading, search, onSearchChange, statusFilter
       key: "action",
       width: 90,
       align: "center",
-      render: (_, record) => (
-        <a onClick={() => onAdjust(record)}>Adjust</a>
-      ),
+      render: (_, record) => <a onClick={() => onAdjust(record)}>Adjust</a>,
     },
   ];
-
-  const [cameraScanOpen, setCameraScanOpen] = useState(false);
-
-  const { message } = App.useApp();
-
-  const handleCameraScan = (decodedText: string) => {
-    const sanitized = sanitizeScannedBarcode(decodedText);
-    if (!sanitized) {
-      message.error("Invalid barcode format. Please try scanning again.");
-      return;
-    }
-    onSearchChange(sanitized);
-    setCameraScanOpen(false);
-  };
 
   return (
     <>
@@ -174,14 +169,6 @@ const StockTable = ({ stockLevels, loading, search, onSearchChange, statusFilter
           allowClear
           style={{ width: 260 }}
         />
-        <CameraScanBtn
-          type="button"
-          onClick={() => setCameraScanOpen(true)}
-          title="Scan barcode via camera"
-        >
-          <CameraOutlined style={{ fontSize: 16 }} />
-          Scan
-        </CameraScanBtn>
         <Select
           placeholder="All Status"
           value={statusFilter}
@@ -195,36 +182,38 @@ const StockTable = ({ stockLevels, loading, search, onSearchChange, statusFilter
           ]}
         />
       </Flex>
-      {cameraScanOpen && (
-        <CameraBarcodeScannerModal
-          open={cameraScanOpen}
-          onScan={handleCameraScan}
-          onClose={() => setCameraScanOpen(false)}
-        />
-      )}
       <Table
         columns={columns}
         dataSource={stockLevels}
         rowKey="id"
         loading={loading}
-        pagination={{ pageSize: 15, showSizeChanger: true, showTotal: (t) => `${t} entries` }}
+        pagination={{
+          current: page,
+          pageSize,
+          total,
+          pageSizeOptions: INVENTORY_PAGE_SIZE_OPTIONS,
+          showSizeChanger: true,
+          onChange: onPaginationChange,
+          showTotal: (t) => `${t} entries`,
+        }}
         size="middle"
         scroll={{ x: 800 }}
         locale={{
-          emptyText: !loading && stockLevels.length === 0 ? (
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description={
-                <span style={{ color: "#888" }}>
-                  No stock entries yet. Add products to start tracking inventory levels.
-                </span>
-              }
-            />
-          ) : undefined,
+          emptyText:
+            !loading && stockLevels.length === 0 ? (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={
+                  <span style={{ color: "#888" }}>
+                    No stock entries yet. Add products to start tracking inventory levels.
+                  </span>
+                }
+              />
+            ) : undefined,
         }}
       />
     </>
   );
-}
+};
 
 export default StockTable;

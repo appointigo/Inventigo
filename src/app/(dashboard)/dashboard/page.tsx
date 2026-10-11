@@ -65,14 +65,35 @@ const PERIOD_LABELS: Record<AnalyticsDatePreset, string> = {
   custom: "Custom",
 };
 
-const DASHBOARD_PRESETS = ["today", "thisWeek", "thisMonth", "thisQuarter", "thisYear", "custom"] as const;
+const DASHBOARD_PRESETS = [
+  "today",
+  "yesterday",
+  "thisWeek",
+  "lastWeek",
+  "thisMonth",
+  "lastMonth",
+  "thisQuarter",
+  "lastQuarter",
+  "thisYear",
+  "lastYear",
+  "7d",
+  "30d",
+  "custom",
+] as const;
 
 const DASHBOARD_DATE_OPTIONS: AnalyticsDateFilterOption[] = [
   { value: "today", label: "Today" },
+  { value: "yesterday", label: "Yesterday" },
   { value: "thisWeek", label: "This Week" },
+  { value: "lastWeek", label: "Last Week" },
   { value: "thisMonth", label: "This Month" },
+  { value: "lastMonth", label: "Last Month" },
   { value: "thisQuarter", label: "This Quarter" },
+  { value: "lastQuarter", label: "Last Quarter" },
   { value: "thisYear", label: "This Year" },
+  { value: "lastYear", label: "Last Year" },
+  { value: "7d", label: "Last 7 Days" },
+  { value: "30d", label: "Last 30 Days" },
   { value: "custom", label: "Custom" },
 ];
 
@@ -108,7 +129,7 @@ function DashboardContent() {
   const { data: session } = useSession();
   const { storeId, storeName } = useStore();
   const [releaseActions, setReleaseActions] = useState<{ customerActions: number; receivables: number } | null>(null);
-  const { range, selectPreset, selectCustom } = useAnalyticsDateRange("thisMonth", DASHBOARD_PRESETS);
+  const { range, selectPreset, selectCustom } = useAnalyticsDateRange("today", DASHBOARD_PRESETS);
   const startDate = range.from;
   const endDate = range.to;
   const periodLabel = `${PERIOD_LABELS[range.preset]} · ${dateRangeLabel(range.from, range.to)}`;
@@ -211,9 +232,9 @@ function DashboardContent() {
       <section className={styles.metricGrid} aria-label="Business performance summary">
         {[
           { label: "Net sales", value: summary ? currency(summary.revenue) : "—", helper: periodLabel, icon: DollarOutlined, tone: "blue", pending: periodLoading },
-          { label: "Net profit", value: summary?.netProfit == null ? "Unavailable" : currency(summary.netProfit), helper: summary?.netMarginPct == null ? "Historical cost evidence is incomplete" : `${summary.netMarginPct}% margin after expenses`, icon: RiseOutlined, tone: (summary?.netProfit ?? 0) >= 0 ? "green" : "red", pending: periodLoading },
+          { label: "Net profit", value: summary?.netProfit == null ? "Unavailable" : currency(summary.netProfit), helper: summary?.netMarginPct == null ? `${PERIOD_LABELS[range.preset]} · Historical cost evidence is incomplete` : `${PERIOD_LABELS[range.preset]} · ${summary.netMarginPct}% margin after expenses`, icon: RiseOutlined, tone: (summary?.netProfit ?? 0) >= 0 ? "green" : "red", pending: periodLoading },
           { label: "Orders", value: summary ? summary.orders.toLocaleString("en-IN") : "—", helper: `${PERIOD_LABELS[range.preset]} · Completed transactions`, icon: ShoppingCartOutlined, tone: "violet", pending: periodLoading },
-          { label: "Customers served", value: summary ? summary.customersServed.toLocaleString("en-IN") : "—", helper: "Unique identified purchasing customers", icon: TeamOutlined, tone: "slate", pending: periodLoading },
+          { label: "Customers served", value: summary ? summary.customersServed.toLocaleString("en-IN") : "—", helper: `${PERIOD_LABELS[range.preset]} · Unique identified purchasing customers`, icon: TeamOutlined, tone: "slate", pending: periodLoading },
           { label: "Low stock", value: String(finiteNumber(data?.kpis?.lowStockCount)), helper: alerts.length ? "Current state · Action recommended" : "Current state · Inventory healthy", icon: WarningOutlined, tone: "amber", pending: loading },
         ].map((metric) => {
           const Icon = metric.icon;

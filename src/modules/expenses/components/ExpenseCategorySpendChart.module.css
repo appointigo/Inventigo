@@ -1,0 +1,101 @@
+.card {
+  height: 100%;
+  border-color: #e7ebf2;
+  box-shadow: 0 2px 10px rgb(15 23 42 / 3%);
+}
+
+.card :global(.ant-card-head) {
+  min-height: 54px;
+  padding: 0 18px;
+}
+
+.card :global(.ant-card-body) {
+  padding: 20px 18px 22px;
+}
+
+.title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #26354a;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.title > :first-child {
+  color: #3478f6;
+}
+
+.info {
+  color: #9aa7b8;
+  cursor: help;
+  font-size: 13px;
+}
+
+.empty {
+  display: grid;
+  min-height: 248px;
+  place-items: center;
+}
+
+.chart {
+  min-height: 248px;
+}
+
+.axis {
+  display: flex;
+  justify-content: space-between;
+  margin: 0 0 14px;
+  color: #98a4b5;
+  font-size: 11px;
+}
+
+.rows {
+  display: grid;
+  gap: 18px;
+}
+
+.row {
+  min-width: 0;
+}
+
+.rowLabel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 7px;
+  color: #58677d;
+  font-size: 12px;
+}
+
+.rowLabel > :first-child {
+  min-width: 0;
+  max-width: 48%;
+  color: #344258;
+  font-size: 13px;
+}
+
+.rowLabel b {
+  margin-left: 5px;
+  color: #3478f6;
+  font-weight: 650;
+}
+
+.barTrack {
+  position: relative;
+  height: 12px;
+  overflow: hidden;
+  border-radius: 4px;
+  background-color: #edf3ff;
+  background-image: linear-gradient(to right, rgb(151 165 185 / 18%) 1px, transparent 1px);
+  background-size: 50% 100%;
+}
+
+.bar {
+  display: block;
+  height: 100%;
+  min-width: 3px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #5a8ff9 0%, #2878f0 100%);
+}

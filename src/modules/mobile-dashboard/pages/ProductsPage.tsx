@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { App, Button, Empty, Select, Skeleton } from "antd";
-import { ScanOutlined } from "@ant-design/icons";
+import { App, Empty, Select, Skeleton } from "antd";
 import { useRouter } from "next/navigation";
 import { useBrands } from "@/modules/brands/hooks/useBrands";
 import { useCategories } from "@/modules/categories/hooks/useCategories";
@@ -64,7 +63,6 @@ export default function ProductsPage() {
       <PageContainer
         title="Products"
         subtitle="Search, filter, and review stock status quickly"
-        headerExtra={<Button shape="circle" icon={<ScanOutlined />} aria-label="Scan barcode" onClick={() => router.push("/dashboard/scan")} />}
         stickySlot={
           <SearchBar
             value={productFilters.search}

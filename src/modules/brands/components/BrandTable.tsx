@@ -2,9 +2,16 @@
 
 import { useState } from "react";
 import { Table, Button, Space, Input, Popconfirm, Tooltip, Switch, Flex, Empty } from "antd";
-import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, UploadOutlined } from "@ant-design/icons";
+import {
+  PlusOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  SearchOutlined,
+  UploadOutlined,
+} from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { Brand } from "../types";
+import { INVENTORY_PAGE_SIZE_OPTIONS, validInventoryPage } from "@/modules/stock/utils/pagination";
 
 interface BrandTableProps {
   brands: Brand[];
@@ -16,12 +23,21 @@ interface BrandTableProps {
   onBulkUpload?: () => void;
 }
 
-const BrandTable = ({ brands, loading, onAdd, onEdit, onDelete, onToggleActive, onBulkUpload }: BrandTableProps) => {
+const BrandTable = ({
+  brands,
+  loading,
+  onAdd,
+  onEdit,
+  onDelete,
+  onToggleActive,
+  onBulkUpload,
+}: BrandTableProps) => {
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
-  const filtered = brands.filter((b) =>
-    b.name.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = brands.filter((b) => b.name.toLowerCase().includes(search.toLowerCase()));
+  const currentPage = validInventoryPage(filtered.length, page, pageSize);
 
   const columns: ColumnsType<Brand> = [
     {
@@ -36,11 +52,7 @@ const BrandTable = ({ brands, loading, onAdd, onEdit, onDelete, onToggleActive, 
       width: 100,
       align: "center",
       render: (isActive: boolean, record) => (
-        <Switch
-          size="small"
-          checked={isActive}
-          onChange={() => onToggleActive(record)}
-        />
+        <Switch size="small" checked={isActive} onChange={() => onToggleActive(record)} />
       ),
     },
     {
@@ -72,7 +84,12 @@ const BrandTable = ({ brands, loading, onAdd, onEdit, onDelete, onToggleActive, 
             okButtonProps={{ danger: true, disabled: record.productCount > 0 }}
           >
             <Tooltip title={record.productCount > 0 ? "Has products" : "Delete"} destroyOnHidden>
-              <Button type="text" danger icon={<DeleteOutlined />} disabled={record.productCount > 0} />
+              <Button
+                type="text"
+                danger
+                icon={<DeleteOutlined />}
+                disabled={record.productCount > 0}
+              />
             </Tooltip>
           </Popconfirm>
         </Space>
@@ -87,7 +104,10 @@ const BrandTable = ({ brands, loading, onAdd, onEdit, onDelete, onToggleActive, 
           placeholder="Search brands..."
           prefix={<SearchOutlined />}
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(1);
+          }}
           allowClear
           style={{ maxWidth: 300 }}
         />
@@ -107,26 +127,39 @@ const BrandTable = ({ brands, loading, onAdd, onEdit, onDelete, onToggleActive, 
         dataSource={filtered}
         rowKey="id"
         loading={loading}
-        pagination={{ pageSize: 10, showSizeChanger: true, showTotal: (t) => `${t} brands` }}
+        pagination={{
+          current: currentPage,
+          pageSize,
+          total: filtered.length,
+          pageSizeOptions: INVENTORY_PAGE_SIZE_OPTIONS,
+          showSizeChanger: true,
+          showTotal: (t) => `${t} brands`,
+        }}
+        onChange={(pagination) => {
+          const nextPageSize = pagination.pageSize ?? pageSize;
+          setPage(nextPageSize === pageSize ? (pagination.current ?? 1) : 1);
+          setPageSize(nextPageSize);
+        }}
         locale={{
-          emptyText: !loading && brands.length === 0 ? (
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description={
-                <span style={{ color: "#888" }}>
-                  No brands yet. Brands help you organise products by manufacturer.
-                </span>
-              }
-            >
-              <Button type="primary" icon={<PlusOutlined />} onClick={onAdd}>
-                Add your first brand
-              </Button>
-            </Empty>
-          ) : undefined,
+          emptyText:
+            !loading && brands.length === 0 ? (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={
+                  <span style={{ color: "#888" }}>
+                    No brands yet. Brands help you organise products by manufacturer.
+                  </span>
+                }
+              >
+                <Button type="primary" icon={<PlusOutlined />} onClick={onAdd}>
+                  Add your first brand
+                </Button>
+              </Empty>
+            ) : undefined,
         }}
       />
     </>
   );
-}
+};
 
 export default BrandTable;

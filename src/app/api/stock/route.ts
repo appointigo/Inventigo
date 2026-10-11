@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { requireOrgAuth } from "@/lib/auth.middleware";
 import { stockService } from "@/modules/stock/services/stockService";
-import { AnalyticsAccessError, resolveAnalyticsStore } from "@/modules/analytics/services/analyticsAccess";
+import {
+  AnalyticsAccessError,
+  resolveAnalyticsStore,
+} from "@/modules/analytics/services/analyticsAccess";
+import { normalizeInventoryPagination } from "@/modules/stock/utils/pagination";
 
 export const GET = async (request: Request) => {
   let user;
@@ -14,14 +18,22 @@ export const GET = async (request: Request) => {
   try {
     const { searchParams } = new URL(request.url);
     const scope = await resolveAnalyticsStore(user, searchParams.get("storeId"));
+    const { page, pageSize } = normalizeInventoryPagination(
+      searchParams.get("page"),
+      searchParams.get("pageSize")
+    );
     const filters = {
       storeId: scope.storeId,
       search: searchParams.get("search") || undefined,
       lowStockOnly: searchParams.get("lowStockOnly") === "true" || undefined,
       outOfStockOnly: searchParams.get("outOfStockOnly") === "true" || undefined,
+      page,
+      pageSize,
     };
     const result = await stockService.getStockLevels(filters);
-    return NextResponse.json(result.items);
+    return NextResponse.json(
+      searchParams.get("paginated") === "true" ? { ...result, page, pageSize } : result.items
+    );
   } catch (error) {
     if (error instanceof AnalyticsAccessError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

@@ -6,6 +6,7 @@ import {
 import { requireOrgAuth } from "@/lib/auth.middleware";
 import { AnalyticsAccessError, resolveAnalyticsStore } from "@/modules/analytics/services/analyticsAccess";
 import { canAccessExpenses } from "@/lib/rbac";
+import { isBusinessDate } from "@/modules/analytics/utils/dateRange";
 
 export async function GET(request: Request) {
   let user;
@@ -23,11 +24,24 @@ export async function GET(request: Request) {
     const scope = await resolveAnalyticsStore(user, searchParams.get("storeId"));
     const monthParam = searchParams.get("month");
     const yearParam = searchParams.get("year");
+    const startDate = searchParams.get("startDate");
+    const endDate = searchParams.get("endDate");
+
+    if (
+      (startDate === null) !== (endDate === null) ||
+      (startDate !== null && !isBusinessDate(startDate)) ||
+      (endDate !== null && !isBusinessDate(endDate)) ||
+      (startDate !== null && endDate !== null && startDate > endDate)
+    ) {
+      return NextResponse.json({ error: "Invalid expense date range" }, { status: 400 });
+    }
 
     const filters = {
       storeId: scope.storeId,
       month: monthParam ? parseInt(monthParam, 10) : undefined,
       year: yearParam ? parseInt(yearParam, 10) : undefined,
+      startDate: startDate ?? undefined,
+      endDate: endDate ?? undefined,
     };
 
     const expenses = await expenseService.list(filters, user.orgId);
