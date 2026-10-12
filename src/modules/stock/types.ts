@@ -6,6 +6,7 @@ export type AdjustStockInput = {
   sizeId: string;
   storeId: string;
   quantity: number;
+  variantSku?: string;
   type: StockMovementType;
   operation?: "ADD" | "REMOVE" | "SET";
   reason?: string;

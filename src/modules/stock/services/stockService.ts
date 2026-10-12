@@ -207,6 +207,7 @@ export async function adjustStockWithClient(tx: Prisma.TransactionClient, input:
     sizeId,
     storeId,
     quantity,
+    variantSku,
     type,
     operation,
     reason,
@@ -225,7 +226,7 @@ export async function adjustStockWithClient(tx: Prisma.TransactionClient, input:
   if (!store || !product) throw new Error("Stock target is outside the selected store scope");
   const existing = await tx.stockEntry.findUnique({
     where: { productId_sizeId_storeId: { productId, sizeId, storeId } },
-    select: { quantity: true },
+    select: { quantity: true, variantSku: true },
   });
   const quantityBefore = existing?.quantity ?? 0;
   const deltaQuantity = resolveStockDelta({ type, quantity, quantityBefore, operation });
@@ -234,6 +235,7 @@ export async function adjustStockWithClient(tx: Prisma.TransactionClient, input:
     where: { productId_sizeId_storeId: { productId, sizeId, storeId } },
     update: {
       quantity: { increment: deltaQuantity },
+      ...(!existing?.variantSku && variantSku ? { variantSku } : {}),
       lastRestockedAt: deltaQuantity > 0 ? new Date() : undefined,
     },
     create: {
@@ -241,6 +243,7 @@ export async function adjustStockWithClient(tx: Prisma.TransactionClient, input:
       sizeId,
       storeId,
       quantity: audit.quantityAfter,
+      variantSku: variantSku ?? null,
       reorderLevel: 5,
       reorderQuantity: 20,
       lastRestockedAt: deltaQuantity > 0 ? new Date() : null,

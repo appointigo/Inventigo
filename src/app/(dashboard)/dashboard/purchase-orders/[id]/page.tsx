@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Typography, Button, Space, Spin, Popconfirm, App, Flex } from "antd";
+import { Typography, Button, Space, Spin, Popconfirm, App, Flex, Input, Modal } from "antd";
 import {
   ArrowLeftOutlined,
   SendOutlined,
@@ -21,6 +21,9 @@ export default function PurchaseOrderDetailPage() {
   const { purchaseOrder, loading, refresh } = usePurchaseOrder(id);
   const [showReceive, setShowReceive] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [showClose, setShowClose] = useState(false);
+  const [closeReason, setCloseReason] = useState("");
+  const actionInFlight = useRef(false);
 
   if (loading) {
     return (
@@ -39,6 +42,8 @@ export default function PurchaseOrderDetailPage() {
   }
 
   const handleSubmit = async () => {
+    if (actionInFlight.current) return;
+    actionInFlight.current = true;
     setActionLoading(true);
     try {
       const res = await fetch(`/api/purchase-orders/${encodeURIComponent(id)}/submit`, {
@@ -52,16 +57,19 @@ export default function PurchaseOrderDetailPage() {
       message.success("Purchase order submitted — status changed to Ordered");
       refresh();
     } finally {
+      actionInFlight.current = false;
       setActionLoading(false);
     }
   };
 
   const handleReceive = async (input: ReceivePOInput) => {
+    if (actionInFlight.current) return;
+    actionInFlight.current = true;
     setActionLoading(true);
     try {
       const res = await fetch(`/api/purchase-orders/${encodeURIComponent(id)}/receive`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Idempotency-Key": input.confirmationId },
         body: JSON.stringify(input),
       });
       if (!res.ok) {
@@ -73,11 +81,14 @@ export default function PurchaseOrderDetailPage() {
       setShowReceive(false);
       refresh();
     } finally {
+      actionInFlight.current = false;
       setActionLoading(false);
     }
   };
 
   const handleCancel = async () => {
+    if (actionInFlight.current) return;
+    actionInFlight.current = true;
     setActionLoading(true);
     try {
       const res = await fetch(`/api/purchase-orders/${encodeURIComponent(id)}`, {
@@ -91,11 +102,44 @@ export default function PurchaseOrderDetailPage() {
       message.success("Purchase order cancelled");
       refresh();
     } finally {
+      actionInFlight.current = false;
+      setActionLoading(false);
+    }
+  };
+
+  const handleClose = async () => {
+    if (!closeReason.trim()) {
+      message.error("Enter a reason for closing the remaining quantity");
+      return;
+    }
+    if (actionInFlight.current) return;
+    actionInFlight.current = true;
+    setActionLoading(true);
+    try {
+      const res = await fetch(`/api/purchase-orders/${encodeURIComponent(id)}/close`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: closeReason }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        message.error(data.error || "Failed to close purchase order");
+        return;
+      }
+      message.success("Remaining purchase quantity closed without changing stock");
+      setShowClose(false);
+      setCloseReason("");
+      refresh();
+    } finally {
+      actionInFlight.current = false;
       setActionLoading(false);
     }
   };
 
   const { status } = purchaseOrder;
+  const hasReceiptEvidence = purchaseOrder.items.some(
+    (item) => item.acceptedQuantity + item.rejectedQuantity + item.damagedQuantity > 0,
+  );
 
   return (
     <div style={{ padding: 24 }}>
@@ -123,9 +167,7 @@ export default function PurchaseOrderDetailPage() {
                 okText="Cancel PO"
                 okButtonProps={{ danger: true }}
               >
-                <Button danger icon={<CloseCircleOutlined />} loading={actionLoading}>
-                  Cancel
-                </Button>
+                <Button danger icon={<CloseCircleOutlined />} loading={actionLoading}>Cancel</Button>
               </Popconfirm>
             </>
           )}
@@ -139,20 +181,45 @@ export default function PurchaseOrderDetailPage() {
               >
                 Receive
               </Button>
-              <Popconfirm
-                title="Cancel this purchase order?"
-                onConfirm={handleCancel}
-                okText="Cancel PO"
-                okButtonProps={{ danger: true }}
-              >
-                <Button danger icon={<CloseCircleOutlined />} loading={actionLoading}>
-                  Cancel
+              {hasReceiptEvidence ? (
+                <Button danger icon={<CloseCircleOutlined />} onClick={() => setShowClose(true)} loading={actionLoading}>
+                  Close Remaining
                 </Button>
-              </Popconfirm>
+              ) : (
+                <Popconfirm
+                  title="Cancel this purchase order?"
+                  onConfirm={handleCancel}
+                  okText="Cancel PO"
+                  okButtonProps={{ danger: true }}
+                >
+                  <Button danger icon={<CloseCircleOutlined />} loading={actionLoading}>Cancel</Button>
+                </Popconfirm>
+              )}
             </>
           )}
         </Space>
       </Flex>
+
+      <Modal
+        title="Close remaining purchase quantity"
+        open={showClose}
+        onOk={handleClose}
+        onCancel={() => setShowClose(false)}
+        confirmLoading={actionLoading}
+        okText="Close Remaining"
+        okButtonProps={{ danger: true }}
+      >
+        <Typography.Paragraph>
+          Posted receipts and stock movements will be preserved. The outstanding quantity will no longer be treated as inbound.
+        </Typography.Paragraph>
+        <Input.TextArea
+          value={closeReason}
+          onChange={(event) => setCloseReason(event.target.value)}
+          placeholder="Reason for short-closing this order"
+          maxLength={1000}
+          rows={3}
+        />
+      </Modal>
 
       <Typography.Title level={3} style={{ marginTop: 0, marginBottom: 24 }}>
         Purchase Order: {id.slice(0, 8).toUpperCase()}

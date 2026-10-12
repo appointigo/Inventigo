@@ -51,11 +51,11 @@ export const supplierService = {
     const s = await prisma.supplier.create({
       data: {
         orgId,
-        name: values.name,
-        contactPerson: values.contactPerson ?? null,
-        email: values.email ?? null,
-        phone: values.phone ?? null,
-        address: values.address ?? null,
+        name: values.name.trim(),
+        contactPerson: values.contactPerson?.trim() || null,
+        email: values.email?.trim() || null,
+        phone: values.phone?.trim() || null,
+        address: values.address?.trim() || null,
         isActive: values.isActive,
       },
       include,
@@ -69,11 +69,11 @@ export const supplierService = {
     const s = await prisma.supplier.update({
       where: { id },
       data: {
-        ...(values.name !== undefined && { name: values.name }),
-        ...(values.contactPerson !== undefined && { contactPerson: values.contactPerson ?? null }),
-        ...(values.email !== undefined && { email: values.email ?? null }),
-        ...(values.phone !== undefined && { phone: values.phone ?? null }),
-        ...(values.address !== undefined && { address: values.address ?? null }),
+        ...(values.name !== undefined && { name: values.name.trim() }),
+        ...(values.contactPerson !== undefined && { contactPerson: values.contactPerson.trim() || null }),
+        ...(values.email !== undefined && { email: values.email.trim() || null }),
+        ...(values.phone !== undefined && { phone: values.phone.trim() || null }),
+        ...(values.address !== undefined && { address: values.address.trim() || null }),
         ...(values.isActive !== undefined && { isActive: values.isActive }),
       },
       include,

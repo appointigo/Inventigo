@@ -39,6 +39,7 @@ export default function POReceiveForm({ purchaseOrder, onReceive, onCancel, load
   const [receivedAt, setReceivedAt] = useState(dayjs());
   const [supplierInvoiceNumber, setSupplierInvoiceNumber] = useState("");
   const [notes, setNotes] = useState("");
+  const [confirmationId] = useState(() => crypto.randomUUID());
 
   const updateLine = (itemId: string, patch: Partial<ReceiveLine>) => {
     setLines((prev) =>
@@ -62,7 +63,7 @@ export default function POReceiveForm({ purchaseOrder, onReceive, onCancel, load
     }
 
     if (itemsToReceive.some((item) => item.acceptedQuantity + item.rejectedQuantity + item.damagedQuantity !== item.receivedQuantity)) { message.error("Accepted + rejected + damaged must equal received for every line"); return; }
-    await onReceive({ items: itemsToReceive, receivedAt: receivedAt.toISOString(), supplierInvoiceNumber, notes });
+    await onReceive({ confirmationId, items: itemsToReceive, receivedAt: receivedAt.toISOString(), supplierInvoiceNumber, notes });
   };
 
   const columns: ColumnsType<ReceiveLine> = [
@@ -103,16 +104,16 @@ export default function POReceiveForm({ purchaseOrder, onReceive, onCancel, load
       render: (_, record) => (
         <InputNumber
           min={0}
-          max={record.quantity * 2}
+          max={1_000_000}
           value={record.receivedQuantity}
           onChange={(val) => updateLine(record.id, { receivedQuantity: val ?? 0 })}
           style={{ width: 80 }}
         />
       ),
     },
-    { title: "Accepted", width: 105, render: (_, record) => <InputNumber min={0} value={record.acceptedQuantity} onChange={(value) => updateLine(record.id, { acceptedQuantity: value ?? 0 })} style={{ width: 75 }} /> },
-    { title: "Rejected", width: 105, render: (_, record) => <InputNumber min={0} value={record.rejectedQuantity} onChange={(value) => updateLine(record.id, { rejectedQuantity: value ?? 0 })} style={{ width: 75 }} /> },
-    { title: "Damaged", width: 105, render: (_, record) => <InputNumber min={0} value={record.damagedQuantity} onChange={(value) => updateLine(record.id, { damagedQuantity: value ?? 0 })} style={{ width: 75 }} /> },
+    { title: "Accepted", width: 105, render: (_, record) => <InputNumber min={0} max={record.outstandingQuantity} value={record.acceptedQuantity} onChange={(value) => updateLine(record.id, { acceptedQuantity: value ?? 0 })} style={{ width: 75 }} /> },
+    { title: "Rejected", width: 105, render: (_, record) => <InputNumber min={0} max={record.receivedQuantity} value={record.rejectedQuantity} onChange={(value) => updateLine(record.id, { rejectedQuantity: value ?? 0 })} style={{ width: 75 }} /> },
+    { title: "Damaged", width: 105, render: (_, record) => <InputNumber min={0} max={record.receivedQuantity} value={record.damagedQuantity} onChange={(value) => updateLine(record.id, { damagedQuantity: value ?? 0 })} style={{ width: 75 }} /> },
     { title: "Actual cost", width: 120, render: (_, record) => <InputNumber min={0} value={record.unitCostActual} onChange={(value) => updateLine(record.id, { unitCostActual: value ?? 0 })} style={{ width: 95 }} /> },
     { title: "Reason", width: 170, render: (_, record) => <Input value={record.rejectionReason} disabled={record.rejectedQuantity + record.damagedQuantity === 0} onChange={(event) => updateLine(record.id, { rejectionReason: event.target.value })} placeholder="Damage/rejection" /> },
   ];

@@ -203,6 +203,7 @@ export const forecastService = {
       ]);
     const inbound = new Map<string, { purchase: number; transfer: number }>();
     for (const item of purchaseItems) {
+      if (!item.productId || !item.sizeId) continue;
       const open = Math.max(
         0,
         item.quantity -

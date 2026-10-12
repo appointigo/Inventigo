@@ -255,6 +255,7 @@ export const productIntelligenceService = {
     >();
     const today = new Date().toISOString().slice(0, 10);
     for (const item of inboundItems) {
+      if (!item.productId) continue;
       const accepted = item.receiptItems.reduce(
         (sum, receipt) => sum + receipt.quantityAccepted,
         0

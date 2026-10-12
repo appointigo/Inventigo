@@ -16,8 +16,8 @@ export default function PODetail({ purchaseOrder }: PODetailProps) {
 
   // Determine current step for the timeline
   let currentStep = 0;
-  if (status === "CANCELLED") {
-    currentStep = status === "CANCELLED" ? -1 : 0; // Special handling below
+  if (status === "CANCELLED" || status === "CLOSED") {
+    currentStep = -1;
   } else if (status === "ORDERED" || status === "PARTIALLY_RECEIVED") {
     currentStep = 1;
   } else if (status === "RECEIVED") {
@@ -70,7 +70,7 @@ export default function PODetail({ purchaseOrder }: PODetailProps) {
   return (
     <Flex vertical gap={24}>
       {/* Status Timeline */}
-      {status !== "CANCELLED" ? (
+      {status !== "CANCELLED" && status !== "CLOSED" ? (
         <Card size="small">
           <Steps
             current={currentStep}
@@ -94,7 +94,7 @@ export default function PODetail({ purchaseOrder }: PODetailProps) {
       ) : (
         <Card size="small">
           <Tag color="error" style={{ fontSize: 14, padding: "4px 12px" }}>
-            Cancelled
+            {PO_STATUS_LABELS[status]}
           </Tag>
         </Card>
       )}
@@ -121,6 +121,12 @@ export default function PODetail({ purchaseOrder }: PODetailProps) {
             {formatDateTime(purchaseOrder.createdAt)}
           </Descriptions.Item>
           <Descriptions.Item label="Expected delivery">{purchaseOrder.expectedDeliveryDate ? formatDate(purchaseOrder.expectedDeliveryDate) : "Not recorded"}</Descriptions.Item>
+          {purchaseOrder.closedAt && (
+            <Descriptions.Item label="Closed">{formatDateTime(purchaseOrder.closedAt)}</Descriptions.Item>
+          )}
+          {purchaseOrder.closureReason && (
+            <Descriptions.Item label="Closure reason" span={2}>{purchaseOrder.closureReason}</Descriptions.Item>
+          )}
           {purchaseOrder.notes && (
             <Descriptions.Item label="Notes" span={2}>
               {purchaseOrder.notes}

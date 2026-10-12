@@ -1,53 +1,43 @@
 import { NextResponse } from "next/server";
 import { poService } from "@/modules/purchase-orders/services/poService";
-import { requireOrgAuth } from "@/lib/auth.middleware";
+import { contractError, updatePurchaseOrderSchema } from "@/modules/purchase-orders/purchaseContracts";
+import { purchaseError, requirePurchaseUser } from "@/modules/purchase-orders/purchaseRoute";
+import { ZodError } from "zod";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  let user;
   try {
-    user = await requireOrgAuth();
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const user = await requirePurchaseUser("read");
+    const { id } = await params;
+    const po = await poService.getById(id, user.orgId, user.storeId);
+    if (!po) return NextResponse.json({ error: "Purchase order not found" }, { status: 404 });
+    return NextResponse.json(po);
+  } catch (error) {
+    return purchaseError(error, "Unable to load purchase order");
   }
-  const { id } = await params;
-  const po = await poService.getById(id, user.orgId, user.storeId);
-  if (!po) return NextResponse.json({ error: "Purchase order not found" }, { status: 404 });
-  return NextResponse.json(po);
 }
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  let user;
   try {
-    user = await requireOrgAuth();
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const { id } = await params;
-  const body = await request.json();
-  try {
+    const user = await requirePurchaseUser("manage");
+    const { id } = await params;
+    const body = updatePurchaseOrderSchema.parse(await request.json());
     const po = await poService.update(id, user.orgId, body, user.storeId);
     if (!po) return NextResponse.json({ error: "Purchase order not found" }, { status: 404 });
     return NextResponse.json(po);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Update failed";
-    return NextResponse.json({ error: message }, { status: 400 });
+    if (err instanceof ZodError) return NextResponse.json({ error: contractError(err) }, { status: 400 });
+    return purchaseError(err, "Update failed");
   }
 }
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  let user;
   try {
-    user = await requireOrgAuth();
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const { id } = await params;
-  try {
+    const user = await requirePurchaseUser("manage");
+    const { id } = await params;
     const po = await poService.cancelPO(id, user.orgId, user.storeId);
     if (!po) return NextResponse.json({ error: "Purchase order not found" }, { status: 404 });
     return NextResponse.json(po);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Cancel failed";
-    return NextResponse.json({ error: message }, { status: 400 });
+    return purchaseError(err, "Cancel failed");
   }
 }

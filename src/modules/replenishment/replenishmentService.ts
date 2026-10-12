@@ -322,6 +322,7 @@ export const replenishmentService = {
     const today = new Date();
     const todayKey = businessDateForInstant(today);
     for (const item of openItems) {
+      if (!item.productId || !item.sizeId) continue;
       const accepted = item.receiptItems.reduce(
         (sum, receipt) => sum + receipt.quantityAccepted,
         0

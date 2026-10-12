@@ -5,6 +5,7 @@ export const PO_STATUS_LABELS: Record<PurchaseOrderStatus, string> = {
   ORDERED: "Ordered",
   PARTIALLY_RECEIVED: "Partially Received",
   RECEIVED: "Received",
+  CLOSED: "Closed Short",
   CANCELLED: "Cancelled",
 };
 
@@ -13,6 +14,7 @@ export const PO_STATUS_COLORS: Record<PurchaseOrderStatus, string> = {
   ORDERED: "processing",
   PARTIALLY_RECEIVED: "warning",
   RECEIVED: "success",
+  CLOSED: "default",
   CANCELLED: "error",
 };
 

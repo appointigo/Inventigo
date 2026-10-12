@@ -5,14 +5,43 @@ export type POFormValues = {
   supplierId: string;
   notes?: string;
   expectedDeliveryDate?: string | null;
-  items: POItemFormValues[];
+  items: PurchaseOrderLineInput[];
 };
 
 export type POItemFormValues = {
+  itemKind?: "EXISTING_PRODUCT";
+  lineGroupId?: string;
   productId: string;
   sizeId: string;
+  colour?: string;
+  supplierReference?: string;
+  notes?: string;
   quantity: number;
   unitCost: number;
+};
+
+export type ProvisionalPOItemFormValues = {
+  itemKind: "PROVISIONAL_PRODUCT";
+  lineGroupId?: string;
+  productName: string;
+  proposedSku?: string;
+  brandId: string;
+  categoryId: string;
+  styleModel?: string;
+  colour?: string;
+  sizeLabel: string;
+  supplierReference?: string;
+  imageUrl?: string;
+  expectedSellingPrice?: number;
+  notes?: string;
+  quantity: number;
+  unitCost: number;
+};
+
+export type PurchaseOrderLineInput = POItemFormValues | ProvisionalPOItemFormValues;
+
+export type POUpdateValues = Omit<Partial<POFormValues>, "notes"> & {
+  notes?: string | null;
 };
 
 export type POListFilters = {
@@ -27,11 +56,22 @@ export type POListFilters = {
 
 export type POItem = {
   id: string;
-  productId: string;
+  itemKind: "EXISTING_PRODUCT" | "PROVISIONAL_PRODUCT";
+  lineGroupId: string;
+  productId: string | null;
   productName: string;
-  productSku: string;
-  sizeId: string;
+  productSku: string | null;
+  sizeId: string | null;
   sizeLabel: string;
+  brandName: string | null;
+  categoryName: string | null;
+  styleModel: string | null;
+  colour: string | null;
+  supplierReference: string | null;
+  imageUrl: string | null;
+  expectedSellingPrice: number | null;
+  notes: string | null;
+  isCatalogResolved: boolean;
   quantity: number;
   unitCost: number;
   total: number;
@@ -52,6 +92,8 @@ export type PurchaseOrder = {
   notes: string | null;
   orderedAt: string | null;
   receivedAt: string | null;
+  closedAt: string | null;
+  closureReason: string | null;
   expectedDeliveryDate: string | null;
   createdBy: string;
   createdByName: string;
@@ -68,11 +110,25 @@ export type ReceiveItemInput = {
   rejectedQuantity: number;
   damagedQuantity: number;
   rejectionReason?: string;
+  batchReference?: string;
+  defectQuantity?: number;
+  defectReason?: string;
+  defectImageUrls?: string[];
   unitCostActual?: number;
+  catalogResolution?:
+    | { mode: "LINK_EXISTING"; productId: string; sizeId: string }
+    | {
+        mode: "CREATE_PRODUCT";
+        sku?: string;
+        sellingPrice?: number;
+        externalBarcode?: string;
+      };
 };
 
 export type ReceivePOInput = {
+  confirmationId: string;
   receivedAt?: string;
+  receiptReference?: string;
   supplierInvoiceNumber?: string;
   notes?: string;
   items: ReceiveItemInput[];
