@@ -230,7 +230,6 @@ async function ensureVariantIdentity(
 async function resolveReceiptCatalogIdentity(
   tx: Prisma.TransactionClient,
   orgId: string,
-  userId: string,
   item: any,
   received: ReceiveItemInput,
   actualCost: Prisma.Decimal | number,
@@ -340,16 +339,6 @@ async function resolveReceiptCatalogIdentity(
     ...(item.styleModelSnapshot ? { style: item.styleModelSnapshot } : {}),
     ...(item.colourSnapshot ? { colour: item.colourSnapshot } : {}),
     size: identity.sizeLabel,
-  });
-  await tx.purchaseOrderItem.update({
-    where: { id: item.id },
-    data: {
-      productId: identity.id,
-      sizeId: identity.sizeId,
-      variantId: variantIdentity.variantId,
-      resolvedAt: new Date(),
-      resolvedBy: userId,
-    },
   });
   return variantIdentity;
 }
@@ -590,7 +579,7 @@ export const poService = {
             const item = po.items.find((candidate) => candidate.id === received.purchaseOrderItemId);
             if (!item) throw new Error("Receipt contains an item outside this purchase order");
             const actualCost = received.unitCostActual ?? item.unitCost;
-            const identity = await resolveReceiptCatalogIdentity(tx, orgId, userId, item, received, actualCost);
+            const identity = await resolveReceiptCatalogIdentity(tx, orgId, item, received, actualCost);
             const receiptItem = await tx.purchaseOrderReceiptItem.create({
               data: {
                 receiptId: receipt.id,

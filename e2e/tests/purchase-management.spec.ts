@@ -25,17 +25,32 @@ test("receipt idempotency replays identical payload and rejects changed payload"
 });
 
 test("one provisional PO line splits into grouped SKU mappings and only accepted stock posts", async ({ page }) => {
-  const opening = await e2eDb.stockEntry.findUniqueOrThrow({ where: { productId_sizeId_storeId: { productId: E2E_IDS.secondProduct, sizeId: E2E_IDS.size, storeId: E2E_IDS.store } } });
-  const po = await expectJson<{ id: string; items: Array<{ id: string }> }>(await apiFetch(page, "/api/purchase-orders", { method: "POST", data: { storeId: E2E_IDS.store, supplierId: E2E_IDS.supplier, items: [{ itemKind: "PROVISIONAL_PRODUCT", productName: "Assorted E2E garments", brandId: E2E_IDS.brand, categoryId: E2E_IDS.category, sizeLabel: "Assorted", quantity: 5, unitCost: 275 }] } }), 201);
+  const [openingA, openingB, openingPayments, openingPayables] = await Promise.all([
+    e2eDb.stockEntry.findUniqueOrThrow({ where: { productId_sizeId_storeId: { productId: E2E_IDS.secondProduct, sizeId: E2E_IDS.size, storeId: E2E_IDS.store } } }),
+    e2eDb.stockEntry.findUniqueOrThrow({ where: { productId_sizeId_storeId: { productId: E2E_IDS.product, sizeId: E2E_IDS.size, storeId: E2E_IDS.store } } }),
+    e2eDb.supplierPayment.count(),
+    e2eDb.supplierPayable.count(),
+  ]);
+  const po = await expectJson<{ id: string; items: Array<{ id: string }> }>(await apiFetch(page, "/api/purchase-orders", { method: "POST", data: { storeId: E2E_IDS.store, supplierId: E2E_IDS.supplier, items: [{ itemKind: "PROVISIONAL_PRODUCT", productName: "Assorted E2E Jeans", brandId: E2E_IDS.brand, categoryId: E2E_IDS.category, sizeLabel: "Assorted", quantity: 50, unitCost: 275 }] } }), 201);
   await expectJson(await apiFetch(page, `/api/purchase-orders/${po.id}/submit`, { method: "POST" }), 200);
   await expectJson(await apiFetch(page, `/api/purchase-orders/${po.id}/receive`, { method: "POST", headers: { "idempotency-key": "e2e-provisional-split" }, data: { items: [
-    { mappingKey: "group-a", purchaseOrderItemId: po.items[0].id, receivedQuantity: 3, acceptedQuantity: 3, heldQuantity: 0, rejectedQuantity: 0, damagedQuantity: 0, catalogResolution: { mode: "LINK_EXISTING", productId: E2E_IDS.secondProduct, sizeId: E2E_IDS.size } },
-    { mappingKey: "group-b", purchaseOrderItemId: po.items[0].id, receivedQuantity: 2, acceptedQuantity: 1, heldQuantity: 1, rejectedQuantity: 0, damagedQuantity: 1, defectReason: "Stitching defect", defectQuantity: 1, catalogResolution: { mode: "LINK_EXISTING", productId: E2E_IDS.secondProduct, sizeId: E2E_IDS.size } },
+    { mappingKey: "group-a", purchaseOrderItemId: po.items[0].id, receivedQuantity: 30, acceptedQuantity: 30, heldQuantity: 0, rejectedQuantity: 0, damagedQuantity: 0, catalogResolution: { mode: "LINK_EXISTING", productId: E2E_IDS.secondProduct, sizeId: E2E_IDS.size } },
+    { mappingKey: "group-b", purchaseOrderItemId: po.items[0].id, receivedQuantity: 10, acceptedQuantity: 5, heldQuantity: 5, rejectedQuantity: 0, damagedQuantity: 5, defectReason: "Stitching defect", defectQuantity: 5, catalogResolution: { mode: "LINK_EXISTING", productId: E2E_IDS.product, sizeId: E2E_IDS.size } },
   ] } }), 200);
   const receipt = await e2eDb.purchaseOrderReceipt.findFirstOrThrow({ where: { purchaseOrderId: po.id }, include: { items: true, discrepancies: true } });
   expect(receipt.items).toHaveLength(2);
   expect(receipt.discrepancies).toHaveLength(1);
-  expect((await e2eDb.stockEntry.findUniqueOrThrow({ where: { id: opening.id } })).quantity).toBe(opening.quantity + 4);
+  expect(new Set(receipt.items.map((item) => item.productId))).toEqual(new Set([E2E_IDS.secondProduct, E2E_IDS.product]));
+  expect(receipt.items.every((item) => item.purchaseOrderItemId === po.items[0].id && item.variantId)).toBe(true);
+  const originalLine = await e2eDb.purchaseOrderItem.findUniqueOrThrow({ where: { id: po.items[0].id } });
+  expect(originalLine).toMatchObject({ itemKind: "PROVISIONAL_PRODUCT", productId: null, sizeId: null, variantId: null, productNameSnapshot: "Assorted E2E Jeans", quantity: 50 });
+  expect((await e2eDb.stockEntry.findUniqueOrThrow({ where: { id: openingA.id } })).quantity).toBe(openingA.quantity + 30);
+  expect((await e2eDb.stockEntry.findUniqueOrThrow({ where: { id: openingB.id } })).quantity).toBe(openingB.quantity + 5);
+  const movements = await e2eDb.stockMovement.findMany({ where: { referenceType: "PO", referenceId: receipt.id } });
+  expect(movements).toHaveLength(2);
+  expect(movements.reduce((sum, movement) => sum + movement.quantity, 0)).toBe(35);
+  expect(await e2eDb.supplierPayment.count()).toBe(openingPayments);
+  expect(await e2eDb.supplierPayable.count()).toBe(openingPayables);
 });
 
 test("bill posting creates one obligation without posting stock again", async ({ page }) => {
