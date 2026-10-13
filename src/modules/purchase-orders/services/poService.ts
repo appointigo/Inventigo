@@ -5,6 +5,8 @@ import { prisma } from "@/lib/db";
 import { adjustStockWithClient } from "@/modules/stock/services/stockService";
 import { buildVariantSku } from "@/shared/services/barcodeService";
 import { normalizeSku } from "@/shared/utils/normalization";
+import { receiptPayloadHash, ReceiptIdempotencyConflictError } from "./receiptIdempotency";
+import { recordReceiptValuation } from "./inventoryValuationService";
 import { outstandingQuantity, purchaseOrderLineState, purchaseOrderStatus, validateReceiptQuantity } from "@/modules/procurement-intelligence/procurementRules";
 import {
   createPurchaseOrderSchema,
@@ -15,6 +17,7 @@ import type { PurchaseOrder, POFormValues, POListFilters, POUpdateValues, Purcha
 
 const poInclude = {
   supplier: { select: { name: true } },
+  store: { select: { name: true } },
   user: { select: { name: true } },
   items: {
     include: {
@@ -32,6 +35,8 @@ type PurchaseDb = Prisma.TransactionClient | typeof prisma;
 
 const transactionOptions = {
   isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+  maxWait: 10_000,
+  timeout: 30_000,
 } as const;
 
 function purchaseTotal(items: Array<{ quantity: number; unitCost: number }>) {
@@ -53,8 +58,8 @@ async function assertPurchaseReferences(
   const provisionalItems = items.filter((item) => item.itemKind === "PROVISIONAL_PRODUCT");
   const productIds = catalogItems.map((item) => item.productId);
   const sizeIds = catalogItems.map((item) => item.sizeId);
-  const brandIds = provisionalItems.map((item) => item.brandId);
-  const categoryIds = provisionalItems.map((item) => item.categoryId);
+  const brandIds = provisionalItems.flatMap((item) => item.brandId ? [item.brandId] : []);
+  const categoryIds = provisionalItems.flatMap((item) => item.categoryId ? [item.categoryId] : []);
   const [store, supplier, products, brands, categories] = await Promise.all([
     db.store.findFirst({ where: { id: storeId, orgId, isActive: true }, select: { id: true } }),
     db.supplier.findFirst({ where: { id: supplierId, orgId, isActive: true }, select: { id: true } }),
@@ -118,23 +123,22 @@ type PurchaseReferences = Awaited<ReturnType<typeof assertPurchaseReferences>>;
 
 function purchaseOrderItemData(item: PurchaseOrderLineInput, references: PurchaseReferences) {
   if (item.itemKind === "PROVISIONAL_PRODUCT") {
-    const brand = references.brands.get(item.brandId);
-    const category = references.categories.get(item.categoryId);
-    if (!brand || !category) throw new Error("Invalid provisional product classification");
+    const brand = item.brandId ? references.brands.get(item.brandId) : undefined;
+    const category = item.categoryId ? references.categories.get(item.categoryId) : undefined;
     return {
       itemKind: "PROVISIONAL_PRODUCT" as const,
       lineGroupId: item.lineGroupId ?? randomUUID(),
       productId: null,
       sizeId: null,
-      brandId: item.brandId,
-      categoryId: item.categoryId,
+      brandId: item.brandId ?? null,
+      categoryId: item.categoryId ?? null,
       productNameSnapshot: item.productName,
       productSkuSnapshot: item.proposedSku || null,
-      brandNameSnapshot: brand.name,
-      categoryNameSnapshot: category.name,
+      brandNameSnapshot: brand?.name ?? null,
+      categoryNameSnapshot: category?.name ?? null,
       styleModelSnapshot: item.styleModel || null,
       colourSnapshot: item.colour || null,
-      sizeLabelSnapshot: item.sizeLabel,
+      sizeLabelSnapshot: item.sizeLabel || "Unspecified",
       supplierReference: item.supplierReference || null,
       imageUrlSnapshot: item.imageUrl || null,
       expectedSellingPrice: item.expectedSellingPrice ?? null,
@@ -155,6 +159,7 @@ function purchaseOrderItemData(item: PurchaseOrderLineInput, references: Purchas
     lineGroupId: item.lineGroupId ?? randomUUID(),
     productId: item.productId,
     sizeId: item.sizeId,
+    variantId: item.variantId ?? null,
     brandId: product.brandId,
     categoryId: product.categoryId,
     productNameSnapshot: product.name,
@@ -199,6 +204,29 @@ async function catalogIdentity(
   return { ...product, sizeId: size.id, sizeLabel: size.label };
 }
 
+async function ensureVariantIdentity(
+  tx: Prisma.TransactionClient,
+  orgId: string,
+  identity: Awaited<ReturnType<typeof catalogIdentity>>,
+  attributes: Prisma.InputJsonValue = {},
+) {
+  const variantSku = buildVariantSku(identity.sku, identity.sizeLabel);
+  const variant = await tx.productVariant.upsert({
+    where: { orgId_sku: { orgId, sku: variantSku } },
+    create: {
+      orgId,
+      productId: identity.id,
+      sizeId: identity.sizeId,
+      sku: variantSku,
+      label: identity.sizeLabel,
+      attributes,
+    },
+    update: { isActive: true },
+    select: { id: true, sku: true },
+  });
+  return { ...identity, variantId: variant.id, variantSku: variant.sku };
+}
+
 async function resolveReceiptCatalogIdentity(
   tx: Prisma.TransactionClient,
   orgId: string,
@@ -217,7 +245,7 @@ async function resolveReceiptCatalogIdentity(
         throw new Error("This purchase order line is already linked to a different catalog variant");
       }
     }
-    return catalogIdentity(tx, orgId, item.productId, item.sizeId);
+    return ensureVariantIdentity(tx, orgId, await catalogIdentity(tx, orgId, item.productId, item.sizeId));
   }
 
   if (item.itemKind !== "PROVISIONAL_PRODUCT") {
@@ -308,16 +336,22 @@ async function resolveReceiptCatalogIdentity(
     identity = { ...product, category: { sizes: [size] }, sizeId: size.id, sizeLabel: size.label };
   }
 
+  const variantIdentity = await ensureVariantIdentity(tx, orgId, identity, {
+    ...(item.styleModelSnapshot ? { style: item.styleModelSnapshot } : {}),
+    ...(item.colourSnapshot ? { colour: item.colourSnapshot } : {}),
+    size: identity.sizeLabel,
+  });
   await tx.purchaseOrderItem.update({
     where: { id: item.id },
     data: {
       productId: identity.id,
       sizeId: identity.sizeId,
+      variantId: variantIdentity.variantId,
       resolvedAt: new Date(),
       resolvedBy: userId,
     },
   });
-  return identity;
+  return variantIdentity;
 }
 
 function isTransactionConflict(error: unknown) {
@@ -330,12 +364,16 @@ function isUniqueConflict(error: unknown) {
 
 const toDto = (po: any): PurchaseOrder => ({
   id: po.id,
+  poNumber: po.poNumber,
   storeId: po.storeId,
+  storeName: po.store.name,
   supplierId: po.supplierId,
   supplierName: po.supplier.name,
   status: po.status,
   totalAmount: Number(po.totalAmount),
   notes: po.notes ?? null,
+  deliveryInstructions: po.deliveryInstructions ?? null,
+  orderDate: po.orderDate.toISOString().slice(0, 10),
   orderedAt: po.orderedAt?.toISOString() ?? null,
   receivedAt: po.receivedAt?.toISOString() ?? null,
   closedAt: po.closedAt?.toISOString() ?? null,
@@ -344,7 +382,10 @@ const toDto = (po: any): PurchaseOrder => ({
   createdBy: po.createdBy,
   createdByName: po.user.name,
   items: po.items.map((item: any) => {
-    const receiptItems = po.receipts.flatMap((receipt: any) => receipt.items).filter((received: any) => received.purchaseOrderItemId === item.id);
+    const receiptItems = po.receipts
+      .filter((receipt: any) => receipt.postingStatus === "POSTED" && !receipt.reversalOfId)
+      .flatMap((receipt: any) => receipt.items)
+      .filter((received: any) => received.purchaseOrderItemId === item.id);
     const acceptedQuantity = receiptItems.reduce((sum: number, received: any) => sum + received.quantityAccepted, 0);
     const rejectedQuantity = receiptItems.reduce((sum: number, received: any) => sum + received.quantityRejected, 0);
     const damagedQuantity = receiptItems.reduce((sum: number, received: any) => sum + received.quantityDamaged, 0);
@@ -382,6 +423,7 @@ export const poService = {
   async list(filters: POListFilters, orgId: string): Promise<PurchaseOrder[]> {
     const orders = await prisma.purchaseOrder.findMany({
       where: {
+        source: "PURCHASE_ORDER",
         store: { orgId },
         ...(filters.storeId && { storeId: filters.storeId }),
         ...(filters.supplierId && { supplierId: filters.supplierId }),
@@ -408,9 +450,13 @@ export const poService = {
       const references = await assertPurchaseReferences(tx, orgId, input.storeId, input.supplierId, input.items);
       return tx.purchaseOrder.create({
         data: {
+          orgId,
+          poNumber: `PO-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-${randomUUID().slice(0, 6).toUpperCase()}`,
           storeId: input.storeId,
           supplierId: input.supplierId,
           notes: input.notes || null,
+          deliveryInstructions: input.deliveryInstructions || null,
+          orderDate: input.orderDate ? new Date(`${input.orderDate}T00:00:00.000Z`) : new Date(),
           expectedDeliveryDate: input.expectedDeliveryDate ? new Date(`${input.expectedDeliveryDate}T00:00:00.000Z`) : null,
           totalAmount: purchaseTotal(input.items),
           createdBy: userId,
@@ -424,7 +470,7 @@ export const poService = {
     return toDto(po);
   },
 
-  async submitPO(id: string, orgId: string, fixedStoreId?: string | null): Promise<PurchaseOrder | null> {
+  async submitPO(id: string, orgId: string, userId: string, fixedStoreId?: string | null): Promise<PurchaseOrder | null> {
     const updated = await prisma.$transaction(async (tx) => {
       const po = await tx.purchaseOrder.findFirst({
         where: { id, store: { orgId }, ...(fixedStoreId ? { storeId: fixedStoreId } : {}) },
@@ -433,7 +479,18 @@ export const poService = {
       if (po.status !== "DRAFT") throw new Error("Only DRAFT purchase orders can be submitted");
       return tx.purchaseOrder.update({
         where: { id },
-        data: { status: "ORDERED", orderedAt: new Date() },
+        data: {
+          status: "ORDERED",
+          orderedAt: new Date(),
+          issuedAt: new Date(),
+          issuedBy: userId,
+          issuedSnapshot: {
+            poNumber: po.poNumber,
+            supplierId: po.supplierId,
+            storeId: po.storeId,
+            totalAmount: po.totalAmount.toString(),
+          },
+        },
         include: poInclude,
       });
     }, transactionOptions);
@@ -451,6 +508,7 @@ export const poService = {
   ): Promise<PurchaseOrder | null> {
     const input = receivePurchaseOrderSchema.parse({ ...metadata, items: receivedItems });
     const receivedAt = input.receivedAt ? new Date(input.receivedAt) : new Date();
+    const payloadHash = receiptPayloadHash(id, input);
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
@@ -465,12 +523,13 @@ export const poService = {
 
           const existingReceipt = await tx.purchaseOrderReceipt.findUnique({
             where: { confirmationId: input.confirmationId },
-            select: { purchaseOrderId: true },
+            select: { purchaseOrderId: true, payloadHash: true },
           });
           if (existingReceipt) {
             if (existingReceipt.purchaseOrderId !== id) {
               throw new Error("Receipt confirmation is already used by another purchase order");
             }
+            if (existingReceipt.payloadHash !== payloadHash) throw new ReceiptIdempotencyConflictError();
             return tx.purchaseOrder.findFirst({
               where: { id, store: { orgId }, ...(fixedStoreId ? { storeId: fixedStoreId } : {}) },
               include: poInclude,
@@ -491,31 +550,45 @@ export const poService = {
           const receipt = await tx.purchaseOrderReceipt.create({
             data: {
               confirmationId: input.confirmationId,
+              payloadHash,
+              receiptNumber: `GRN-${receivedAt.toISOString().slice(0, 10).replaceAll("-", "")}-${randomUUID().slice(0, 6).toUpperCase()}`,
+              orgId,
+              storeId: po.storeId,
               purchaseOrderId: id,
               receiptReference: input.receiptReference || null,
               receivedBy: userId,
               receivedAt,
               supplierInvoiceNumber: input.supplierInvoiceNumber || null,
               notes: input.notes || null,
+              postedAt: new Date(),
+              sourceSnapshot: input as unknown as Prisma.InputJsonValue,
             },
           });
+
+          for (const item of po.items) {
+            const incomingForLine = input.items.filter((row) => row.purchaseOrderItemId === item.id);
+            const incomingPhysical = incomingForLine.reduce((sum, row) => sum + row.receivedQuantity, 0);
+            const incomingAccepted = incomingForLine.reduce((sum, row) => sum + row.acceptedQuantity, 0);
+            const priorRows = po.receipts.flatMap((existingReceipt) => existingReceipt.items).filter((row) => row.purchaseOrderItemId === item.id);
+            const priorPhysical = priorRows.reduce((sum, row) => sum + row.quantityReceived, 0);
+            const priorAccepted = priorRows.reduce((sum, row) => sum + row.quantityAccepted, 0);
+            if (priorPhysical + incomingPhysical > item.quantity) {
+              throw new Error(`Physical receipt quantity for ${item.product?.name ?? item.productNameSnapshot} exceeds the ordered quantity`);
+            }
+            if (priorAccepted + incomingAccepted > item.quantity) {
+              throw new Error(`Accepted quantity for ${item.product?.name ?? item.productNameSnapshot} exceeds the ordered quantity`);
+            }
+          }
 
           for (const received of input.items) {
             validateReceiptQuantity({
               received: received.receivedQuantity,
               accepted: received.acceptedQuantity,
               rejected: received.rejectedQuantity,
-              damaged: received.damagedQuantity,
+              damaged: received.heldQuantity ?? received.damagedQuantity,
             });
             const item = po.items.find((candidate) => candidate.id === received.purchaseOrderItemId);
             if (!item) throw new Error("Receipt contains an item outside this purchase order");
-            const priorAccepted = po.receipts
-              .flatMap((existingReceipt) => existingReceipt.items)
-              .filter((row) => row.purchaseOrderItemId === item.id)
-              .reduce((sum, row) => sum + row.quantityAccepted, 0);
-            if (priorAccepted + received.acceptedQuantity > item.quantity) {
-              throw new Error(`Accepted quantity for ${item.product?.name ?? item.productNameSnapshot} (${item.size?.label ?? item.sizeLabelSnapshot}) exceeds the ordered quantity`);
-            }
             const actualCost = received.unitCostActual ?? item.unitCost;
             const identity = await resolveReceiptCatalogIdentity(tx, orgId, userId, item, received, actualCost);
             const receiptItem = await tx.purchaseOrderReceiptItem.create({
@@ -524,13 +597,16 @@ export const poService = {
                 purchaseOrderItemId: item.id,
                 productId: identity?.id ?? null,
                 sizeId: identity?.sizeId ?? null,
+                variantId: identity?.variantId ?? item.variantId,
                 quantityReceived: received.receivedQuantity,
                 quantityAccepted: received.acceptedQuantity,
                 quantityRejected: received.rejectedQuantity,
                 quantityDamaged: received.damagedQuantity,
+                quantityHeld: received.heldQuantity ?? received.damagedQuantity,
                 rejectionReason: received.rejectionReason || null,
                 batchReference: received.batchReference || null,
                 unitCostActual: actualCost,
+                notes: received.notes || null,
               },
             });
             if (received.damagedQuantity > 0) {
@@ -544,20 +620,52 @@ export const poService = {
                 },
               });
             }
+            if (received.damagedQuantity > 0 || received.rejectedQuantity > 0) {
+              await tx.purchaseDiscrepancy.create({
+                data: {
+                  orgId,
+                  storeId: po.storeId,
+                  discrepancyNumber: `DISC-${receivedAt.getUTCFullYear()}-${randomUUID().slice(0, 8).toUpperCase()}`,
+                  purchaseOrderId: po.id,
+                  receiptId: receipt.id,
+                  receiptItemId: receiptItem.id,
+                  purchaseOrderItemId: item.id,
+                  variantId: identity?.variantId ?? item.variantId,
+                  issueType: received.damagedQuantity > 0 ? "DAMAGED" : "OTHER",
+                  quantity: received.damagedQuantity || received.rejectedQuantity,
+                  reason: received.defectReason || received.rejectionReason || "Receipt discrepancy",
+                  photoUrls: received.defectImageUrls ?? [],
+                  createdBy: userId,
+                },
+              });
+            }
             if (received.acceptedQuantity > 0) {
               if (!identity) throw new Error("Accepted stock requires a resolved catalog product and variant");
               await adjustStockWithClient(tx, {
                 orgId,
                 productId: identity.id,
                 sizeId: identity.sizeId,
+                variantId: identity.variantId,
                 storeId: po.storeId,
                 quantity: received.acceptedQuantity,
-                variantSku: buildVariantSku(identity.sku, identity.sizeLabel),
+                variantSku: identity.variantSku,
                 type: "IN",
                 referenceType: "PO",
                 referenceId: receipt.id,
                 reason: `PO receipt ${receipt.id.slice(0, 8).toUpperCase()}`,
                 businessDate: receivedAt,
+                userId,
+              });
+              await recordReceiptValuation(tx, {
+                orgId,
+                storeId: po.storeId,
+                productId: identity.id,
+                sizeId: identity.sizeId,
+                variantId: identity.variantId,
+                receiptId: receipt.id,
+                receiptItemId: receiptItem.id,
+                quantity: received.acceptedQuantity,
+                unitCost: actualCost,
                 userId,
               });
             }
@@ -576,7 +684,9 @@ export const poService = {
               .flatMap((existingReceipt) => existingReceipt.items)
               .filter((row) => row.purchaseOrderItemId === item.id)
               .reduce((sum, row) => sum + row.quantityAccepted, 0)
-              + (input.items.find((row) => row.purchaseOrderItemId === item.id)?.acceptedQuantity ?? 0),
+              + input.items
+                .filter((row) => row.purchaseOrderItemId === item.id)
+                .reduce((sum, row) => sum + row.acceptedQuantity, 0),
           }));
           const status = purchaseOrderStatus(acceptedByLine);
           return tx.purchaseOrder.update({
@@ -598,9 +708,12 @@ export const poService = {
               purchaseOrderId: id,
               purchaseOrder: { store: { orgId }, ...(fixedStoreId ? { storeId: fixedStoreId } : {}) },
             },
-            select: { id: true },
+            select: { id: true, payloadHash: true },
           });
-          if (existing) return this.getById(id, orgId, fixedStoreId);
+          if (existing) {
+            if (existing.payloadHash !== payloadHash) throw new ReceiptIdempotencyConflictError();
+            return this.getById(id, orgId, fixedStoreId);
+          }
         }
         throw error;
       }
@@ -660,6 +773,68 @@ export const poService = {
     return updated ? toDto(updated) : null;
   },
 
+  async reverseReceipt(
+    purchaseOrderId: string,
+    receiptId: string,
+    orgId: string,
+    userId: string,
+    confirmationId: string,
+    reason: string,
+    fixedStoreId?: string | null,
+  ): Promise<PurchaseOrder | null> {
+    if (!confirmationId.trim() || !reason.trim()) throw new Error("Confirmation ID and correction reason are required");
+    const hash = receiptPayloadHash(purchaseOrderId, { receiptId, reason: reason.trim(), type: "RECEIPT_REVERSAL" });
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "purchase_orders" WHERE "id" = ${purchaseOrderId} FOR UPDATE`;
+      const replay = await tx.purchaseOrderReceipt.findUnique({ where: { confirmationId }, select: { purchaseOrderId: true, payloadHash: true } });
+      if (replay) {
+        if (replay.purchaseOrderId !== purchaseOrderId || replay.payloadHash !== hash) throw new ReceiptIdempotencyConflictError();
+        return tx.purchaseOrder.findFirst({ where: { id: purchaseOrderId, orgId, ...(fixedStoreId ? { storeId: fixedStoreId } : {}) }, include: poInclude });
+      }
+      const receipt = await tx.purchaseOrderReceipt.findFirst({
+        where: { id: receiptId, purchaseOrderId, orgId, postingStatus: "POSTED", ...(fixedStoreId ? { storeId: fixedStoreId } : {}) },
+        include: { items: true, purchaseOrder: { include: { items: true } } },
+      });
+      if (!receipt) throw new Error("Posted receipt not found or already reversed");
+      await assertActiveOrgUser(tx, orgId, userId);
+      const reversal = await tx.purchaseOrderReceipt.create({
+        data: {
+          confirmationId,
+          payloadHash: hash,
+          receiptNumber: `GRN-REV-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-${randomUUID().slice(0, 6).toUpperCase()}`,
+          orgId,
+          storeId: receipt.storeId,
+          purchaseOrderId,
+          receivedAt: new Date(),
+          receivedBy: userId,
+          notes: reason.trim(),
+          postedAt: new Date(),
+          reversalOfId: receipt.id,
+          sourceSnapshot: { correctionReason: reason.trim(), originalReceiptId: receipt.id },
+        },
+      });
+      for (const item of receipt.items) {
+        if (item.quantityAccepted > 0 && item.productId && item.sizeId) {
+          const valuation = await tx.inventoryValuationEvent.findFirst({ where: { receiptItemId: item.id, eventType: "RECEIPT" }, orderBy: { occurredAt: "desc" } });
+          if (valuation) {
+            const newer = await tx.inventoryValuationEvent.count({ where: { storeId: receipt.storeId, productId: item.productId, variantId: item.variantId, occurredAt: { gt: valuation.occurredAt } } });
+            if (newer) throw new Error("This receipt is not the latest valuation event; post a controlled cost correction instead of reversing history");
+          }
+          const stockResult = await adjustStockWithClient(tx, { orgId, storeId: receipt.storeId, productId: item.productId, sizeId: item.sizeId, variantId: item.variantId ?? undefined, quantity: item.quantityAccepted, type: "OUT", referenceType: "PO", referenceId: reversal.id, reason: `Receipt reversal: ${reason.trim()}`, userId });
+          const resultingAverage = valuation?.previousAverage ?? item.unitCostActual ?? 0;
+          await tx.stockEntry.update({ where: { id: stockResult.stockEntry.id }, data: { averageUnitCost: resultingAverage } });
+          await tx.inventoryValuationEvent.create({ data: { orgId, storeId: receipt.storeId, productId: item.productId, variantId: item.variantId, receiptId: reversal.id, eventType: "REVERSAL", quantity: -item.quantityAccepted, unitCost: item.unitCostActual ?? valuation?.unitCost ?? 0, previousAverage: valuation?.resultingAverage, resultingAverage, resultingQuantity: stockResult.stockEntry.quantity, sourceType: "PURCHASE_RECEIPT_REVERSAL", sourceId: reversal.id, idempotencyKey: `purchase-receipt-reversal:${item.id}`, createdBy: userId } });
+        }
+        await tx.purchaseOrderReceiptItem.create({ data: { receiptId: reversal.id, purchaseOrderItemId: item.purchaseOrderItemId, productId: item.productId, sizeId: item.sizeId, variantId: item.variantId, quantityReceived: item.quantityReceived, quantityAccepted: item.quantityAccepted, quantityRejected: item.quantityRejected, quantityDamaged: item.quantityDamaged, quantityHeld: item.quantityHeld, rejectionReason: reason.trim(), batchReference: item.batchReference, unitCostActual: item.unitCostActual, notes: "Append-only reversal; direction is represented by the reversal receipt and OUT stock movement" } });
+      }
+      await tx.purchaseOrderReceipt.update({ where: { id: receipt.id }, data: { postingStatus: "REVERSED" } });
+      const allReceipts = await tx.purchaseOrderReceiptItem.findMany({ where: { receipt: { purchaseOrderId, postingStatus: "POSTED", reversalOfId: null } } });
+      const state = receipt.purchaseOrder.items.map((line) => ({ ordered: line.quantity, accepted: allReceipts.filter((row) => row.purchaseOrderItemId === line.id).reduce((sum, row) => sum + row.quantityAccepted, 0) }));
+      return tx.purchaseOrder.update({ where: { id: purchaseOrderId }, data: { status: purchaseOrderStatus(state), receivedAt: null }, include: poInclude });
+    }, transactionOptions);
+    return updated ? toDto(updated) : null;
+  },
+
   async update(
     id: string,
     orgId: string,
@@ -688,6 +863,8 @@ export const poService = {
         data: {
           ...(input.supplierId !== undefined && { supplierId: input.supplierId }),
           ...(input.notes !== undefined && { notes: input.notes || null }),
+          ...(input.deliveryInstructions !== undefined && { deliveryInstructions: input.deliveryInstructions || null }),
+          ...(input.orderDate !== undefined && { orderDate: new Date(`${input.orderDate}T00:00:00.000Z`) }),
           ...(input.expectedDeliveryDate !== undefined && { expectedDeliveryDate: input.expectedDeliveryDate ? new Date(`${input.expectedDeliveryDate}T00:00:00.000Z`) : null }),
           ...(nextTotalAmount !== undefined && { totalAmount: nextTotalAmount }),
           ...(items !== undefined && {

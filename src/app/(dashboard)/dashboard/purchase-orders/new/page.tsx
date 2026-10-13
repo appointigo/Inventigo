@@ -2,13 +2,15 @@
 
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Typography, Button, App, Skeleton, Alert } from "antd";
+import { Typography, Button, App, Skeleton, Alert, Space } from "antd";
 import { ArrowLeftOutlined } from "@ant-design/icons";
 import POForm from "@/modules/purchase-orders/components/POForm";
 import { useSuppliers } from "@/modules/suppliers/hooks/useSuppliers";
-import { useProducts } from "@/modules/products/hooks/useProducts";
 import { useStore } from "@/providers/StoreProvider";
-import type { POItemFormValues } from "@/modules/purchase-orders/types";
+import type { PurchaseOrderLineInput } from "@/modules/purchase-orders/types";
+import { useCategories } from "@/modules/categories/hooks/useCategories";
+import { useBrands } from "@/modules/brands/hooks/useBrands";
+import styles from "@/modules/purchase-orders/components/PurchaseWorkspace.module.css";
 
 export default function NewPurchaseOrderPage() {
   const router = useRouter();
@@ -16,15 +18,16 @@ export default function NewPurchaseOrderPage() {
   const { message } = App.useApp();
   const { storeId } = useStore();
   const { suppliers, loading: suppliersLoading } = useSuppliers();
-  const { products, loading: productsLoading } = useProducts({ pageSize: 100 });
+  const { categories, loading: categoriesLoading } = useCategories();
+  const { brands, loading: brandsLoading } = useBrands();
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async (values: {
     supplierId: string;
-    notes?: string;
+    notes?: string; deliveryInstructions?: string; orderDate: string;
     expectedDeliveryDate?: string;
-    items: POItemFormValues[];
-  }) => {
+    items: PurchaseOrderLineInput[];
+  }, issue: boolean) => {
     if (!storeId) {
       message.error("Please select a store first");
       return;
@@ -45,6 +48,15 @@ export default function NewPurchaseOrderPage() {
         return;
       }
       const po = await res.json();
+      if (issue) {
+        const issueResponse = await fetch(`/api/purchase-orders/${encodeURIComponent(po.id)}/submit`, { method: "POST" });
+        if (!issueResponse.ok) {
+          const data = await issueResponse.json();
+          message.warning(`Draft saved, but issuing failed: ${data.error || "Unknown error"}`);
+          router.push(`/dashboard/purchase-orders/${po.id}`);
+          return;
+        }
+      }
       const recommendationId = searchParams.get("recommendationId");
       if (recommendationId)
         await fetch(`/api/replenishment/${encodeURIComponent(recommendationId)}`, {
@@ -52,7 +64,7 @@ export default function NewPurchaseOrderPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ disposition: "ACCEPTED", linkedPurchaseOrderId: po.id }),
         });
-      message.success("Purchase order created");
+      message.success(issue ? "Purchase order issued" : "Purchase order saved as draft");
       router.push(`/dashboard/purchase-orders/${po.id}`);
     } finally {
       setSaving(false);
@@ -60,17 +72,14 @@ export default function NewPurchaseOrderPage() {
   };
 
   return (
-    <div style={{ padding: 24 }}>
-      <Button
+    <main className={styles.page}>
+      <div className={styles.header}><div><Button
         icon={<ArrowLeftOutlined />}
         onClick={() => router.push("/dashboard/purchase-orders")}
-        style={{ marginBottom: 16 }}
+        style={{ marginBottom: 12 }}
       >
         Back to Purchase Orders
-      </Button>
-      <Typography.Title level={3} style={{ marginTop: 0, marginBottom: 24 }}>
-        New Purchase Order
-      </Typography.Title>
+      </Button><Typography.Title level={2} className={styles.title}>Create Purchase Order</Typography.Title><p className={styles.subtitle}>Order catalog products, create a product without stock, or describe unknown supplier goods provisionally.</p></div><Space /></div>
       {searchParams.get("recommendationId") ? (
         <Alert
           showIcon
@@ -80,12 +89,14 @@ export default function NewPurchaseOrderPage() {
           style={{ marginBottom: 16 }}
         />
       ) : null}
-      {suppliersLoading || productsLoading ? (
+      {suppliersLoading || categoriesLoading || brandsLoading || !storeId ? (
         <Skeleton active />
       ) : (
         <POForm
           suppliers={suppliers}
-          products={products}
+          storeId={storeId}
+          categories={categories}
+          brands={brands}
           onSubmit={handleSubmit}
           onCancel={() => router.push("/dashboard/purchase-orders")}
           loading={saving}
@@ -101,6 +112,6 @@ export default function NewPurchaseOrderPage() {
           }
         />
       )}
-    </div>
+    </main>
   );
 }

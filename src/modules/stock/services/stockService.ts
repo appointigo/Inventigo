@@ -27,6 +27,7 @@ const toStockLevelRow = (entry: StockEntryWithDetails): StockLevelRow => ({
   sku: entry.product.sku,
   externalBarcode: entry.product.externalBarcode ?? null,
   variantSku: entry.variantSku ?? null,
+  averageUnitCost: entry.averageUnitCost === null ? null : Number(entry.averageUnitCost),
   attributes: (entry.product.attributes ?? {}) as Record<string, unknown>,
   categoryName: entry.product.category.name,
   brandName: entry.product.brand.name,
@@ -205,6 +206,7 @@ export async function adjustStockWithClient(tx: Prisma.TransactionClient, input:
     orgId,
     productId,
     sizeId,
+    variantId,
     storeId,
     quantity,
     variantSku,
@@ -226,7 +228,7 @@ export async function adjustStockWithClient(tx: Prisma.TransactionClient, input:
   if (!store || !product) throw new Error("Stock target is outside the selected store scope");
   const existing = await tx.stockEntry.findUnique({
     where: { productId_sizeId_storeId: { productId, sizeId, storeId } },
-    select: { quantity: true, variantSku: true },
+    select: { quantity: true, variantSku: true, variantId: true },
   });
   const quantityBefore = existing?.quantity ?? 0;
   const deltaQuantity = resolveStockDelta({ type, quantity, quantityBefore, operation });
@@ -236,6 +238,7 @@ export async function adjustStockWithClient(tx: Prisma.TransactionClient, input:
     update: {
       quantity: { increment: deltaQuantity },
       ...(!existing?.variantSku && variantSku ? { variantSku } : {}),
+      ...(!existing?.variantId && variantId ? { variantId } : {}),
       lastRestockedAt: deltaQuantity > 0 ? new Date() : undefined,
     },
     create: {
@@ -244,6 +247,7 @@ export async function adjustStockWithClient(tx: Prisma.TransactionClient, input:
       storeId,
       quantity: audit.quantityAfter,
       variantSku: variantSku ?? null,
+      variantId: variantId ?? null,
       reorderLevel: 5,
       reorderQuantity: 20,
       lastRestockedAt: deltaQuantity > 0 ? new Date() : null,
@@ -254,6 +258,7 @@ export async function adjustStockWithClient(tx: Prisma.TransactionClient, input:
       productId,
       sizeId,
       storeId,
+      variantId: variantId ?? null,
       type,
       ...audit,
       reason,

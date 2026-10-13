@@ -279,7 +279,7 @@ export const financeService = {
       prisma.supplierPayable.findMany({ where: { ...rowWhere, status: { in: [SupplierPayableStatus.OPEN, SupplierPayableStatus.PARTIALLY_PAID] } }, select: { outstandingAmount: true, dueDate: true } }),
       prisma.refundLiability.findMany({ where: { ...rowWhere, status: { in: [RefundLiabilityStatus.PENDING, RefundLiabilityStatus.PARTIAL] } }, select: { outstandingAmount: true } }),
       prisma.sale.aggregate({ where: { ...(storeId ? { storeId } : { store: { orgId } }), amountDue: { gt: 0 } }, _sum: { amountDue: true } }),
-      prisma.stockEntry.findMany({ where: { ...(storeId ? { storeId } : { store: { orgId } }), quantity: { gt: 0 } }, select: { quantity: true, product: { select: { costPrice: true } } } }),
+      prisma.stockEntry.findMany({ where: { ...(storeId ? { storeId } : { store: { orgId } }), quantity: { gt: 0 } }, select: { quantity: true, averageUnitCost: true, product: { select: { costPrice: true } } } }),
       prisma.financialTransaction.count({ where: { ...rowWhere, ...(storeId ? { OR: [{ accountId: null }, { account: { storeId: null } }, { account: { storeId: { not: storeId } } }] } : { accountId: null }) } }),
       storeId ? prisma.store.findFirst({ where: { id: storeId, orgId }, select: { name: true } }) : Promise.resolve(null),
       prisma.purchaseOrder.findMany({
@@ -312,7 +312,7 @@ export const financeService = {
     const thirtyObligations = roundMoney(dueBetween(in30) + overdue + pendingRefunds);
     const sevenDay = { obligations: sevenObligations, ...cashCoverage(available, sevenObligations) };
     const thirtyDay = { obligations: thirtyObligations, ...cashCoverage(available, thirtyObligations) };
-    const inventoryValue = roundMoney(stocks.reduce((sum, row) => sum + row.quantity * money(row.product.costPrice), 0));
+    const inventoryValue = roundMoney(stocks.reduce((sum, row) => sum + row.quantity * money(row.averageUnitCost ?? row.product.costPrice), 0));
     const inboundInventoryValue = roundMoney(inboundOrders.reduce((sum, order) => sum + order.items.reduce((itemSum, item) => {
       const accepted = item.receiptItems.reduce((received, receipt) => received + receipt.quantityAccepted, 0);
       return itemSum + Math.max(0, item.quantity - accepted) * money(item.unitCost);
@@ -358,7 +358,7 @@ export const financeService = {
         dueDateMissing: roundMoney(payables.filter((row) => !row.dueDate).reduce((sum, row) => sum + money(row.outstandingAmount), 0)),
         pendingRefunds,
       },
-      workingCapital: { inventoryValue, excessInventoryValue, inboundInventoryValue, operatingWorkingCapital: operatingWorkingCapital(receivableValue, inventoryValue, payableOutstanding), limitations: ["Retail operating snapshot, not a statutory balance sheet.", "Excludes taxes, payroll, loans and unmodeled current assets/liabilities.", "Inventory uses current sellable quantity × current product cost.", "Excess value uses the latest open replenishment evidence per variant; inbound value uses unreceived ordered PO quantities."] },
+      workingCapital: { inventoryValue, excessInventoryValue, inboundInventoryValue, operatingWorkingCapital: operatingWorkingCapital(receivableValue, inventoryValue, payableOutstanding), limitations: ["Retail operating snapshot, not a statutory balance sheet.", "Excludes taxes, payroll, loans and unmodeled current assets/liabilities.", "Inventory uses the store/variant moving average when receipt evidence exists and legacy product cost otherwise.", "Excess value uses the latest open replenishment evidence per variant; inbound value uses unreceived ordered PO quantities."] },
       coverage: { sevenDay, thirtyDay }, actions, completeness,
     };
   },

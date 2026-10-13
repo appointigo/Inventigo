@@ -4,6 +4,7 @@ export type AdjustStockInput = {
   orgId: string;
   productId: string;
   sizeId: string;
+  variantId?: string;
   storeId: string;
   quantity: number;
   variantSku?: string;
@@ -35,6 +36,7 @@ export type StockLevelRow = {
   sku: string;
   externalBarcode: string | null;
   variantSku: string | null;
+  averageUnitCost: number | null;
   attributes: Record<string, unknown>;
   categoryName: string;
   brandName: string;

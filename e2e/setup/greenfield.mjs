@@ -24,21 +24,31 @@ function fail(message) {
 }
 
 function runPrisma(args, { quiet = false, input } = {}) {
-  const result = spawnSync(executable, ["prisma", ...args], {
-    cwd: root,
-    env: process.env,
-    encoding: "utf8",
-    input,
-    maxBuffer: 20 * 1024 * 1024,
-  });
-  if (result.status !== 0) {
+  const resolvingBaseline = args[0] === "migrate" && args[1] === "resolve";
+  const attempts = resolvingBaseline ? 3 : 1;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const result = spawnSync(executable, ["prisma", ...args], {
+      cwd: root,
+      env: process.env,
+      encoding: "utf8",
+      input,
+      maxBuffer: 20 * 1024 * 1024,
+      timeout: resolvingBaseline ? 30_000 : undefined,
+    });
+    if (result.status === 0) {
+      if (!quiet) {
+        if (result.stdout) process.stdout.write(result.stdout);
+        if (result.stderr) process.stderr.write(result.stderr);
+      }
+      return;
+    }
+    if (resolvingBaseline && attempt < attempts && (result.signal === "SIGTERM" || result.error?.code === "ETIMEDOUT")) {
+      console.warn(`Retrying stalled baseline migration record (${attempt}/${attempts}): ${args.at(-1)}`);
+      continue;
+    }
     if (result.stdout) process.stdout.write(result.stdout);
     if (result.stderr) process.stderr.write(result.stderr);
     throw new Error(`Prisma command failed: prisma ${args.join(" ")}`);
-  }
-  if (!quiet) {
-    if (result.stdout) process.stdout.write(result.stdout);
-    if (result.stderr) process.stderr.write(result.stderr);
   }
 }
 

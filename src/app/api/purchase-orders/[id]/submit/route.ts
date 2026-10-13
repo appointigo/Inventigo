@@ -6,7 +6,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   try {
     const user = await requirePurchaseUser("manage");
     const { id } = await params;
-    const po = await poService.submitPO(id, user.orgId, user.storeId);
+    const po = await poService.submitPO(id, user.orgId, user.id, user.storeId);
     if (!po) return NextResponse.json({ error: "Purchase order not found" }, { status: 404 });
     return NextResponse.json(po);
   } catch (err) {

@@ -1,6 +1,6 @@
 import "server-only";
 import { requireOrgAuth } from "@/lib/auth.middleware";
-import { canAccessPurchasing, canManagePurchasing } from "@/lib/rbac";
+import { canAccessPurchasing, canApprovePurchaseExceptions, canManagePurchasing } from "@/lib/rbac";
 
 export class PurchaseRouteError extends Error {
   constructor(message: string, readonly status: number) {
@@ -8,12 +8,12 @@ export class PurchaseRouteError extends Error {
   }
 }
 
-export async function requirePurchaseUser(mode: "read" | "manage" = "read") {
+export async function requirePurchaseUser(mode: "read" | "manage" | "approve" = "read") {
   const user = await requireOrgAuth().catch(() => null);
   if (!user) throw new PurchaseRouteError("Unauthorized", 401);
-  const allowed = mode === "manage"
-    ? canManagePurchasing(user.role)
-    : canAccessPurchasing(user.role);
+  const allowed = mode === "approve"
+    ? canApprovePurchaseExceptions(user.role)
+    : mode === "manage" ? canManagePurchasing(user.role) : canAccessPurchasing(user.role);
   if (!allowed) throw new PurchaseRouteError("Forbidden", 403);
   return user;
 }

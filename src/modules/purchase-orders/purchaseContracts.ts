@@ -12,6 +12,7 @@ const poItemSchema = z.object({
   lineGroupId: identifier.optional(),
   productId: identifier,
   sizeId: identifier,
+  variantId: identifier.optional(),
   colour: optionalText(100),
   supplierReference: optionalText(200),
   notes: optionalText(1_000),
@@ -24,11 +25,11 @@ const provisionalPOItemSchema = z.object({
   lineGroupId: identifier.optional(),
   productName: z.string().trim().min(1).max(300),
   proposedSku: optionalText(100),
-  brandId: identifier,
-  categoryId: identifier,
+  brandId: identifier.optional(),
+  categoryId: identifier.optional(),
   styleModel: optionalText(200),
   colour: optionalText(100),
-  sizeLabel: z.string().trim().min(1).max(100),
+  sizeLabel: z.string().trim().min(1).max(100).optional(),
   supplierReference: optionalText(200),
   imageUrl: optionalText(2_000),
   expectedSellingPrice: money.optional(),
@@ -63,6 +64,8 @@ export const createPurchaseOrderSchema = z.object({
   storeId: identifier,
   supplierId: identifier,
   notes: optionalText(2_000),
+  deliveryInstructions: optionalText(2_000),
+  orderDate: z.iso.date().optional(),
   expectedDeliveryDate: z.iso.date().nullable().optional(),
   items: z.array(purchaseOrderLineSchema).min(1).max(500),
 }).strict().superRefine((value, context) => rejectDuplicateVariants(value.items, context));
@@ -70,6 +73,8 @@ export const createPurchaseOrderSchema = z.object({
 export const updatePurchaseOrderSchema = z.object({
   supplierId: identifier.optional(),
   notes: z.string().trim().max(2_000).nullable().optional(),
+  deliveryInstructions: z.string().trim().max(2_000).nullable().optional(),
+  orderDate: z.iso.date().optional(),
   expectedDeliveryDate: z.iso.date().nullable().optional(),
   items: z.array(purchaseOrderLineSchema).min(1).max(500).optional(),
 }).strict().refine((value) => Object.keys(value).length > 0, "At least one purchase order field is required").superRefine((value, context) => {
@@ -77,17 +82,20 @@ export const updatePurchaseOrderSchema = z.object({
 });
 
 const receiptItemSchema = z.object({
+  mappingKey: identifier.optional(),
   purchaseOrderItemId: identifier,
   receivedQuantity: z.number().int().positive().max(1_000_000),
   acceptedQuantity: z.number().int().nonnegative().max(1_000_000),
   rejectedQuantity: z.number().int().nonnegative().max(1_000_000),
   damagedQuantity: z.number().int().nonnegative().max(1_000_000),
+  heldQuantity: z.number().int().nonnegative().max(1_000_000).optional(),
   rejectionReason: optionalText(1_000),
   batchReference: optionalText(200),
   defectQuantity: z.number().int().positive().max(1_000_000).optional(),
   defectReason: optionalText(1_000),
   defectImageUrls: z.array(z.string().trim().min(1).max(2_000)).max(10).optional(),
   unitCostActual: money.optional(),
+  notes: optionalText(1_000),
   catalogResolution: z.discriminatedUnion("mode", [
     z.object({
       mode: z.literal("LINK_EXISTING"),
@@ -111,21 +119,13 @@ export const receivePurchaseOrderSchema = z.object({
   notes: optionalText(2_000),
   items: z.array(receiptItemSchema).min(1).max(500),
 }).strict().superRefine((value, context) => {
-  const seen = new Set<string>();
   value.items.forEach((item, index) => {
-    if (seen.has(item.purchaseOrderItemId)) {
-      context.addIssue({
-        code: "custom",
-        path: ["items", index, "purchaseOrderItemId"],
-        message: "A purchase order line may appear only once per receipt",
-      });
-    }
-    seen.add(item.purchaseOrderItemId);
-    if (item.acceptedQuantity + item.rejectedQuantity + item.damagedQuantity !== item.receivedQuantity) {
+    const held = item.heldQuantity ?? item.damagedQuantity;
+    if (item.acceptedQuantity + item.rejectedQuantity + held !== item.receivedQuantity) {
       context.addIssue({
         code: "custom",
         path: ["items", index],
-        message: "Accepted, rejected, and damaged quantities must equal received quantity",
+        message: "Accepted, held, and rejected quantities must equal received quantity",
       });
     }
     if (item.damagedQuantity > 0 && item.defectQuantity !== undefined && item.defectQuantity !== item.damagedQuantity) {
@@ -133,6 +133,13 @@ export const receivePurchaseOrderSchema = z.object({
         code: "custom",
         path: ["items", index, "defectQuantity"],
         message: "Defect quantity must equal damaged quantity",
+      });
+    }
+    if (item.damagedQuantity > held + item.rejectedQuantity) {
+      context.addIssue({
+        code: "custom",
+        path: ["items", index, "damagedQuantity"],
+        message: "Damaged quantity must be held or rejected",
       });
     }
     if (item.damagedQuantity > 0 && !item.defectReason && !item.rejectionReason) {

@@ -3,6 +3,7 @@ import { poService } from "@/modules/purchase-orders/services/poService";
 import { contractError, receivePurchaseOrderSchema } from "@/modules/purchase-orders/purchaseContracts";
 import { purchaseError, requirePurchaseUser } from "@/modules/purchase-orders/purchaseRoute";
 import { ZodError } from "zod";
+import { randomUUID } from "crypto";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -12,7 +13,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const body = await request.json();
     const input = receivePurchaseOrderSchema.parse({
       ...body,
-      confirmationId: requestId || body.confirmationId,
+      confirmationId: requestId || body.confirmationId || randomUUID(),
     });
     const po = await poService.receivePO(id, user.orgId, input.items, user.id, {
       confirmationId: input.confirmationId,

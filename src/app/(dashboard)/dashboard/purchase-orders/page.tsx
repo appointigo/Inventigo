@@ -8,6 +8,7 @@ import POTable from "@/modules/purchase-orders/components/POTable";
 import { usePurchaseOrders } from "@/modules/purchase-orders/hooks/usePurchaseOrders";
 import { useSuppliers } from "@/modules/suppliers/hooks/useSuppliers";
 import { useStore } from "@/providers/StoreProvider";
+import styles from "@/modules/purchase-orders/components/PurchaseWorkspace.module.css";
 
 export default function PurchaseOrdersPage() {
   const router = useRouter();
@@ -19,17 +20,18 @@ export default function PurchaseOrdersPage() {
   const [supplierFilter, setSupplierFilter] = useState<string | undefined>();
 
   const { purchaseOrders, loading } = usePurchaseOrders({
-    status: statusFilter,
     supplierId: supplierFilter,
     storeId: storeId ?? undefined,
   });
   const { suppliers } = useSuppliers();
 
   return (
-    <div style={{ padding: 24 }}>
-      <Typography.Title level={3} style={{ marginTop: 0, marginBottom: 24 }}>
-        Purchase Orders
-      </Typography.Title>
+    <main className={styles.page}>
+      <div className={styles.breadcrumb}>Purchases &nbsp;/&nbsp; Purchase Orders</div>
+      <div className={styles.header}><div>
+        <Typography.Title level={2} className={styles.title}>Purchase Orders</Typography.Title>
+        <p className={styles.subtitle}>Create and manage purchase orders with suppliers.</p>
+      </div></div>
       <POTable
         purchaseOrders={purchaseOrders}
         suppliers={suppliers}
@@ -41,6 +43,6 @@ export default function PurchaseOrdersPage() {
         onAdd={() => router.push("/dashboard/purchase-orders/new")}
         onView={(po) => router.push(`/dashboard/purchase-orders/${po.id}`)}
       />
-    </div>
+    </main>
   );
 }

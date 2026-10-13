@@ -12,6 +12,10 @@ export function canManagePurchasing(role: Role): boolean {
   return PURCHASING_ROLES.has(role);
 }
 
+export function canApprovePurchaseExceptions(role: Role): boolean {
+  return role === "OWNER" || role === "ADMIN";
+}
+
 export function canAccessExpenses(role: Role): boolean {
   return FINANCE_AND_REPORTING_ROLES.has(role);
 }

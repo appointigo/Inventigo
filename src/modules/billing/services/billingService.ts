@@ -732,11 +732,21 @@ export const billingService = {
       keys.add(key);
       validateAmount(item.unitPrice, "unit price");
     }
-    const products = await prisma.product.findMany({
-      where: { id: { in: input.items.map((item) => item.productId) }, orgId, isActive: true },
-      select: { id: true, mrp: true, basePrice: true, costPrice: true },
-    });
+    const [products, stockCosts] = await Promise.all([
+      prisma.product.findMany({
+        where: { id: { in: input.items.map((item) => item.productId) }, orgId, isActive: true },
+        select: { id: true, mrp: true, basePrice: true, costPrice: true },
+      }),
+      prisma.stockEntry.findMany({
+        where: {
+          storeId,
+          OR: input.items.map((item) => ({ productId: item.productId, sizeId: item.sizeId })),
+        },
+        select: { productId: true, sizeId: true, averageUnitCost: true },
+      }),
+    ]);
     const productMap = new Map(products.map((product) => [product.id, product]));
+    const stockCostMap = new Map(stockCosts.map((entry) => [`${entry.productId}:${entry.sizeId}`, entry.averageUnitCost]));
     const sourceItems = input.items.map((item) => {
       const product = productMap.get(item.productId);
       if (!product) throw new Error("Product not found or inactive");
@@ -754,7 +764,7 @@ export const billingService = {
         originalUnitPrice,
         sellingPrice: resolveItemPrice(originalUnitPrice, adjustment),
         mrp: Number(product.mrp),
-        costPrice: Number(product.costPrice),
+        costPrice: Number(stockCostMap.get(`${item.productId}:${item.sizeId}`) ?? product.costPrice),
         eligibleForDiscount: true,
       };
     });

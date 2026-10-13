@@ -36,7 +36,7 @@ export const reportsService = {
     const costPriceMap = new Map(products.map((p) => [p.id, Number(p.costPrice)]));
 
     let result: StockReportRow[] = allStock.map((row) => {
-      const costPrice = costPriceMap.get(row.productId) ?? 0;
+      const costPrice = row.averageUnitCost ?? costPriceMap.get(row.productId) ?? 0;
       return { ...row, costPrice, stockValue: Math.max(0, row.quantity) * costPrice };
     });
 

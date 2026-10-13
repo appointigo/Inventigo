@@ -4,6 +4,8 @@ export type POFormValues = {
   storeId: string;
   supplierId: string;
   notes?: string;
+  deliveryInstructions?: string;
+  orderDate?: string;
   expectedDeliveryDate?: string | null;
   items: PurchaseOrderLineInput[];
 };
@@ -13,6 +15,7 @@ export type POItemFormValues = {
   lineGroupId?: string;
   productId: string;
   sizeId: string;
+  variantId?: string;
   colour?: string;
   supplierReference?: string;
   notes?: string;
@@ -25,11 +28,11 @@ export type ProvisionalPOItemFormValues = {
   lineGroupId?: string;
   productName: string;
   proposedSku?: string;
-  brandId: string;
-  categoryId: string;
+  brandId?: string;
+  categoryId?: string;
   styleModel?: string;
   colour?: string;
-  sizeLabel: string;
+  sizeLabel?: string;
   supplierReference?: string;
   imageUrl?: string;
   expectedSellingPrice?: number;
@@ -40,8 +43,9 @@ export type ProvisionalPOItemFormValues = {
 
 export type PurchaseOrderLineInput = POItemFormValues | ProvisionalPOItemFormValues;
 
-export type POUpdateValues = Omit<Partial<POFormValues>, "notes"> & {
+export type POUpdateValues = Omit<Partial<POFormValues>, "notes" | "deliveryInstructions"> & {
   notes?: string | null;
+  deliveryInstructions?: string | null;
 };
 
 export type POListFilters = {
@@ -84,12 +88,16 @@ export type POItem = {
 
 export type PurchaseOrder = {
   id: string;
+  poNumber: string;
   storeId: string;
   supplierId: string;
   supplierName: string;
+  storeName: string;
   status: PurchaseOrderStatus;
   totalAmount: number;
   notes: string | null;
+  deliveryInstructions: string | null;
+  orderDate: string;
   orderedAt: string | null;
   receivedAt: string | null;
   closedAt: string | null;
@@ -104,17 +112,20 @@ export type PurchaseOrder = {
 };
 
 export type ReceiveItemInput = {
+  mappingKey?: string;
   purchaseOrderItemId: string;
   receivedQuantity: number;
   acceptedQuantity: number;
   rejectedQuantity: number;
   damagedQuantity: number;
+  heldQuantity?: number;
   rejectionReason?: string;
   batchReference?: string;
   defectQuantity?: number;
   defectReason?: string;
   defectImageUrls?: string[];
   unitCostActual?: number;
+  notes?: string;
   catalogResolution?:
     | { mode: "LINK_EXISTING"; productId: string; sizeId: string }
     | {

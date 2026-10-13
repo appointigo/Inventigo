@@ -171,7 +171,8 @@ test("finance cash movement, receivables and inventory value reconcile to the le
     0,
   );
   const inventory = stock.reduce(
-    (sum, row) => sum + row.quantity * Number(row.product.costPrice),
+    (sum, row) =>
+      sum + row.quantity * Number(row.averageUnitCost ?? row.product.costPrice),
     0,
   );
   expectMoney(summary.movement.inflows, inflows);

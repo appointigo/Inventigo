@@ -80,7 +80,7 @@ export const dashboardServiceCompat = {
     );
     const lowStockCount = allStock.filter((row) => row.status !== "OK").length;
     const totalStockValue = allStock.reduce(
-      (sum, row) => sum + Math.max(0, row.quantity) * (costPriceMap.get(row.productId) ?? 0),
+      (sum, row) => sum + Math.max(0, row.quantity) * (row.averageUnitCost ?? costPriceMap.get(row.productId) ?? 0),
       0
     );
     const brandMap = new Map<string, number>();
@@ -88,7 +88,7 @@ export const dashboardServiceCompat = {
     const categoryValueMap = new Map<string, number>();
     for (const row of allStock) {
       const quantity = Math.max(0, row.quantity);
-      const value = quantity * (costPriceMap.get(row.productId) ?? 0);
+      const value = quantity * (row.averageUnitCost ?? costPriceMap.get(row.productId) ?? 0);
       brandMap.set(row.brandName, (brandMap.get(row.brandName) ?? 0) + value);
       categoryQuantityMap.set(
         row.categoryName,
