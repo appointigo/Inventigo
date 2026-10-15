@@ -1,12 +1,13 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import { App, Button, Segmented, Select, Spin, Typography } from "antd";
+import { App, Segmented, Select, Spin, Typography } from "antd";
 import Script from "next/script";
 import { useSearchParams } from "next/navigation";
 import { SUBSCRIPTION_CATALOG } from "@/config/subscriptions/pricing";
 import { SceneWrapper, Overlay, LogoRow, LogoIcon, LogoText } from "@/app/(auth)/login/login.styled";
 import { OnboardingCard } from "@/app/(auth)/onboarding/onboarding.styled";
+import { CheckoutActionButton } from "./checkout.styled";
 
 type PlanKey = (typeof SUBSCRIPTION_CATALOG.plans)[number]["key"];
 type Interval = "MONTH" | "YEAR";
@@ -45,7 +46,9 @@ function CheckoutContent() {
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const [scriptReady, setScriptReady] = useState(false);
+  const [scriptFailed, setScriptFailed] = useState(false);
   const [paymentPending, setPaymentPending] = useState(false);
+  const [refreshCount, setRefreshCount] = useState(0);
   const { message } = App.useApp();
   const plan = SUBSCRIPTION_CATALOG.plans.find((item) => item.key === planKey)!;
 
@@ -61,10 +64,11 @@ function CheckoutContent() {
       if (error.name !== "AbortError") setAvailability({ ready: false, reason: error.message, price: null });
     }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [planKey, interval]);
+  }, [planKey, interval, refreshCount]);
 
   const changePlan = (value: PlanKey) => { setLoading(true); setAvailability(null); setPlanKey(value); };
   const changeInterval = (value: Interval) => { setLoading(true); setAvailability(null); setInterval(value); };
+  const retryAvailability = () => { setLoading(true); setAvailability(null); setRefreshCount((count) => count + 1); };
 
   const startCheckout = async () => {
     setStarting(true);
@@ -99,7 +103,7 @@ function CheckoutContent() {
   const displayPrice = availability?.price?.amountMinor ?? (interval === "MONTH" ? plan.monthlyPaise : plan.annualPaise);
 
   return <>
-    {availability?.ready && <Script src="https://checkout.razorpay.com/v1/checkout.js" onReady={() => setScriptReady(true)} onError={() => setScriptReady(false)} />}
+    {availability?.ready && <Script src="https://checkout.razorpay.com/v1/checkout.js" onReady={() => { setScriptReady(true); setScriptFailed(false); }} onError={() => { setScriptReady(false); setScriptFailed(true); }} />}
     <SceneWrapper>
       <Overlay />
       <LogoRow><LogoIcon /><LogoText>Stockiva</LogoText></LogoRow>
@@ -120,11 +124,18 @@ function CheckoutContent() {
           <Title level={2} style={{ color: "#5ecfea", margin: "12px 0 0" }}>{money(displayPrice)} <Text style={{ color: "rgba(255,255,255,.6)", fontSize: 14 }}>/{interval === "MONTH" ? "month" : "year"}</Text></Title>
           <Text style={{ color: "rgba(255,255,255,.65)" }}>Taxes extra. Final amount and recurring terms will appear in Razorpay checkout.</Text>
         </div>
-        {loading ? <Spin /> : availability?.reason && <Paragraph style={{ color: "#ffd591" }}>{availability.reason}</Paragraph>}
+        {loading ? <Spin /> : availability?.reason && <Paragraph role="status" style={{ color: "#ffd591" }}>{availability.reason} Your workspace is saved; check again when payment setup is complete.</Paragraph>}
+        {availability?.ready && scriptFailed && <Paragraph role="status" style={{ color: "#ffd591" }}>Razorpay checkout could not load. Check your connection and retry.</Paragraph>}
         {paymentPending && <Paragraph style={{ color: "#5ecfea" }}>Payment submitted. We are awaiting verified confirmation before enabling the plan.</Paragraph>}
-        <Button type="primary" size="large" block disabled={!availability?.ready || !scriptReady || loading || paymentPending} loading={starting} onClick={startCheckout}>
-          {availability?.ready ? "Continue to Razorpay (Test Mode)" : "Payment unavailable"}
-        </Button>
+        {!paymentPending && <CheckoutActionButton
+          type="primary"
+          size="large"
+          block
+          loading={loading || starting || (availability?.ready && !scriptReady && !scriptFailed)}
+          onClick={availability?.ready ? scriptFailed ? () => window.location.reload() : startCheckout : retryAvailability}
+        >
+          {availability?.ready ? scriptFailed ? "Retry Razorpay checkout" : "Continue to Razorpay (Test Mode)" : "Check payment availability"}
+        </CheckoutActionButton>}
       </OnboardingCard>
     </SceneWrapper>
   </>;

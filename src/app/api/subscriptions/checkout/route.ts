@@ -37,9 +37,8 @@ export async function GET(request: NextRequest) {
     const ready = Boolean(offer?.price.providerPlanId && testCheckoutEnabled() && (!existing || canResume));
     return Response.json({
       ready,
-      reason: !offer ? "This plan is awaiting publication." :
-        !offer.price.providerPlanId ? "This price is awaiting a Razorpay plan." :
-        !testCheckoutEnabled() ? "Test Mode checkout is currently disabled." :
+      reason: !offer || !offer.price.providerPlanId ? "Payment setup is incomplete for this plan." :
+        !testCheckoutEnabled() ? "Payments are temporarily unavailable." :
         existing && !canResume ? "A subscription or checkout already exists for this workspace." : null,
       price: offer ? {
         amountMinor: offer.price.amountMinor,
