@@ -12,6 +12,7 @@ model Organization {
   slug                         String                        @unique
   logoUrl                      String?
   plan                         OrgPlan                       @default(FREE)
+  saasAccessRevision           Int                           @default(0)
   isActive                     Boolean                       @default(true)
   createdAt                    DateTime                      @default(now())
   updatedAt                    DateTime                      @updatedAt
@@ -68,6 +69,8 @@ model Organization {
   supplierClaimTransitions     SupplierClaimTransition[]
   supplierBills                SupplierBill[]
   inventoryValuationEvents     InventoryValuationEvent[]
+  saasSubscriptions            SaasSubscription[]
+  saasAccessGrants             SaasAccessGrant[]
 
   @@map("organizations")
 }
@@ -1836,7 +1839,9 @@ model EmailVerification {
   code      String
   expiresAt DateTime
   attempts  Int      @default(0)
-  createdAt DateTime @default(now())
+  // The existing database column is reused as the resend cooldown timestamp.
+  // Epoch marks a failed delivery that may be retried immediately.
+  lastSentAt DateTime @default(now()) @map("createdAt")
 
   @@index([email])
   @@map("email_verifications")
@@ -2658,6 +2663,182 @@ model WhatsAppAutomationExecution {
   @@index([status, availableAt, lockedAt])
   @@index([automationId, createdAt])
   @@map("whatsapp_automation_executions")
+}
+
+// Stockiva's SaaS catalog is separate from merchant POS billing and retail promotions.
+// Published versions and prices are immutable application-level contracts.
+model SaasPlan {
+  key       String            @id
+  createdAt DateTime          @default(now()) @db.Timestamptz(3)
+  versions  SaasPlanVersion[]
+
+  @@map("saas_plans")
+}
+
+model SaasPlanVersion {
+  id            String             @id @default(uuid())
+  planKey       String
+  version       Int
+  displayName   String
+  description   String
+  status        SaasCatalogStatus  @default(DRAFT)
+  publishedAt   DateTime?          @db.Timestamptz(3)
+  createdAt     DateTime           @default(now()) @db.Timestamptz(3)
+  plan          SaasPlan           @relation(fields: [planKey], references: [key], onDelete: Restrict)
+  prices        SaasPlanPrice[]
+  features      SaasPlanFeature[]
+  subscriptions SaasSubscription[]
+  accessGrants  SaasAccessGrant[]
+
+  @@unique([planKey, version])
+  @@index([status, publishedAt])
+  @@map("saas_plan_versions")
+}
+
+model SaasPlanPrice {
+  id                     String             @id @default(uuid())
+  planVersionId          String
+  interval               SaasBillingInterval
+  currency               String             @default("INR")
+  amountMinor            Int
+  taxMode                SaasTaxMode
+  providerPlanId         String?            @unique
+  createdAt              DateTime           @default(now()) @db.Timestamptz(3)
+  planVersion            SaasPlanVersion    @relation(fields: [planVersionId], references: [id], onDelete: Restrict)
+  subscriptions          SaasSubscription[]
+
+  @@unique([planVersionId, interval, currency])
+  @@unique([id, planVersionId])
+  @@map("saas_plan_prices")
+}
+
+model SaasFeatureDefinition {
+  key         String            @id
+  description String
+  valueType   SaasFeatureType
+  createdAt   DateTime          @default(now()) @db.Timestamptz(3)
+  planValues  SaasPlanFeature[]
+
+  @@map("saas_feature_definitions")
+}
+
+model SaasPlanFeature {
+  planVersionId String
+  featureKey    String
+  value         Json
+  planVersion   SaasPlanVersion        @relation(fields: [planVersionId], references: [id], onDelete: Restrict)
+  feature       SaasFeatureDefinition @relation(fields: [featureKey], references: [key], onDelete: Restrict)
+
+  @@id([planVersionId, featureKey])
+  @@map("saas_plan_features")
+}
+
+model SaasSubscription {
+  id                     String            @id @default(uuid())
+  organizationId         String
+  planVersionId          String
+  planPriceId            String
+  provider               String
+  providerSubscriptionId String?           @unique
+  billingStatus          SaasBillingStatus @default(PENDING)
+  paidThrough            DateTime?         @db.Timestamptz(3)
+  recurringAuthorized    Boolean           @default(false)
+  isCurrent              Boolean           @default(false)
+  createdAt              DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt              DateTime          @updatedAt @db.Timestamptz(3)
+  organization           Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  planVersion            SaasPlanVersion   @relation(fields: [planVersionId], references: [id], onDelete: Restrict)
+  planPrice              SaasPlanPrice     @relation(fields: [planPriceId, planVersionId], references: [id, planVersionId], onDelete: Restrict)
+
+  @@index([organizationId, createdAt])
+  @@index([billingStatus, paidThrough])
+  @@map("saas_subscriptions")
+}
+
+model SaasAccessGrant {
+  id               String          @id @default(uuid())
+  organizationId   String
+  planVersionId    String
+  status           SaasGrantStatus @default(PENDING)
+  reason           String
+  createdByUserId  String
+  approvedByUserId String?
+  startsAt         DateTime        @db.Timestamptz(3)
+  endsAt           DateTime        @db.Timestamptz(3)
+  reviewAt         DateTime?       @db.Timestamptz(3)
+  revokedAt        DateTime?       @db.Timestamptz(3)
+  createdAt        DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime        @updatedAt @db.Timestamptz(3)
+  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  planVersion      SaasPlanVersion @relation(fields: [planVersionId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, status, startsAt, endsAt])
+  @@map("saas_access_grants")
+}
+
+// Signed provider events are stored before acknowledgement and processed later.
+model SaasWebhookEvent {
+  id            String                @id @default(uuid())
+  provider      String
+  eventId       String
+  eventType     String
+  payload       Json
+  payloadHash   String
+  status        SaasWebhookStatus     @default(RECEIVED)
+  attempts      Int                   @default(0)
+  nextAttemptAt DateTime              @default(now()) @db.Timestamptz(3)
+  lastError     String?
+  receivedAt    DateTime              @default(now()) @db.Timestamptz(3)
+  processedAt   DateTime?             @db.Timestamptz(3)
+
+  @@unique([provider, eventId])
+  @@index([status, nextAttemptAt])
+  @@map("saas_webhook_events")
+}
+
+enum SaasCatalogStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum SaasBillingInterval {
+  MONTH
+  YEAR
+}
+
+enum SaasTaxMode {
+  INCLUSIVE
+  EXCLUSIVE
+}
+
+enum SaasFeatureType {
+  BOOLEAN
+  INTEGER
+  ENUM
+  SET
+  DECIMAL
+}
+
+enum SaasBillingStatus {
+  PENDING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  EXPIRED
+}
+
+enum SaasGrantStatus {
+  PENDING
+  APPROVED
+  REVOKED
+}
+
+enum SaasWebhookStatus {
+  RECEIVED
+  PROCESSING
+  PROCESSED
+  FAILED
 }
 
 enum OrgPlan {

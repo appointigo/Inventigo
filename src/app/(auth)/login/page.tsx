@@ -55,9 +55,9 @@ const GoogleIcon = () => (
 );
 
 // ─── Smart redirect based on session state ────────────────────────────────────
-function getRedirectPath(user: { role: string; emailVerified: boolean; orgId: string | null }): string {
+function getRedirectPath(user: { role: string; email: string; emailVerified: boolean; orgId: string | null }): string {
   if (user.role === "SUPER_ADMIN") return "/admin";
-  if (!user.emailVerified) return "/verify-email";
+  if (!user.emailVerified) return `/verify-email?email=${encodeURIComponent(user.email)}`;
   if (!user.orgId) return "/onboarding";
   return "/dashboard";
 }
@@ -85,7 +85,7 @@ function LoginInner() {
   // Smart redirect for already-authenticated users
   useEffect(() => {
     if (status === "authenticated" && session?.user) {
-      router.replace(getRedirectPath(session.user as { role: string; emailVerified: boolean; orgId: string | null }));
+      router.replace(getRedirectPath(session.user as { role: string; email: string; emailVerified: boolean; orgId: string | null }));
     }
   }, [status, session, router]);
 
@@ -137,12 +137,25 @@ function LoginInner() {
 
       const data = await res.json();
       if (!res.ok) {
-        message.error(data.error ?? "Registration failed");
+        if (data.needsVerification) {
+          // The account and code exist, but the provider did not accept the
+          // message. Let the user retry on the verification screen.
+          sessionStorage.setItem("pendingAuth", JSON.stringify({ email: values.email, password: values.password }));
+          message.error(data.error ?? "Verification email could not be sent");
+          router.push(`/verify-email?email=${encodeURIComponent(values.email)}&delivery=failed`);
+        } else {
+          message.error(data.error ?? "Registration failed");
+        }
       } else {
         // Store credentials temporarily for auto-sign-in after email verification
         sessionStorage.setItem("pendingAuth", JSON.stringify({ email: values.email, password: values.password }));
-        message.success("Account created! Check your email for a verification code.");
-        router.push(`/verify-email?email=${encodeURIComponent(values.email)}`);
+        if (data.delivery === "console" && typeof data.verificationCode === "string") {
+          console.info("[Stockiva] Signup verification code:", data.verificationCode);
+        }
+        message.success(data.delivery === "console"
+          ? `Account created! Check the ${typeof data.verificationCode === "string" ? "browser console" : "server terminal"} for your verification code.`
+          : "Account created! Check your email for a verification code.");
+        router.push(`/verify-email?email=${encodeURIComponent(values.email)}${data.delivery === "console" ? "&delivery=console" : ""}`);
       }
     } catch (error) {
       console.error(error);

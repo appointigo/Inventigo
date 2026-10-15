@@ -25,7 +25,7 @@ export const proxy = (request: NextRequest) => {
   }
 
   // Allow public routes (prefix match)
-  if (publicRoutes.some((route) => pathname.startsWith(route))) {
+  if (pathname === "/api/public/subscription-plans" || pathname === "/api/webhooks/razorpay" || publicRoutes.some((route) => pathname.startsWith(route))) {
     return NextResponse.next();
   }
 
