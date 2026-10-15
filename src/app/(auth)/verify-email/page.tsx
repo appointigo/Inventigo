@@ -27,13 +27,17 @@ const VerifyEmailInner = () => {
   const { update: updateSession } = useSession();
 
   const email = searchParams.get("email") ?? "";
-  const decodedEmail = decodeURIComponent(email);
+  const decodedEmail = email;
 
   const [digits, setDigits] = useState<string[]>(Array(OTP_LENGTH).fill(""));
   const [verifying, setVerifying] = useState(false);
   const [resending, setResending] = useState(false);
-  const [countdown, setCountdown] = useState(RESEND_COOLDOWN);
-  const [error, setError] = useState("");
+  const [countdown, setCountdown] = useState(searchParams.get("delivery") === "failed" ? 0 : RESEND_COOLDOWN);
+  const [deliveryFailed, setDeliveryFailed] = useState(searchParams.get("delivery") === "failed");
+  const [consoleDelivery, setConsoleDelivery] = useState(searchParams.get("delivery") === "console");
+  const [error, setError] = useState(searchParams.get("delivery") === "failed"
+    ? "The verification email could not be sent. Please retry below."
+    : "");
   const [shaking, setShaking] = useState(false);
   const inputRefs = useRef<HTMLInputElement[]>([]);
 
@@ -134,10 +138,18 @@ const VerifyEmailInner = () => {
       });
       const data = await res.json();
       if (!res.ok) {
-        message.error(data.error ?? "Failed to resend code");
+        if (res.status !== 429) setDeliveryFailed(true);
+        setError(data.error ?? "Failed to resend code");
       } 
       else {
-        message.success("A new code has been sent to your email");
+        setDeliveryFailed(false);
+        setConsoleDelivery(data.delivery === "console");
+        if (data.delivery === "console" && typeof data.verificationCode === "string") {
+          console.info("[Stockiva] Resent verification code:", data.verificationCode);
+        }
+        message.success(data.delivery === "console"
+          ? `Check the ${typeof data.verificationCode === "string" ? "browser console" : "server terminal"} for your verification code`
+          : "A new code has been sent to your email");
         setCountdown(RESEND_COOLDOWN);
         setDigits(Array(OTP_LENGTH).fill(""));
         inputRefs.current[0]?.focus();
@@ -145,7 +157,8 @@ const VerifyEmailInner = () => {
     } 
     catch (error) {
       console.error(error);
-      message.error("Failed to resend code");
+      setDeliveryFailed(true);
+      setError("Failed to resend code. Please try again.");
     } 
     finally {
       setResending(false);
@@ -228,10 +241,14 @@ const VerifyEmailInner = () => {
         </MailIconWrap>
 
         <CardTitle level={3} style={{ textAlign: "center" }}>
-          Check your email
+          {consoleDelivery ? "Check your console" : "Check your email"}
         </CardTitle>
         <CardSubtext $mb={8} style={{ textAlign: "center" }}>
-          We sent a 6-digit code to
+          {deliveryFailed
+            ? "We couldn't send a code yet. Retry for"
+            : consoleDelivery
+              ? "Find your 6-digit code in the browser console or server terminal for"
+              : "We sent a 6-digit code to"}
         </CardSubtext>
         <div style={{ textAlign: "center", marginBottom: 28 }}>
           <Text style={{ color: "#5ecfea", fontWeight: 600 }}>

@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
-import { Form, Input, Select, App, Steps, Typography, Space } from "antd";
-import { ShopOutlined, RocketOutlined, CrownOutlined, StarFilled } from "@ant-design/icons";
+import { Form, Input, Select, App, Steps, Typography, Space, Segmented } from "antd";
+import { ShopOutlined, RocketOutlined, CrownOutlined } from "@ant-design/icons";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { SUBSCRIPTION_CATALOG } from "@/config/subscriptions/pricing";
 import { SceneWrapper, Overlay, OrbitRing, Particle, LogoRow, LogoIcon, LogoText, SubmitBtn, CardTitle, CardSubtext, FooterText } from "@/app/(auth)/login/login.styled";
-import { OnboardingCard, PlanGrid, PlanCard, PopularBadge, PlanSelectedIcon, PlanName, PlanPrice, PlanPeriod, PlanDesc, PlanDivider, PlanFeatsList, PlanFeatsItem, PlanCheckMark, StepNavRow, BackBtn, ProBanner, EnterpriseBanner } from "./onboarding.styled";
+import { OnboardingCard, PlanGrid, PlanCard, PopularBadge, PlanSelectedIcon, PlanName, PlanPrice, PlanPeriod, PlanDesc, PlanDivider, PlanFeatsList, PlanFeatsItem, PlanCheckMark, StepNavRow, BackBtn, ProBanner } from "./onboarding.styled";
 
 const { Text } = Typography;
 
@@ -32,38 +33,27 @@ const INDUSTRIES = [
   "Other",
 ];
 
-const PLANS = [
-  {
-    id: "free" as const,
-    name: "Starter",
-    price: "Free",
-    period: "Forever free",
-    desc: "Perfect for solo entrepreneurs and small shops getting started.",
-    icon: <ShopOutlined style={{ fontSize: 24, color: "#5ecfea", marginBottom: 8 }} />,
-    features: ["1 store", "100 products", "2 team members", "Basic stock tracking", "Email support"],
-    popular: false,
-  },
-  {
-    id: "pro" as const,
-    name: "Growth",
-    price: "₹2,499",
-    period: "per month · 1 month free trial",
-    desc: "Everything you need to run a multi-store retail business.",
-    icon: <RocketOutlined style={{ fontSize: 24, color: "#f0d060", marginBottom: 8 }} />,
-    features: ["Unlimited stores", "Unlimited products", "10 team members", "Advanced analytics", "Barcode scanning", "Reorder automation"],
-    popular: true,
-  },
-  {
-    id: "enterprise" as const,
-    name: "Enterprise",
-    price: "Custom",
-    period: "Tailored for you",
-    desc: "For large teams, custom integrations, and compliance needs.",
-    icon: <CrownOutlined style={{ fontSize: 24, color: "#c87eff", marginBottom: 8 }} />,
-    features: ["Everything in Growth", "Unlimited members", "Custom integrations", "Dedicated manager", "99.9% SLA"],
-    popular: false,
-  },
-];
+type PlanKey = (typeof SUBSCRIPTION_CATALOG.plans)[number]["key"];
+type BillingInterval = "MONTH" | "YEAR";
+
+const planIcons = {
+  starter: ShopOutlined,
+  growth: RocketOutlined,
+  business: CrownOutlined,
+} as const;
+
+const formatRupees = (paise: number) => new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  maximumFractionDigits: 0,
+}).format(paise / 100);
+
+function planFromLanding(value: string | null): PlanKey | null {
+  if (value === "starter" || value === "free") return "starter";
+  if (value === "growth" || value === "pro") return "growth";
+  if (value === "business" || value === "enterprise") return "business";
+  return null;
+}
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
@@ -72,8 +62,9 @@ const OnboardingInner = () => {
   const { data: session, status, update: updateSession } = useSession();
   const { message } = App.useApp();
   const [stepIndex, setStepIndex] = useState(0);
+  const [selectedPlan, setSelectedPlan] = useState<PlanKey>("starter");
+  const [interval, setInterval] = useState<BillingInterval>("MONTH");
   const [submitting, setSubmitting] = useState(false);
-  const [plan, setPlan] = useState<"free" | "pro" | "enterprise">("free");
   const [businessForm] = Form.useForm();
 
   // Redirect if not authenticated
@@ -81,24 +72,22 @@ const OnboardingInner = () => {
     if (status === "unauthenticated") router.replace("/login");
   }, [status, router]);
 
-  // Pre-select plan from sessionStorage (set by landing page pricing buttons)
   useEffect(() => {
-    const stored = sessionStorage.getItem("selectedPlan");
-    if (stored === "pro" || stored === "free" || stored === "enterprise") {
-      setPlan(stored as "free" | "pro" | "enterprise");
-    }
+    const preferredPlan = planFromLanding(sessionStorage.getItem("selectedPlan"));
+    if (preferredPlan) setSelectedPlan(preferredPlan);
   }, []);
 
   const firstName = session?.user?.name?.split(" ")[0] ?? "there";
 
-  // ─── Step 1 → Step 2 ─────────────────────────────────────────────────────
-  const goToStep2 = () => {
-    businessForm.validateFields().then(() => setStepIndex(1));
+  const goToPlans = async () => {
+    const values = await businessForm.validateFields().catch(() => null);
+    if (values) setStepIndex(1);
   };
 
   // ─── Final Submit ─────────────────────────────────────────────────────────
   const onComplete = async () => {
-    const values = businessForm.getFieldsValue();
+    const values = await businessForm.validateFields().catch(() => null);
+    if (!values) return;
     setSubmitting(true);
 
     try {
@@ -110,7 +99,6 @@ const OnboardingInner = () => {
           industry: values.industry ?? null,
           storeName: values.storeName || "Main Store",
           storeCity: values.storeCity ?? null,
-          plan: plan.toUpperCase(),
         }),
       });
 
@@ -121,6 +109,12 @@ const OnboardingInner = () => {
       }
 
       sessionStorage.removeItem("selectedPlan");
+      // A preference for the eventual checkout, never proof of payment or access.
+      sessionStorage.setItem("pendingSubscriptionChoice", JSON.stringify({
+        planKey: selectedPlan,
+        interval,
+        catalogVersion: SUBSCRIPTION_CATALOG.version,
+      }));
       // Pass the server-confirmed values directly into the JWT callback via
       // update(data). This is the reliable path in NextAuth v5: the `session`
       // param in the jwt callback receives these values immediately under
@@ -130,8 +124,8 @@ const OnboardingInner = () => {
         storeId: data.storeId as string,
         role: "OWNER",
       });
-      message.success("Setup complete! Welcome to Stockiva 🎉");
-      router.push("/dashboard");
+      message.success("Workspace created. Review your plan before payment.");
+      router.push(`/subscription/checkout?plan=${selectedPlan}&interval=${interval}`);
     } 
     catch (error) {
       console.error(error);
@@ -163,16 +157,13 @@ const OnboardingInner = () => {
             current={stepIndex}
             size="small"
             items={[
-              { title: <Text style={{ color: "#fff", fontSize: 13 }}>Business Info</Text> },
-              { title: <Text style={{ color: "#fff", fontSize: 13 }}>Choose Plan</Text> },
+              { title: <Text style={{ color: "#fff", fontSize: 13 }}>Business info</Text> },
+              { title: <Text style={{ color: "#fff", fontSize: 13 }}>View plans</Text> },
             ]}
-            style={{ "--ant-color-primary": "#5ecfea" } as React.CSSProperties}
           />
         </div>
 
-        {/* ─── Step 1: Business Info ─ */}
         <div style={{ display: stepIndex === 0 ? undefined : "none" }}>
-          <>
             <Space orientation="vertical" size={2} style={{ marginBottom: 24 }}>
               <CardTitle level={3}>Hi {firstName}! 👋</CardTitle>
               <CardSubtext $mb={0}>Tell us a bit about your business</CardSubtext>
@@ -218,73 +209,84 @@ const OnboardingInner = () => {
                 <Input placeholder="e.g. Mumbai (optional)" size="large" />
               </Form.Item>
 
-              <SubmitBtn htmlType="button" onClick={goToStep2}>
-                Next →
+              <SubmitBtn htmlType="button" onClick={goToPlans}>
+                View plans →
               </SubmitBtn>
             </Form>
-          </>
         </div>
 
-        {/* ─── Step 2: Plan ─ */}
-        <div style={{ display: stepIndex === 1 ? undefined : "none" }}>
-          <>
-            <Space orientation="vertical" size={2} style={{ marginBottom: 24 }}>
-              <CardTitle level={3}>Choose your plan</CardTitle>
-              <CardSubtext $mb={0}>You can change this any time from settings</CardSubtext>
+        {stepIndex === 1 && (
+          <div>
+            <Space orientation="vertical" size={2} style={{ marginBottom: 16 }}>
+              <CardTitle level={3}>Choose a plan to preview</CardTitle>
+              <CardSubtext $mb={0}>Final pricing and taxes will be shown before checkout.</CardSubtext>
             </Space>
 
+            <div style={{ marginBottom: 24 }}>
+              <Segmented<BillingInterval>
+                value={interval}
+                onChange={setInterval}
+                options={[{ label: "Monthly", value: "MONTH" }, { label: "Yearly", value: "YEAR" }]}
+              />
+            </div>
+
             <PlanGrid>
-              {PLANS.map((p) => (
-                <PlanCard
-                  key={p.id}
-                  $selected={plan === p.id}
-                  onClick={() => setPlan(p.id as typeof plan)}
-                >
-                {p.popular && <PopularBadge>Popular</PopularBadge>}
-                  {plan === p.id && <PlanSelectedIcon />}
-                  <div>{p.icon}</div>
-                  <PlanName>{p.name}</PlanName>
-                  <PlanPrice>{p.price}</PlanPrice>
-                  <PlanPeriod>{p.period}</PlanPeriod>
-                  <PlanDesc>{p.desc}</PlanDesc>
-                  <PlanDivider />
-                  <PlanFeatsList>
-                    {p.features.map((f) => (
-                      <PlanFeatsItem key={f}><PlanCheckMark>✓</PlanCheckMark>{f}</PlanFeatsItem>
-                    ))}
-                  </PlanFeatsList>
-                </PlanCard>
-              ))}
+              {SUBSCRIPTION_CATALOG.plans.map((plan) => {
+                const Icon = planIcons[plan.key];
+                const selected = selectedPlan === plan.key;
+                const amount = interval === "MONTH" ? plan.monthlyPaise : plan.annualPaise;
+                return (
+                  <PlanCard
+                    key={plan.key}
+                    $selected={selected}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={selected}
+                    onClick={() => setSelectedPlan(plan.key)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setSelectedPlan(plan.key);
+                      }
+                    }}
+                  >
+                    {plan.key === "growth" && <PopularBadge>Popular</PopularBadge>}
+                    {selected && <PlanSelectedIcon />}
+                    <Icon style={{ fontSize: 24, color: "#5ecfea", marginBottom: 8 }} />
+                    <PlanName>{plan.name}</PlanName>
+                    <PlanPrice>{formatRupees(amount)}</PlanPrice>
+                    <PlanPeriod>per {interval === "MONTH" ? "month" : "year"}, plus applicable tax</PlanPeriod>
+                    <PlanDesc>{plan.description}</PlanDesc>
+                    <PlanDivider />
+                    <PlanFeatsList>
+                      <PlanFeatsItem><PlanCheckMark>✓</PlanCheckMark>{plan.features["stores.max"]} stores</PlanFeatsItem>
+                      <PlanFeatsItem><PlanCheckMark>✓</PlanCheckMark>{plan.features["team.seats.max"]} team members</PlanFeatsItem>
+                      <PlanFeatsItem><PlanCheckMark>✓</PlanCheckMark>POS billing and inventory</PlanFeatsItem>
+                      {"purchasing.orders" in plan.features && (
+                        <PlanFeatsItem><PlanCheckMark>✓</PlanCheckMark>Purchasing and stock transfers</PlanFeatsItem>
+                      )}
+                    </PlanFeatsList>
+                  </PlanCard>
+                );
+              })}
             </PlanGrid>
 
-            {plan === "pro" && (
-              <ProBanner>
-                <StarFilled style={{ color: "#5ecfea", marginRight: 8 }} />
-                Your first month is <strong style={{ color: "#fff" }}>completely free</strong>. No
-                credit card required.
-              </ProBanner>
-            )}
-
-            {plan === "enterprise" && (
-              <EnterpriseBanner>
-                <CrownOutlined style={{ color: "#c87eff", marginRight: 8 }} />
-                Our team will reach out within 24 hours to discuss your needs.
-              </EnterpriseBanner>
-            )}
-
+            <ProBanner>
+              Your workspace is created first. You will review the selected plan and payment status on the next screen before starting Razorpay checkout.
+            </ProBanner>
             <StepNavRow>
-              <BackBtn onClick={() => setStepIndex(0)}>← Back</BackBtn>
+              <BackBtn type="button" onClick={() => setStepIndex(0)}>← Back</BackBtn>
               <SubmitBtn
                 htmlType="button"
                 loading={submitting}
                 onClick={onComplete}
                 style={{ flex: 2, marginBottom: 0 }}
               >
-                {submitting ? "Setting up…" : "Complete Setup →"}
+                {submitting ? "Creating workspace…" : "Continue to checkout →"}
               </SubmitBtn>
             </StepNavRow>
-          </>
-        </div>
+          </div>
+        )}
 
         <FooterText>© 2026 Stockiva. All rights reserved.</FooterText>
       </OnboardingCard>

@@ -28,7 +28,7 @@ export const POST = async (request: NextRequest) => {
 
     const record = await prisma.emailVerification.findFirst({
       where: { email: emailLower },
-      orderBy: { createdAt: "desc" },
+      orderBy: { expiresAt: "desc" },
     });
 
     if (!record) {

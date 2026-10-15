@@ -1,134 +1,104 @@
+import { randomInt } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/db";
+import { sendVerificationEmail, verificationCodeBrowserEnabled, verificationEmailConfigured, VerificationEmailError, type VerificationDelivery } from "@/modules/auth/verificationEmail";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/auth/resend-verification
-// Body: { email }
-// Rate-limited: cannot resend if the previous code was sent < 60 seconds ago.
-// ─────────────────────────────────────────────────────────────────────────────
-
-const generateOtp = (): string => {
-  return String(Math.floor(100000 + Math.random() * 900000));
-};
-
-const sendVerificationEmail = async (email: string, code: string): Promise<void> => {
-  if (process.env.RESEND_API_KEY) {
-    try {
-      const res = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: "onboarding@resend.dev",
-          to: email,
-          subject: "Your new Stockiva verification code",
-          html: `
-            <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
-              <h2 style="color:#1677ff">New verification code</h2>
-              <p>Your new Stockiva verification code is:</p>
-              <div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#1677ff;margin:24px 0">
-                ${code}
-              </div>
-              <p style="color:#666">This code expires in 15 minutes.</p>
-              <p style="color:#999;font-size:12px">If you didn't request this, you can ignore this email.</p>
-            </div>
-          `,
-          text: `Your verification code is: ${code}`,
-        }),
-      });
-
-      if (!res.ok) {
-        const err = await res.text();
-        console.error(`[resend-verification] Resend API error for ${email}:`, err);
-        if (process.env.NODE_ENV !== "production") {
-          console.warn("[resend-verification] Resend email failed in development, falling back to console output.");
-          console.log(`\n[Stockiva OTP Resend] Email: ${email} | Code: ${code}\n`);
-          return;
-        }
-        throw new Error("Failed to send verification email");
-      }
-
-      console.log(`[resend-verification] Verification email sent to ${email}`);
-    } catch (error) {
-      console.error(`[resend-verification] Resend request failed for ${email}:`, error);
-      if (process.env.NODE_ENV !== "production") {
-        console.warn("[resend-verification] Resend email request failed in development, falling back to console output.");
-        console.log(`\n[Stockiva OTP Resend] Email: ${email} | Code: ${code}\n`);
-        return;
-      }
-      throw new Error("Failed to send verification email");
-    }
-  } else {
-    console.log(`\n[Stockiva OTP Resend] Email: ${email} | Code: ${code}\n`);
-  }
-}
+const RESEND_COOLDOWN_MS = 60_000;
+const CODE_LIFETIME_MS = 15 * 60_000;
 
 export const POST = async (request: NextRequest) => {
-  let body: unknown;
+  let body: Record<string, unknown>;
   try {
-    body = await request.json();
-  } 
-  catch {
+    const parsed: unknown = await request.json();
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Invalid body");
+    body = parsed as Record<string, unknown>;
+  } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { email } = body as Record<string, string>;
-
-  if (!email?.trim()) {
+  if (typeof body.email !== "string" || !body.email.trim()) {
     return NextResponse.json({ error: "Email is required" }, { status: 400 });
   }
-
-  const emailLower = email.toLowerCase().trim();
-  const otp = generateOtp();
-  const expiresAt = Date.now() + 15 * 60 * 1000;
-  const RESEND_COOLDOWN_MS = 60_000; // 60 seconds
+  const email = body.email.toLowerCase().trim();
 
   try {
-    const { prisma } = await import("@/lib/db");
-
-    const user = await prisma.user.findUnique({ where: { email: emailLower } });
+    const user = await prisma.user.findUnique({ where: { email }, select: { emailVerified: true } });
     if (!user) {
-      // Don't reveal whether the email is registered
-      return NextResponse.json({ message: "If that email is registered, a new code has been sent." });
+      return NextResponse.json({ message: "If that email is registered, a verification code has been sent." });
     }
-
     if (user.emailVerified) {
       return NextResponse.json({ error: "Email is already verified" }, { status: 400 });
     }
-
-    // Rate limit check
-    const existing = await prisma.emailVerification.findFirst({
-      where: { email: emailLower },
-      orderBy: { createdAt: "desc" },
-    });
-
-    if (existing) {
-      const msSinceCreated = Date.now() - existing.createdAt.getTime();
-      if (msSinceCreated < RESEND_COOLDOWN_MS) {
-        return NextResponse.json(
-          { error: "Please wait 60 seconds before requesting a new code" },
-          { status: 429 }
-        );
-      }
-
-      await prisma.emailVerification.deleteMany({ where: { email: emailLower } });
+    if (!verificationEmailConfigured()) {
+      console.error("[resend-verification] verification email sender is not configured");
+      return NextResponse.json({ error: "Email verification is temporarily unavailable. Please try again later." }, { status: 503 });
     }
 
-    await prisma.emailVerification.create({
-      data: {
-        email: emailLower,
-        code: otp,
-        expiresAt: new Date(expiresAt),
-      },
+    const now = new Date();
+    const existing = await prisma.emailVerification.findFirst({
+      where: { email },
+      orderBy: { expiresAt: "desc" },
     });
+    // Failed sends have an epoch timestamp and can be retried immediately.
+    if (existing && now.getTime() - existing.lastSentAt.getTime() < RESEND_COOLDOWN_MS) {
+      return NextResponse.json(
+        { error: "Please wait 60 seconds before requesting another code" },
+        { status: 429 },
+      );
+    }
 
-    await sendVerificationEmail(emailLower, otp);
+    let verification = existing;
+    if (!existing || existing.expiresAt.getTime() - now.getTime() < 2 * 60_000 || existing.attempts >= 5) {
+      verification = await prisma.$transaction(async (tx) => {
+        await tx.emailVerification.deleteMany({ where: { email } });
+        return tx.emailVerification.create({
+          data: {
+            email,
+            code: String(randomInt(100000, 1_000_000)),
+            expiresAt: new Date(now.getTime() + CODE_LIFETIME_MS),
+            lastSentAt: new Date(0),
+          },
+        });
+      });
+    }
 
-    return NextResponse.json({ message: "New verification code sent" });
-  } 
-  catch (error) {
+    if (!verification) throw new Error("Verification record was not created");
+    const reservation = await prisma.emailVerification.updateMany({
+      where: { id: verification.id, lastSentAt: { lte: new Date(now.getTime() - RESEND_COOLDOWN_MS) } },
+      data: { lastSentAt: now },
+    });
+    if (reservation.count !== 1) {
+      return NextResponse.json(
+        { error: "Please wait 60 seconds before requesting another code" },
+        { status: 429 },
+      );
+    }
+    let delivery: VerificationDelivery;
+    try {
+      delivery = await sendVerificationEmail(email, verification.code, "resend");
+    } catch (error) {
+      if (error instanceof VerificationEmailError) {
+        await prisma.emailVerification.update({
+          where: { id: verification.id },
+          data: { lastSentAt: new Date(0) },
+        }).catch((updateError) => console.error("[resend-verification] could not reset failed-send cooldown", updateError));
+        console.error("[resend-verification] email was not accepted", { reason: error.reason, providerStatus: error.providerStatus });
+        return NextResponse.json(
+          { error: "We could not send the verification code. Please try again shortly." },
+          { status: 503 },
+        );
+      }
+      throw error;
+    }
+
+    const browserCode = delivery === "console" && verificationCodeBrowserEnabled(request.url, request.headers.get("origin"));
+    return NextResponse.json({
+      message: browserCode ? "Verification code available in browser console" : delivery === "console" ? "Verification code logged to server console" : "Verification code sent",
+      delivery,
+      ...(browserCode ? { verificationCode: verification.code } : {}),
+    }, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
     console.error("Resend verification error:", error);
     return NextResponse.json({ error: "Failed to resend verification code" }, { status: 500 });
   }
-}
+};

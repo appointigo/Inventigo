@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/onboarding/register-business
 // Auth: Required — must have a valid session with emailVerified=true, orgId=null
-// Body: { businessName, industry?, storeName?, storeCity?, plan }
+// Body: { businessName, industry?, storeName?, storeCity? }
 // Creates the Organization + Store and links the user to them.
 // After success, the client calls session.update() to refresh the JWT.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -53,14 +53,16 @@ export const POST = async (request: NextRequest) => {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { businessName, industry, storeName, storeCity, plan = "FREE" } = body;
+  const { businessName, storeName, storeCity } = body;
 
   if (!businessName?.trim()) {
     return NextResponse.json({ error: "Business name is required" }, { status: 400 });
   }
 
-  if (!["FREE", "PRO", "ENTERPRISE"].includes(plan)) {
-    return NextResponse.json({ error: "Invalid plan. Must be FREE, PRO, or ENTERPRISE" }, { status: 400 });
+  // Legacy onboarding may only create a pending organization. A paid plan is
+  // assigned later from a verified subscription, never from a browser value.
+  if (body.plan !== undefined && body.plan !== "FREE") {
+    return NextResponse.json({ error: "Select a paid plan through verified checkout" }, { status: 400 });
   }
 
   const userId = session.user.id;
@@ -98,7 +100,7 @@ export const POST = async (request: NextRequest) => {
         data: {
           name: businessName.trim(),
           slug: finalSlug,
-          plan: plan as "FREE" | "PRO" | "ENTERPRISE",
+          plan: "FREE",
         },
       });
 

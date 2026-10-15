@@ -26,6 +26,7 @@ export const PlanGrid = styled.div`
 `;
 
 export const PlanCard = styled.div<{ $selected?: boolean }>`
+  width: 100%;
   border: 1.5px solid
     ${({ $selected }) => ($selected ? "#5ecfea" : "rgba(255,255,255,0.14)")};
   border-radius: 14px;
@@ -39,6 +40,11 @@ export const PlanCard = styled.div<{ $selected?: boolean }>`
 
   &:hover {
     border-color: ${({ $selected }) => ($selected ? "#5ecfea" : "rgba(255,255,255,0.3)")};
+  }
+
+  &:focus-visible {
+    outline: 2px solid #5ecfea;
+    outline-offset: 3px;
   }
 `;
 
