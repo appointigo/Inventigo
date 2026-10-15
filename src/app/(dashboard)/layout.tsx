@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { App, Flex, Spin } from "antd";
+import { Alert, App, Button, Flex, Spin } from "antd";
 import { StoreProvider } from "@/providers/StoreProvider";
 import AppLayout from "@/modules/layout/components/AppLayout";
+import { requiresSubscriptionActivation, type SubscriptionAccessSource } from "@/modules/subscriptions/navigationPolicy";
 
 const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
   const { data: session, status, update } = useSession();
@@ -13,6 +14,8 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
   // On first load the JWT cookie may be stale (e.g. right after onboarding).
   // Attempt one DB-backed refresh before deciding to redirect to /onboarding.
   const orgRefreshAttempted = useRef(false);
+  const [billingGate, setBillingGate] = useState<"checking" | "allowed" | "blocked" | "error">("checking");
+  const [billingRetry, setBillingRetry] = useState(0);
 
   useEffect(() => {
     if (status === "loading") return;
@@ -47,6 +50,27 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
     }
   }, [session, status, router, update]);
 
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    if (session?.user?.role === "SUPER_ADMIN") return;
+    if (!session?.user?.orgId) return;
+    const controller = new AbortController();
+    fetch("/api/subscriptions/access", { cache: "no-store", signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Could not check your subscription status");
+        return response.json() as Promise<{ source: SubscriptionAccessSource; billingRequired: boolean }>;
+      })
+      .then((access) => setBillingGate(requiresSubscriptionActivation(access.billingRequired, access.source) ? "blocked" : "allowed"))
+      .catch((error) => {
+        if (error.name !== "AbortError") setBillingGate("error");
+      });
+    return () => controller.abort();
+  }, [status, session?.user?.orgId, session?.user?.role, billingRetry]);
+
+  useEffect(() => {
+    if (billingGate === "blocked") router.replace("/subscription/pending");
+  }, [billingGate, router]);
+
   if (status === "loading") {
     return (
       <Flex justify="center" align="center" style={{ height: "100vh" }}>
@@ -59,13 +83,20 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
   if (
     status === "unauthenticated" ||
     (session?.user && !session.user.emailVerified) ||
-    (session?.user && !session.user.orgId && session.user.role !== "SUPER_ADMIN")
+    (session?.user && !session.user.orgId && session.user.role !== "SUPER_ADMIN") ||
+    (session?.user?.role !== "SUPER_ADMIN" && (billingGate === "checking" || billingGate === "blocked"))
   ) {
     return (
       <Flex justify="center" align="center" style={{ height: "100vh" }}>
         <Spin size="large" />
       </Flex>
     );
+  }
+
+  if (billingGate === "error") {
+    return <Flex justify="center" align="center" style={{ minHeight: "100vh" }}>
+      <Alert type="error" title="Could not check your subscription status" description={<Button onClick={() => { setBillingGate("checking"); setBillingRetry((count) => count + 1); }}>Try again</Button>} />
+    </Flex>;
   }
 
   return (

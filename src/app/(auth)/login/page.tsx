@@ -71,6 +71,7 @@ function LoginInner() {
   // Read ?tab= and ?plan= from URL
   const tabParam = searchParams.get("tab");
   const planParam = searchParams.get("plan");
+  const returnToCheckout = searchParams.get("callbackUrl") === "/subscription/checkout";
 
   const [mode, setMode] = useState<Mode>(tabParam === "signup" ? "signup" : "signin");
   const [signinLoading, setSigninLoading] = useState(false);
@@ -85,9 +86,10 @@ function LoginInner() {
   // Smart redirect for already-authenticated users
   useEffect(() => {
     if (status === "authenticated" && session?.user) {
-      router.replace(getRedirectPath(session.user as { role: string; email: string; emailVerified: boolean; orgId: string | null }));
+      const destination = getRedirectPath(session.user as { role: string; email: string; emailVerified: boolean; orgId: string | null });
+      router.replace(returnToCheckout && destination === "/dashboard" ? "/subscription/checkout" : destination);
     }
-  }, [status, session, router]);
+  }, [status, session, router, returnToCheckout]);
 
   // Store plan param in sessionStorage for onboarding page to pick up
   useEffect(() => {

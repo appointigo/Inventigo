@@ -13,6 +13,7 @@ model Organization {
   logoUrl                      String?
   plan                         OrgPlan                       @default(FREE)
   saasAccessRevision           Int                           @default(0)
+  saasBillingRequired          Boolean                       @default(false)
   isActive                     Boolean                       @default(true)
   createdAt                    DateTime                      @default(now())
   updatedAt                    DateTime                      @updatedAt

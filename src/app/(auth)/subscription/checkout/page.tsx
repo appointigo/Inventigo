@@ -3,11 +3,12 @@
 import { Suspense, useEffect, useState } from "react";
 import { App, Segmented, Select, Spin, Typography } from "antd";
 import Script from "next/script";
-import { useSearchParams } from "next/navigation";
+import { useSession } from "next-auth/react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { SUBSCRIPTION_CATALOG } from "@/config/subscriptions/pricing";
 import { SceneWrapper, Overlay, LogoRow, LogoIcon, LogoText } from "@/app/(auth)/login/login.styled";
 import { OnboardingCard } from "@/app/(auth)/onboarding/onboarding.styled";
-import { CheckoutActionButton } from "./checkout.styled";
+import { CheckoutActionButton, CheckoutSecondaryButton } from "./checkout.styled";
 
 type PlanKey = (typeof SUBSCRIPTION_CATALOG.plans)[number]["key"];
 type Interval = "MONTH" | "YEAR";
@@ -36,6 +37,8 @@ const money = (paise: number) => new Intl.NumberFormat("en-IN", {
 }).format(paise / 100);
 
 function CheckoutContent() {
+  const router = useRouter();
+  const { data: session, status: sessionStatus } = useSession();
   const params = useSearchParams();
   const initialPlan = params.get("plan");
   const [planKey, setPlanKey] = useState<PlanKey>(
@@ -49,7 +52,7 @@ function CheckoutContent() {
   const [scriptFailed, setScriptFailed] = useState(false);
   const [paymentPending, setPaymentPending] = useState(false);
   const [refreshCount, setRefreshCount] = useState(0);
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const plan = SUBSCRIPTION_CATALOG.plans.find((item) => item.key === planKey)!;
 
   useEffect(() => {
@@ -69,6 +72,46 @@ function CheckoutContent() {
   const changePlan = (value: PlanKey) => { setLoading(true); setAvailability(null); setPlanKey(value); };
   const changeInterval = (value: Interval) => { setLoading(true); setAvailability(null); setInterval(value); };
   const retryAvailability = () => { setLoading(true); setAvailability(null); setRefreshCount((count) => count + 1); };
+
+  useEffect(() => {
+    sessionStorage.setItem("pendingSubscriptionChoice", JSON.stringify({
+      planKey,
+      interval,
+      catalogVersion: SUBSCRIPTION_CATALOG.version,
+    }));
+  }, [planKey, interval]);
+
+  const payLater = () => modal.confirm({
+    title: "Leave checkout and pay later?",
+    content: "Your account and workspace will stay saved. No paid features will be activated. You can return and choose a plan whenever you're ready.",
+    okText: "Pay later",
+    cancelText: "Keep reviewing",
+    onOk: async () => {
+      // Newly created workspaces are already marked as requiring a subscription.
+      // Leaving checkout does not need another server mutation.
+      if (session?.user?.saasBillingRequired) {
+        router.replace("/subscription/pending");
+        return;
+      }
+      if (!session?.user) {
+        message.error("Your session has expired. Please sign in to continue.");
+        router.replace("/login?callbackUrl=%2Fsubscription%2Fcheckout");
+        return;
+      }
+      try {
+        const response = await fetch("/api/subscriptions/pay-later", { method: "POST" });
+        if (response.status === 401) {
+          message.error("Your session has expired. Please sign in to continue.");
+          router.replace("/login?callbackUrl=%2Fsubscription%2Fcheckout");
+          return;
+        }
+        if (!response.ok) throw new Error((await response.json()).error ?? "Could not save your choice");
+        router.replace("/subscription/pending");
+      } catch (error) {
+        message.error(error instanceof Error ? error.message : "Could not leave checkout");
+      }
+    },
+  });
 
   const startCheckout = async () => {
     setStarting(true);
@@ -136,6 +179,9 @@ function CheckoutContent() {
         >
           {availability?.ready ? scriptFailed ? "Retry Razorpay checkout" : "Continue to Razorpay (Test Mode)" : "Check payment availability"}
         </CheckoutActionButton>}
+        {!paymentPending && <CheckoutSecondaryButton block onClick={payLater} disabled={starting || sessionStatus === "loading"}>
+          ← Pay later
+        </CheckoutSecondaryButton>}
       </OnboardingCard>
     </SceneWrapper>
   </>;

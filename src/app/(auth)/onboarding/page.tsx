@@ -272,7 +272,7 @@ const OnboardingInner = () => {
             </PlanGrid>
 
             <ProBanner>
-              Your workspace is created first. You will review the selected plan and payment status on the next screen before starting Razorpay checkout.
+              Your workspace is created first. You can review the plan, pay now or leave checkout and return later. Paid features start only after activation.
             </ProBanner>
             <StepNavRow>
               <BackBtn type="button" onClick={() => setStepIndex(0)}>← Back</BackBtn>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { PDFOptions } from "puppeteer-core";
 import { launchInvoiceBrowser } from "@/lib/server/browser";
 import { generateBarcodeLabelHTML } from "@/modules/barcode/services/barcodeExportService";
+import { requireOrgAuth } from "@/lib/auth.middleware";
 
 export const runtime = "nodejs"; // Ensure Node.js runtime
 export const maxDuration = 60;
@@ -31,6 +32,14 @@ interface RequestBody {
  * Response: PDF binary stream
  */
 export async function POST(request: NextRequest) {
+  try {
+    await requireOrgAuth();
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error && error.message === "Subscription required" ? "Subscription required" : "Unauthorized" },
+      { status: error instanceof Error && error.message === "Subscription required" ? 403 : 401 },
+    );
+  }
   try {
     const body: RequestBody = await request.json();
 

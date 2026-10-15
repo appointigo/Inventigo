@@ -8,7 +8,7 @@ import { parseCheckoutSelection, resolveCheckoutPrice, testCheckoutEnabled } fro
 export const runtime = "nodejs";
 
 async function owner() {
-  const sessionUser = await requireOrgAuth();
+  const sessionUser = await requireOrgAuth({ allowPendingSubscription: true });
   const user = await prisma.user.findUnique({
     where: { id: sessionUser.id },
     select: { orgId: true, role: true, emailVerified: true },

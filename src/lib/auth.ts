@@ -47,7 +47,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               orgId: true,
               isActive: true,
               emailVerified: true,
-              org: { select: { name: true } },
+              org: { select: { name: true, saasBillingRequired: true } },
             },
           });
         } catch (error) {
@@ -91,6 +91,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           storeId: user.storeId,
           orgId: user.orgId,
           orgName: user.org?.name ?? null,
+          saasBillingRequired: user.org?.saasBillingRequired ?? false,
           emailVerified: user.emailVerified,
         };
       },
@@ -107,6 +108,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.storeId = user.storeId ?? null;
         token.orgId = user.orgId ?? null;
         token.orgName = (user as { orgName?: string | null }).orgName ?? null;
+        token.saasBillingRequired = (user as { saasBillingRequired?: boolean }).saasBillingRequired ?? false;
         token.emailVerified = (user as { emailVerified?: boolean }).emailVerified ?? false;
       }
       // Google OAuth: email already verified by Google, needs onboarding to create org
@@ -137,7 +139,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               storeId: true,
               role: true,
               emailVerified: true,
-              org: { select: { name: true } },
+              org: { select: { name: true, saasBillingRequired: true } },
             },
           });
           if (!fresh?.isActive) return null;
@@ -147,6 +149,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.role = fresh.role;
           token.emailVerified = fresh.emailVerified;
           token.orgName = fresh.org?.name ?? null;
+          token.saasBillingRequired = fresh.org?.saasBillingRequired ?? false;
         } catch (error) {
           console.error("[auth jwt] authoritative user lookup failed", {
             userId: token.id,
@@ -164,6 +167,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.storeId = token.storeId;
         session.user.orgId = token.orgId;
         session.user.orgName = token.orgName ?? null;
+        session.user.saasBillingRequired = token.saasBillingRequired ?? false;
         // Cast to our augmented type — emailVerified is boolean in our schema, not Date
         (session.user as { emailVerified: boolean }).emailVerified =
           (token.emailVerified as boolean) ?? false;

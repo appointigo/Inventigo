@@ -9,6 +9,7 @@ declare module "next-auth" {
     orgId: string | null;
     orgName?: string | null;
     emailVerified?: boolean;
+    saasBillingRequired?: boolean;
   }
 
   interface Session {
@@ -21,6 +22,7 @@ declare module "next-auth" {
       orgId: string | null;
       orgName: string | null;
       emailVerified: boolean;
+      saasBillingRequired: boolean;
     };
   }
 }
@@ -33,5 +35,6 @@ declare module "next-auth/jwt" {
     orgId: string | null;
     orgName?: string | null;
     emailVerified?: boolean;
+    saasBillingRequired?: boolean;
   }
 }

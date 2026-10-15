@@ -38,12 +38,13 @@ export const proxy = (request: NextRequest) => {
     return NextResponse.next();
   }
 
-  // Check for session token (NextAuth v5 sets this cookie)
-  const token =
-    request.cookies.get("__Secure-authjs.session-token") ??
-    request.cookies.get("authjs.session-token");
+  // Auth.js can split a large session token across numbered cookies.
+  // This is only a fast presence check; route handlers validate the session.
+  const hasSessionCookie = request.cookies.getAll().some(({ name, value }) =>
+    Boolean(value) && /^(?:__Secure-)?authjs\.session-token(?:\.\d+)?$/.test(name)
+  );
 
-  if (!token) {
+  if (!hasSessionCookie) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json(
         { error: "Unauthorized", code: "UNAUTHORIZED" },

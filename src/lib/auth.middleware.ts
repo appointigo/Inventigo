@@ -1,5 +1,7 @@
 import type { Role } from "@prisma/client";
 import { auth } from "./auth";
+import { getEffectiveCommercialAccess } from "@/modules/subscriptions/accessService";
+import { requiresSubscriptionActivation } from "@/modules/subscriptions/navigationPolicy";
 
 export type AuthUser = {
   id: string;
@@ -8,6 +10,7 @@ export type AuthUser = {
   role: Role;
   storeId: string | null;
   orgId: string | null;
+  saasBillingRequired: boolean;
 };
 
 /**
@@ -25,6 +28,7 @@ export const getAuthUser = async (): Promise<AuthUser | null> => {
     role: session.user.role,
     storeId: session.user.storeId,
     orgId: session.user.orgId,
+    saasBillingRequired: session.user.saasBillingRequired,
   };
 }
 
@@ -45,10 +49,18 @@ export const requireAuth = async (): Promise<AuthUser> => {
  * SUPER_ADMIN has orgId=null — use requireSuperAdmin() for platform routes.
  * All other roles must have an orgId to access org-scoped resources.
  */
-export const requireOrgAuth = async (): Promise<AuthUser & { orgId: string }> => {
+export const requireOrgAuth = async (
+  options: { allowPendingSubscription?: boolean } = {},
+): Promise<AuthUser & { orgId: string }> => {
   const user = await requireAuth();
   if (!user.orgId) {
     throw new Error("Forbidden");
+  }
+  if (user.saasBillingRequired && !options.allowPendingSubscription) {
+    const access = await getEffectiveCommercialAccess(user.orgId);
+    if (requiresSubscriptionActivation(true, access.source)) {
+      throw new Error("Subscription required");
+    }
   }
   return user as AuthUser & { orgId: string };
 }

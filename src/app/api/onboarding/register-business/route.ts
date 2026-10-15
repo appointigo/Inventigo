@@ -101,6 +101,7 @@ export const POST = async (request: NextRequest) => {
           name: businessName.trim(),
           slug: finalSlug,
           plan: "FREE",
+          saasBillingRequired: true,
         },
       });
 
